@@ -1,0 +1,32 @@
+{
+  "name": "wxt-vue-starter",
+  "description": "manifest.json description",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "wxt",
+    "dev:firefox": "wxt -b firefox",
+    "build": "wxt build",
+    "build:firefox": "wxt build -b firefox",
+    "zip": "wxt zip",
+    "zip:firefox": "wxt zip -b firefox",
+    "compile": "vue-tsc --noEmit",
+    "postinstall": "wxt prepare"
+  },
+  "dependencies": {
+    "vue": "^3.5.11"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.14.0",
+    "@types/chrome": "^0.0.269",
+    "@wxt-dev/module-vue": "^1.0.1",
+    "eslint": "^9.14.0",
+    "eslint-plugin-vue": "^9.30.0",
+    "globals": "^15.12.0",
+    "typescript": "^5.6.2",
+    "typescript-eslint": "^8.13.0",
+    "vue-tsc": "^2.1.6",
+    "wxt": "^0.19.11"
+  }
+}
