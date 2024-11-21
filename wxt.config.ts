@@ -5,9 +5,15 @@ export default defineConfig({
   extensionApi: 'chrome',
   manifest: {
     action: {
-      default_title: 'Some Title',
+      default_area: 'navbar',
+      default_icon: {
+        '16': 'icon/16.png',
+        '32': 'icon/32.png',
+      },
+      default_title: 'Session Flow',
     },
-    permissions: ['activeTab', 'scripting', 'storage', 'tabs'],
+    permissions: ['activeTab', 'menus', 'scripting', 'storage', 'tabs'],
+    name: 'Session Flow',
   },
   modules: ['@wxt-dev/module-vue'],
   // runner: {
@@ -20,6 +26,8 @@ export default defineConfig({
   //     "remote-debugging-port": "9229",
   //   },
   //   firefoxArgs: ["no-config-discovery"],
+  // firefoxProfile: 'SessionFlow',
+  // firefoxArgs: ['profile-create-if-missing'],
   // },
   srcDir: 'src',
 })
