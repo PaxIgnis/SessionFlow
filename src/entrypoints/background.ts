@@ -56,28 +56,43 @@ export default defineBackground(() => {
 
   async function openSessionTree() {
     if (sessionTreeWindowId) {
-      const existingWindow = await browser.windows.get(sessionTreeWindowId)
-      if (existingWindow) {
+      const openWindows = await browser.windows.getAll()
+      const exists = openWindows.some(
+        (window) => window.id === sessionTreeWindowId
+      )
+
+      if (exists) {
         await browser.windows.update(sessionTreeWindowId, { focused: true })
         return // Window is already open
       }
     }
     // get last window position and size from storage
-    const { sessionTreeWindowConfig } = await browser.storage.local.get({
-      sessionTreeWindowConfig: {
-        width: 300,
-        height: 700,
-        top: 50,
-        left: 50,
-      },
-    })
+    let bounds
+    const sessionTreeWindowConfigLocal = localStorage.getItem(
+      'sessionTreeWindowConfig'
+    )
+    if (sessionTreeWindowConfigLocal) {
+      bounds = JSON.parse(sessionTreeWindowConfigLocal)
+    } else {
+      const { sessionTreeWindowConfig } = await browser.storage.local.get({
+        sessionTreeWindowConfig: {
+          width: 300,
+          height: 700,
+          top: 50,
+          left: 50,
+        },
+      })
+
+      bounds = sessionTreeWindowConfig
+    }
+
     const sessionTreeWindow = await browser.windows.create({
       type: 'popup',
       url: 'sessiontree.html',
-      width: sessionTreeWindowConfig.width,
-      height: sessionTreeWindowConfig.height,
-      top: sessionTreeWindowConfig.top,
-      left: sessionTreeWindowConfig.left,
+      width: bounds.width,
+      height: bounds.height,
+      top: bounds.top,
+      left: bounds.left,
     })
     sessionTreeWindowId = sessionTreeWindow.id
   }

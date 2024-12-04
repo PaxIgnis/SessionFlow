@@ -1,16 +1,13 @@
 <script lang="ts" setup>
 // Save Session Tree Window location and size before closing.
 window.onbeforeunload = () => {
-  console.log('Closing Session Tree Window')
   const bounds = {
     width: window.outerWidth,
     height: window.outerHeight,
     left: window.screenLeft,
     top: window.screenTop,
   }
-  browser.storage.local.set({
-    sessionTreeWindowConfig: bounds,
-  })
+  localStorage.setItem('sessionTreeWindowConfig', JSON.stringify(bounds))
 }
 </script>
 
