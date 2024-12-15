@@ -1,8 +1,12 @@
 export default defineBackground(() => {
-  console.log('Hello background!', { id: browser.runtime.id })
+  console.log('Hello, SessionFlow Background has Started!', {
+    id: browser.runtime.id,
+  })
 
+  // Initialize variables
   let sessionTreeWindowId: number | undefined
 
+  // Initialize Listeners
   browser.runtime.onInstalled.addListener(updateBadge)
   browser.tabs.onCreated.addListener(updateBadge)
   browser.tabs.onRemoved.addListener(updateBadge)
@@ -116,5 +120,106 @@ export default defineBackground(() => {
     if (info.menuItemId === 'open-sessiontree') {
       openSessionTree()
     }
+  })
+
+  interface Window {
+    id: number
+    tabs: Array<{ id: number; url: string; title: string }>
+  }
+
+  class SessionTree {
+    windows: Array<Window>
+
+    constructor() {
+      this.windows = []
+    }
+
+    addWindow(windowId: number) {
+      if (!this.windows.some((w) => w.id === windowId)) {
+        const newWindow = { id: windowId, tabs: [] }
+        this.windows.push(newWindow)
+        this.notifyUpdate('TREE_UPDATED')
+        console.log('Window Added in background.ts', this.windows)
+      }
+    }
+
+    removeWindow(windowId: number) {
+      const index = this.windows.findIndex((w) => w.id === windowId)
+      if (index !== -1) {
+        this.windows.splice(index, 1)
+        this.notifyUpdate('TREE_UPDATED')
+      }
+    }
+
+    addTab(windowId: number, tabId: number, title: string, url: string) {
+      console.log('Tab Added in background.ts', windowId, tabId, title, url)
+      const window = this.windows.find((w) => w.id === windowId)
+      if (window) {
+        const newTab = { id: tabId, title, url }
+        window.tabs.push(newTab)
+        this.notifyUpdate('TREE_UPDATED')
+      }
+    }
+
+    removeTab(windowId: number, tabId: number) {
+      const window = this.windows.find((w) => w.id === windowId)
+      if (window) {
+        const index = window.tabs.findIndex((tab) => tab.id === tabId)
+        if (index !== -1) {
+          window.tabs.splice(index, 1)
+          this.notifyUpdate('TREE_UPDATED')
+        }
+      }
+    }
+
+    notifyUpdate(type: string) {
+      // Send a message to the Vue component about the update
+      browser.runtime.sendMessage({ type }).catch((error) => {
+        console.error('Error sending message:', error)
+      })
+    }
+  }
+
+  const sessionTree = new SessionTree()
+
+  function getSessionTree(): Array<Window> {
+    return sessionTree.windows
+  }
+  window.getSessionTree = getSessionTree
+
+  browser.windows.onCreated.addListener((window) => {
+    if (window.id === undefined) {
+      console.error('Window ID is undefined')
+      return
+    }
+    console.log('Window Added', window.id)
+    sessionTree.addWindow(window.id)
+  })
+
+  browser.windows.onRemoved.addListener((windowId) => {
+    sessionTree.removeWindow(windowId)
+  })
+  browser.tabs.onCreated.addListener((tab) => {
+    console.log('Tab Added', tab)
+  })
+  browser.tabs.onCreated.addListener((tab) => {
+    if (tab.windowId === undefined || tab.id === undefined) {
+      console.error('Tab or Window ID is undefined')
+      return
+    }
+    sessionTree.addTab(
+      tab.windowId,
+      tab.id,
+      tab.title || 'Untitled',
+      tab.url || ''
+    )
+  })
+
+  browser.tabs.onRemoved.addListener((tabId, removeInfo) => {
+    if (removeInfo.windowId === undefined) {
+      console.error('Window ID is undefined')
+      return
+    }
+    sessionTree.removeTab(removeInfo.windowId, tabId)
   })
 })

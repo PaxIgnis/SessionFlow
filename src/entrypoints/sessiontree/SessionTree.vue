@@ -1,4 +1,5 @@
 <script lang="ts" setup>
+import { ref, onMounted, triggerRef } from 'vue'
 // Save Session Tree Window location and size before closing.
 window.onbeforeunload = () => {
   const bounds = {
@@ -8,6 +9,51 @@ window.onbeforeunload = () => {
     top: window.screenTop,
   }
   localStorage.setItem('sessionTreeWindowConfig', JSON.stringify(bounds))
+}
+
+// Initialize a local reactive sessionTree
+interface Window {
+  id: number
+  tabs: Array<{ id: number; url: string; title: string }>
+}
+
+const sessionTree = ref<{ windows: Array<Window> }>({ windows: [] })
+
+// Function to update sessionTree
+function updateSessionTree(newWindows: Array<Window>) {
+  sessionTree.value.windows = newWindows
+}
+
+// On component mount
+onMounted(() => {
+  console.log('Mounted')
+  // Get initial data from the background script
+  const backgroundPage = window.browser.extension.getBackgroundPage()
+  updateSessionTree(backgroundPage.getSessionTree())
+
+  // Listen for messages from the background script
+  window.browser.runtime.onMessage.addListener((message) => {
+    switch (message.type) {
+      case 'TREE_UPDATED':
+        handleTreeUpdate()
+        break
+      default:
+        console.warn('Unknown message type:', message.type)
+    }
+  })
+  handleTreeUpdate()
+})
+
+// Handler functions
+function handleTreeUpdate() {
+  triggerRef(sessionTree)
+  console.log('Tree updated inside SessionTree', sessionTree.value)
+}
+
+const getTabTree = () => {
+  handleTreeUpdate()
+  console.log(sessionTree.value)
+  console.log(sessionTree.value.windows)
 }
 </script>
 
@@ -19,8 +65,19 @@ window.onbeforeunload = () => {
     <a href="https://vuejs.org/" target="_blank">
       <img src="@/assets/vue.svg" class="logo vue" alt="Vue logo" />
     </a>
+    <button @click="getTabTree">Get Tab Tree</button>
+
+    <ul>
+      <li v-for="window in sessionTree.windows" :key="window.id">
+        <strong>Window {{ window.id }}</strong>
+        <ul>
+          <li v-for="tab in window.tabs" :key="tab.id">
+            <a :href="tab.url" target="_blank">{{ tab.title }}</a>
+          </li>
+        </ul>
+      </li>
+    </ul>
   </div>
-  <!-- <HelloWorld msg="WXT + Vue" /> -->
 </template>
 
 <style scoped>
@@ -35,5 +92,24 @@ window.onbeforeunload = () => {
 }
 .logo.vue:hover {
   filter: drop-shadow(0 0 2em #42b883aa);
+}
+
+.sessiontree ul {
+  list-style-type: none;
+  padding: 0;
+  margin: 0;
+}
+
+.sessiontree li {
+  margin-bottom: 8px;
+}
+
+.sessiontree a {
+  color: blue;
+  text-decoration: none;
+}
+
+.sessiontree a:hover {
+  text-decoration: underline;
 }
 </style>
