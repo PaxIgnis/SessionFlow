@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { ref, onMounted, triggerRef } from 'vue'
+import { ref, onMounted, triggerRef, onBeforeUnmount } from 'vue'
 // Save Session Tree Window location and size before closing.
 window.onbeforeunload = () => {
   const bounds = {
@@ -9,6 +9,9 @@ window.onbeforeunload = () => {
     top: window.screenTop,
   }
   localStorage.setItem('sessionTreeWindowConfig', JSON.stringify(bounds))
+
+  console.log('Unloading')
+  window.browser.extension.getBackgroundPage().resetSessionTree()
 }
 
 // Initialize a local reactive sessionTree
@@ -31,6 +34,8 @@ onMounted(() => {
   const backgroundPage = window.browser.extension.getBackgroundPage()
   updateSessionTree(backgroundPage.getSessionTree())
 
+  backgroundPage.setSessionTree(sessionTree.value.windows)
+
   // Listen for messages from the background script
   window.browser.runtime.onMessage.addListener((message) => {
     switch (message.type) {
@@ -44,9 +49,14 @@ onMounted(() => {
   handleTreeUpdate()
 })
 
+onBeforeUnmount(() => {
+  console.log('Unmounted')
+  window.browser.extension.getBackgroundPage().resetSessionTree()
+})
+
 // Handler functions
 function handleTreeUpdate() {
-  triggerRef(sessionTree)
+  // triggerRef(sessionTree)
   console.log('Tree updated inside SessionTree', sessionTree.value)
 }
 

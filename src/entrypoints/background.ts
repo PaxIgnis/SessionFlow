@@ -129,12 +129,18 @@ export default defineBackground(() => {
 
   class SessionTree {
     windows: Array<Window>
+    windowsBackup: Array<Window>
 
     constructor() {
       this.windows = []
+      this.windowsBackup = []
     }
 
     addWindow(windowId: number) {
+      console.log(windowId, sessionTreeWindowId)
+      if (windowId === sessionTreeWindowId) {
+        return // Do nothing if the windowId is the sessionTreeWindowId
+      }
       if (!this.windows.some((w) => w.id === windowId)) {
         const newWindow = { id: windowId, tabs: [] }
         this.windows.push(newWindow)
@@ -187,12 +193,35 @@ export default defineBackground(() => {
   }
   window.getSessionTree = getSessionTree
 
+  function setSessionTree(newTree: Array<Window>) {
+    console.log(
+      'Setting Session Tree',
+      sessionTree.windows,
+      sessionTree.windowsBackup
+    )
+    sessionTree.windowsBackup = sessionTree.windows
+    sessionTree.windows = newTree
+    console.log(
+      'After Setting Session Tree',
+      sessionTree.windows,
+      sessionTree.windowsBackup
+    )
+  }
+  window.setSessionTree = setSessionTree
+
+  function resetSessionTree() {
+    console.log('Resetting Session Tree')
+    sessionTree.windows = sessionTree.windowsBackup
+  }
+  window.resetSessionTree = resetSessionTree
+
   browser.windows.onCreated.addListener((window) => {
+    console.log('sessionTree', sessionTree)
     if (window.id === undefined) {
       console.error('Window ID is undefined')
       return
     }
-    console.log('Window Added', window.id)
+    console.log('Window Added', window.id, window)
     sessionTree.addWindow(window.id)
   })
 
