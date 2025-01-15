@@ -49,6 +49,7 @@ onMounted(() => {
   handleTreeUpdate()
 })
 
+// reset sessionTree to non-ref object to avoid zombie dead object
 onBeforeUnmount(() => {
   console.log('Unmounted')
   window.browser.extension.getBackgroundPage().resetSessionTree()

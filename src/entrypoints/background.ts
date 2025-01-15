@@ -99,6 +99,10 @@ export default defineBackground(() => {
       left: bounds.left,
     })
     sessionTreeWindowId = sessionTreeWindow.id
+    // Remove SessionTreeWindow from windows list when opened
+    if (sessionTreeWindowId) {
+      sessionTree.removeWindow(sessionTreeWindowId)
+    }
   }
 
   // browser.menus.create({
