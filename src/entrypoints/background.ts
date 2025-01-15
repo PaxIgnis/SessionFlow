@@ -145,26 +145,61 @@ export default defineBackground(() => {
     constructor() {
       this.windows = []
       this.windowsBackup = []
+      this.initializeWindows()
+    }
+
+    async initializeWindows() {
+      try {
+        const currentWindows = await browser.windows.getAll({ populate: true })
+        currentWindows.forEach((win) => {
+          const newWindow: Window = {
+            id: win.id!,
+            tabs: win.tabs!.map((tab) => ({
+              id: tab.id!,
+              title: tab.title!,
+              url: tab.url!,
+            })),
+          }
+          this.windows.push(newWindow)
+        })
+      } catch (error) {
+        console.error('Error initializing windows:', error)
+      }
     }
 
     addWindow(windowId: number) {
-      console.log(windowId, sessionTreeWindowId)
-      if (windowId === sessionTreeWindowId) {
-        return // Do nothing if the windowId is the sessionTreeWindowId
-      }
+      console.log('Adding Window', windowId)
       if (!this.windows.some((w) => w.id === windowId)) {
         const newWindow = { id: windowId, tabs: [] }
         this.windows.push(newWindow)
-        this.notifyUpdate('TREE_UPDATED')
-        console.log('Window Added in background.ts', this.windows)
+        this.updateWindowTabs(windowId)
+      }
+    }
+
+    async updateWindowTabs(windowId: number) {
+      try {
+        const win = await browser.windows.get(windowId, { populate: true })
+        const window = this.windows.find((w) => w.id === windowId)
+        if (window) {
+          window.tabs = win.tabs!.map((tab) => ({
+            id: tab.id!,
+            title: tab.title!,
+            url: tab.url!,
+          }))
+        }
+      } catch (error) {
+        console.error('Error updating window tabs:', error)
       }
     }
 
     removeWindow(windowId: number) {
+      console.log('Remove Window', windowId)
       const index = this.windows.findIndex((w) => w.id === windowId)
       if (index !== -1) {
+        console.log('Success Removing Window', windowId)
         this.windows.splice(index, 1)
-        this.notifyUpdate('TREE_UPDATED')
+      } else {
+        console.error('Error Removing Window', windowId)
       }
     }
 
