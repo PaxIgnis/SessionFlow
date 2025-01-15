@@ -126,10 +126,17 @@ export default defineBackground(() => {
     }
   })
 
+  // ==============================
+  // Interfaces
+  // ==============================
   interface Window {
     id: number
     tabs: Array<{ id: number; url: string; title: string }>
   }
+
+  // ==============================
+  // Class Definitions
+  // ==============================
 
   class SessionTree {
     windows: Array<Window>
@@ -190,12 +197,19 @@ export default defineBackground(() => {
     }
   }
 
+  // ==============================
+  // Global Variables
+  // ==============================
+
   const sessionTree = new SessionTree()
+
+  // ==============================
+  // Utility Functions
+  // ==============================
 
   function getSessionTree(): Array<Window> {
     return sessionTree.windows
   }
-  window.getSessionTree = getSessionTree
 
   function setSessionTree(newTree: Array<Window>) {
     console.log(
@@ -211,13 +225,23 @@ export default defineBackground(() => {
       sessionTree.windowsBackup
     )
   }
-  window.setSessionTree = setSessionTree
 
   function resetSessionTree() {
     console.log('Resetting Session Tree')
     sessionTree.windows = sessionTree.windowsBackup
   }
+
+  // ==============================
+  // Exposed Functions for the SessionTree Vue component
+  // ==============================
+
+  window.getSessionTree = getSessionTree
+  window.setSessionTree = setSessionTree
   window.resetSessionTree = resetSessionTree
+
+  // ==============================
+  // Event Listeners
+  // ==============================
 
   browser.windows.onCreated.addListener((window) => {
     console.log('sessionTree', sessionTree)
