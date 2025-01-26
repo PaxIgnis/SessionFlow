@@ -144,6 +144,7 @@ const getTabTree = () => {
 .nodeContainer {
   padding-left: 15px;
   display: block;
+  text-decoration: none;
 }
 
 .nodeFavicon {
@@ -157,6 +158,7 @@ const getTabTree = () => {
 .nodeText {
   display: block;
   white-space: nowrap;
+  color: black;
 }
 
 .sessiontree ul {
