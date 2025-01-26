@@ -224,6 +224,18 @@ export default defineBackground(() => {
       }
     }
 
+    updateTab(windowId: number, tabId: number, title: string, url: string) {
+      const window = this.windows.find((w) => w.id === windowId)
+      if (window) {
+        const tab = window.tabs.find((t) => t.id === tabId)
+        if (tab) {
+          tab.title = title
+          tab.url = url
+          this.notifyUpdate('TREE_UPDATED')
+        }
+      }
+    }
+
     notifyUpdate(type: string) {
       // Send a message to the Vue component about the update
       browser.runtime.sendMessage({ type }).catch((error) => {
@@ -313,5 +325,13 @@ export default defineBackground(() => {
       return
     }
     sessionTree.removeTab(removeInfo.windowId, tabId)
+  })
+
+  browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+    if (tab.windowId === undefined || tab.id === undefined) {
+      console.error('Tab or Window ID is undefined')
+      return
+    }
+    sessionTree.updateTab(tab.windowId, tab.id, tab.title || '', tab.url || '')
   })
 })
