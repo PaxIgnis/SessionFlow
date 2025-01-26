@@ -21,6 +21,8 @@ interface Window {
 }
 
 const sessionTree = ref<{ windows: Array<Window> }>({ windows: [] })
+const hoveredTab = ref<number | null>(null) // Track the hovered tab
+const hoveredWindow = ref<number | null>(null) // Track the hovered window
 
 // Function to update sessionTree
 function updateSessionTree(newWindows: Array<Window>) {
@@ -78,12 +80,37 @@ const getTabTree = () => {
     </a>
     <button @click="getTabTree">Get Tab Tree</button>
 
-    <ul>
-      <li v-for="window in sessionTree.windows" :key="window.id">
-        <strong>Window {{ window.id }}</strong>
-        <ul>
-          <li v-for="tab in window.tabs" :key="tab.id">
-            <a :href="tab.url" target="_blank">{{ tab.title }}</a>
+    <ul v-cloak>
+      <li
+        v-for="window in sessionTree.windows"
+        :key="window.id"
+        class="subNodeContainer"
+      >
+        <div
+          @mouseover="hoveredWindow = window.id"
+          @mouseleave="hoveredWindow = null"
+        >
+          <span v-if="hoveredWindow === window.id" class="hoverMenu"
+            >&nbsp;</span
+          >
+          <div class="windowContainer">
+            <img class="nodeFavicon" src="/icon/16.png" alt="Window icon" />
+            <span>Window {{ window.id }}</span>
+          </div>
+        </div>
+        <ul class="tabsList">
+          <li
+            v-for="tab in window.tabs"
+            :key="tab.id"
+            class="subNodeContainer"
+            @mouseover="hoveredTab = tab.id"
+            @mouseleave="hoveredTab = null"
+          >
+            <span v-if="hoveredTab === tab.id" class="hoverMenu">&nbsp;</span>
+            <a :href="tab.url" class="nodeContainer" target="_blank">
+              <img class="nodeFavicon" src="/icon/16.png" alt="Tab icon" />
+              <span class="nodeText">{{ tab.title }}</span>
+            </a>
           </li>
         </ul>
       </li>
@@ -92,6 +119,15 @@ const getTabTree = () => {
 </template>
 
 <style scoped>
+.hoverMenu {
+  /* pointer-events: none; */
+  position: absolute;
+  /* height: 16px; */
+  left: 0;
+  width: 100%;
+  background: rgba(36, 145, 255, 0.08);
+  visibility: visible;
+}
 .logo {
   height: 6em;
   padding: 1.5em;
@@ -105,22 +141,44 @@ const getTabTree = () => {
   filter: drop-shadow(0 0 2em #42b883aa);
 }
 
+.nodeContainer {
+  padding-left: 15px;
+  display: block;
+}
+
+.nodeFavicon {
+  width: 16px;
+  height: 16px;
+  float: left;
+  margin: 0px;
+  margin-right: 3px;
+}
+
+.nodeText {
+  display: block;
+  white-space: nowrap;
+}
+
 .sessiontree ul {
   list-style-type: none;
   padding: 0;
   margin: 0;
 }
 
-.sessiontree li {
-  margin-bottom: 8px;
+.subNodeContainer {
+  padding-left: 15px;
 }
 
-.sessiontree a {
-  color: blue;
-  text-decoration: none;
+.tabsList {
+  padding-bottom: 10px;
 }
 
-.sessiontree a:hover {
-  text-decoration: underline;
+[v-cloak] {
+  display: none;
+}
+
+.windowContainer {
+  padding-left: 15px;
+  display: block;
 }
 </style>
