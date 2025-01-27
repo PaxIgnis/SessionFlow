@@ -226,6 +226,16 @@ export default defineBackground(() => {
       }
     }
 
+    updateState(windowId: number, tabId: number, state: State) {
+      const window = this.windows.find((w) => w.id === windowId)
+      if (window) {
+        const tab = window.tabs.find((t) => t.id === tabId)
+        if (tab) {
+          tab.state = state
+        }
+      }
+    }
+
     updateTab(
       windowId: number,
       tabId: number,
@@ -334,7 +344,19 @@ export default defineBackground(() => {
       console.error('Window ID is undefined')
       return
     }
-    sessionTree.removeTab(removeInfo.windowId, tabId)
+    if (sessionTree) {
+      const window = sessionTree.windows.find(
+        (w) => w.id === removeInfo.windowId
+      )
+      if (window) {
+        const index = window.tabs.findIndex((tab) => tab.id === tabId)
+        if (index !== -1) {
+          if (window.tabs[index].state !== State.SAVED) {
+            sessionTree.removeTab(removeInfo.windowId, tabId)
+          }
+        }
+      }
+    }
   })
 
   browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
@@ -349,5 +371,34 @@ export default defineBackground(() => {
       tab.title || '',
       tab.url || ''
     )
+  })
+
+  browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.action === 'closeTab' && message.tabId) {
+      sessionTree.removeTab(message.windowId, message.tabId)
+      browser.tabs
+        .remove(message.tabId)
+        .then(() => {
+          sendResponse({ success: true })
+        })
+        .catch((error) => {
+          console.error('Error closing tab:', error)
+          sendResponse({ success: false, error: error })
+        })
+      return true // Indicates that the response will be sent asynchronously
+    } else if (message.action === 'saveTab' && message.tabId) {
+      console.log('Saving Tab', message.tabId, message.windowId)
+      sessionTree.updateState(message.windowId, message.tabId, State.SAVED)
+      browser.tabs
+        .remove(message.tabId)
+        .then(() => {
+          sendResponse({ success: true })
+        })
+        .catch((error) => {
+          console.error('Error saving tab:', error)
+          sendResponse({ success: false, error: error })
+        })
+      return true // Indicates that the response will be sent asynchronously
+    }
   })
 })

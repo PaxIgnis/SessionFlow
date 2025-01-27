@@ -65,6 +65,22 @@ const getTabTree = () => {
   console.log(sessionTree.value)
   console.log(sessionTree.value.windows)
 }
+
+function closeTab(tabId: number, windowId: number) {
+  window.browser.runtime.sendMessage({
+    action: 'closeTab',
+    tabId: tabId,
+    windowId: windowId,
+  })
+}
+
+function saveTab(tabId: number, windowId: number) {
+  window.browser.runtime.sendMessage({
+    action: 'saveTab',
+    tabId: tabId,
+    windowId: windowId,
+  })
+}
 </script>
 
 <template>
@@ -109,7 +125,19 @@ const getTabTree = () => {
             @mouseover="hoveredTab = tab.id"
             @mouseleave="hoveredTab = null"
           >
-            <span v-if="hoveredTab === tab.id" class="hoverMenu">&nbsp;</span>
+            <span v-if="hoveredTab === tab.id" class="hoverMenu"
+              >&nbsp;
+              <span class="hoverMenuToolbar">
+                <span
+                  class="hoverMenuSave"
+                  @click="saveTab(tab.id, window.id)"
+                ></span>
+                <span
+                  class="hoverMenuClose"
+                  @click="closeTab(tab.id, window.id)"
+                ></span>
+              </span>
+            </span>
             <a :href="tab.url" class="nodeContainer" target="_blank">
               <img class="nodeFavicon" src="/icon/16.png" alt="Tab icon" />
               <span
@@ -138,6 +166,37 @@ const getTabTree = () => {
   background: rgba(36, 145, 255, 0.08);
   visibility: visible;
 }
+
+.hoverMenuClose {
+  pointer-events: auto;
+  cursor: pointer;
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  /* padding-right: -15px; */
+  background: transparent url('/icon/16.png') no-repeat;
+}
+
+.hoverMenuSave {
+  pointer-events: auto;
+  cursor: pointer;
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  padding-right: 4px;
+  background: transparent url('/icon/16.png') no-repeat;
+}
+
+.hoverMenuToolbar {
+  pointer-events: none;
+  position: absolute;
+  display: inline-block;
+  right: 0px;
+  padding-right: 7px;
+  fill: darkgrey;
+  background-clip: border-box, border-box, content-box;
+}
+
 .logo {
   height: 6em;
   padding: 1.5em;
@@ -175,7 +234,7 @@ const getTabTree = () => {
 }
 
 .nodeTextSaved {
-  color: rgb(94, 94, 94);
+  color: rgb(150, 150, 150);
 }
 
 .sessiontree ul {
