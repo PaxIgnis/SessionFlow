@@ -1,5 +1,7 @@
 <script lang="ts" setup>
 import { ref, onMounted, triggerRef, onBeforeUnmount } from 'vue'
+import { Window, State } from './sessiontree.interfaces.ts'
+
 // Save Session Tree Window location and size before closing.
 window.onbeforeunload = () => {
   const bounds = {
@@ -15,11 +17,6 @@ window.onbeforeunload = () => {
 }
 
 // Initialize a local reactive sessionTree
-interface Window {
-  id: number
-  tabs: Array<{ id: number; url: string; title: string }>
-}
-
 const sessionTree = ref<{ windows: Array<Window> }>({ windows: [] })
 const hoveredTab = ref<number | null>(null) // Track the hovered tab
 const hoveredWindow = ref<number | null>(null) // Track the hovered window
@@ -95,7 +92,13 @@ const getTabTree = () => {
           >
           <div class="windowContainer">
             <img class="nodeFavicon" src="/icon/16.png" alt="Window icon" />
-            <span>Window {{ window.id }}</span>
+            <span
+              :class="{
+                nodeTextOpen: window.state === State.OPEN,
+                nodeTextSaved: window.state === State.SAVED,
+              }"
+              >Window {{ window.id }}</span
+            >
           </div>
         </div>
         <ul class="tabsList">
@@ -109,7 +112,14 @@ const getTabTree = () => {
             <span v-if="hoveredTab === tab.id" class="hoverMenu">&nbsp;</span>
             <a :href="tab.url" class="nodeContainer" target="_blank">
               <img class="nodeFavicon" src="/icon/16.png" alt="Tab icon" />
-              <span class="nodeText">{{ tab.title }}</span>
+              <span
+                :class="{
+                  nodeTextOpen: tab.state === State.OPEN,
+                  nodeTextSaved: tab.state === State.SAVED,
+                }"
+                class="nodeText"
+                >{{ tab.title }}</span
+              >
             </a>
           </li>
         </ul>
@@ -158,7 +168,14 @@ const getTabTree = () => {
 .nodeText {
   display: block;
   white-space: nowrap;
+}
+
+.nodeTextOpen {
   color: black;
+}
+
+.nodeTextSaved {
+  color: rgb(94, 94, 94);
 }
 
 .sessiontree ul {
@@ -169,6 +186,7 @@ const getTabTree = () => {
 
 .subNodeContainer {
   padding-left: 15px;
+  white-space: nowrap;
 }
 
 .tabsList {

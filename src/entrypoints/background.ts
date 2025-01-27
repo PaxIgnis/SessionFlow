@@ -1,3 +1,4 @@
+import { Window, State } from './sessiontree/sessiontree.interfaces'
 export default defineBackground(() => {
   console.log('Hello, SessionFlow Background has Started!', {
     id: browser.runtime.id,
@@ -127,14 +128,6 @@ export default defineBackground(() => {
   })
 
   // ==============================
-  // Interfaces
-  // ==============================
-  interface Window {
-    id: number
-    tabs: Array<{ id: number; url: string; title: string }>
-  }
-
-  // ==============================
   // Class Definitions
   // ==============================
 
@@ -154,8 +147,10 @@ export default defineBackground(() => {
         currentWindows.forEach((win) => {
           const newWindow: Window = {
             id: win.id!,
+            state: State.OPEN,
             tabs: win.tabs!.map((tab) => ({
               id: tab.id!,
+              state: State.OPEN,
               title: tab.title!,
               url: tab.url!,
             })),
@@ -170,7 +165,7 @@ export default defineBackground(() => {
     addWindow(windowId: number) {
       console.log('Adding Window', windowId)
       if (!this.windows.some((w) => w.id === windowId)) {
-        const newWindow = { id: windowId, tabs: [] }
+        const newWindow = { id: windowId, state: State.OPEN, tabs: [] }
         this.windows.push(newWindow)
         this.updateWindowTabs(windowId)
       }
@@ -183,6 +178,7 @@ export default defineBackground(() => {
         if (window) {
           window.tabs = win.tabs!.map((tab) => ({
             id: tab.id!,
+            state: State.OPEN,
             title: tab.title!,
             url: tab.url!,
           }))
@@ -203,11 +199,17 @@ export default defineBackground(() => {
       }
     }
 
-    addTab(windowId: number, tabId: number, title: string, url: string) {
+    addTab(
+      windowId: number,
+      tabId: number,
+      state: State,
+      title: string,
+      url: string
+    ) {
       console.log('Tab Added in background.ts', windowId, tabId, title, url)
       const window = this.windows.find((w) => w.id === windowId)
       if (window) {
-        const newTab = { id: tabId, title, url }
+        const newTab = { id: tabId, state, title, url }
         window.tabs.push(newTab)
         this.notifyUpdate('TREE_UPDATED')
       }
@@ -224,11 +226,18 @@ export default defineBackground(() => {
       }
     }
 
-    updateTab(windowId: number, tabId: number, title: string, url: string) {
+    updateTab(
+      windowId: number,
+      tabId: number,
+      state: State,
+      title: string,
+      url: string
+    ) {
       const window = this.windows.find((w) => w.id === windowId)
       if (window) {
         const tab = window.tabs.find((t) => t.id === tabId)
         if (tab) {
+          tab.state = state
           tab.title = title
           tab.url = url
           this.notifyUpdate('TREE_UPDATED')
@@ -314,6 +323,7 @@ export default defineBackground(() => {
     sessionTree.addTab(
       tab.windowId,
       tab.id,
+      State.OPEN,
       tab.title || 'Untitled',
       tab.url || ''
     )
@@ -332,6 +342,12 @@ export default defineBackground(() => {
       console.error('Tab or Window ID is undefined')
       return
     }
-    sessionTree.updateTab(tab.windowId, tab.id, tab.title || '', tab.url || '')
+    sessionTree.updateTab(
+      tab.windowId,
+      tab.id,
+      State.OPEN,
+      tab.title || '',
+      tab.url || ''
+    )
   })
 })
