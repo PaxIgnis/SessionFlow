@@ -81,6 +81,32 @@ function saveTab(tabId: number, windowId: number) {
     windowId: windowId,
   })
 }
+
+function tabDoubleClick(
+  tabId: number,
+  windowId: number,
+  state: State,
+  url: string
+) {
+  if (state === State.SAVED) {
+    window.browser.runtime.sendMessage({
+      action: 'openTab',
+      tabId: tabId,
+      windowId: windowId,
+      url: url,
+    })
+  } else if (state === State.OPEN) {
+    window.browser.runtime.sendMessage({
+      action: 'focusTab',
+      tabId: tabId,
+      windowId: windowId,
+    })
+  }
+}
+
+function tabClick(tabId: number, windowId: number, state: State, url: string) {
+  console.log('Tab clicked', tabId, windowId, state, url)
+}
 </script>
 
 <template>
@@ -138,7 +164,12 @@ function saveTab(tabId: number, windowId: number) {
                 ></span>
               </span>
             </span>
-            <a :href="tab.url" class="nodeContainer" target="_blank">
+            <a
+              :href="tab.url"
+              class="nodeContainer"
+              target="_blank"
+              @click.prevent
+            >
               <img class="nodeFavicon" src="/icon/16.png" alt="Tab icon" />
               <span
                 :class="{
@@ -146,6 +177,10 @@ function saveTab(tabId: number, windowId: number) {
                   nodeTextSaved: tab.state === State.SAVED,
                 }"
                 class="nodeText"
+                @click="tabClick(tab.id, window.id, tab.state, tab.url)"
+                @dblclick="
+                  tabDoubleClick(tab.id, window.id, tab.state, tab.url)
+                "
                 >{{ tab.title }}</span
               >
             </a>
@@ -158,7 +193,7 @@ function saveTab(tabId: number, windowId: number) {
 
 <style scoped>
 .hoverMenu {
-  /* pointer-events: none; */
+  pointer-events: none;
   position: absolute;
   /* height: 16px; */
   left: 0;
@@ -211,6 +246,7 @@ function saveTab(tabId: number, windowId: number) {
 }
 
 .nodeContainer {
+  cursor: pointer;
   padding-left: 15px;
   display: block;
   text-decoration: none;

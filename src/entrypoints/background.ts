@@ -215,6 +215,17 @@ export default defineBackground(() => {
       }
     }
 
+    getTabTitle(windowId: number, tabId: number) {
+      const window = this.windows.find((w) => w.id === windowId)
+      if (window) {
+        const tab = window.tabs.find((t) => t.id === tabId)
+        if (tab) {
+          return tab.title
+        }
+      }
+      return ''
+    }
+
     removeTab(windowId: number, tabId: number) {
       const window = this.windows.find((w) => w.id === windowId)
       if (window) {
@@ -239,6 +250,7 @@ export default defineBackground(() => {
     updateTab(
       windowId: number,
       tabId: number,
+      newTabId: number,
       state: State,
       title: string,
       url: string
@@ -250,6 +262,7 @@ export default defineBackground(() => {
           tab.state = state
           tab.title = title
           tab.url = url
+          tab.id = newTabId
           this.notifyUpdate('TREE_UPDATED')
         }
       }
@@ -268,6 +281,15 @@ export default defineBackground(() => {
   // ==============================
 
   const sessionTree = new SessionTree()
+  const privilegedUrls = [
+    'about:config',
+    'about:addons',
+    'about:debugging',
+    'chrome:',
+    'javascript:',
+    'data:',
+    'file:',
+  ]
 
   // ==============================
   // Utility Functions
@@ -297,6 +319,20 @@ export default defineBackground(() => {
     sessionTree.windows = sessionTree.windowsBackup
   }
 
+  // build the redirect URL for privileged URLs
+  function getRedirectUrl(targetUrl: string, targetTitle: string) {
+    const redirectUrl =
+      browser.runtime.getURL('/redirect.html') +
+      `?targetUrl=${encodeURIComponent(targetUrl)}` +
+      `&targetTitle=${encodeURIComponent(targetTitle)}`
+    return redirectUrl
+  }
+
+  // check if a URL is a privileged URL for Firefox
+  function isPrivilegedUrl(url: string): boolean {
+    return privilegedUrls.some((privilegedUrl) => url.startsWith(privilegedUrl))
+  }
+
   // ==============================
   // Exposed Functions for the SessionTree Vue component
   // ==============================
@@ -322,9 +358,11 @@ export default defineBackground(() => {
   browser.windows.onRemoved.addListener((windowId) => {
     sessionTree.removeWindow(windowId)
   })
+
   browser.tabs.onCreated.addListener((tab) => {
     console.log('Tab Added', tab)
   })
+
   browser.tabs.onCreated.addListener((tab) => {
     if (tab.windowId === undefined || tab.id === undefined) {
       console.error('Tab or Window ID is undefined')
@@ -367,6 +405,7 @@ export default defineBackground(() => {
     sessionTree.updateTab(
       tab.windowId,
       tab.id,
+      tabId,
       State.OPEN,
       tab.title || '',
       tab.url || ''
@@ -396,6 +435,41 @@ export default defineBackground(() => {
         })
         .catch((error) => {
           console.error('Error saving tab:', error)
+          sendResponse({ success: false, error: error })
+        })
+      return true // Indicates that the response will be sent asynchronously
+    } else if (message.action === 'openTab' && message.tabId) {
+      sessionTree.updateState(message.windowId, message.tabId, State.OPEN)
+      let properties: { windowId: number; active: boolean; url?: string } = {
+        windowId: message.windowId,
+        active: true,
+      }
+      // if the URL is a privileged URL, open a redirect page instead
+      if (isPrivilegedUrl(message.url)) {
+        const title = sessionTree.getTabTitle(message.windowId, message.tabId)
+        properties.url = getRedirectUrl(message.url, title)
+      } else if (message.url !== 'about:newtab') {
+        // don't set the URL for new tabs
+        properties.url = message.url
+      }
+      browser.tabs
+        .create(properties)
+        .then((tab) => {
+          // Remove the newly opened tab from sessionTree
+          sessionTree.removeTab(tab.windowId!, tab.id!)
+          // Update the old tab in sessionTree with the new tab details
+          sessionTree.updateTab(
+            message.windowId,
+            message.tabId,
+            tab.id!,
+            State.OPEN,
+            tab.title || '',
+            tab.url || ''
+          )
+          sendResponse({ success: true })
+        })
+        .catch((error) => {
+          console.error('Error opening tab:', error)
           sendResponse({ success: false, error: error })
         })
       return true // Indicates that the response will be sent asynchronously
