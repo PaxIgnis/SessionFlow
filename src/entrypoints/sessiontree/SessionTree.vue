@@ -74,10 +74,24 @@ function closeTab(tabId: number, windowId: number) {
   })
 }
 
+function closeWindow(windowId: number) {
+  window.browser.runtime.sendMessage({
+    action: 'closeWindow',
+    windowId: windowId,
+  })
+}
+
 function saveTab(tabId: number, windowId: number) {
   window.browser.runtime.sendMessage({
     action: 'saveTab',
     tabId: tabId,
+    windowId: windowId,
+  })
+}
+
+function saveWindow(windowId: number) {
+  window.browser.runtime.sendMessage({
+    action: 'saveWindow',
     windowId: windowId,
   })
 }
@@ -99,6 +113,21 @@ function tabDoubleClick(
     window.browser.runtime.sendMessage({
       action: 'focusTab',
       tabId: tabId,
+      windowId: windowId,
+    })
+  }
+}
+
+function windowDoubleClick(windowId: number, state: State) {
+  console.log('Window double clicked', sessionTree.value)
+  if (state === State.SAVED) {
+    window.browser.runtime.sendMessage({
+      action: 'openWindow',
+      windowId: windowId,
+    })
+  } else if (state === State.OPEN) {
+    window.browser.runtime.sendMessage({
+      action: 'focusWindow',
       windowId: windowId,
     })
   }
@@ -130,8 +159,15 @@ function tabClick(tabId: number, windowId: number, state: State, url: string) {
           @mouseleave="hoveredWindow = null"
         >
           <span v-if="hoveredWindow === window.id" class="hoverMenu"
-            >&nbsp;</span
-          >
+            >&nbsp;
+            <span class="hoverMenuToolbar">
+              <span class="hoverMenuSave" @click="saveWindow(window.id)"></span>
+              <span
+                class="hoverMenuClose"
+                @click="closeWindow(window.id)"
+              ></span>
+            </span>
+          </span>
           <div class="windowContainer">
             <img class="nodeFavicon" src="/icon/16.png" alt="Window icon" />
             <span
@@ -139,6 +175,7 @@ function tabClick(tabId: number, windowId: number, state: State, url: string) {
                 nodeTextOpen: window.state === State.OPEN,
                 nodeTextSaved: window.state === State.SAVED,
               }"
+              @dblclick="windowDoubleClick(window.id, window.state)"
               >Window {{ window.id }}</span
             >
           </div>

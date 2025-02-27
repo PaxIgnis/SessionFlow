@@ -14,3 +14,10 @@ export enum State {
   OPEN = 1,
   OTHER = 2,
 }
+
+export interface PendingItem {
+  id: number
+  complete: boolean
+  creatorResolved: boolean
+  listenerResolved: boolean
+}
