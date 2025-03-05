@@ -1,8 +1,10 @@
 export interface Window {
   id: number
+  serialId: number
   state: State
   tabs: Array<{
     id: number
+    serialId: number
     state: State
     title: string
     url: string

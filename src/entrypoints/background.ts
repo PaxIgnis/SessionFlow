@@ -136,6 +136,7 @@ export default defineBackground(() => {
   // ==============================
 
   class SessionTree {
+    private readonly STORAGE_KEY = 'sessionTree'
     windows: Array<Window>
     windowsBackup: Array<Window>
 
@@ -147,13 +148,16 @@ export default defineBackground(() => {
 
     async initializeWindows() {
       try {
+        await this.loadSessionTreeFromStorage()
         const currentWindows = await browser.windows.getAll({ populate: true })
         currentWindows.forEach((win) => {
           const newWindow: Window = {
             id: win.id!,
+            serialId: 0,
             state: State.OPEN,
             tabs: win.tabs!.map((tab) => ({
               id: tab.id!,
+              serialId: 0,
               state: State.OPEN,
               title: tab.title!,
               url: tab.url!,
@@ -161,16 +165,71 @@ export default defineBackground(() => {
           }
           this.windows.push(newWindow)
         })
+        this.serializeSessionTree()
+        console.log('Session Tree after initialize:', this.windows)
       } catch (error) {
         console.error('Error initializing windows:', error)
+      }
+    }
+
+    /**
+     * Serializes the session tree by assigning serial IDs to windows and tabs.
+     */
+    serializeSessionTree() {
+      this.windows.forEach((window, windowIndex) => {
+        window.serialId = windowIndex
+        window.tabs.forEach((tab, tabIndex) => {
+          tab.serialId = tabIndex
+        })
+      })
+    }
+
+    /**
+     * Loads the session tree from local storage.
+     *
+     * @returns {Promise<void>} A promise that resolves when the session tree has been loaded.
+     */
+    async loadSessionTreeFromStorage() {
+      try {
+        const sessionTree = await browser.storage.local.get(this.STORAGE_KEY)
+        console.log('Session Tree from storage:', sessionTree)
+        if (sessionTree[this.STORAGE_KEY]) {
+          console.log('Saving session tree to this.windows')
+          this.windows = sessionTree[this.STORAGE_KEY]
+          this.windows.forEach((window) => {
+            window.id = 0
+            window.state = State.SAVED
+            window.tabs.forEach((tab) => {
+              tab.id = 0
+              tab.state = State.SAVED
+            })
+          })
+          console.log('Session Tree:', this.windows)
+        }
+      } catch (error) {
+        console.error('Error loading session tree from storage:', error)
+      }
+    }
+
+    async saveSessionTreeToStorage() {
+      try {
+        await browser.storage.local.set({ [this.STORAGE_KEY]: this.windows })
+      } catch (error) {
+        console.error('Error saving session tree to storage:', error)
       }
     }
 
     addWindow(windowId: number) {
       console.log('Adding Window', windowId)
       if (!this.windows.some((w) => w.id === windowId)) {
-        const newWindow = { id: windowId, state: State.OPEN, tabs: [] }
+        const newWindow = {
+          id: windowId,
+          serialId: 0,
+          state: State.OPEN,
+          tabs: [],
+        }
         this.windows.push(newWindow)
+        this.serializeSessionTree()
         this.updateWindowTabs(windowId)
       }
     }
@@ -182,24 +241,31 @@ export default defineBackground(() => {
         if (window) {
           window.tabs = win.tabs!.map((tab) => ({
             id: tab.id!,
+            serialId: 0,
             state: State.OPEN,
             title: tab.title!,
             url: tab.url!,
           }))
+          this.serializeSessionTree()
         }
       } catch (error) {
         console.error('Error updating window tabs:', error)
       }
     }
 
-    removeWindow(windowId: number) {
-      console.log('Remove Window', windowId)
-      const index = this.windows.findIndex((w) => w.id === windowId)
+    removeWindow(windowSerialId: number) {
+      console.log('Remove Window', windowSerialId)
+      const index = this.windows.findIndex((w) => w.serialId === windowSerialId)
       if (index !== -1) {
-        console.log(`Success Removing Window ${windowId} from sessionTree`)
+        console.log(
+          `Success Removing Window ${windowSerialId} from sessionTree`
+        )
         this.windows.splice(index, 1)
+        this.serializeSessionTree()
       } else {
-        console.error(`Error Removing Window ${windowId} from sessionTree`)
+        console.error(
+          `Error Removing Window ${windowSerialId} from sessionTree`
+        )
       }
     }
 
@@ -213,16 +279,17 @@ export default defineBackground(() => {
       console.log('Tab Added in background.ts', windowId, tabId, title, url)
       const window = this.windows.find((w) => w.id === windowId)
       if (window) {
-        const newTab = { id: tabId, state, title, url }
+        const newTab = { id: tabId, serialId: 0, state, title, url }
         window.tabs.push(newTab)
+        this.serializeSessionTree()
         this.notifyUpdate('TREE_UPDATED')
       }
     }
 
-    getTabTitle(windowId: number, tabId: number) {
-      const window = this.windows.find((w) => w.id === windowId)
+    getTabTitle(windowSerialId: number, tabSerialId: number) {
+      const window = this.windows.find((w) => w.serialId === windowSerialId)
       if (window) {
-        const tab = window.tabs.find((t) => t.id === tabId)
+        const tab = window.tabs.find((t) => t.serialId === tabSerialId)
         if (tab) {
           return tab.title
         }
@@ -233,27 +300,37 @@ export default defineBackground(() => {
     /**
      * Removes a tab from the session tree and updates the state.
      *
-     * @param {number} windowId - The ID of the window containing the tab.
-     * @param {number} tabId - The ID of the tab to be removed.
+     * @param {number} windowSerialId - The serial ID of the window containing the tab.
+     * @param {number} tabSerialId - The serial ID of the tab to be removed.
      */
-    removeTab(windowId: number, tabId: number) {
-      const window = this.windows.find((w) => w.id === windowId)
+    removeTab(windowSerialId: number, tabSerialId: number) {
+      const window = this.windows.find((w) => w.serialId === windowSerialId)
       if (window) {
-        const index = window.tabs.findIndex((tab) => tab.id === tabId)
+        const index = window.tabs.findIndex(
+          (tab) => tab.serialId === tabSerialId
+        )
         if (index !== -1) {
-          console.log('removeTab success', windowId, tabId)
+          console.log('removeTab success', windowSerialId, tabSerialId)
           window.tabs.splice(index, 1)
+          this.serializeSessionTree()
           this.notifyUpdate('TREE_UPDATED')
         } else {
-          console.error('Error removing tab:', windowId, tabId)
+          console.error('Error removing tab:', windowSerialId, tabSerialId)
         }
       }
     }
 
-    updateTabState(windowId: number, tabId: number, state: State) {
-      const window = this.windows.find((w) => w.id === windowId)
+    /**
+     * Updates the state of a tab in the session tree.
+     *
+     * @param {number} windowSerialId - The serial ID of the window containing the tab.
+     * @param {number} tabSerialId - The serial ID of the tab to update.
+     * @param {State} state - The new state to assign to the tab.
+     */
+    updateTabState(windowSerialId: number, tabSerialId: number, state: State) {
+      const window = this.windows.find((w) => w.serialId === windowSerialId)
       if (window) {
-        const tab = window.tabs.find((t) => t.id === tabId)
+        const tab = window.tabs.find((t) => t.serialId === tabSerialId)
         if (tab) {
           tab.state = state
         }
@@ -263,11 +340,11 @@ export default defineBackground(() => {
     /**
      * Updates the state of a window in the session tree.
      *
-     * @param {number} windowId - The ID of the window to update.
+     * @param {number} windowSerialId - The serial ID of the window to update.
      * @param {State} state - The new state to assign to the window.
      */
-    updateWindowState(windowId: number, state: State) {
-      const window = this.windows.find((w) => w.id === windowId)
+    updateWindowState(windowSerialId: number, state: State) {
+      const window = this.windows.find((w) => w.serialId === windowSerialId)
       if (window) {
         window.state = state
       }
@@ -308,13 +385,30 @@ export default defineBackground(() => {
     /**
      * Updates the id of a window in the session tree
      *
-     * @param {number} windowId - The current ID of the window to be updated.
+     * @param {number} windowSerialId - The current Serial ID of the window to be updated.
      * @param {number} newWindowId - The new ID to assign to the window.
      */
-    updateWindowId(windowId: number, newWindowId: number) {
-      const window = this.windows.find((w) => w.id === windowId)
+    updateWindowId(windowSerialId: number, newWindowId: number) {
+      const window = this.windows.find((w) => w.serialId === windowSerialId)
       if (window) {
         window.id = newWindowId
+      }
+    }
+
+    /**
+     * Updates the id of a tab in the session tree
+     *
+     * @param {number} windowSerialId - The current Serial ID of the window to be updated.
+     * @param {number} tabSerialId - The current Serial ID of the tab to be updated.
+     * @param {number} newTabId - The new ID to assign to the tab.
+     */
+    updateTabId(windowSerialId: number, tabSerialId: number, newTabId: number) {
+      const window = this.windows.find((w) => w.serialId === windowSerialId)
+      if (window) {
+        const tab = window.tabs.find((t) => t.serialId === tabSerialId)
+        if (tab) {
+          tab.id = newTabId
+        }
       }
     }
 
@@ -596,6 +690,7 @@ export default defineBackground(() => {
   function resetSessionTree() {
     console.log('Resetting Session Tree')
     sessionTree.windows = sessionTree.windowsBackup
+    sessionTree.saveSessionTreeToStorage()
   }
 
   // build the redirect URL for privileged URLs
@@ -617,12 +712,18 @@ export default defineBackground(() => {
    *
    * @param {Object} message - The message object containing tab and window information.
    * @param {number} message.tabId - The ID of the tab to be closed.
-   * @param {number} message.windowId - The ID of the window containing the tab.
+   * @param {number} message.tabSerialId - The Serial ID of the tab to be closed.
+   * @param {number} message.windowSerialId - The Serial ID of the window containing the tab.
    * @param {Function} sendResponse - The function to send a response back to the sender.
    * @returns {boolean} - Indicates that the response will be sent asynchronously.
    */
   function closeTab(message, sendResponse) {
-    sessionTree.removeTab(message.windowId, message.tabId)
+    if (
+      message.tabSerialId !== undefined &&
+      message.windowSerialId !== undefined
+    ) {
+      sessionTree.removeTab(message.windowSerialId, message.tabSerialId)
+    }
     browser.tabs
       .remove(message.tabId)
       .then(() => {
@@ -640,11 +741,14 @@ export default defineBackground(() => {
    *
    * @param {Object} message - The message object containing window information.
    * @param {number} message.windowId - The ID of the window to be closed.
+   * @param {number} message.windowSerialId - The Serial ID of the window to be closed.
    * @param {Function} sendResponse - The function to send a response back to the sender.
    * @returns {boolean} - Indicates that the response will be sent asynchronously.
    */
   function closeWindow(message, sendResponse) {
-    sessionTree.removeWindow(message.windowId)
+    if (message.windowSerialId !== undefined) {
+      sessionTree.removeWindow(message.windowSerialId)
+    }
     browser.windows
       .remove(message.windowId)
       .then(() => {
@@ -662,12 +766,23 @@ export default defineBackground(() => {
    *
    * @param {Object} message - The message object containing tab and window information.
    * @param {number} message.tabId - The ID of the tab to be saved.
-   * @param {number} message.windowId - The ID of the window containing the tab.
+   * @param {number} message.tabSerialId - The Serial ID of the tab to be saved.
+   * @param {number} message.windowSerialId - The Serial ID of the window containing the tab.
    * @param {Function} sendResponse - The function to send a response back to the sender.
    * @returns {boolean} - Indicates that the response will be sent asynchronously.
    */
   function saveTab(message, sendResponse) {
-    sessionTree.updateTabState(message.windowId, message.tabId, State.SAVED)
+    if (
+      message.tabSerialId !== undefined &&
+      message.windowSerialId !== undefined
+    ) {
+      sessionTree.updateTabState(
+        message.windowSerialId,
+        message.tabSerialId,
+        State.SAVED
+      )
+      sessionTree.updateTabId(message.windowSerialId, message.tabSerialId, -1)
+    }
     browser.tabs
       .remove(message.tabId)
       .then(() => {
@@ -685,15 +800,24 @@ export default defineBackground(() => {
    *
    * @param {Object} message - The message object containing window information.
    * @param {number} message.windowId - The ID of the window to be saved.
+   * @param {number} message.windowSerialId - The Serial ID of the window to be saved.
    * @param {Function} sendResponse - The function to send a response back to the sender.
    * @returns {boolean} - Indicates that the response will be sent asynchronously.
    */
   function saveWindow(message, sendResponse) {
-    sessionTree.updateWindowState(message.windowId, State.SAVED)
-    const window = sessionTree.windows.find((w) => w.id === message.windowId)
+    sessionTree.updateWindowState(message.windowSerialId, State.SAVED)
+    sessionTree.updateWindowId(message.windowSerialId, -1)
+    const window = sessionTree.windows.find(
+      (w) => w.serialId === message.windowSerialId
+    )
     if (window) {
       for (const tab of window.tabs) {
-        sessionTree.updateTabState(message.windowId, tab.id, State.SAVED)
+        sessionTree.updateTabState(
+          message.windowSerialId,
+          tab.serialId,
+          State.SAVED
+        )
+        sessionTree.updateTabId(message.windowSerialId, tab.serialId, -1)
       }
     }
     browser.windows
@@ -712,42 +836,103 @@ export default defineBackground(() => {
    * Opens a tab by creating it in the browser and updating the session tree.
    *
    * @param {Object} message - The message object containing tab and window information.
-   * @param {number} message.tabId - The ID of the tab to be opened.
-   * @param {number} message.windowId - The ID of the window containing the tab.
+   * @param {number} message.tabSerialId - The Serial ID of the tab to be opened.
+   * @param {number} message.windowSerialId - The Serial ID of the window containing the tab.
    * @param {string} message.url - The URL to be opened in the tab.
    * @param {Function} sendResponse - The function to send a response back to the sender.
    * @returns {boolean} - Indicates that the response will be sent asynchronously.
    */
   async function openTab(message, sendResponse) {
-    sessionTree.updateTabState(message.windowId, message.tabId, State.OPEN)
-    let properties: { windowId: number; active: boolean; url?: string } = {
-      windowId: message.windowId,
-      active: true,
-    }
+    let properties: { windowId?: number; active?: boolean; url?: string } = {}
     // if the URL is a privileged URL, open a redirect page instead
     if (isPrivilegedUrl(message.url)) {
-      const title = sessionTree.getTabTitle(message.windowId, message.tabId)
+      const title = sessionTree.getTabTitle(
+        message.windowSerialId,
+        message.tabSerialId
+      )
       properties.url = getRedirectUrl(message.url, title)
     } else if (message.url !== 'about:newtab') {
       // don't set the URL for new tabs
       properties.url = message.url
     }
-    try {
-      const tab = await createTabAndWait(properties)
-      // Update the old tab in sessionTree with the new tab details
-      sessionTree.updateTab(
-        message.windowId,
-        message.tabId,
-        tab.id!,
-        State.OPEN,
-        tab.title || '',
-        tab.url || ''
-      )
-      sendResponse({ success: true })
-    } catch (error) {
-      console.error('Error opening tab:', error)
-      sendResponse({ success: false, error: error })
+    sessionTree.updateTabState(
+      message.windowSerialId,
+      message.tabSerialId,
+      State.OPEN
+    )
+    const savedWindow = sessionTree.windows.find(
+      (w) => w.serialId === message.windowSerialId
+    )
+    if (savedWindow !== undefined && savedWindow.state === State.SAVED) {
+      // if the window is saved, open the window first
+
+      sessionTree.updateWindowState(message.windowSerialId, State.OPEN)
+      try {
+        const window = await createWindowAndWait()
+
+        if (window.id === undefined) {
+          throw new Error('Window ID is undefined')
+        } else {
+          const newtab = window.tabs![0]
+          // then update the saved window object id to represent the newly opened window
+          sessionTree.updateWindowId(message.windowSerialId, window.id)
+          properties.windowId = window.id
+          properties.active = true
+
+          try {
+            const tab = await createTabAndWait(properties)
+            sessionTree.updateTabId(
+              message.windowSerialId,
+              message.tabSerialId,
+              tab.id!
+            )
+            sessionTree.updateTabState(
+              message.windowSerialId,
+              message.tabSerialId,
+              State.OPEN
+            )
+            sendResponse({ success: true })
+          } catch (error) {
+            console.error('Error opening tab:', error)
+            sendResponse({ success: false, error: error })
+          }
+
+          // remove the default tab from the new window
+          closeTab(
+            {
+              tabId: newtab.id,
+              tabSerialId: undefined,
+              windowSerialId: undefined,
+            },
+            () => {}
+          )
+        }
+        sendResponse({ success: true })
+      } catch (error) {
+        console.error('Error opening window:', error)
+      }
+    } else {
+      properties.windowId = savedWindow.id
+      properties.active = true
+      try {
+        const tab = await createTabAndWait(properties)
+        sessionTree.updateTabId(
+          message.windowSerialId,
+          message.tabSerialId,
+          tab.id!
+        )
+        sessionTree.updateTabState(
+          message.windowSerialId,
+          message.tabSerialId,
+          State.OPEN
+        )
+        sendResponse({ success: true })
+      } catch (error) {
+        console.error('Error opening tab:', error)
+        sendResponse({ success: false, error: error })
+      }
     }
+
     return true // Indicates that the response will be sent asynchronously
   }
 
@@ -767,13 +952,13 @@ export default defineBackground(() => {
    * Opens a window by creating it in the browser and updating the session tree.
    *
    * @param {Object} message - The message object containing window information.
-   * @param {number} message.windowId - The ID of the window to be opened from sessionTree.
+   * @param {number} message.windowSerialId - The Serial ID of the window to be opened from sessionTree.
    * @param {Function} sendResponse - The function to send a response back to the sender.
    * @returns {boolean} - Indicates that the response will be sent asynchronously.
    */
   async function openWindow(message, sendResponse) {
     // First change the state of the window in sessionTree to from SAVED to OPEN
-    sessionTree.updateWindowState(message.windowId, State.OPEN)
+    sessionTree.updateWindowState(message.windowSerialId, State.OPEN)
     try {
       const window = await createWindowAndWait()
 
@@ -784,15 +969,19 @@ export default defineBackground(() => {
         // remove the new window object from the sessionTree
         // sessionTree.removeWindow(window.id)
         // then update the saved window object id to represent the newly opened window
-        sessionTree.updateWindowId(message.windowId, window.id)
+        sessionTree.updateWindowId(message.windowSerialId, window.id)
         // open up all the tabs in the window
-        const savedWindow = sessionTree.windows.find((w) => w.id === window.id)
+        const savedWindow = sessionTree.windows.find(
+          (w) => w.serialId === message.windowSerialId
+        )
         if (savedWindow) {
           for (const tab of savedWindow.tabs) {
             await openTab(
               {
                 tabId: tab.id,
                 windowId: savedWindow.id,
+                tabSerialId: tab.serialId,
+                windowSerialId: savedWindow.serialId,
                 url: tab.url,
               },
               () => {}
@@ -802,7 +991,14 @@ export default defineBackground(() => {
           console.error('Error opening window:', window.id)
         }
         // remove the default tab from the new window
-        closeTab({ tabId: newtab.id, windowId: window.id }, () => {})
+        closeTab(
+          {
+            tabId: newtab.id,
+            tabSerialId: undefined,
+            windowSerialId: undefined,
+          },
+          () => {}
+        )
       }
       sendResponse({ success: true })
     } catch (error) {
@@ -845,7 +1041,7 @@ export default defineBackground(() => {
       if (window) {
         if (window.state !== State.SAVED) {
           console.log('Removing Window from sessionTree: ', windowId)
-          sessionTree.removeWindow(windowId)
+          sessionTree.removeWindow(window.serialId)
         }
       }
     }
@@ -886,7 +1082,7 @@ export default defineBackground(() => {
         const index = window.tabs.findIndex((tab) => tab.id === tabId)
         if (index !== -1) {
           if (window.tabs[index].state !== State.SAVED) {
-            sessionTree.removeTab(removeInfo.windowId, tabId)
+            sessionTree.removeTab(window.serialId, window.tabs[index].serialId)
           }
         }
       }
@@ -909,17 +1105,17 @@ export default defineBackground(() => {
   })
 
   browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message.action === 'closeTab' && message.tabId) {
+    if (message.action === 'closeTab') {
       return closeTab(message, sendResponse)
-    } else if (message.action === 'saveTab' && message.tabId) {
+    } else if (message.action === 'saveTab') {
       return saveTab(message, sendResponse)
-    } else if (message.action === 'openTab' && message.tabId) {
+    } else if (message.action === 'openTab') {
       return openTab(message, sendResponse)
-    } else if (message.action === 'closeWindow' && message.windowId) {
+    } else if (message.action === 'closeWindow') {
       return closeWindow(message, sendResponse)
-    } else if (message.action === 'saveWindow' && message.windowId) {
+    } else if (message.action === 'saveWindow') {
       return saveWindow(message, sendResponse)
-    } else if (message.action === 'openWindow' && message.windowId) {
+    } else if (message.action === 'openWindow') {
       return openWindow(message, sendResponse)
     }
   })

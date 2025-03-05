@@ -18,7 +18,7 @@ window.onbeforeunload = () => {
 
 // Initialize a local reactive sessionTree
 const sessionTree = ref<{ windows: Array<Window> }>({ windows: [] })
-const hoveredTab = ref<number | null>(null) // Track the hovered tab
+const hoveredTab = ref<string | null>(null) // Track the hovered tab
 const hoveredWindow = ref<number | null>(null) // Track the hovered window
 
 // Function to update sessionTree
@@ -66,47 +66,53 @@ const getTabTree = () => {
   console.log(sessionTree.value.windows)
 }
 
-function closeTab(tabId: number, windowId: number) {
+function closeTab(tabId: number, tabSerialId: number, windowSerialId: number) {
   window.browser.runtime.sendMessage({
     action: 'closeTab',
     tabId: tabId,
-    windowId: windowId,
+    tabSerialId: tabSerialId,
+    windowSerialId: windowSerialId,
   })
 }
 
-function closeWindow(windowId: number) {
+function closeWindow(windowId: number, windowSerialId: number) {
   window.browser.runtime.sendMessage({
     action: 'closeWindow',
     windowId: windowId,
+    windowSerialId: windowSerialId,
   })
 }
 
-function saveTab(tabId: number, windowId: number) {
+function saveTab(tabId: number, tabSerialId: number, windowSerialId: number) {
   window.browser.runtime.sendMessage({
     action: 'saveTab',
     tabId: tabId,
-    windowId: windowId,
+    tabSerialId: tabSerialId,
+    windowSerialId: windowSerialId,
   })
 }
 
-function saveWindow(windowId: number) {
+function saveWindow(windowId: number, windowSerialId: number) {
   window.browser.runtime.sendMessage({
     action: 'saveWindow',
     windowId: windowId,
+    windowSerialId: windowSerialId,
   })
 }
 
 function tabDoubleClick(
   tabId: number,
   windowId: number,
+  tabSerialId: number,
+  windowSerialId: number,
   state: State,
   url: string
 ) {
   if (state === State.SAVED) {
     window.browser.runtime.sendMessage({
       action: 'openTab',
-      tabId: tabId,
-      windowId: windowId,
+      tabSerialId: tabSerialId,
+      windowSerialId: windowSerialId,
       url: url,
     })
   } else if (state === State.OPEN) {
@@ -118,17 +124,17 @@ function tabDoubleClick(
   }
 }
 
-function windowDoubleClick(windowId: number, state: State) {
+function windowDoubleClick(windowSerialId: number, state: State) {
   console.log('Window double clicked', sessionTree.value)
   if (state === State.SAVED) {
     window.browser.runtime.sendMessage({
       action: 'openWindow',
-      windowId: windowId,
+      windowSerialId: windowSerialId,
     })
   } else if (state === State.OPEN) {
     window.browser.runtime.sendMessage({
       action: 'focusWindow',
-      windowId: windowId,
+      windowSerialId: windowSerialId,
     })
   }
 }
@@ -151,20 +157,23 @@ function tabClick(tabId: number, windowId: number, state: State, url: string) {
     <ul v-cloak>
       <li
         v-for="window in sessionTree.windows"
-        :key="window.id"
+        :key="window.serialId"
         class="subNodeContainer"
       >
         <div
-          @mouseover="hoveredWindow = window.id"
+          @mouseover="hoveredWindow = window.serialId"
           @mouseleave="hoveredWindow = null"
         >
-          <span v-if="hoveredWindow === window.id" class="hoverMenu"
+          <span v-if="hoveredWindow === window.serialId" class="hoverMenu"
             >&nbsp;
             <span class="hoverMenuToolbar">
-              <span class="hoverMenuSave" @click="saveWindow(window.id)"></span>
+              <span
+                class="hoverMenuSave"
+                @click="saveWindow(window.id, window.serialId)"
+              ></span>
               <span
                 class="hoverMenuClose"
-                @click="closeWindow(window.id)"
+                @click="closeWindow(window.id, window.serialId)"
               ></span>
             </span>
           </span>
@@ -175,29 +184,32 @@ function tabClick(tabId: number, windowId: number, state: State, url: string) {
                 nodeTextOpen: window.state === State.OPEN,
                 nodeTextSaved: window.state === State.SAVED,
               }"
-              @dblclick="windowDoubleClick(window.id, window.state)"
-              >Window {{ window.id }}</span
+              @dblclick="windowDoubleClick(window.serialId, window.state)"
+              >Window id {{ window.id }} Window serialId
+              {{ window.serialId }}</span
             >
           </div>
         </div>
         <ul class="tabsList">
           <li
             v-for="tab in window.tabs"
-            :key="tab.id"
+            :key="`${window.serialId}-${tab.serialId}`"
             class="subNodeContainer"
-            @mouseover="hoveredTab = tab.id"
+            @mouseover="hoveredTab = `${window.serialId}-${tab.serialId}`"
             @mouseleave="hoveredTab = null"
           >
-            <span v-if="hoveredTab === tab.id" class="hoverMenu"
+            <span
+              v-if="hoveredTab === `${window.serialId}-${tab.serialId}`"
+              class="hoverMenu"
               >&nbsp;
               <span class="hoverMenuToolbar">
                 <span
                   class="hoverMenuSave"
-                  @click="saveTab(tab.id, window.id)"
+                  @click="saveTab(tab.id, tab.serialId, window.serialId)"
                 ></span>
                 <span
                   class="hoverMenuClose"
-                  @click="closeTab(tab.id, window.id)"
+                  @click="closeTab(tab.id, tab.serialId, window.serialId)"
                 ></span>
               </span>
             </span>
@@ -214,9 +226,18 @@ function tabClick(tabId: number, windowId: number, state: State, url: string) {
                   nodeTextSaved: tab.state === State.SAVED,
                 }"
                 class="nodeText"
-                @click="tabClick(tab.id, window.id, tab.state, tab.url)"
+                @click="
+                  tabClick(tab.serialId, window.serialId, tab.state, tab.url)
+                "
                 @dblclick="
-                  tabDoubleClick(tab.id, window.id, tab.state, tab.url)
+                  tabDoubleClick(
+                    tab.id,
+                    window.id,
+                    tab.serialId,
+                    window.serialId,
+                    tab.state,
+                    tab.url
+                  )
                 "
                 >{{ tab.title }}</span
               >
