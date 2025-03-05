@@ -741,6 +741,18 @@ export default defineBackground(() => {
       message.windowSerialId !== undefined
     ) {
       sessionTree.removeTab(message.windowSerialId, message.tabSerialId)
+      // if this is the last open tab in the window but there are other saved tabs then
+      // update the window state to SAVED and reset id
+      const window = sessionTree.windows.find(
+        (w) => w.serialId === message.windowSerialId
+      )
+      if (window) {
+        const openTabs = window.tabs.filter((tab) => tab.state === State.OPEN)
+        if (window.tabs.length > 0 && openTabs.length === 0) {
+          sessionTree.updateWindowState(message.windowSerialId, State.SAVED)
+          sessionTree.updateWindowId(message.windowSerialId, -1)
+        }
+      }
     }
     browser.tabs
       .remove(message.tabId)
