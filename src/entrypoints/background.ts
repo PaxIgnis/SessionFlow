@@ -751,18 +751,27 @@ export default defineBackground(() => {
         if (window.tabs.length > 0 && openTabs.length === 0) {
           sessionTree.updateWindowState(message.windowSerialId, State.SAVED)
           sessionTree.updateWindowId(message.windowSerialId, -1)
+        } else if (window.tabs.length === 0) {
+          // if there are no tabs left in the window, remove the window
+          sessionTree.removeWindow(message.windowSerialId)
         }
       }
     }
-    browser.tabs
-      .remove(message.tabId)
-      .then(() => {
-        sendResponse({ success: true })
-      })
-      .catch((error) => {
-        console.error('Error closing tab:', error)
-        sendResponse({ success: false, error: error })
-      })
+    // only close the tab if it is open
+    if (
+      sessionTree.getTabState(message.windowSerialId, message.tabSerialId) ===
+      State.OPEN
+    ) {
+      browser.tabs
+        .remove(message.tabId)
+        .then(() => {
+          sendResponse({ success: true })
+        })
+        .catch((error) => {
+          console.error('Error closing tab:', error)
+          sendResponse({ success: false, error: error })
+        })
+    }
     return true // Indicates that the response will be sent asynchronously
   }
 
