@@ -298,6 +298,24 @@ export default defineBackground(() => {
     }
 
     /**
+     * Returns the state of a tab in the session tree.
+     *
+     * @param {number} windowSerialId - The serial ID of the window containing the tab.
+     * @param {number} tabSerialId - The serial ID of the tab to get the state of.
+     * @returns {State} The state of the tab.
+     */
+    getTabState(windowSerialId: number, tabSerialId: number) {
+      const window = this.windows.find((w) => w.serialId === windowSerialId)
+      if (window) {
+        const tab = window.tabs.find((t) => t.serialId === tabSerialId)
+        if (tab) {
+          return tab.state
+        }
+      }
+      return State.OTHER
+    }
+
+    /**
      * Removes a tab from the session tree and updates the state.
      *
      * @param {number} windowSerialId - The serial ID of the window containing the tab.
@@ -763,6 +781,8 @@ export default defineBackground(() => {
 
   /**
    * Saves a tab by removing it from the browser and updating the session tree.
+   * If it is the last open tab in the window, the window state is updated to SAVED and the ID is reset.
+   * Then the same is done for the tab and finally the tab is removed from the browser.
    *
    * @param {Object} message - The message object containing tab and window information.
    * @param {number} message.tabId - The ID of the tab to be saved.
@@ -776,6 +796,25 @@ export default defineBackground(() => {
       message.tabSerialId !== undefined &&
       message.windowSerialId !== undefined
     ) {
+      if (
+        sessionTree.getTabState(message.windowSerialId, message.tabSerialId) ===
+        State.SAVED
+      ) {
+        // tab is already saved, do nothing
+        sendResponse({ success: true })
+        return true
+      }
+      // if this is the last open tab in the window, update the window state to SAVED and reset id
+      const window = sessionTree.windows.find(
+        (w) => w.serialId === message.windowSerialId
+      )
+      if (window) {
+        const openTabs = window.tabs.filter((tab) => tab.state === State.OPEN)
+        if (openTabs.length === 1) {
+          sessionTree.updateWindowState(message.windowSerialId, State.SAVED)
+          sessionTree.updateWindowId(message.windowSerialId, -1)
+        }
+      }
       sessionTree.updateTabState(
         message.windowSerialId,
         message.tabSerialId,
