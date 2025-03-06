@@ -548,6 +548,12 @@ export default defineBackground(() => {
     properties?: browser.windows._CreateCreateData
   ): Promise<browser.windows.Window> {
     pendingWindowCount++
+    let tabCount = 0
+    if (properties?.url) {
+      // Handle both string and string[] cases
+      tabCount = Array.isArray(properties.url) ? properties.url.length : 1
+      pendingTabCount += tabCount
+    }
     const window = await browser.windows.create(properties || {})
     const waitForWindowId = (windowId: number): Promise<void> => {
       return new Promise((resolve) => {
@@ -561,11 +567,33 @@ export default defineBackground(() => {
         }, 100)
       })
     }
-    if (window.id !== undefined) {
-      addPendingWindowToQueue(window.id, true, false)
-      await waitForWindowId(window.id)
-    } else {
-      console.error('Window ID is undefined')
+    if (!window.id || !window.tabs) {
+      throw new Error('Window creation failed: ID or tabs undefined')
+    }
+    addPendingWindowToQueue(window.id, true, false)
+    await waitForWindowId(window.id)
+    if (tabCount > 0) {
+      const promises: Promise<void>[] = []
+      const waitForTabId = (tabId: number): Promise<void> => {
+        return new Promise((resolve) => {
+          const interval = setInterval(() => {
+            const tab = pendingTabs.get(tabId)
+            if (tab && tab.listenerResolved) {
+              tab.complete = true
+              clearInterval(interval)
+              resolve()
+            }
+          }, 100)
+        })
+      }
+      for (const tab of window.tabs) {
+        if (!tab.id) {
+          throw new Error('Tab ID is undefined')
+        }
+        addPendingTabToQueue(tab.id, true, false)
+        promises.push(waitForTabId(tab.id))
+      }
+      await Promise.all(promises)
     }
     return window
   }
@@ -923,55 +951,39 @@ export default defineBackground(() => {
     const savedWindow = sessionTree.windows.find(
       (w) => w.serialId === message.windowSerialId
     )
-    if (savedWindow !== undefined && savedWindow.state === State.SAVED) {
+    if (!savedWindow) {
+      throw new Error('Saved window not found')
+    }
+    if (savedWindow.state === State.SAVED) {
       // if the window is saved, open the window first
-
       sessionTree.updateWindowState(message.windowSerialId, State.OPEN)
       try {
-        const window = await createWindowAndWait()
+        const window = await createWindowAndWait(
+          properties.url ? { url: [properties.url] } : {}
+        )
 
-        if (window.id === undefined) {
+        if (!window.id) {
           throw new Error('Window ID is undefined')
-        } else {
-          const newtab = window.tabs![0]
-          // then update the saved window object id to represent the newly opened window
-          sessionTree.updateWindowId(message.windowSerialId, window.id)
-          properties.windowId = window.id
-          properties.active = true
-
-          try {
-            const tab = await createTabAndWait(properties)
-            sessionTree.updateTabId(
-              message.windowSerialId,
-              message.tabSerialId,
-              tab.id!
-            )
-            sessionTree.updateTabState(
-              message.windowSerialId,
-              message.tabSerialId,
-              State.OPEN
-            )
-            sendResponse({ success: true })
-          } catch (error) {
-            console.error('Error opening tab:', error)
-            sendResponse({ success: false, error: error })
-          }
-
-          // remove the default tab from the new window
-          closeTab(
-            {
-              tabId: newtab.id,
-              tabSerialId: undefined,
-              windowSerialId: undefined,
-            },
-            () => {}
-          )
         }
+        // then update the saved window object id to represent the newly opened window
+        sessionTree.updateWindowId(message.windowSerialId, window.id)
+        const tab = window.tabs![0]
+        sessionTree.updateTabId(
+          message.windowSerialId,
+          message.tabSerialId,
+          tab.id!
+        )
+        sessionTree.updateTabState(
+          message.windowSerialId,
+          message.tabSerialId,
+          State.OPEN
+        )
         sendResponse({ success: true })
       } catch (error) {
         console.error('Error opening window:', error)
       }
     } else {
+      // if the window is currently open
       properties.windowId = savedWindow.id
       properties.active = true
       try {
