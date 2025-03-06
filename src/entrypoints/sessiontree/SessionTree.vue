@@ -124,7 +124,11 @@ function tabDoubleClick(
   }
 }
 
-function windowDoubleClick(windowSerialId: number, state: State) {
+function windowDoubleClick(
+  windowSerialId: number,
+  windowId: number,
+  state: State
+) {
   console.log('Window double clicked', sessionTree.value)
   if (state === State.SAVED) {
     window.browser.runtime.sendMessage({
@@ -134,7 +138,7 @@ function windowDoubleClick(windowSerialId: number, state: State) {
   } else if (state === State.OPEN) {
     window.browser.runtime.sendMessage({
       action: 'focusWindow',
-      windowSerialId: windowSerialId,
+      windowId: windowId,
     })
   }
 }
@@ -184,7 +188,9 @@ function tabClick(tabId: number, windowId: number, state: State, url: string) {
                 nodeTextOpen: window.state === State.OPEN,
                 nodeTextSaved: window.state === State.SAVED,
               }"
-              @dblclick="windowDoubleClick(window.serialId, window.state)"
+              @dblclick="
+                windowDoubleClick(window.serialId, window.id, window.state)
+              "
               >Window id {{ window.id }} Window serialId
               {{ window.serialId }}</span
             >

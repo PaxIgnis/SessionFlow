@@ -1008,6 +1008,48 @@ export default defineBackground(() => {
     return true // Indicates that the response will be sent asynchronously
   }
 
+  /**
+   * Focuses a tab by updating the browser tab to be active.
+   *
+   * @param {Object} message - The message object containing tab information.
+   * @param {number} message.tabId - The ID of the tab to be focused.
+   * @param {Function} sendResponse - The function to send a response back to the sender.
+   * @returns {boolean} - Indicates that the response will be sent asynchronously.
+   */
+  function focusTab(message, sendResponse) {
+    browser.tabs
+      .update(message.tabId, { active: true })
+      .then(() => {
+        sendResponse({ success: true })
+      })
+      .catch((error) => {
+        console.error('Error focusing tab:', error)
+        sendResponse({ success: false, error: error })
+      })
+    return true // Indicates that the response will be sent asynchronously
+  }
+
+  /**
+   * Focuses a window by updating the browser window to be active.
+   *
+   * @param {Object} message - The message object containing window information.
+   * @param {number} message.windowId - The ID of the window to be focused.
+   * @param {Function} sendResponse - The function to send a response back to the sender.
+   * @returns {boolean} - Indicates that the response will be sent asynchronously.
+   */
+  function focusWindow(message, sendResponse) {
+    browser.windows
+      .update(message.windowId, { focused: true })
+      .then(() => {
+        sendResponse({ success: true })
+      })
+      .catch((error) => {
+        console.error('Error focusing window:', error)
+        sendResponse({ success: false, error: error })
+      })
+    return true // Indicates that the response will be sent asynchronously
+  }
+
   function printSessionTree(string: string = '') {
     console.log('******************************')
     console.log(`Printing Session Tree: ${string}:`)
@@ -1195,6 +1237,10 @@ export default defineBackground(() => {
       return saveWindow(message, sendResponse)
     } else if (message.action === 'openWindow') {
       return openWindow(message, sendResponse)
+    } else if (message.action === 'focusTab') {
+      return focusTab(message, sendResponse)
+    } else if (message.action === 'focusWindow') {
+      return focusWindow(message, sendResponse)
     }
   })
 })
