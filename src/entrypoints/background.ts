@@ -1032,46 +1032,52 @@ export default defineBackground(() => {
     // First change the state of the window in sessionTree to from SAVED to OPEN
     sessionTree.updateWindowState(message.windowSerialId, State.OPEN)
     try {
-      const window = await createWindowAndWait()
-
-      if (window.id === undefined) {
-        throw new Error('Window ID is undefined')
-      } else {
-        const newtab = window.tabs![0]
-        // remove the new window object from the sessionTree
-        // sessionTree.removeWindow(window.id)
-        // then update the saved window object id to represent the newly opened window
-        sessionTree.updateWindowId(message.windowSerialId, window.id)
-        // open up all the tabs in the window
-        const savedWindow = sessionTree.windows.find(
-          (w) => w.serialId === message.windowSerialId
-        )
-        if (savedWindow) {
-          for (const tab of savedWindow.tabs) {
-            await openTab(
-              {
-                tabId: tab.id,
-                windowId: savedWindow.id,
-                tabSerialId: tab.serialId,
-                windowSerialId: savedWindow.serialId,
-                url: tab.url,
-              },
-              () => {}
-            )
-          }
-        } else {
-          console.error('Error opening window:', window.id)
-        }
-        // remove the default tab from the new window
-        closeTab(
-          {
-            tabId: newtab.id,
-            tabSerialId: undefined,
-            windowSerialId: undefined,
-          },
-          () => {}
-        )
+      const sessionTreeWindow = sessionTree.windows.find(
+        (w) => w.serialId === message.windowSerialId
+      )
+      if (!sessionTreeWindow) {
+        throw new Error('Saved window not found')
       }
+      const urls: string[] = []
+      for (const tab of sessionTreeWindow.tabs) {
+        let url = String(tab.url)
+        // if the URL is a privileged URL, open a redirect page instead
+        if (isPrivilegedUrl(url)) {
+          const title = sessionTree.getTabTitle(
+            sessionTreeWindow.serialId,
+            tab.serialId
+          )
+          url = getRedirectUrl(url, title)
+        } else if (
+          url === 'about:newtab' ||
+          url === 'chrome://browser/content/blanktab.html'
+        ) {
+          // don't set the URL for new tabs
+          url = 'about:blank'
+        }
+        urls.push(url)
+      }
+      const properties = urls.length > 0 ? { url: urls } : {}
+      const window = await createWindowAndWait(properties)
+
+      if (!window.id || !window.tabs) {
+        throw new Error('Window ID is undefined')
+      }
+
+      // then update the saved window object id to represent the newly opened window
+      sessionTree.updateWindowId(message.windowSerialId, window.id)
+      window.tabs.forEach((tab, index) => {
+        sessionTree.updateTabId(
+          sessionTreeWindow?.serialId,
+          sessionTreeWindow?.tabs[index].serialId,
+          tab.id!
+        )
+        sessionTree.updateTabState(
+          sessionTreeWindow?.serialId,
+          sessionTreeWindow?.tabs[index].serialId,
+          State.OPEN
+        )
+      })
       sendResponse({ success: true })
     } catch (error) {
       console.error('Error opening window:', error)
