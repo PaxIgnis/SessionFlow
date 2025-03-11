@@ -1140,6 +1140,26 @@ export default defineBackground(() => {
   // Event Listeners
   // ==============================
 
+  /**
+   * Event listener for when a tab is updated. This is used to detect when a tab's favicon is updated.
+   * When a favicon is updated, a message is sent to the Vue component to update the favicon in the cache.
+   * This is done in the SessionTree.vue file.
+   *
+   */
+  browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+    if (changeInfo.favIconUrl && browser.extension.getViews().length > 0) {
+      window.browser.runtime
+        .sendMessage({
+          type: 'FAVICON_UPDATED',
+          favIconUrl: changeInfo.favIconUrl,
+          tab: tab,
+        })
+        .catch(() => {
+          console.debug('No receivers for favicon update')
+        })
+    }
+  })
+
   browser.windows.onCreated.addListener(async (window) => {
     if (window.id === undefined) {
       console.error('Window ID is undefined')

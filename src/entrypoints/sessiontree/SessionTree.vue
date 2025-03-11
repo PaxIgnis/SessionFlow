@@ -1,6 +1,8 @@
 <script lang="ts" setup>
 import { ref, onMounted, triggerRef, onBeforeUnmount } from 'vue'
 import { Window, State } from './sessiontree.interfaces.ts'
+import { FaviconService } from '../../services/favicon/favicon.index.ts'
+import { FaviconCacheEntry } from '../../services/favicon/favicon.interfaces.ts'
 
 // Save Session Tree Window location and size before closing.
 window.onbeforeunload = () => {
@@ -14,12 +16,17 @@ window.onbeforeunload = () => {
 
   console.log('Unloading')
   window.browser.extension.getBackgroundPage().resetSessionTree()
+  faviconService.saveCacheToStorage()
 }
 
 // Initialize a local reactive sessionTree
 const sessionTree = ref<{ windows: Array<Window> }>({ windows: [] })
 const hoveredTab = ref<string | null>(null) // Track the hovered tab
 const hoveredWindow = ref<number | null>(null) // Track the hovered window
+const faviconCache = ref<Map<string, FaviconCacheEntry>>(
+  new Map<string, FaviconCacheEntry>()
+)
+const faviconService = new FaviconService(undefined, faviconCache.value)
 
 // Function to update sessionTree
 function updateSessionTree(newWindows: Array<Window>) {
@@ -40,6 +47,10 @@ onMounted(() => {
     switch (message.type) {
       case 'TREE_UPDATED':
         handleTreeUpdate()
+        break
+      case 'FAVICON_UPDATED':
+        console.log('FaviconUpdated message received')
+        faviconService.updateFavicon(message.favIconUrl, message.tab)
         break
       default:
         console.warn('Unknown message type:', message.type)
@@ -225,7 +236,11 @@ function tabClick(tabId: number, windowId: number, state: State, url: string) {
               target="_blank"
               @click.prevent
             >
-              <img class="nodeFavicon" src="/icon/16.png" alt="Tab icon" />
+              <img
+                class="nodeFavicon"
+                :src="faviconService.getFavicon(tab.url)"
+                alt="/icon/16.png"
+              />
               <span
                 :class="{
                   nodeTextOpen: tab.state === State.OPEN,
