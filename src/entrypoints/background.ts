@@ -555,6 +555,15 @@ export default defineBackground(() => {
       pendingTabCount += tabCount
     }
     const window = await browser.windows.create(properties || {})
+    // Update window position if provided. This is necessary at the moment
+    // because of a possible bug where the window position is not set.
+    if (properties?.left && properties?.top) {
+      await browser.windows.update(window.id!, {
+        left: properties.left,
+        top: properties.top,
+      })
+    }
+
     const waitForWindowId = (windowId: number): Promise<void> => {
       return new Promise((resolve) => {
         const interval = setInterval(() => {
