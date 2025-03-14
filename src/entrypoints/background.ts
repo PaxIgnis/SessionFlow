@@ -1188,10 +1188,17 @@ export default defineBackground(() => {
     if (sessionTree) {
       const window = sessionTree.windows.find((w) => w.id === windowId)
       if (window) {
-        if (window.state !== State.SAVED) {
-          console.log('Removing Window from sessionTree: ', windowId)
-          sessionTree.removeWindow(window.serialId)
+        if (window.state === State.SAVED) {
+          return
         }
+        // if window has saved tabs, save the window instead of removing
+        const savedTabs = window.tabs.filter((tab) => tab.state === State.SAVED)
+        if (savedTabs.length > 0) {
+          saveWindow({ windowId, windowSerialId: window.serialId }, () => {})
+          return
+        }
+        console.log('Removing Window from sessionTree: ', windowId)
+        sessionTree.removeWindow(window.serialId)
       }
     }
   })
@@ -1221,6 +1228,10 @@ export default defineBackground(() => {
   browser.tabs.onRemoved.addListener((tabId, removeInfo) => {
     if (removeInfo.windowId === undefined) {
       console.error('Window ID is undefined')
+      return
+    }
+    if (removeInfo.isWindowClosing) {
+      console.debug('Window is closing, no need to remove tab')
       return
     }
     if (sessionTree) {
