@@ -227,6 +227,7 @@ export default defineBackground(() => {
           serialId: 0,
           state: State.OPEN,
           tabs: [],
+          collapsed: false,
         }
         this.windows.push(newWindow)
         this.serializeSessionTree()

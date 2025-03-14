@@ -2,12 +2,14 @@ export interface Window {
   id: number
   serialId: number
   state: State
+  collapsed?: boolean
   tabs: Array<{
     id: number
     serialId: number
     state: State
     title: string
     url: string
+    collapsed?: boolean
   }>
 }
 

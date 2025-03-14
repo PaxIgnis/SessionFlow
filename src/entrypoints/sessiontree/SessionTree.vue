@@ -148,6 +148,15 @@ function windowDoubleClick(
 function tabClick(tabId: number, windowId: number, state: State, url: string) {
   console.log('Tab clicked', tabId, windowId, state, url)
 }
+
+function toggleCollapsedWindow(windowSerialId: number) {
+  const window = sessionTree.value.windows.find(
+    (w) => w.serialId === windowSerialId
+  )
+  if (window) {
+    window.collapsed = !window.collapsed
+  }
+}
 </script>
 
 <template>
@@ -179,6 +188,11 @@ function tabClick(tabId: number, windowId: number, state: State, url: string) {
             </span>
           </span>
           <div class="windowContainer">
+            <span
+              class="collapseArrow"
+              :class="{ collapsed: window.collapsed }"
+              @click="toggleCollapsedWindow(window.serialId)"
+            ></span>
             <img class="nodeFavicon" src="/icon/16.png" alt="Window icon" />
             <span
               :class="{
@@ -193,7 +207,7 @@ function tabClick(tabId: number, windowId: number, state: State, url: string) {
             >
           </div>
         </div>
-        <ul class="tabsList">
+        <ul class="tabsList" v-show="!window.collapsed">
           <li
             v-for="tab in window.tabs"
             :key="`${window.serialId}-${tab.serialId}`"
@@ -300,7 +314,7 @@ function tabClick(tabId: number, windowId: number, state: State, url: string) {
 
 .nodeContainer {
   cursor: pointer;
-  padding-left: 15px;
+  padding-left: 10px;
   display: block;
   text-decoration: none;
 }
@@ -333,7 +347,8 @@ function tabClick(tabId: number, windowId: number, state: State, url: string) {
 }
 
 .subNodeContainer {
-  padding-left: 15px;
+  position: relative;
+  padding-left: 10px;
   white-space: nowrap;
 }
 
@@ -344,9 +359,58 @@ function tabClick(tabId: number, windowId: number, state: State, url: string) {
 [v-cloak] {
   display: none;
 }
-
 .windowContainer {
-  padding-left: 15px;
+  padding-left: 0px;
+  display: flex;
+  align-items: center;
+}
+
+/* Vertical guide line */
+.subNodeContainer::before {
+  content: '';
   display: block;
+  position: absolute;
+  top: 0px;
+  left: 1px;
+  width: 0;
+  height: 100%;
+  border: 1px solid #d2d2d2;
+}
+
+/* Last item shouldn't extend the vertical line fully */
+.subNodeContainer:last-child::before {
+  height: calc(100% - 4px);
+}
+
+.collapseArrow {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  cursor: pointer;
+  user-select: none;
+  transition: transform 0.1s linear;
+  margin-right: 6px;
+  border: solid #303030;
+  border-width: 0 1px 1px 0;
+  padding: 1px;
+  transform: rotate(45deg);
+  margin-left: 0px;
+  position: relative;
+}
+
+.collapseArrow::after {
+  content: '';
+  position: absolute;
+  top: -4px;
+  left: -4px;
+  right: -4px;
+  bottom: -4px;
+  cursor: pointer;
+}
+
+.collapseArrow.collapsed {
+  margin-left: -1px;
+  margin-right: 7px;
+  transform: rotate(-45deg);
 }
 </style>
