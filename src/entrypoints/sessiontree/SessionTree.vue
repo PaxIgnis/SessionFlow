@@ -45,9 +45,6 @@ onMounted(() => {
   // Listen for messages from the background script
   window.browser.runtime.onMessage.addListener((message) => {
     switch (message.type) {
-      case 'TREE_UPDATED':
-        handleTreeUpdate()
-        break
       case 'FAVICON_UPDATED':
         console.log('FaviconUpdated message received')
         faviconService.updateFavicon(message.favIconUrl, message.tab)
@@ -56,7 +53,6 @@ onMounted(() => {
         console.warn('Unknown message type:', message.type)
     }
   })
-  handleTreeUpdate()
 })
 
 // reset sessionTree to non-ref object to avoid zombie dead object
@@ -66,13 +62,8 @@ onBeforeUnmount(() => {
 })
 
 // Handler functions
-function handleTreeUpdate() {
-  // triggerRef(sessionTree)
-  console.log('Tree updated inside SessionTree', sessionTree.value)
-}
 
 const getTabTree = () => {
-  handleTreeUpdate()
   console.log(sessionTree.value)
   console.log(sessionTree.value.windows)
 }

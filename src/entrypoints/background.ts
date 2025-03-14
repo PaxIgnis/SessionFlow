@@ -282,7 +282,6 @@ export default defineBackground(() => {
         const newTab = { id: tabId, serialId: 0, state, title, url }
         window.tabs.push(newTab)
         this.serializeSessionTree()
-        this.notifyUpdate('TREE_UPDATED')
       }
     }
 
@@ -331,7 +330,6 @@ export default defineBackground(() => {
           console.log('removeTab success', windowSerialId, tabSerialId)
           window.tabs.splice(index, 1)
           this.serializeSessionTree()
-          this.notifyUpdate('TREE_UPDATED')
         } else {
           console.error('Error removing tab:', windowSerialId, tabSerialId)
         }
@@ -395,7 +393,6 @@ export default defineBackground(() => {
           tab.title = title
           tab.url = url
           tab.id = newTabId
-          this.notifyUpdate('TREE_UPDATED')
         }
       }
     }
