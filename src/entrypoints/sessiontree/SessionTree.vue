@@ -174,6 +174,7 @@ function tabClick(tabId: number, windowId: number, state: State, url: string) {
             >&nbsp;
             <span class="hoverMenuToolbar">
               <span
+                v-if="window.state === State.OPEN"
                 class="hoverMenuSave"
                 @click="saveWindow(window.id, window.serialId)"
               ></span>
@@ -212,6 +213,7 @@ function tabClick(tabId: number, windowId: number, state: State, url: string) {
               >&nbsp;
               <span class="hoverMenuToolbar">
                 <span
+                  v-if="tab.state === State.OPEN"
                   class="hoverMenuSave"
                   @click="saveTab(tab.id, tab.serialId, window.serialId)"
                 ></span>
