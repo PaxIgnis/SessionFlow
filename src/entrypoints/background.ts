@@ -434,6 +434,18 @@ export default defineBackground(() => {
         console.error('Error sending message:', error)
       })
     }
+
+    saveWindow(windowSerialId: number) {
+      const window = this.windows.find((w) => w.serialId === windowSerialId)
+      if (window) {
+        window.state = State.SAVED
+        window.id = -1
+        window.tabs.forEach((tab) => {
+          tab.state = State.SAVED
+          tab.id = -1
+        })
+      }
+    }
   }
 
   // ==============================
@@ -1192,7 +1204,7 @@ export default defineBackground(() => {
         // if window has saved tabs, save the window instead of removing
         const savedTabs = window.tabs.filter((tab) => tab.state === State.SAVED)
         if (savedTabs.length > 0) {
-          saveWindow({ windowId, windowSerialId: window.serialId }, () => {})
+          sessionTree.saveWindow(window.serialId)
           return
         }
         console.log('Removing Window from sessionTree: ', windowId)
