@@ -1261,19 +1261,19 @@ export default defineBackground(() => {
     if (message.action === 'closeTab') {
       closeTab(message)
     } else if (message.action === 'saveTab') {
-      return saveTab(message)
+      saveTab(message)
     } else if (message.action === 'openTab') {
-      return openTab(message)
+      openTab(message)
     } else if (message.action === 'closeWindow') {
-      return closeWindow(message)
+      closeWindow(message)
     } else if (message.action === 'saveWindow') {
-      return saveWindow(message)
+      saveWindow(message)
     } else if (message.action === 'openWindow') {
-      return openWindow(message)
+      openWindow(message)
     } else if (message.action === 'focusTab') {
-      return focusTab(message)
+      focusTab(message)
     } else if (message.action === 'focusWindow') {
-      return focusWindow(message)
+      focusWindow(message)
     }
   })
 })
