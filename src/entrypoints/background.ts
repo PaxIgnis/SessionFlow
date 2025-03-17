@@ -809,6 +809,9 @@ export default defineBackground(() => {
       }
     }
     // only close the tab if it is open
+    if (message.tabId === -1 || message.tabId === 0) {
+      return
+    }
     browser.tabs
       .get(message.tabId)
       .then((tab) => {
@@ -817,9 +820,9 @@ export default defineBackground(() => {
         }
       })
       .catch((error) => {
-        console.error('Error closing tab:', error)
+        console.debug('Error closing tab:', error)
       })
-    return true // Indicates that the response will be sent asynchronously
+    return
   }
 
   /**
@@ -835,6 +838,9 @@ export default defineBackground(() => {
     if (message.windowSerialId !== undefined) {
       sessionTree.removeWindow(message.windowSerialId)
     }
+    if (message.windowId === -1 || message.windowId === 0) {
+      return
+    }
     browser.windows
       .get(message.windowId)
       .then((window) => {
@@ -845,9 +851,9 @@ export default defineBackground(() => {
         }
       })
       .catch(() => {
-        console.error('Error getting window:', message.windowId)
+        console.debug('Window ID not found.', message.windowId)
       })
-    return true // Indicates that the response will be sent asynchronously
+    return
   }
 
   /**
