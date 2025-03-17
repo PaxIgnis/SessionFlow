@@ -782,7 +782,11 @@ export default defineBackground(() => {
    * @param {Function} sendResponse - The function to send a response back to the sender.
    * @returns {boolean} - Indicates that the response will be sent asynchronously.
    */
-  function closeTab(message, sendResponse) {
+  function closeTab(message: {
+    tabId: number
+    tabSerialId: number
+    windowSerialId: number
+  }) {
     if (
       message.tabSerialId !== undefined &&
       message.windowSerialId !== undefined
@@ -805,20 +809,16 @@ export default defineBackground(() => {
       }
     }
     // only close the tab if it is open
-    if (
-      sessionTree.getTabState(message.windowSerialId, message.tabSerialId) ===
-      State.OPEN
-    ) {
-      browser.tabs
-        .remove(message.tabId)
-        .then(() => {
-          sendResponse({ success: true })
-        })
-        .catch((error) => {
-          console.error('Error closing tab:', error)
-          sendResponse({ success: false, error: error })
-        })
-    }
+    browser.tabs
+      .get(message.tabId)
+      .then((tab) => {
+        if (tab !== undefined) {
+          browser.tabs.remove(message.tabId)
+        }
+      })
+      .catch((error) => {
+        console.error('Error closing tab:', error)
+      })
     return true // Indicates that the response will be sent asynchronously
   }
 
@@ -831,18 +831,21 @@ export default defineBackground(() => {
    * @param {Function} sendResponse - The function to send a response back to the sender.
    * @returns {boolean} - Indicates that the response will be sent asynchronously.
    */
-  function closeWindow(message, sendResponse) {
+  function closeWindow(message: { windowId: number; windowSerialId: number }) {
     if (message.windowSerialId !== undefined) {
       sessionTree.removeWindow(message.windowSerialId)
     }
     browser.windows
-      .remove(message.windowId)
-      .then(() => {
-        sendResponse({ success: true })
+      .get(message.windowId)
+      .then((window) => {
+        if (window) {
+          browser.windows.remove(message.windowId).catch((error) => {
+            console.error('Error closing window:', error)
+          })
+        }
       })
-      .catch((error) => {
-        console.error('Error closing window:', error)
-        sendResponse({ success: false, error: error })
+      .catch(() => {
+        console.error('Error getting window:', message.windowId)
       })
     return true // Indicates that the response will be sent asynchronously
   }
@@ -859,7 +862,11 @@ export default defineBackground(() => {
    * @param {Function} sendResponse - The function to send a response back to the sender.
    * @returns {boolean} - Indicates that the response will be sent asynchronously.
    */
-  function saveTab(message, sendResponse) {
+  function saveTab(message: {
+    tabId: number
+    tabSerialId: number
+    windowSerialId: number
+  }) {
     if (
       message.tabSerialId !== undefined &&
       message.windowSerialId !== undefined
@@ -869,7 +876,6 @@ export default defineBackground(() => {
         State.SAVED
       ) {
         // tab is already saved, do nothing
-        sendResponse({ success: true })
         return true
       }
       // if this is the last open tab in the window, update the window state to SAVED and reset id
@@ -890,15 +896,9 @@ export default defineBackground(() => {
       )
       sessionTree.updateTabId(message.windowSerialId, message.tabSerialId, -1)
     }
-    browser.tabs
-      .remove(message.tabId)
-      .then(() => {
-        sendResponse({ success: true })
-      })
-      .catch((error) => {
-        console.error('Error saving tab:', error)
-        sendResponse({ success: false, error: error })
-      })
+    browser.tabs.remove(message.tabId).catch((error) => {
+      console.error('Error saving tab:', error)
+    })
     return true // Indicates that the response will be sent asynchronously
   }
 
@@ -911,7 +911,7 @@ export default defineBackground(() => {
    * @param {Function} sendResponse - The function to send a response back to the sender.
    * @returns {boolean} - Indicates that the response will be sent asynchronously.
    */
-  function saveWindow(message, sendResponse) {
+  function saveWindow(message: { windowId: number; windowSerialId: number }) {
     sessionTree.updateWindowState(message.windowSerialId, State.SAVED)
     sessionTree.updateWindowId(message.windowSerialId, -1)
     const window = sessionTree.windows.find(
@@ -927,15 +927,9 @@ export default defineBackground(() => {
         sessionTree.updateTabId(message.windowSerialId, tab.serialId, -1)
       }
     }
-    browser.windows
-      .remove(message.windowId)
-      .then(() => {
-        sendResponse({ success: true })
-      })
-      .catch((error) => {
-        console.error('Error saving window:', error)
-        sendResponse({ success: false, error: error })
-      })
+    browser.windows.remove(message.windowId).catch((error) => {
+      console.error('Error saving window:', error)
+    })
     return true // Indicates that the response will be sent asynchronously
   }
 
@@ -949,7 +943,11 @@ export default defineBackground(() => {
    * @param {Function} sendResponse - The function to send a response back to the sender.
    * @returns {boolean} - Indicates that the response will be sent asynchronously.
    */
-  async function openTab(message, sendResponse) {
+  async function openTab(message: {
+    tabSerialId: number
+    windowSerialId: number
+    url: string
+  }) {
     let properties: { windowId?: number; active?: boolean; url?: string } = {}
     // if the URL is a privileged URL, open a redirect page instead
     if (isPrivilegedUrl(message.url)) {
@@ -997,7 +995,6 @@ export default defineBackground(() => {
           message.tabSerialId,
           State.OPEN
         )
-        sendResponse({ success: true })
       } catch (error) {
         console.error('Error opening window:', error)
       }
@@ -1017,10 +1014,8 @@ export default defineBackground(() => {
           message.tabSerialId,
           State.OPEN
         )
-        sendResponse({ success: true })
       } catch (error) {
         console.error('Error opening tab:', error)
-        sendResponse({ success: false, error: error })
       }
     }
 
@@ -1035,16 +1030,10 @@ export default defineBackground(() => {
    * @param {Function} sendResponse - The function to send a response back to the sender.
    * @returns {boolean} - Indicates that the response will be sent asynchronously.
    */
-  function focusTab(message, sendResponse) {
-    browser.tabs
-      .update(message.tabId, { active: true })
-      .then(() => {
-        sendResponse({ success: true })
-      })
-      .catch((error) => {
-        console.error('Error focusing tab:', error)
-        sendResponse({ success: false, error: error })
-      })
+  function focusTab(message: { tabId: number }) {
+    browser.tabs.update(message.tabId, { active: true }).catch((error) => {
+      console.error('Error focusing tab:', error)
+    })
     return true // Indicates that the response will be sent asynchronously
   }
 
@@ -1056,15 +1045,11 @@ export default defineBackground(() => {
    * @param {Function} sendResponse - The function to send a response back to the sender.
    * @returns {boolean} - Indicates that the response will be sent asynchronously.
    */
-  function focusWindow(message, sendResponse) {
+  function focusWindow(message: { windowId: number }) {
     browser.windows
       .update(message.windowId, { focused: true })
-      .then(() => {
-        sendResponse({ success: true })
-      })
       .catch((error) => {
         console.error('Error focusing window:', error)
-        sendResponse({ success: false, error: error })
       })
     return true // Indicates that the response will be sent asynchronously
   }
@@ -1089,7 +1074,7 @@ export default defineBackground(() => {
    * @param {Function} sendResponse - The function to send a response back to the sender.
    * @returns {boolean} - Indicates that the response will be sent asynchronously.
    */
-  async function openWindow(message, sendResponse) {
+  async function openWindow(message: { windowSerialId: number }) {
     // First change the state of the window in sessionTree to from SAVED to OPEN
     sessionTree.updateWindowState(message.windowSerialId, State.OPEN)
     try {
@@ -1139,10 +1124,8 @@ export default defineBackground(() => {
           State.OPEN
         )
       })
-      sendResponse({ success: true })
     } catch (error) {
       console.error('Error opening window:', error)
-      sendResponse({ success: false, error: error })
     }
     return true // Indicates that the response will be sent asynchronously
   }
@@ -1274,23 +1257,23 @@ export default defineBackground(() => {
     )
   })
 
-  browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  browser.runtime.onMessage.addListener((message) => {
     if (message.action === 'closeTab') {
-      return closeTab(message, sendResponse)
+      closeTab(message)
     } else if (message.action === 'saveTab') {
-      return saveTab(message, sendResponse)
+      return saveTab(message)
     } else if (message.action === 'openTab') {
-      return openTab(message, sendResponse)
+      return openTab(message)
     } else if (message.action === 'closeWindow') {
-      return closeWindow(message, sendResponse)
+      return closeWindow(message)
     } else if (message.action === 'saveWindow') {
-      return saveWindow(message, sendResponse)
+      return saveWindow(message)
     } else if (message.action === 'openWindow') {
-      return openWindow(message, sendResponse)
+      return openWindow(message)
     } else if (message.action === 'focusTab') {
-      return focusTab(message, sendResponse)
+      return focusTab(message)
     } else if (message.action === 'focusWindow') {
-      return focusWindow(message, sendResponse)
+      return focusWindow(message)
     }
   })
 })
