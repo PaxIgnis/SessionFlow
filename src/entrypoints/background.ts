@@ -1278,6 +1278,7 @@ export default defineBackground(() => {
       openWindow(message)
     } else if (message.action === 'focusTab') {
       focusTab(message)
+      focusWindow(message)
     } else if (message.action === 'focusWindow') {
       focusWindow(message)
     }
