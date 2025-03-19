@@ -1321,9 +1321,9 @@ export default defineBackground(() => {
     }
     // if order doesn't match, update the sessionTree order to match the browser order
     const movedTabIndex = window.tabs.findIndex((tab) => tab.id === tabId)
+    const tab = window.tabs.splice(movedTabIndex, 1)[0]
     if (moveInfo.toIndex + 1 >= openSessionTreeTabs.length) {
       // place in last position
-      const tab = window.tabs.splice(movedTabIndex, 1)[0]
       window.tabs.push(tab)
     } else {
       // move to the position immediately before the tab to the right in the browser
@@ -1331,7 +1331,6 @@ export default defineBackground(() => {
       const rightTabIndex = window.tabs.findIndex(
         (tab) => tab.id === rightTabId
       )
-      const tab = window.tabs.splice(movedTabIndex, 1)[0]
       window.tabs.splice(rightTabIndex, 0, tab)
     }
     sessionTree.serializeSessionTree()
