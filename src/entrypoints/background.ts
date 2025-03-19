@@ -435,6 +435,11 @@ export default defineBackground(() => {
       })
     }
 
+    /**
+     * Sets the state of the window and all tabs to SAVED and resets the IDs.
+     *
+     * @param {number} windowSerialId - The Serial ID of the window to save.
+     */
     saveWindow(windowSerialId: number) {
       const window = this.windows.find((w) => w.serialId === windowSerialId)
       if (window) {
@@ -444,6 +449,23 @@ export default defineBackground(() => {
           tab.state = State.SAVED
           tab.id = -1
         })
+      }
+    }
+
+    /**
+     * Sets the state of the tab to SAVED and resets the ID.
+     *
+     * @param {number} windowSerialId - The Serial ID of the window containing the tab.
+     * @param {number} tabSerialId - The Serial ID of the tab to save.
+     */
+    saveTab(windowSerialId: number, tabSerialId: number) {
+      const window = this.windows.find((w) => w.serialId === windowSerialId)
+      if (window) {
+        const tab = window.tabs.find((t) => t.serialId === tabSerialId)
+        if (tab) {
+          tab.state = State.SAVED
+          tab.id = -1
+        }
       }
     }
   }
@@ -891,16 +913,10 @@ export default defineBackground(() => {
       if (window) {
         const openTabs = window.tabs.filter((tab) => tab.state === State.OPEN)
         if (openTabs.length === 1) {
-          sessionTree.updateWindowState(message.windowSerialId, State.SAVED)
-          sessionTree.updateWindowId(message.windowSerialId, -1)
+          sessionTree.saveWindow(message.windowSerialId)
         }
       }
-      sessionTree.updateTabState(
-        message.windowSerialId,
-        message.tabSerialId,
-        State.SAVED
-      )
-      sessionTree.updateTabId(message.windowSerialId, message.tabSerialId, -1)
+      sessionTree.saveTab(message.windowSerialId, message.tabSerialId)
     }
     browser.tabs.remove(message.tabId).catch((error) => {
       console.error('Error saving tab:', error)
@@ -1185,20 +1201,29 @@ export default defineBackground(() => {
 
   browser.windows.onRemoved.addListener((windowId) => {
     if (sessionTree) {
-      const window = sessionTree.windows.find((w) => w.id === windowId)
-      if (window) {
-        if (window.state === State.SAVED) {
-          return
-        }
-        // if window has saved tabs, save the window instead of removing
-        const savedTabs = window.tabs.filter((tab) => tab.state === State.SAVED)
-        if (savedTabs.length > 0) {
-          sessionTree.saveWindow(window.serialId)
-          return
-        }
-        console.log('Removing Window from sessionTree: ', windowId)
-        sessionTree.removeWindow(window.serialId)
-      }
+    if (!sessionTree) {
+      return
+    }
+    const window = sessionTree.windows.find((w) => w.id === windowId)
+    if (!window) {
+      return
+    }
+    if (window.state === State.SAVED) {
+      return
+    }
+    // if window has saved tabs, save the window instead of removing
+    const savedTabs = window.tabs.filter((tab) => tab.state === State.SAVED)
+    if (savedTabs.length > 0) {
+      sessionTree.saveWindow(window.serialId)
+      return
+    }
+    const tabCount = window.tabs.length
+    // if this window only has 1 tab, then save the window instead of removing
+    if (tabCount === 1) {
+      sessionTree.saveWindow(window.serialId)
+    } else {
+      console.log('Removing Window from sessionTree: ', windowId)
+      sessionTree.removeWindow(window.serialId)
     }
   })
 
@@ -1229,23 +1254,24 @@ export default defineBackground(() => {
       console.error('Window ID is undefined')
       return
     }
-    if (removeInfo.isWindowClosing) {
-      console.debug('Window is closing, no need to remove tab')
+    if (!sessionTree) {
       return
     }
-    if (sessionTree) {
-      const window = sessionTree.windows.find(
-        (w) => w.id === removeInfo.windowId
-      )
-      if (window) {
-        const index = window.tabs.findIndex((tab) => tab.id === tabId)
-        if (index !== -1) {
-          if (window.tabs[index].state !== State.SAVED) {
-            sessionTree.removeTab(window.serialId, window.tabs[index].serialId)
-          }
-        }
-      }
+    const window = sessionTree.windows.find((w) => w.id === removeInfo.windowId)
+    if (!window) {
+      return
     }
+    const index = window.tabs.findIndex((tab) => tab.id === tabId)
+    if (index === -1) {
+      return
+    }
+    if (window.tabs[index].state === State.SAVED) {
+      return
+    }
+    if (removeInfo.isWindowClosing) {
+      return
+    }
+    sessionTree.removeTab(window.serialId, window.tabs[index].serialId)
   })
 
   browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
