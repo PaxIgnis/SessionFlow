@@ -970,7 +970,12 @@ export default defineBackground(() => {
     windowSerialId: number
     url: string
   }) {
-    let properties: { windowId?: number; active?: boolean; url?: string } = {}
+    let properties: {
+      windowId?: number
+      active?: boolean
+      url?: string
+      index?: number
+    } = {}
     // if the URL is a privileged URL, open a redirect page instead
     if (isPrivilegedUrl(message.url)) {
       const title = sessionTree.getTabTitle(
@@ -1024,6 +1029,16 @@ export default defineBackground(() => {
       // if the window is currently open
       properties.windowId = savedWindow.id
       properties.active = true
+      // find id of first open tab to the right
+      const tabToRightIndex = savedWindow.tabs
+        .filter((tab) => tab.state === State.OPEN)
+        .findIndex(
+          (tab, index, array) =>
+            array[index - 1]?.serialId === message.tabSerialId
+        )
+      if (tabToRightIndex !== -1) {
+        properties.index = tabToRightIndex - 1
+      }
       try {
         const tab = await createTabAndWait(properties)
         sessionTree.updateTabId(
