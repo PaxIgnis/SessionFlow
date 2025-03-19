@@ -1200,7 +1200,6 @@ export default defineBackground(() => {
   })
 
   browser.windows.onRemoved.addListener((windowId) => {
-    if (sessionTree) {
     if (!sessionTree) {
       return
     }
@@ -1287,6 +1286,55 @@ export default defineBackground(() => {
       tab.title || '',
       tab.url || ''
     )
+  })
+
+  browser.tabs.onMoved.addListener(async (tabId, moveInfo) => {
+    if (
+      moveInfo.windowId === undefined ||
+      moveInfo.toIndex === undefined ||
+      tabId === undefined
+    ) {
+      console.error('Tab or Window ID is undefined')
+      return
+    }
+    const window = sessionTree.windows.find((w) => w.id === moveInfo.windowId)
+    if (!window) {
+      return
+    }
+    const openSessionTreeTabs = window.tabs.filter(
+      (tab) => tab.state === State.OPEN
+    )
+    const openBrowserTabs = await browser.tabs.query({
+      windowId: moveInfo.windowId,
+    })
+    if (!openSessionTreeTabs || !openBrowserTabs) {
+      console.error('Error getting tabs')
+      return
+    }
+    // return if order matches
+    if (
+      openSessionTreeTabs.every(
+        (tab, index) => tab.id === openBrowserTabs[index].id
+      )
+    ) {
+      return
+    }
+    // if order doesn't match, update the sessionTree order to match the browser order
+    const movedTabIndex = window.tabs.findIndex((tab) => tab.id === tabId)
+    if (moveInfo.toIndex + 1 >= openSessionTreeTabs.length) {
+      // place in last position
+      const tab = window.tabs.splice(movedTabIndex, 1)[0]
+      window.tabs.push(tab)
+    } else {
+      // move to the position immediately before the tab to the right in the browser
+      const rightTabId = openBrowserTabs[moveInfo.toIndex + 1].id
+      const rightTabIndex = window.tabs.findIndex(
+        (tab) => tab.id === rightTabId
+      )
+      const tab = window.tabs.splice(movedTabIndex, 1)[0]
+      window.tabs.splice(rightTabIndex, 0, tab)
+    }
+    sessionTree.serializeSessionTree()
   })
 
   browser.runtime.onMessage.addListener((message) => {
