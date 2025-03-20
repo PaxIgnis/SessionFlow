@@ -270,20 +270,42 @@ export default defineBackground(() => {
       }
     }
 
+    /**
+     * Adds a tab to the session tree.
+     *
+     * @param {number} windowId - The ID of the window containing the tab.
+     * @param {number} tabId - The ID of the tab to add.
+     * @param {State} state - The state of the tab.
+     * @param {string} title - The title of the tab.
+     * @param {string} url - The URL of the tab.
+     * @param {number} index - The index to insert the tab at, if not provided the tab is added to the end.
+     */
     addTab(
       windowId: number,
       tabId: number,
       state: State,
       title: string,
-      url: string
+      url: string,
+      index?: number
     ) {
       console.log('Tab Added in background.ts', windowId, tabId, title, url)
       const window = this.windows.find((w) => w.id === windowId)
-      if (window) {
-        const newTab = { id: tabId, serialId: 0, state, title, url }
-        window.tabs.push(newTab)
-        this.serializeSessionTree()
+      if (!window) {
+        console.error('Error adding tab, could not find window:', windowId)
+        return
       }
+      if (index !== undefined) {
+        window.tabs.splice(index, 0, {
+          id: tabId,
+          serialId: 0,
+          state,
+          title,
+          url,
+        })
+      } else {
+        window.tabs.push({ id: tabId, serialId: 0, state, title, url })
+      }
+      this.serializeSessionTree()
     }
 
     getTabTitle(windowSerialId: number, tabSerialId: number) {
@@ -1304,6 +1326,7 @@ export default defineBackground(() => {
   })
 
   browser.tabs.onMoved.addListener(async (tabId, moveInfo) => {
+    console.debug('Tab Moved:', tabId, moveInfo)
     if (
       moveInfo.windowId === undefined ||
       moveInfo.toIndex === undefined ||
@@ -1349,6 +1372,76 @@ export default defineBackground(() => {
       window.tabs.splice(rightTabIndex, 0, tab)
     }
     sessionTree.serializeSessionTree()
+  })
+
+  /**
+   * When a tab is detached from a window, remove it from the session tree.
+   */
+  browser.tabs.onDetached.addListener((tabId, detachInfo) => {
+    console.debug('Tab Detached:', tabId, detachInfo)
+    if (detachInfo.oldWindowId === undefined || tabId === undefined) {
+      console.error('Tab or Window ID is undefined')
+      return
+    }
+    const window = sessionTree.windows.find(
+      (w) => w.id === detachInfo.oldWindowId
+    )
+    if (!window) {
+      return
+    }
+    const index = window.tabs.findIndex((tab) => tab.id === tabId)
+    if (index === -1) {
+      return
+    }
+    window.tabs.splice(index, 1)
+    sessionTree.serializeSessionTree()
+  })
+
+  browser.tabs.onAttached.addListener(async (tabId, attachInfo) => {
+    console.debug('Tab Attached:', tabId, attachInfo)
+    if (attachInfo.newWindowId === undefined || tabId === undefined) {
+      console.error('Tab or Window ID is undefined')
+      return
+    }
+    const window = sessionTree.windows.find(
+      (w) => w.id === attachInfo.newWindowId
+    )
+    if (!window) {
+      return
+    }
+    const tab = await browser.tabs.get(tabId)
+    if (!tab) {
+      console.error('Tab not found in window')
+      return
+    }
+    // get the id of the tab to the right in the browser
+    const tabToRight = await browser.tabs.query({
+      windowId: attachInfo.newWindowId,
+      index: tab.index + 1,
+    })
+    const tabToRightId = tabToRight.length > 0 ? tabToRight[0].id : undefined
+    if (tabToRightId === undefined) {
+      sessionTree.addTab(
+        attachInfo.newWindowId,
+        tabId,
+        State.OPEN,
+        tab.title || 'Untitled',
+        tab.url || ''
+      )
+      return
+    } else {
+      const tabToRightIndex = window.tabs.findIndex(
+        (tab) => tab.id === tabToRightId
+      )
+      sessionTree.addTab(
+        attachInfo.newWindowId,
+        tabId,
+        State.OPEN,
+        tab.title || 'Untitled',
+        tab.url || '',
+        tabToRightIndex
+      )
+    }
   })
 
   browser.runtime.onMessage.addListener((message) => {
