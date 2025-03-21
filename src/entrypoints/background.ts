@@ -146,6 +146,12 @@ export default defineBackground(() => {
       this.initializeWindows()
     }
 
+    /**
+     * Initializes the session tree by first loading the save tree from storage,
+     * and then updating it with the current state of the browser.
+     *
+     * @returns {Promise<void>} A promise that resolves when the session tree has been initialized.
+     */
     async initializeWindows() {
       try {
         await this.loadSessionTreeFromStorage()
@@ -166,7 +172,6 @@ export default defineBackground(() => {
           this.windows.push(newWindow)
         })
         this.serializeSessionTree()
-        console.log('Session Tree after initialize:', this.windows)
       } catch (error) {
         console.error('Error initializing windows:', error)
       }
@@ -192,9 +197,8 @@ export default defineBackground(() => {
     async loadSessionTreeFromStorage() {
       try {
         const sessionTree = await browser.storage.local.get(this.STORAGE_KEY)
-        console.log('Session Tree from storage:', sessionTree)
+        console.debug('Session Tree from storage:', sessionTree)
         if (sessionTree[this.STORAGE_KEY]) {
-          console.log('Saving session tree to this.windows')
           this.windows = sessionTree[this.STORAGE_KEY]
           this.windows.forEach((window) => {
             window.id = 0
@@ -204,13 +208,17 @@ export default defineBackground(() => {
               tab.state = State.SAVED
             })
           })
-          console.log('Session Tree:', this.windows)
         }
       } catch (error) {
         console.error('Error loading session tree from storage:', error)
       }
     }
 
+    /**
+     * Saves the session tree to local storage.
+     *
+     * @returns {Promise<void>} A promise that resolves when the session tree has been saved.
+     */
     async saveSessionTreeToStorage() {
       try {
         await browser.storage.local.set({ [this.STORAGE_KEY]: this.windows })
@@ -219,6 +227,12 @@ export default defineBackground(() => {
       }
     }
 
+    /**
+     * Adds a blank window to the session tree,
+     * and then updates it with the current state in the browser.
+     *
+     * @param {number} windowId - The ID of the window to add.
+     */
     addWindow(windowId: number) {
       console.log('Adding Window', windowId)
       if (!this.windows.some((w) => w.id === windowId)) {
@@ -235,6 +249,12 @@ export default defineBackground(() => {
       }
     }
 
+    /**
+     * Updates a window in the session tree to match the current state in the browser.
+     *
+     * @param {number} windowId - The ID of the window to update.
+     * @returns {Promise<void>} A promise that resolves when the window has been updated.
+     */
     async updateWindowTabs(windowId: number) {
       try {
         const win = await browser.windows.get(windowId, { populate: true })
@@ -254,8 +274,13 @@ export default defineBackground(() => {
       }
     }
 
+    /**
+     * Removes a window from the session tree.
+     *
+     * @param {number} windowSerialId - The serial ID of the window to remove.
+     */
     removeWindow(windowSerialId: number) {
-      console.log('Remove Window', windowSerialId)
+      console.debug('Remove Window', windowSerialId)
       const index = this.windows.findIndex((w) => w.serialId === windowSerialId)
       if (index !== -1) {
         console.log(
@@ -308,6 +333,13 @@ export default defineBackground(() => {
       this.serializeSessionTree()
     }
 
+    /**
+     * Returns the title of a tab in the session tree.
+     *
+     * @param {number} windowSerialId - The serial ID of the window containing the tab.
+     * @param {number} tabSerialId - The serial ID of the tab to get the title of.
+     * @returns {string} The title of the tab, or an empty string if not found.
+     */
     getTabTitle(windowSerialId: number, tabSerialId: number) {
       const window = this.windows.find((w) => w.serialId === windowSerialId)
       if (window) {
@@ -777,32 +809,41 @@ export default defineBackground(() => {
     }
   }
 
+  /**
+   * Returns the session tree.
+   *
+   * @returns {Array<Window>} The session tree
+   */
   function getSessionTree(): Array<Window> {
     return sessionTree.windows
   }
 
+  /**
+   * Sets the session tree to a new tree, saving the current tree as a backup.
+   *
+   * @param {Array<Window>} newTree - The new session tree
+   */
   function setSessionTree(newTree: Array<Window>) {
-    console.log(
-      'Setting Session Tree',
-      sessionTree.windows,
-      sessionTree.windowsBackup
-    )
     sessionTree.windowsBackup = sessionTree.windows
     sessionTree.windows = newTree
-    console.log(
-      'After Setting Session Tree',
-      sessionTree.windows,
-      sessionTree.windowsBackup
-    )
   }
 
+  /**
+   * Resets the session tree to the backup session tree.
+   */
   function resetSessionTree() {
     console.log('Resetting Session Tree')
     sessionTree.windows = sessionTree.windowsBackup
     sessionTree.saveSessionTreeToStorage()
   }
 
-  // build the redirect URL for privileged URLs
+  /**
+   * Builds the redirect URL for privileged Firefox URLs
+   *
+   * @param {string} targetUrl - The URL to redirect to
+   * @param {string} targetTitle - The title of the target URL
+   * @returns {string} The redirect URL
+   */
   function getRedirectUrl(targetUrl: string, targetTitle: string) {
     const redirectUrl =
       browser.runtime.getURL('/redirect.html') +
@@ -811,7 +852,12 @@ export default defineBackground(() => {
     return redirectUrl
   }
 
-  // check if a URL is a privileged URL for Firefox
+  /**
+   * Checks if a URL is a privileged URL for Firefox
+   *
+   * @param {string} url - The URL to check
+   * @returns {boolean} True if the URL is a privileged URL, false otherwise
+   */
   function isPrivilegedUrl(url: string): boolean {
     return privilegedUrls.some((privilegedUrl) => url.startsWith(privilegedUrl))
   }
@@ -824,7 +870,6 @@ export default defineBackground(() => {
    * @param {number} message.tabSerialId - The Serial ID of the tab to be closed.
    * @param {number} message.windowSerialId - The Serial ID of the window containing the tab.
    * @param {Function} sendResponse - The function to send a response back to the sender.
-   * @returns {boolean} - Indicates that the response will be sent asynchronously.
    */
   function closeTab(message: {
     tabId: number
@@ -876,7 +921,6 @@ export default defineBackground(() => {
    * @param {number} message.windowId - The ID of the window to be closed.
    * @param {number} message.windowSerialId - The Serial ID of the window to be closed.
    * @param {Function} sendResponse - The function to send a response back to the sender.
-   * @returns {boolean} - Indicates that the response will be sent asynchronously.
    */
   function closeWindow(message: { windowId: number; windowSerialId: number }) {
     if (message.windowSerialId !== undefined) {
@@ -910,7 +954,6 @@ export default defineBackground(() => {
    * @param {number} message.tabSerialId - The Serial ID of the tab to be saved.
    * @param {number} message.windowSerialId - The Serial ID of the window containing the tab.
    * @param {Function} sendResponse - The function to send a response back to the sender.
-   * @returns {boolean} - Indicates that the response will be sent asynchronously.
    */
   function saveTab(message: {
     tabId: number
@@ -943,7 +986,7 @@ export default defineBackground(() => {
     browser.tabs.remove(message.tabId).catch((error) => {
       console.error('Error saving tab:', error)
     })
-    return true // Indicates that the response will be sent asynchronously
+    return
   }
 
   /**
@@ -953,7 +996,6 @@ export default defineBackground(() => {
    * @param {number} message.windowId - The ID of the window to be saved.
    * @param {number} message.windowSerialId - The Serial ID of the window to be saved.
    * @param {Function} sendResponse - The function to send a response back to the sender.
-   * @returns {boolean} - Indicates that the response will be sent asynchronously.
    */
   function saveWindow(message: { windowId: number; windowSerialId: number }) {
     sessionTree.updateWindowState(message.windowSerialId, State.SAVED)
@@ -974,7 +1016,7 @@ export default defineBackground(() => {
     browser.windows.remove(message.windowId).catch((error) => {
       console.error('Error saving window:', error)
     })
-    return true // Indicates that the response will be sent asynchronously
+    return
   }
 
   /**
@@ -985,7 +1027,6 @@ export default defineBackground(() => {
    * @param {number} message.windowSerialId - The Serial ID of the window containing the tab.
    * @param {string} message.url - The URL to be opened in the tab.
    * @param {Function} sendResponse - The function to send a response back to the sender.
-   * @returns {boolean} - Indicates that the response will be sent asynchronously.
    */
   async function openTab(message: {
     tabSerialId: number
@@ -1077,8 +1118,7 @@ export default defineBackground(() => {
         console.error('Error opening tab:', error)
       }
     }
-
-    return true // Indicates that the response will be sent asynchronously
+    return
   }
 
   /**
@@ -1087,13 +1127,12 @@ export default defineBackground(() => {
    * @param {Object} message - The message object containing tab information.
    * @param {number} message.tabId - The ID of the tab to be focused.
    * @param {Function} sendResponse - The function to send a response back to the sender.
-   * @returns {boolean} - Indicates that the response will be sent asynchronously.
    */
   function focusTab(message: { tabId: number }) {
     browser.tabs.update(message.tabId, { active: true }).catch((error) => {
       console.error('Error focusing tab:', error)
     })
-    return true // Indicates that the response will be sent asynchronously
+    return
   }
 
   /**
@@ -1102,7 +1141,6 @@ export default defineBackground(() => {
    * @param {Object} message - The message object containing window information.
    * @param {number} message.windowId - The ID of the window to be focused.
    * @param {Function} sendResponse - The function to send a response back to the sender.
-   * @returns {boolean} - Indicates that the response will be sent asynchronously.
    */
   function focusWindow(message: { windowId: number }) {
     browser.windows
@@ -1110,7 +1148,7 @@ export default defineBackground(() => {
       .catch((error) => {
         console.error('Error focusing window:', error)
       })
-    return true // Indicates that the response will be sent asynchronously
+    return
   }
 
   function printSessionTree(string: string = '') {
@@ -1131,7 +1169,6 @@ export default defineBackground(() => {
    * @param {Object} message - The message object containing window information.
    * @param {number} message.windowSerialId - The Serial ID of the window to be opened from sessionTree.
    * @param {Function} sendResponse - The function to send a response back to the sender.
-   * @returns {boolean} - Indicates that the response will be sent asynchronously.
    */
   async function openWindow(message: { windowSerialId: number }) {
     // First change the state of the window in sessionTree to from SAVED to OPEN
@@ -1186,7 +1223,7 @@ export default defineBackground(() => {
     } catch (error) {
       console.error('Error opening window:', error)
     }
-    return true // Indicates that the response will be sent asynchronously
+    return
   }
 
   // ==============================
@@ -1221,21 +1258,27 @@ export default defineBackground(() => {
     }
   })
 
+  /**
+   * When a window is created, add it to the session tree.
+   * If the window is created by the extension, do nothing as it is already in the session tree.
+   */
   browser.windows.onCreated.addListener(async (window) => {
     if (window.id === undefined) {
       console.error('Window ID is undefined')
       return
     }
-    console.log('Window Added, id: ', window.id)
     const extensionWindow = await isNewWindowExtensionGenerated(window.id)
     if (!extensionWindow) {
-      console.log(
-        'New window not Extension Generated, continuing to .addWindow'
-      )
       sessionTree.addWindow(window.id)
     }
   })
 
+  /**
+   * When a window is removed, remove it from the session tree.
+   * If the window is saved, do nothing.
+   * If the window has saved tabs, save the window instead of removing.
+   * If the window only has 1 tab, save the window instead of removing.
+   */
   browser.windows.onRemoved.addListener((windowId) => {
     if (!sessionTree) {
       return
@@ -1258,22 +1301,21 @@ export default defineBackground(() => {
     if (tabCount === 1) {
       sessionTree.saveWindow(window.serialId)
     } else {
-      console.log('Removing Window from sessionTree: ', windowId)
       sessionTree.removeWindow(window.serialId)
     }
   })
 
+  /**
+   * When a tab is created, add it to the session tree.
+   * If the tab is created by the extension, do nothing as it is already in the session tree.
+   */
   browser.tabs.onCreated.addListener(async (tab) => {
     if (tab.windowId === undefined || tab.id === undefined) {
       console.error('Tab or Window ID is undefined')
       return
     }
-    console.error(
-      `new tab detected, adding to sessionTree. windowId: ${tab.windowId} tabId: ${tab.id} title: ${tab.title} url: ${tab.url}`
-    )
     const extensionTab = await isNewTabExtensionGenerated(tab.id)
     if (!extensionTab) {
-      console.log('New tab not Extension Generated, continuing to .addTab')
       sessionTree.addTab(
         tab.windowId,
         tab.id,
@@ -1281,10 +1323,14 @@ export default defineBackground(() => {
         tab.title || 'Untitled',
         tab.url || ''
       )
-      printSessionTree('after browser.tabs.Created')
     }
   })
 
+  /**
+   * When a tab is removed, remove it from the session tree.
+   * If the tab is saved, do nothing.
+   * If the window is also closing, do nothing.
+   */
   browser.tabs.onRemoved.addListener((tabId, removeInfo) => {
     if (removeInfo.windowId === undefined) {
       console.error('Window ID is undefined')
@@ -1310,6 +1356,10 @@ export default defineBackground(() => {
     sessionTree.removeTab(window.serialId, window.tabs[index].serialId)
   })
 
+  /**
+   * When a tab is updated, update the session tree to match the new tab state.
+   * This includes tab id, title and url.
+   */
   browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     if (tab.windowId === undefined || tab.id === undefined) {
       console.error('Tab or Window ID is undefined')
@@ -1325,6 +1375,9 @@ export default defineBackground(() => {
     )
   })
 
+  /**
+   * When a tab is moved within a window, update the session tree to match the new tab order.
+   */
   browser.tabs.onMoved.addListener(async (tabId, moveInfo) => {
     console.debug('Tab Moved:', tabId, moveInfo)
     if (
@@ -1397,6 +1450,10 @@ export default defineBackground(() => {
     sessionTree.serializeSessionTree()
   })
 
+  /**
+   * When a tab is attached to a window, add it to the session tree.
+   * If the tab is attached to the left of another tab, insert it at that index.
+   */
   browser.tabs.onAttached.addListener(async (tabId, attachInfo) => {
     console.debug('Tab Attached:', tabId, attachInfo)
     if (attachInfo.newWindowId === undefined || tabId === undefined) {
@@ -1420,6 +1477,7 @@ export default defineBackground(() => {
       index: tab.index + 1,
     })
     const tabToRightId = tabToRight.length > 0 ? tabToRight[0].id : undefined
+    // if there is no tab to the right, add the tab to the end
     if (tabToRightId === undefined) {
       sessionTree.addTab(
         attachInfo.newWindowId,
@@ -1430,6 +1488,7 @@ export default defineBackground(() => {
       )
       return
     } else {
+      // if there is a tab to the right, insert it to the left of that tab
       const tabToRightIndex = window.tabs.findIndex(
         (tab) => tab.id === tabToRightId
       )
@@ -1444,6 +1503,10 @@ export default defineBackground(() => {
     }
   })
 
+  /**
+   * Listen for messages from the Vue component session tree.
+   * Most of these will be user actions performed in the session tree.
+   */
   browser.runtime.onMessage.addListener((message) => {
     if (message.action === 'closeTab') {
       closeTab(message)
