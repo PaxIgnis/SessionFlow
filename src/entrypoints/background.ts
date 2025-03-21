@@ -1312,6 +1312,12 @@ export default defineBackground(() => {
     }
     const extensionTab = await isNewTabExtensionGenerated(tab.id)
     if (!extensionTab) {
+      const window = sessionTree.windows.find((w) => w.id === tab.windowId)
+      // if Window ID is not in session tree, then the window was just opened,
+      // so window listener will handle adding the tab to the session tree.
+      if (!window) {
+        return
+      }
       sessionTree.addTab(
         tab.windowId,
         tab.id,
