@@ -15,7 +15,7 @@ export async function loadSettingsFromStorage(): Promise<void> {
   for (const key in settingsFromStorage.settings) {
     // if the key is not one of the defined keys, skip it
     if (!(key in SettingsValues.values)) {
-      console.error(`Invalid setting key: ${key}`)
+      console.error(`Invalid settings key: ${key}`)
       continue
     }
     // if the key is one of the defined keys, validate and add it to the global Settings object
@@ -25,7 +25,7 @@ export async function loadSettingsFromStorage(): Promise<void> {
         settingsFromStorage.settings[key]
       )
     } catch (error) {
-      console.error(`Error validating setting ${key}:`, error)
+      console.error(`Error validating settings ${key}:`, error)
       continue
     }
   }
@@ -33,10 +33,14 @@ export async function loadSettingsFromStorage(): Promise<void> {
 
 /**
  * Saves the settings from the global Settings object to the browser storage.
+ * And send out a message that settings in local storage have been updated.
  *
  * @returns a Promise that resolves when the settings have been saved
  */
 export async function saveSettingsToStorage(): Promise<void> {
+  browser.runtime.sendMessage({
+    type: 'settingsUpdated',
+  })
   await browser.storage.local.set({ settings: toRaw(SettingsValues.values) })
 }
 
@@ -79,3 +83,13 @@ function validateAndAddSettingKey<K extends keyof Settings>(
     }
   }
 }
+
+// receives the settings updated message
+browser.runtime.onMessage.addListener((message) => {
+  if (message.type === 'settingsUpdated') {
+    // update the settings in the global Settings object
+    loadSettingsFromStorage().catch((error) => {
+      console.error('Failed to load settings from storage:', error)
+    })
+  }
+})
