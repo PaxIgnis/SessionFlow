@@ -25,7 +25,39 @@ export interface Settings {
 }
 
 export const SETTINGS_TYPES = {
-  doubleClickOnOpenTab: ['save', 'close', 'reload', 'duplicate'],
+  doubleClickOnOpenTab: ['save', 'close', 'reload', 'duplicate', 'focus'],
   doubleClickOnSavedTab: ['open', 'remove', 'duplicate'],
-  refreshFaviconsAfterPeriodOfTimeUnit: ['seconds', 'minutes', 'days', 'weeks'],
+  refreshFaviconsAfterPeriodOfTimeUnit: [
+    'seconds',
+    'minutes',
+    'hours',
+    'days',
+    'weeks',
+  ],
+}
+
+export const OPTIONS = {
+  boolean: [
+    { label: 'On', value: true },
+    { label: 'Off', value: false },
+  ],
+  doubleClickOnOpenTab: [
+    { label: 'Save', value: 'save' },
+    { label: 'Close', value: 'close' },
+    { label: 'Reload', value: 'reload' },
+    { label: 'Duplicate', value: 'duplicate' },
+    { label: 'Focus', value: 'focus' },
+  ],
+  doubleClickOnSavedTab: [
+    { label: 'Open', value: 'open' },
+    { label: 'Remove', value: 'remove' },
+    { label: 'Duplicate', value: 'duplicate' },
+  ],
+  refreshFaviconsAfterPeriodOfTimeUnit: [
+    { label: 'Seconds', value: 'seconds' },
+    { label: 'Minutes', value: 'minutes' },
+    { label: 'Hours', value: 'hours' },
+    { label: 'Days', value: 'days' },
+    { label: 'Weeks', value: 'weeks' },
+  ],
 }
