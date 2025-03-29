@@ -118,12 +118,20 @@ export default defineBackground(() => {
     contexts: ['browser_action'],
   })
 
+  browser.menus.create({
+    id: 'open-settings',
+    title: 'Settings',
+    contexts: ['browser_action'],
+  })
+
   browser.menus.onClicked.addListener((info, tab) => {
     // if (info.menuItemId === 'toggle-sessiontree-sidebar') {
     //   browser.sidebarAction.toggle()
     // }
     if (info.menuItemId === 'open-sessiontree') {
       openSessionTree()
+    } else if (info.menuItemId === 'open-settings') {
+      browser.runtime.openOptionsPage()
     }
   })
 
