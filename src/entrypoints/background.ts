@@ -29,7 +29,7 @@ export default defineBackground(() => {
     removeSessionWindowId(windowId)
   })
 
-  async function removeSessionWindowId(windowId) {
+  async function removeSessionWindowId(windowId: number) {
     if (windowId === sessionTreeWindowId) {
       sessionTreeWindowId = undefined
     }
