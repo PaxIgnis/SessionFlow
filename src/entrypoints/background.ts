@@ -14,9 +14,17 @@ export default defineBackground(() => {
     return Settings.loadSettingsFromStorage()
   }
   // Call initialization when background starts
-  initializeSettings().catch((error) => {
-    console.error('Failed to initialize settings:', error)
-  })
+  initializeSettings()
+    .then(() => {
+      if (Settings.values.openSessionTreeOnStartup) {
+        setTimeout(() => {
+          openSessionTree()
+        }, 1000)
+      }
+    })
+    .catch((error) => {
+      console.error('Failed to initialize settings:', error)
+    })
 
   // Initialize variables
   let sessionTreeWindowId: number | undefined
