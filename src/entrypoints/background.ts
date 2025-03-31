@@ -3,9 +3,19 @@ import {
   State,
   PendingItem,
 } from './sessiontree/sessiontree.interfaces'
+import { Settings } from '@/services/settings'
+
 export default defineBackground(() => {
   console.log('Hello, SessionFlow Background has Started!', {
     id: browser.runtime.id,
+  })
+
+  const initializeSettings = () => {
+    return Settings.loadSettingsFromStorage()
+  }
+  // Call initialization when background starts
+  initializeSettings().catch((error) => {
+    console.error('Failed to initialize settings:', error)
   })
 
   // Initialize variables
@@ -17,8 +27,10 @@ export default defineBackground(() => {
   browser.tabs.onRemoved.addListener(updateBadge)
   // browser.action.onClicked.addListener(updateBadge)
 
-  browser.browserAction.onClicked.addListener(async () => {
-    openSessionTree()
+  browser.browserAction.onClicked.addListener(() => {
+    openSessionTree().catch((error) => {
+      console.error('Error opening SessionTree:', error)
+    })
   })
 
   // browser.windows.onFocusChanged.addListener((windowId) => {
@@ -75,34 +87,39 @@ export default defineBackground(() => {
         return // Window is already open
       }
     }
-    // get last window position and size from storage
-    let bounds
-    const sessionTreeWindowConfigLocal = localStorage.getItem(
-      'sessionTreeWindowConfig'
-    )
-    if (sessionTreeWindowConfigLocal) {
-      bounds = JSON.parse(sessionTreeWindowConfigLocal)
-    } else {
-      const { sessionTreeWindowConfig } = await browser.storage.local.get({
-        sessionTreeWindowConfig: {
-          width: 300,
-          height: 700,
-          top: 50,
-          left: 50,
-        },
-      })
-
-      bounds = sessionTreeWindowConfig
+    // properties to pass to browser.windows.create
+    const properties: browser.windows._CreateCreateData = {
+      type: 'popup' as browser.windows.CreateType,
+      url: 'sessiontree.html',
     }
 
-    const sessionTreeWindow = await createWindowAndWait({
-      type: 'popup',
-      url: 'sessiontree.html',
-      width: bounds.width,
-      height: bounds.height,
-      top: bounds.top,
-      left: bounds.left,
-    })
+    if (Settings.values.openSessionTreeInSameLocation) {
+      let bounds
+      // get last window position and size from storage
+      const sessionTreeWindowConfigLocal = localStorage.getItem(
+        'sessionTreeWindowConfig'
+      )
+      if (sessionTreeWindowConfigLocal) {
+        bounds = JSON.parse(sessionTreeWindowConfigLocal)
+      } else {
+        const { sessionTreeWindowConfig } = await browser.storage.local.get({
+          sessionTreeWindowConfig: {
+            width: 300,
+            height: 700,
+            top: 50,
+            left: 50,
+          },
+        })
+
+        bounds = sessionTreeWindowConfig
+      }
+      properties.width = bounds.width
+      properties.height = bounds.height
+      properties.top = bounds.top
+      properties.left = bounds.left
+    }
+
+    const sessionTreeWindow = await createWindowAndWait(properties)
     sessionTreeWindowId = sessionTreeWindow.id
   }
 
