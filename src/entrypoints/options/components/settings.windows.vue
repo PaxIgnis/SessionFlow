@@ -15,6 +15,12 @@ import { STRINGS } from '@/types/strings'
       @update="Settings.saveSettingsToStorage()"
     />
     <ToggleButton
+      label="Open Saved Window with Tabs Discarded (lazy loading)"
+      v-model="Settings.values.openWindowWithTabsDiscarded"
+      :options="OPTIONS.boolean"
+      @update="Settings.saveSettingsToStorage()"
+    />
+    <ToggleButton
       label="Reopen Windows In The Same Location"
       v-model="Settings.values.openWindowsInSameLocation"
       :options="OPTIONS.boolean"

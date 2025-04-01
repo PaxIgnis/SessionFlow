@@ -6,6 +6,7 @@ export interface Settings {
   // Windows
   focusWindowOnOpen: boolean
   openWindowsInSameLocation: boolean
+  openWindowWithTabsDiscarded: boolean
   saveWindowOnClose: boolean
   saveWindowOnCloseIfContainsSavedTabs: boolean
   saveWindowOnCloseIfPreviouslySaved: boolean

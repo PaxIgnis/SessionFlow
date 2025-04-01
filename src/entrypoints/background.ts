@@ -1055,43 +1055,44 @@ export default defineBackground(() => {
    * @param {number} message.tabSerialId - The Serial ID of the tab to be opened.
    * @param {number} message.windowSerialId - The Serial ID of the window containing the tab.
    * @param {string} message.url - The URL to be opened in the tab.
-   * @param {Function} sendResponse - The function to send a response back to the sender.
    */
   async function openTab(message: {
     tabSerialId: number
     windowSerialId: number
-    url: string
+    url?: string
+    discarded?: boolean
   }) {
-    // let properties: {
-    //   windowId?: number
-    //   active?: boolean
-    //   url?: string
-    //   index?: number
-    // } = {}
-    let url
+    const sessionTreeWindow = sessionTree.windows.find(
+      (w) => w.serialId === message.windowSerialId
+    )
+    if (!sessionTreeWindow) {
+      throw new Error('Saved window not found')
+    }
+    const sessionTreeTab = sessionTreeWindow.tabs.find(
+      (t) => t.serialId === message.tabSerialId
+    )
+    if (!sessionTreeTab) {
+      throw new Error('Saved tab not found')
+    }
+    let url = message.url
+    if (url === undefined) url = sessionTreeTab.url
     // if the URL is a privileged URL, open a redirect page instead
-    if (isPrivilegedUrl(message.url)) {
+    if (isPrivilegedUrl(url)) {
       const title = sessionTree.getTabTitle(
         message.windowSerialId,
         message.tabSerialId
       )
-      url = getRedirectUrl(message.url, title)
-    } else if (message.url !== 'about:newtab') {
+      url = getRedirectUrl(url, title)
+    } else if (url === 'about:newtab') {
       // don't set the URL for new tabs
-      url = message.url
+      url = undefined
     }
     sessionTree.updateTabState(
       message.windowSerialId,
       message.tabSerialId,
       State.OPEN
     )
-    const savedWindow = sessionTree.windows.find(
-      (w) => w.serialId === message.windowSerialId
-    )
-    if (!savedWindow) {
-      throw new Error('Saved window not found')
-    }
-    if (savedWindow.state === State.SAVED) {
+    if (sessionTreeWindow.state === State.SAVED) {
       // if the window is saved, open the window first
       sessionTree.updateWindowState(message.windowSerialId, State.OPEN)
       const properties: browser.windows._CreateCreateData = {}
@@ -1125,10 +1126,17 @@ export default defineBackground(() => {
       const properties: browser.tabs._CreateCreateProperties = {}
       if (url) properties.url = url
       // if the window is currently open
-      properties.windowId = savedWindow.id
-      properties.active = true
+      properties.windowId = sessionTreeWindow.id
+      if (message.discarded) {
+        properties.discarded = true
+        properties.active = false
+        properties.title = sessionTreeTab.title
+      } else {
+        properties.active = true
+      }
+
       // find id of first open tab to the right
-      const tabToRightIndex = savedWindow.tabs
+      const tabToRightIndex = sessionTreeWindow.tabs
         .filter((tab) => tab.state === State.OPEN)
         .findIndex(
           (tab, index, array) =>
@@ -1236,6 +1244,11 @@ export default defineBackground(() => {
       }
       const properties: browser.windows._CreateCreateData = {}
       if (urls.length > 0) properties.url = urls
+      if (Settings.values.openWindowWithTabsDiscarded) {
+        if (urls.length > 1) {
+          properties.url = urls[0]
+        }
+      }
       const window = await createWindowAndWait(properties)
       if (!Settings.values.focusWindowOnOpen && sessionTreeWindowId) {
         focusWindow({ windowId: sessionTreeWindowId })
@@ -1258,6 +1271,17 @@ export default defineBackground(() => {
           State.OPEN
         )
       })
+      if (Settings.values.openWindowWithTabsDiscarded && urls.length > 1) {
+        for (const tab of sessionTreeWindow.tabs) {
+          if (tab.state === State.SAVED) {
+            openTab({
+              tabSerialId: tab.serialId,
+              windowSerialId: message.windowSerialId,
+              discarded: true,
+            })
+          }
+        }
+      }
     } catch (error) {
       console.error('Error opening window:', error)
     }

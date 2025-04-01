@@ -8,6 +8,7 @@ export const DEFAULT_SETTINGS: Settings = {
   // Windows
   focusWindowOnOpen: true,
   openWindowsInSameLocation: true,
+  openWindowWithTabsDiscarded: true,
   saveWindowOnClose: false,
   saveWindowOnCloseIfContainsSavedTabs: true,
   saveWindowOnCloseIfPreviouslySaved: false,
