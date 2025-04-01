@@ -1062,22 +1062,23 @@ export default defineBackground(() => {
     windowSerialId: number
     url: string
   }) {
-    let properties: {
-      windowId?: number
-      active?: boolean
-      url?: string
-      index?: number
-    } = {}
+    // let properties: {
+    //   windowId?: number
+    //   active?: boolean
+    //   url?: string
+    //   index?: number
+    // } = {}
+    let url
     // if the URL is a privileged URL, open a redirect page instead
     if (isPrivilegedUrl(message.url)) {
       const title = sessionTree.getTabTitle(
         message.windowSerialId,
         message.tabSerialId
       )
-      properties.url = getRedirectUrl(message.url, title)
+      url = getRedirectUrl(message.url, title)
     } else if (message.url !== 'about:newtab') {
       // don't set the URL for new tabs
-      properties.url = message.url
+      url = message.url
     }
     sessionTree.updateTabState(
       message.windowSerialId,
@@ -1093,11 +1094,14 @@ export default defineBackground(() => {
     if (savedWindow.state === State.SAVED) {
       // if the window is saved, open the window first
       sessionTree.updateWindowState(message.windowSerialId, State.OPEN)
+      const properties: browser.windows._CreateCreateData = {}
+      if (url) properties.url = url
       try {
-        const window = await createWindowAndWait(
-          properties.url ? { url: [properties.url] } : {}
-        )
-
+        const window = await createWindowAndWait(properties)
+        // because Firefox doesn't support opening unfocused windows, we send focus back
+        if (!Settings.values.focusWindowOnOpen && sessionTreeWindowId) {
+          focusWindow({ windowId: sessionTreeWindowId })
+        }
         if (!window.id) {
           throw new Error('Window ID is undefined')
         }
@@ -1118,6 +1122,8 @@ export default defineBackground(() => {
         console.error('Error opening window:', error)
       }
     } else {
+      const properties: browser.tabs._CreateCreateProperties = {}
+      if (url) properties.url = url
       // if the window is currently open
       properties.windowId = savedWindow.id
       properties.active = true
@@ -1228,9 +1234,12 @@ export default defineBackground(() => {
         }
         urls.push(url)
       }
-      const properties = urls.length > 0 ? { url: urls } : {}
+      const properties: browser.windows._CreateCreateData = {}
+      if (urls.length > 0) properties.url = urls
       const window = await createWindowAndWait(properties)
-
+      if (!Settings.values.focusWindowOnOpen && sessionTreeWindowId) {
+        focusWindow({ windowId: sessionTreeWindowId })
+      }
       if (!window.id || !window.tabs) {
         throw new Error('Window ID is undefined')
       }
