@@ -669,9 +669,15 @@ export default defineBackground(() => {
       tabCount = Array.isArray(properties.url) ? properties.url.length : 1
       pendingTabCount += tabCount
     }
-    const window = await browser.windows.create(properties || {})
-    // Update window position if provided. This is necessary at the moment
-    // because of a possible bug where the window position is not set.
+    const window = await browser.windows
+      .create(properties || {})
+      .catch((error) => {
+        console.error('Error creating window:', error)
+        pendingTabCount -= tabCount
+        throw error
+      })
+    // Update window position if provided. This is necessary
+    // because top/left are ignored before Firefox 109.
     if (properties?.left && properties?.top) {
       await browser.windows.update(window.id!, {
         left: properties.left,
@@ -740,7 +746,11 @@ export default defineBackground(() => {
    */
   async function createTabAndWait(properties): Promise<browser.tabs.Tab> {
     pendingTabCount++
-    const tab = await browser.tabs.create(properties)
+    const tab = await browser.tabs.create(properties).catch((error) => {
+      console.error('Error creating tab:', error)
+      pendingTabCount--
+      throw error
+    })
     const waitForTabId = (tabId: number): Promise<void> => {
       return new Promise((resolve) => {
         const interval = setInterval(() => {
@@ -888,7 +898,26 @@ export default defineBackground(() => {
    * @returns {boolean} True if the URL is a privileged URL, false otherwise
    */
   function isPrivilegedUrl(url: string): boolean {
-    return privilegedUrls.some((privilegedUrl) => url.startsWith(privilegedUrl))
+    const isPrivilegedUrl = privilegedUrls.some((privilegedUrl) =>
+      url.startsWith(privilegedUrl)
+    )
+    const startsWithAbout =
+      url.startsWith('about:') &&
+      !url.startsWith('about:blank') &&
+      !url.startsWith('about:newtab')
+    return isPrivilegedUrl || startsWithAbout
+  }
+
+  /**
+   * Checks if a url can be discarded without error.
+   *
+   * @param {string} url - The URL to check
+   * @returns {boolean} True if the URL can be discarded, false otherwise
+   */
+  function discardedUrlPrecheck(url: string): boolean {
+    const about = url.startsWith('about:')
+    const empty = url === ''
+    return !(about || empty || isPrivilegedUrl(url))
   }
 
   /**
@@ -1083,7 +1112,11 @@ export default defineBackground(() => {
         message.tabSerialId
       )
       url = getRedirectUrl(url, title)
-    } else if (url === 'about:newtab') {
+    } else if (
+      url === 'about:newtab' ||
+      url === 'about:blank' ||
+      url === 'chrome://browser/content/blanktab.html'
+    ) {
       // don't set the URL for new tabs
       url = undefined
     }
@@ -1098,7 +1131,21 @@ export default defineBackground(() => {
       const properties: browser.windows._CreateCreateData = {}
       if (url) properties.url = url
       try {
-        const window = await createWindowAndWait(properties)
+        const window = await createWindowAndWait(properties).catch((error) => {
+          console.error('Error creating window:', error)
+          // revert changes since window wasn't created
+          sessionTree.updateWindowState(message.windowSerialId, State.SAVED)
+          sessionTree.updateTabState(
+            message.windowSerialId,
+            message.tabSerialId,
+            State.SAVED
+          )
+          return
+        })
+        if (!window) {
+          console.error('Window is undefined')
+          return
+        }
         // because Firefox doesn't support opening unfocused windows, we send focus back
         if (!Settings.values.focusWindowOnOpen && sessionTreeWindowId) {
           focusWindow({ windowId: sessionTreeWindowId })
@@ -1128,9 +1175,15 @@ export default defineBackground(() => {
       // if the window is currently open
       properties.windowId = sessionTreeWindow.id
       if (message.discarded) {
-        properties.discarded = true
-        properties.active = false
-        properties.title = sessionTreeTab.title
+        // some urls cannot be opened as discarded
+        if (url && discardedUrlPrecheck(url)) {
+          properties.discarded = true
+          properties.active = false
+          properties.title = sessionTreeTab.title
+        } else {
+          properties.active = false
+          properties.discarded = false
+        }
       } else {
         properties.active = true
       }
@@ -1146,7 +1199,20 @@ export default defineBackground(() => {
         properties.index = tabToRightIndex - 1
       }
       try {
-        const tab = await createTabAndWait(properties)
+        const tab = await createTabAndWait(properties).catch((error) => {
+          console.error('Error creating tab:', error)
+          // revert changes since window wasn't created
+          sessionTree.updateTabState(
+            message.windowSerialId,
+            message.tabSerialId,
+            State.SAVED
+          )
+          return
+        })
+        if (!tab) {
+          console.error('Tab is undefined')
+          return
+        }
         sessionTree.updateTabId(
           message.windowSerialId,
           message.tabSerialId,
