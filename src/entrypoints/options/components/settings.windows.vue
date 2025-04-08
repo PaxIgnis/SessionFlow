@@ -50,21 +50,25 @@ function updateLocation() {
       @update="updateLocation()"
     />
     <ToggleButton
-      label="Save Window When Closed"
+      label="When a Window is Closed, Always Save It"
       v-model="Settings.values.saveWindowOnClose"
       :options="OPTIONS.boolean"
       @update="Settings.saveSettingsToStorage()"
     />
     <ToggleButton
-      label="Save Window When Closed If It Contains Saved Tabs"
+      class="child-setting"
+      label="Save Window When Closed: If It Contains Saved Tabs"
       v-model="Settings.values.saveWindowOnCloseIfContainsSavedTabs"
       :options="OPTIONS.boolean"
+      :disabled="Settings.values.saveWindowOnClose"
       @update="Settings.saveSettingsToStorage()"
     />
     <ToggleButton
-      label="Save Window When Closed If It Was Previously Saved"
+      class="child-setting"
+      label="Save Window When Closed: If It Was Previously Saved"
       v-model="Settings.values.saveWindowOnCloseIfPreviouslySaved"
       :options="OPTIONS.boolean"
+      :disabled="Settings.values.saveWindowOnClose"
       @update="Settings.saveSettingsToStorage()"
     />
   </section>
@@ -77,7 +81,8 @@ function updateLocation() {
   pointer-events: var(--child-events, auto);
 }
 
-.child-setting:has(input:disabled) {
+.child-setting:has(input:disabled),
+.child-setting:has(button:disabled) {
   --child-opacity: 0.5;
   --child-events: none;
 }

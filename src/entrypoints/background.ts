@@ -1501,7 +1501,11 @@ export default defineBackground(() => {
     }
     // if window has saved tabs, save the window instead of removing
     const savedTabs = window.tabs.filter((tab) => tab.state === State.SAVED)
-    if (savedTabs.length > 0) {
+    if (
+      Settings.values.saveWindowOnClose ||
+      (savedTabs.length > 0 &&
+        Settings.values.saveWindowOnCloseIfContainsSavedTabs)
+    ) {
       sessionTree.saveWindow(window.serialId)
       return
     }

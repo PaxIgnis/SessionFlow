@@ -8,6 +8,7 @@ const props = defineProps<{
   label: string
   modelValue: string | number | boolean
   options: Option[]
+  disabled?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -32,6 +33,7 @@ const handleToggle = (value: string | number | boolean) => {
           'toggle-button',
           { active: props.modelValue === option.value },
         ]"
+        :disabled="disabled"
         @click="handleToggle(option.value)"
         type="button"
       >
@@ -58,7 +60,7 @@ const handleToggle = (value: string | number | boolean) => {
 .toggle-button-group {
   display: flex;
   gap: 1px;
-  background: #ddd;
+  background: #fff;
   border-radius: 4px;
   padding: 1px;
 }
@@ -66,20 +68,14 @@ const handleToggle = (value: string | number | boolean) => {
 .toggle-button {
   padding: 6px 12px;
   background: #fff;
-  border: none;
+  border: 1px solid #ddd;
   cursor: pointer;
   font-size: 14px;
   transition: background-color 0.2s;
 }
 
-.toggle-button:first-child {
-  border-top-left-radius: 4px;
-  border-bottom-left-radius: 4px;
-}
-
-.toggle-button:last-child {
-  border-top-right-radius: 4px;
-  border-bottom-right-radius: 4px;
+.toggle-button {
+  border-radius: 4px;
 }
 
 .toggle-button:hover {
@@ -88,6 +84,6 @@ const handleToggle = (value: string | number | boolean) => {
 
 .toggle-button.active {
   background: #2196f3;
-  color: white;
+  color: #fff;
 }
 </style>
