@@ -272,6 +272,15 @@ function toggleCollapsedWindow(windowSerialId: number) {
 </template>
 
 <style scoped>
+.sessiontree {
+  min-width: 200px;
+  width: 100%;
+  overflow: hidden;
+  height: 100%;
+  position: relative;
+  margin: 0;
+}
+
 .hoverMenu {
   pointer-events: none;
   position: absolute;
@@ -280,6 +289,7 @@ function toggleCollapsedWindow(windowSerialId: number) {
   width: 100%;
   background: rgba(36, 145, 255, 0.08);
   visibility: visible;
+  margin-bottom: 0;
 }
 
 .hoverMenuClose {
@@ -317,6 +327,8 @@ function toggleCollapsedWindow(windowSerialId: number) {
   padding-left: 10px;
   display: block;
   text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .nodeFavicon {
@@ -330,6 +342,8 @@ function toggleCollapsedWindow(windowSerialId: number) {
 .nodeText {
   display: block;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .nodeTextOpen {
@@ -412,5 +426,16 @@ function toggleCollapsedWindow(windowSerialId: number) {
   margin-left: -1px;
   margin-right: 7px;
   transform: rotate(-45deg);
+}
+</style>
+
+<style>
+body {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  padding: 0;
+  margin: 0;
 }
 </style>
