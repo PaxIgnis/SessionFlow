@@ -8,6 +8,8 @@ export const DEFAULT_SETTINGS: Settings = {
   // Windows
   focusWindowOnOpen: true,
   openWindowsInSameLocation: true,
+  openWindowsInSameLocationUpdateInterval: 60,
+  openWindowsInSameLocationUpdateIntervalUnit: 'seconds',
   openWindowWithTabsDiscarded: true,
   saveWindowOnClose: false,
   saveWindowOnCloseIfContainsSavedTabs: true,

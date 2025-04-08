@@ -2,6 +2,7 @@ import {
   Window,
   State,
   PendingItem,
+  WindowPosition,
 } from './sessiontree/sessiontree.interfaces'
 import { Settings } from '@/services/settings'
 
@@ -21,6 +22,7 @@ export default defineBackground(() => {
           openSessionTree()
         }, 1000)
       }
+      updateWindowPositionInterval()
     })
     .catch((error) => {
       console.error('Failed to initialize settings:', error)
@@ -573,9 +575,70 @@ export default defineBackground(() => {
   let pendingTabCount = 0
   const pendingTabs: Map<number, PendingItem> = new Map()
 
+  let windowPositionInterval: NodeJS.Timeout | undefined
+
   // ==============================
   // Utility Functions
   // ==============================
+
+  /**
+   * Updates the stored position of a window in the session tree.
+   *
+   * @param {number} windowId - The ID of the window to update.
+   * @param {WindowPosition} position - The new position of the window.
+   */
+  function updateWindowPosition(windowId: number, position: WindowPosition) {
+    const window = sessionTree.windows.find((w) => w.id === windowId)
+    if (window) {
+      window.windowPosition = position
+    }
+  }
+
+  /**
+   * Updates the interval for periodically checking and updating the position of open windows.
+   * This function clears the existing interval and sets a new one based on the configured update interval.
+   * Is called when the related settings are changed.
+   *
+   */
+  function updateWindowPositionInterval() {
+    // Clear existing interval
+    if (windowPositionInterval) {
+      clearInterval(windowPositionInterval)
+    }
+    if (!Settings.values.openWindowsInSameLocation) {
+      return
+    }
+    // Calculate interval in milliseconds
+    const intervalMs =
+      Settings.values.openWindowsInSameLocationUpdateInterval *
+      (Settings.values.openWindowsInSameLocationUpdateIntervalUnit === 'seconds'
+        ? 1000
+        : 60000)
+    windowPositionInterval = setInterval(async () => {
+      try {
+        const windows = await browser.windows.getAll()
+        windows.forEach((window) => {
+          if (
+            window.id &&
+            window.id !== sessionTreeWindowId &&
+            window.left &&
+            window.top &&
+            window.width &&
+            window.height
+          ) {
+            updateWindowPosition(window.id, {
+              left: window.left,
+              top: window.top,
+              width: window.width,
+              height: window.height,
+            })
+          }
+        })
+      } catch (error) {
+        console.error('Error updating window positions:', error)
+      }
+    }, intervalMs)
+  }
 
   /**
    * Checks if a window was created by the extension by tracking it in the pending windows queue.
@@ -1130,6 +1193,15 @@ export default defineBackground(() => {
       sessionTree.updateWindowState(message.windowSerialId, State.OPEN)
       const properties: browser.windows._CreateCreateData = {}
       if (url) properties.url = url
+      if (
+        Settings.values.openWindowsInSameLocation &&
+        sessionTreeWindow.windowPosition
+      ) {
+        properties.left = sessionTreeWindow.windowPosition.left
+        properties.top = sessionTreeWindow.windowPosition.top
+        properties.width = sessionTreeWindow.windowPosition.width
+        properties.height = sessionTreeWindow.windowPosition.height
+      }
       try {
         const window = await createWindowAndWait(properties).catch((error) => {
           console.error('Error creating window:', error)
@@ -1314,6 +1386,15 @@ export default defineBackground(() => {
         if (urls.length > 1) {
           properties.url = urls[0]
         }
+      }
+      if (
+        Settings.values.openWindowsInSameLocation &&
+        sessionTreeWindow.windowPosition
+      ) {
+        properties.left = sessionTreeWindow.windowPosition.left
+        properties.top = sessionTreeWindow.windowPosition.top
+        properties.width = sessionTreeWindow.windowPosition.width
+        properties.height = sessionTreeWindow.windowPosition.height
       }
       const window = await createWindowAndWait(properties)
       if (!Settings.values.focusWindowOnOpen && sessionTreeWindowId) {
@@ -1659,6 +1740,8 @@ export default defineBackground(() => {
       focusWindow(message)
     } else if (message.action === 'focusWindow') {
       focusWindow(message)
+    } else if (message.action === 'openWindowsInSameLocationUpdated') {
+      updateWindowPositionInterval()
     }
   })
 })

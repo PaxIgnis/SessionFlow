@@ -6,6 +6,8 @@ export interface Settings {
   // Windows
   focusWindowOnOpen: boolean
   openWindowsInSameLocation: boolean
+  openWindowsInSameLocationUpdateInterval: number
+  openWindowsInSameLocationUpdateIntervalUnit: (typeof SETTINGS_TYPES.openWindowsInSameLocationUpdateIntervalUnit)[number]
   openWindowWithTabsDiscarded: boolean
   saveWindowOnClose: boolean
   saveWindowOnCloseIfContainsSavedTabs: boolean
@@ -35,6 +37,7 @@ export const SETTINGS_TYPES = {
     'days',
     'weeks',
   ],
+  openWindowsInSameLocationUpdateIntervalUnit: ['seconds', 'minutes'],
 }
 
 export const OPTIONS = {
@@ -60,5 +63,9 @@ export const OPTIONS = {
     { label: 'Hours', value: 'hours' },
     { label: 'Days', value: 'days' },
     { label: 'Weeks', value: 'weeks' },
+  ],
+  openWindowsInSameLocationUpdateIntervalUnit: [
+    { label: 'Seconds', value: 'seconds' },
+    { label: 'Minutes', value: 'minutes' },
   ],
 }

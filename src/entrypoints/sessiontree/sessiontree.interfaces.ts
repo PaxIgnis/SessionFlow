@@ -3,6 +3,7 @@ export interface Window {
   serialId: number
   state: State
   collapsed?: boolean
+  windowPosition?: WindowPosition
   tabs: Array<{
     id: number
     serialId: number
@@ -24,4 +25,11 @@ export interface PendingItem {
   complete: boolean
   creatorResolved: boolean
   listenerResolved: boolean
+}
+
+export interface WindowPosition {
+  left: number
+  top: number
+  width: number
+  height: number
 }

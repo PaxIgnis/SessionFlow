@@ -191,7 +191,8 @@ h3 {
   -moz-user-select: none;
 }
 
-.toggle-container {
+.toggle-container,
+.number-container {
   -moz-user-select: none;
 }
 

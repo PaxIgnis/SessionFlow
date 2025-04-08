@@ -50,7 +50,7 @@ onMounted(() => {
         faviconService.updateFavicon(message.favIconUrl, message.tab)
         break
       default:
-        console.warn('Unknown message type:', message.type)
+      // console.warn('Unknown message type:', message.type)
     }
   })
 })
