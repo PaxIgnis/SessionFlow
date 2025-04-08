@@ -150,7 +150,7 @@ const handleUnitToggle = (value: string | number | boolean) => {
 }
 
 .number-input {
-  width: 80px;
+  width: 40px;
   padding: 6px 12px;
   border: 1px solid #ddd;
   border-radius: 4px;

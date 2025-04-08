@@ -275,8 +275,9 @@ function toggleCollapsedWindow(windowSerialId: number) {
 .sessiontree {
   min-width: 200px;
   width: 100%;
-  overflow: hidden;
-  height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  height: 100vh;
   position: relative;
   margin: 0;
 }
@@ -373,6 +374,11 @@ function toggleCollapsedWindow(windowSerialId: number) {
 [v-cloak] {
   display: none;
 }
+
+.sessiontree > ul {
+  margin-bottom: 25px;
+}
+
 .windowContainer {
   padding-left: 0px;
   display: flex;
