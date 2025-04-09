@@ -7,6 +7,7 @@ export interface Window {
   windowPosition?: WindowPosition
   tabs: Array<{
     id: number
+    savedTime?: number
     serialId: number
     state: State
     title: string

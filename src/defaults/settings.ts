@@ -13,12 +13,12 @@ export const DEFAULT_SETTINGS: Settings = {
   openWindowWithTabsDiscarded: true,
   saveWindowOnClose: false,
   saveWindowOnCloseIfContainsSavedTabs: true,
-  saveWindowOnCloseIfPreviouslySaved: false,
+  saveWindowOnCloseIfPreviouslySaved: true,
 
   // Tabs
   focusTabOnOpen: true,
   saveTabOnClose: false,
-  saveTabOnCloseIfPreviouslySaved: false,
+  saveTabOnCloseIfPreviouslySaved: true,
   doubleClickOnOpenTab: 'focus',
   doubleClickOnSavedTab: 'open',
 

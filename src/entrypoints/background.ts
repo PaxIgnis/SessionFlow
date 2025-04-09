@@ -238,6 +238,7 @@ export default defineBackground(() => {
             window.tabs.forEach((tab) => {
               tab.id = 0
               tab.state = State.SAVED
+              if (!tab.savedTime) tab.savedTime = Date.now()
             })
           })
         }
@@ -436,6 +437,9 @@ export default defineBackground(() => {
         const tab = window.tabs.find((t) => t.serialId === tabSerialId)
         if (tab) {
           tab.state = state
+          if (state === State.SAVED) {
+            tab.savedTime = Date.now()
+          }
         }
       }
     }
@@ -538,6 +542,7 @@ export default defineBackground(() => {
         window.tabs.forEach((tab) => {
           tab.state = State.SAVED
           tab.id = -1
+          tab.savedTime = Date.now()
         })
       }
     }
@@ -555,6 +560,7 @@ export default defineBackground(() => {
         if (tab) {
           tab.state = State.SAVED
           tab.id = -1
+          tab.savedTime = Date.now()
         }
       }
     }
@@ -1518,11 +1524,21 @@ export default defineBackground(() => {
     }
     const tabCount = window.tabs.length
     // if this window only has 1 tab, then save the window instead of removing
-    if (tabCount === 1 && Settings.values.saveTabOnClose) {
-      sessionTree.saveWindow(window.serialId)
-    } else {
-      sessionTree.removeWindow(window.serialId)
+    if (tabCount === 1) {
+      const openTab = window.tabs.filter((tab) => tab.state === State.OPEN)[0]
+      if (!openTab) {
+        sessionTree.removeWindow(window.serialId)
+      }
+      // if settings set to save tab on close
+      if (
+        Settings.values.saveTabOnClose ||
+        (Settings.values.saveTabOnCloseIfPreviouslySaved &&
+          openTab.savedTime! > 0)
+      ) {
+        sessionTree.saveWindow(window.serialId)
+      }
     }
+    sessionTree.removeWindow(window.serialId)
   })
 
   /**
@@ -1579,7 +1595,11 @@ export default defineBackground(() => {
     if (removeInfo.isWindowClosing) {
       return
     }
-    if (Settings.values.saveTabOnClose) {
+    if (
+      Settings.values.saveTabOnClose ||
+      (Settings.values.saveTabOnCloseIfPreviouslySaved &&
+        window.tabs[index].savedTime! > 0)
+    ) {
       sessionTree.saveTab(window.serialId, window.tabs[index].serialId)
       return
     }
