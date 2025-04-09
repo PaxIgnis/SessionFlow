@@ -1518,7 +1518,7 @@ export default defineBackground(() => {
     }
     const tabCount = window.tabs.length
     // if this window only has 1 tab, then save the window instead of removing
-    if (tabCount === 1) {
+    if (tabCount === 1 && Settings.values.saveTabOnClose) {
       sessionTree.saveWindow(window.serialId)
     } else {
       sessionTree.removeWindow(window.serialId)
@@ -1577,6 +1577,10 @@ export default defineBackground(() => {
       return
     }
     if (removeInfo.isWindowClosing) {
+      return
+    }
+    if (Settings.values.saveTabOnClose) {
+      sessionTree.saveTab(window.serialId, window.tabs[index].serialId)
       return
     }
     sessionTree.removeTab(window.serialId, window.tabs[index].serialId)
