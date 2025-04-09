@@ -376,7 +376,7 @@ function toggleCollapsedWindow(windowSerialId: number) {
 }
 
 .sessiontree > ul {
-  margin-bottom: 25px;
+  margin-bottom: 95vh;
 }
 
 .windowContainer {
