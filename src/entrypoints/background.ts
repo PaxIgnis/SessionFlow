@@ -234,6 +234,7 @@ export default defineBackground(() => {
           this.windows.forEach((window) => {
             window.id = 0
             window.state = State.SAVED
+            if (!window.savedTime) window.savedTime = Date.now()
             window.tabs.forEach((tab) => {
               tab.id = 0
               tab.state = State.SAVED
@@ -449,6 +450,9 @@ export default defineBackground(() => {
       const window = this.windows.find((w) => w.serialId === windowSerialId)
       if (window) {
         window.state = state
+        if (state === State.SAVED) {
+          window.savedTime = Date.now()
+        }
       }
       return true
     }
@@ -530,6 +534,7 @@ export default defineBackground(() => {
       if (window) {
         window.state = State.SAVED
         window.id = -1
+        window.savedTime = Date.now()
         window.tabs.forEach((tab) => {
           tab.state = State.SAVED
           tab.id = -1
@@ -1504,7 +1509,9 @@ export default defineBackground(() => {
     if (
       Settings.values.saveWindowOnClose ||
       (savedTabs.length > 0 &&
-        Settings.values.saveWindowOnCloseIfContainsSavedTabs)
+        Settings.values.saveWindowOnCloseIfContainsSavedTabs) ||
+      (Settings.values.saveWindowOnCloseIfPreviouslySaved &&
+        window.savedTime! > 0)
     ) {
       sessionTree.saveWindow(window.serialId)
       return

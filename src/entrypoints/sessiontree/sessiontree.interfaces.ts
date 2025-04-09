@@ -1,5 +1,6 @@
 export interface Window {
   id: number
+  savedTime?: number
   serialId: number
   state: State
   collapsed?: boolean
