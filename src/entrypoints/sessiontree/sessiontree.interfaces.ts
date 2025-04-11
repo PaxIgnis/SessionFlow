@@ -19,7 +19,7 @@ export interface Window {
 export enum State {
   SAVED = 0,
   OPEN = 1,
-  OTHER = 2,
+  DISCARDED = 2,
 }
 
 export interface PendingItem {

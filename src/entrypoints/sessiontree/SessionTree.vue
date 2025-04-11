@@ -117,7 +117,7 @@ function tabDoubleClick(
       windowSerialId: windowSerialId,
       url: url,
     })
-  } else if (state === State.OPEN) {
+  } else if (state === State.OPEN || state === State.DISCARDED) {
     window.browser.runtime.sendMessage({
       action: 'focusTab',
       tabId: tabId,
@@ -221,7 +221,9 @@ function toggleCollapsedWindow(windowSerialId: number) {
               >&nbsp;
               <span class="hoverMenuToolbar">
                 <span
-                  v-if="tab.state === State.OPEN"
+                  v-if="
+                    tab.state === State.OPEN || tab.state === State.DISCARDED
+                  "
                   class="hoverMenuSave"
                   @click="saveTab(tab.id, tab.serialId, window.serialId)"
                 ></span>
@@ -246,6 +248,7 @@ function toggleCollapsedWindow(windowSerialId: number) {
                 :class="{
                   nodeTextOpen: tab.state === State.OPEN,
                   nodeTextSaved: tab.state === State.SAVED,
+                  nodeTextDiscarded: tab.state === State.DISCARDED,
                 }"
                 class="nodeText"
                 @click="

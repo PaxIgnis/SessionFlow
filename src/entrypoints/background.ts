@@ -296,7 +296,7 @@ export default defineBackground(() => {
           window.tabs = win.tabs!.map((tab) => ({
             id: tab.id!,
             serialId: 0,
-            state: State.OPEN,
+            state: tab.discarded ? State.DISCARDED : State.OPEN,
             title: tab.title!,
             url: tab.url!,
           }))
@@ -1019,7 +1019,9 @@ export default defineBackground(() => {
         (w) => w.serialId === message.windowSerialId
       )
       if (window) {
-        const openTabs = window.tabs.filter((tab) => tab.state === State.OPEN)
+        const openTabs = window.tabs.filter(
+          (tab) => tab.state === State.OPEN || tab.state === State.DISCARDED
+        )
         if (window.tabs.length > 0 && openTabs.length === 0) {
           sessionTree.updateWindowState(message.windowSerialId, State.SAVED)
           sessionTree.updateWindowId(message.windowSerialId, -1)
@@ -1108,7 +1110,9 @@ export default defineBackground(() => {
         (w) => w.serialId === message.windowSerialId
       )
       if (window) {
-        const openTabs = window.tabs.filter((tab) => tab.state === State.OPEN)
+        const openTabs = window.tabs.filter(
+          (tab) => tab.state === State.OPEN || tab.state === State.DISCARDED
+        )
         if (openTabs.length === 1) {
           sessionTree.saveWindow(message.windowSerialId)
         }
@@ -1197,7 +1201,7 @@ export default defineBackground(() => {
     sessionTree.updateTabState(
       message.windowSerialId,
       message.tabSerialId,
-      State.OPEN
+      message.discarded ? State.DISCARDED : State.OPEN
     )
     if (sessionTreeWindow.state === State.SAVED) {
       // if the window is saved, open the window first
@@ -1273,7 +1277,9 @@ export default defineBackground(() => {
 
       // find id of first open tab to the right
       const tabToRightIndex = sessionTreeWindow.tabs
-        .filter((tab) => tab.state === State.OPEN)
+        .filter(
+          (tab) => tab.state === State.OPEN || tab.state === State.DISCARDED
+        )
         .findIndex(
           (tab, index, array) =>
             array[index - 1]?.serialId === message.tabSerialId
@@ -1304,7 +1310,7 @@ export default defineBackground(() => {
         sessionTree.updateTabState(
           message.windowSerialId,
           message.tabSerialId,
-          State.OPEN
+          tab.discarded ? State.DISCARDED : State.OPEN
         )
       } catch (error) {
         console.error('Error opening tab:', error)
@@ -1561,7 +1567,7 @@ export default defineBackground(() => {
       sessionTree.addTab(
         tab.windowId,
         tab.id,
-        State.OPEN,
+        tab.discarded ? State.DISCARDED : State.OPEN,
         tab.title || 'Untitled',
         tab.url || ''
       )
@@ -1619,7 +1625,7 @@ export default defineBackground(() => {
       tab.windowId,
       tab.id,
       tab.id,
-      State.OPEN,
+      tab.discarded ? State.DISCARDED : State.OPEN,
       tab.title || '',
       tab.url || ''
     )
@@ -1643,7 +1649,7 @@ export default defineBackground(() => {
       return
     }
     const openSessionTreeTabs = window.tabs.filter(
-      (tab) => tab.state === State.OPEN
+      (tab) => tab.state === State.OPEN || tab.state === State.DISCARDED
     )
     const openBrowserTabs = await browser.tabs.query({
       windowId: moveInfo.windowId,
@@ -1732,7 +1738,7 @@ export default defineBackground(() => {
       sessionTree.addTab(
         attachInfo.newWindowId,
         tabId,
-        State.OPEN,
+        tab.discarded ? State.DISCARDED : State.OPEN,
         tab.title || 'Untitled',
         tab.url || ''
       )
@@ -1745,7 +1751,7 @@ export default defineBackground(() => {
       sessionTree.addTab(
         attachInfo.newWindowId,
         tabId,
-        State.OPEN,
+        tab.discarded ? State.DISCARDED : State.OPEN,
         tab.title || 'Untitled',
         tab.url || '',
         tabToRightIndex
