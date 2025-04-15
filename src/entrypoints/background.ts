@@ -234,8 +234,10 @@ export default defineBackground(() => {
           this.windows.forEach((window) => {
             window.id = 0
             window.state = State.SAVED
+            window.active = false
             if (!window.savedTime) window.savedTime = Date.now()
             window.tabs.forEach((tab) => {
+              tab.active = false
               tab.id = 0
               tab.state = State.SAVED
               if (!tab.savedTime) tab.savedTime = Date.now()
@@ -539,10 +541,12 @@ export default defineBackground(() => {
         window.state = State.SAVED
         window.id = -1
         window.savedTime = Date.now()
+        window.active = false
         window.tabs.forEach((tab) => {
           tab.state = State.SAVED
           tab.id = -1
           tab.savedTime = Date.now()
+          tab.active = false
         })
       }
     }
@@ -561,6 +565,7 @@ export default defineBackground(() => {
           tab.state = State.SAVED
           tab.id = -1
           tab.savedTime = Date.now()
+          tab.active = false
         }
       }
     }
@@ -1452,6 +1457,70 @@ export default defineBackground(() => {
     return
   }
 
+  /**
+   * Removes the active status from the previous active window and sets the new active window.
+   *
+   * @param {number} windowId - The ID of the window to set as active.
+   * @param {number} tries - The number of tries left to set the active window.
+   */
+  function setActiveWindow(windowId: number, tries: number = 0) {
+    if (
+      windowId === undefined ||
+      windowId === -1 ||
+      windowId === sessionTreeWindowId
+    ) {
+      return
+    }
+
+    const previousActiveWindow = sessionTree.windows.find((w) => w.active)
+    if (previousActiveWindow) {
+      previousActiveWindow.active = false
+    }
+
+    const activeWindow = sessionTree.windows.find((w) => w.id === windowId)
+    // if activeWindow is undefined, wait and try again
+    if (activeWindow) {
+      activeWindow.active = true
+    } else {
+      if (tries > 0) {
+        setTimeout(() => {
+          setActiveWindow(windowId, tries - 1)
+        }, 100)
+      }
+    }
+  }
+
+  /**
+   * Updates active tab status in session tree
+   */
+  function tabOnActivated(
+    activeInfo: browser.tabs._OnActivatedActiveInfo,
+    tries: number = 0
+  ) {
+    const window = sessionTree.windows.find((w) => w.id === activeInfo.windowId)
+    const activeTab = sessionTree.windows
+      .find((w) => w.id === activeInfo.windowId)
+      ?.tabs.find((t) => t.id === activeInfo.tabId)
+    // if window or activeTab is undefined, wait and try again
+    if (!window || !activeTab) {
+      if (tries > 0) {
+        setTimeout(() => {
+          tabOnActivated(activeInfo, tries - 1)
+        }, 100)
+      }
+      return
+    }
+    window.activeTabId = activeInfo.tabId
+    activeTab.active = true
+
+    const previousActiveTab = sessionTree.windows
+      .find((w) => w.id === activeInfo.windowId)
+      ?.tabs.find((t) => t.id === activeInfo.previousTabId)
+    if (previousActiveTab) {
+      previousActiveTab.active = false
+    }
+  }
+
   // ==============================
   // Exposed Functions for the SessionTree Vue component
   // ==============================
@@ -1757,6 +1826,20 @@ export default defineBackground(() => {
         tabToRightIndex
       )
     }
+  })
+
+  /**
+   * When a window is focused, set the active window in the session tree.
+   */
+  browser.windows.onFocusChanged.addListener((windowId) => {
+    setActiveWindow(windowId, 5)
+  })
+
+  /**
+   * When a tab is activated, set the active tab in the session tree.
+   */
+  browser.tabs.onActivated.addListener((activeInfo) => {
+    tabOnActivated(activeInfo, 5)
   })
 
   /**
