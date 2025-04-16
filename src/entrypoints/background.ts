@@ -1573,17 +1573,19 @@ export default defineBackground(() => {
     }
     // if window has saved tabs, save the window instead of removing
     const savedTabs = window.tabs.filter((tab) => tab.state === State.SAVED)
+    const tabCount = window.tabs.length
     if (
-      Settings.values.saveWindowOnClose ||
-      (savedTabs.length > 0 &&
-        Settings.values.saveWindowOnCloseIfContainsSavedTabs) ||
-      (Settings.values.saveWindowOnCloseIfPreviouslySaved &&
-        window.savedTime! > 0)
+      tabCount > 0 &&
+      (Settings.values.saveWindowOnClose ||
+        (savedTabs.length > 0 &&
+          Settings.values.saveWindowOnCloseIfContainsSavedTabs) ||
+        (Settings.values.saveWindowOnCloseIfPreviouslySaved &&
+          window.savedTime! > 0))
     ) {
       sessionTree.saveWindow(window.serialId)
       return
     }
-    const tabCount = window.tabs.length
+
     // if this window only has 1 tab, then save the window instead of removing
     if (tabCount === 1) {
       const openTab = window.tabs.filter((tab) => tab.state === State.OPEN)[0]
