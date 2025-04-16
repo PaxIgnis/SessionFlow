@@ -1139,21 +1139,7 @@ export default defineBackground(() => {
    * @param {Function} sendResponse - The function to send a response back to the sender.
    */
   function saveWindow(message: { windowId: number; windowSerialId: number }) {
-    sessionTree.updateWindowState(message.windowSerialId, State.SAVED)
-    sessionTree.updateWindowId(message.windowSerialId, -1)
-    const window = sessionTree.windows.find(
-      (w) => w.serialId === message.windowSerialId
-    )
-    if (window) {
-      for (const tab of window.tabs) {
-        sessionTree.updateTabState(
-          message.windowSerialId,
-          tab.serialId,
-          State.SAVED
-        )
-        sessionTree.updateTabId(message.windowSerialId, tab.serialId, -1)
-      }
-    }
+    sessionTree.saveWindow(message.windowSerialId)
     browser.windows.remove(message.windowId).catch((error) => {
       console.error('Error saving window:', error)
     })
@@ -1501,6 +1487,13 @@ export default defineBackground(() => {
     const activeTab = sessionTree.windows
       .find((w) => w.id === activeInfo.windowId)
       ?.tabs.find((t) => t.id === activeInfo.tabId)
+    const previousActiveTab = sessionTree.windows
+      .find((w) => w.id === activeInfo.windowId)
+      ?.tabs.find((t) => t.id === activeInfo.previousTabId)
+    // remove active status from previous active tab (not when detached/attached)
+    if (activeInfo.previousTabId !== activeInfo.tabId && previousActiveTab) {
+      previousActiveTab.active = false
+    }
     // if window or activeTab is undefined, wait and try again
     if (!window || !activeTab) {
       if (tries > 0) {
@@ -1512,13 +1505,6 @@ export default defineBackground(() => {
     }
     window.activeTabId = activeInfo.tabId
     activeTab.active = true
-
-    const previousActiveTab = sessionTree.windows
-      .find((w) => w.id === activeInfo.windowId)
-      ?.tabs.find((t) => t.id === activeInfo.previousTabId)
-    if (previousActiveTab) {
-      previousActiveTab.active = false
-    }
   }
 
   // ==============================
