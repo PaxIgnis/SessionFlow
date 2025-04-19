@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import { ref, onMounted, triggerRef, onBeforeUnmount } from 'vue'
-import { Window, State } from './sessiontree.interfaces.ts'
+import { Window, State, Tab } from './sessiontree.interfaces.ts'
 import { FaviconService } from '../../services/favicon/favicon.index.ts'
 import { FaviconCacheEntry } from '../../services/favicon/favicon.interfaces.ts'
 
@@ -14,6 +14,18 @@ window.onbeforeunload = () => {
   }
   localStorage.setItem('sessionTreeWindowConfig', JSON.stringify(bounds))
 
+  // Reset selected status of all items
+  if (selectedItem.value) {
+    selectedItem.value.selected = false
+    selectedItem.value = null
+  }
+  sessionTree.value.windows.forEach((window) => {
+    window.tabs.forEach((tab) => {
+      tab.selected = false
+    })
+    window.selected = false
+  })
+
   console.log('Unloading')
   window.browser.extension.getBackgroundPage().resetSessionTree()
   faviconService.saveCacheToStorage()
@@ -23,6 +35,7 @@ window.onbeforeunload = () => {
 const sessionTree = ref<{ windows: Array<Window> }>({ windows: [] })
 const hoveredTab = ref<string | null>(null) // Track the hovered tab
 const hoveredWindow = ref<number | null>(null) // Track the hovered window
+const selectedItem = ref<Window | Tab | null>(null) // Track the selected item
 const faviconCache = ref<Map<string, FaviconCacheEntry>>(
   new Map<string, FaviconCacheEntry>()
 )
@@ -145,8 +158,16 @@ function windowDoubleClick(
   }
 }
 
-function tabClick(tabId: number, windowId: number, state: State, url: string) {
-  console.log('Tab clicked', tabId, windowId, state, url)
+function itemClick(item: Window | Tab) {
+  console.log('Item clicked', item)
+  if (item.selected) {
+    return
+  }
+  if (selectedItem.value) {
+    selectedItem.value.selected = false
+  }
+  selectedItem.value = item
+  selectedItem.value.selected = true
 }
 
 function toggleCollapsedWindow(windowSerialId: number) {
@@ -172,9 +193,22 @@ function toggleCollapsedWindow(windowSerialId: number) {
         <div
           @mouseover="hoveredWindow = window.serialId"
           @mouseleave="hoveredWindow = null"
+          :class="{
+            active: window.active === true,
+          }"
+          class="windowNodeContainer treeItem"
+          @click="itemClick(window)"
+          @dblclick="
+            windowDoubleClick(window.serialId, window.id, window.state)
+          "
         >
-          <span v-if="hoveredWindow === window.serialId" class="hoverMenu"
-            >&nbsp;
+          <span
+            v-if="hoveredWindow === window.serialId"
+            class="hoverMenu"
+            :class="{
+              selectedHovered: window.selected === true,
+            }"
+          >
             <span class="hoverMenuToolbar">
               <span
                 v-if="window.state === State.OPEN"
@@ -187,6 +221,7 @@ function toggleCollapsedWindow(windowSerialId: number) {
               ></span>
             </span>
           </span>
+          <div v-if="window.selected" class="selected"></div>
           <div class="windowContainer">
             <span
               class="collapseArrow"
@@ -199,9 +234,7 @@ function toggleCollapsedWindow(windowSerialId: number) {
                 nodeTextOpen: window.state === State.OPEN,
                 nodeTextSaved: window.state === State.SAVED,
               }"
-              @dblclick="
-                windowDoubleClick(window.serialId, window.id, window.state)
-              "
+              class="nodeText"
               >Window id {{ window.id }} Window serialId
               {{ window.serialId }}</span
             >
@@ -215,58 +248,68 @@ function toggleCollapsedWindow(windowSerialId: number) {
             @mouseover="hoveredTab = `${window.serialId}-${tab.serialId}`"
             @mouseleave="hoveredTab = null"
           >
-            <span
-              v-if="hoveredTab === `${window.serialId}-${tab.serialId}`"
-              class="hoverMenu"
-              >&nbsp;
-              <span class="hoverMenuToolbar">
-                <span
-                  v-if="
-                    tab.state === State.OPEN || tab.state === State.DISCARDED
-                  "
-                  class="hoverMenuSave"
-                  @click="saveTab(tab.id, tab.serialId, window.serialId)"
-                ></span>
-                <span
-                  class="hoverMenuClose"
-                  @click="closeTab(tab.id, tab.serialId, window.serialId)"
-                ></span>
-              </span>
-            </span>
-            <a
-              :href="tab.url"
-              class="nodeContainer"
-              target="_blank"
-              @click.prevent
+            <div
+              :class="{
+                active: tab.active === true,
+                windowActive: window.active === true,
+              }"
+              class="tabNodeContainer treeItem"
+              @click="itemClick(tab)"
+              @dblclick="
+                tabDoubleClick(
+                  tab.id,
+                  window.id,
+                  tab.serialId,
+                  window.serialId,
+                  tab.state,
+                  tab.url
+                )
+              "
             >
-              <img
-                class="nodeFavicon"
-                :src="faviconService.getFavicon(tab.url)"
-                alt="/icon/16.png"
-              />
               <span
+                v-if="hoveredTab === `${window.serialId}-${tab.serialId}`"
                 :class="{
-                  nodeTextOpen: tab.state === State.OPEN,
-                  nodeTextSaved: tab.state === State.SAVED,
-                  nodeTextDiscarded: tab.state === State.DISCARDED,
+                  selectedHovered: tab.selected === true,
                 }"
-                class="nodeText"
-                @click="
-                  tabClick(tab.serialId, window.serialId, tab.state, tab.url)
-                "
-                @dblclick="
-                  tabDoubleClick(
-                    tab.id,
-                    window.id,
-                    tab.serialId,
-                    window.serialId,
-                    tab.state,
-                    tab.url
-                  )
-                "
-                >{{ tab.title }}</span
+                class="hoverMenu"
+                >&nbsp;
+                <span class="hoverMenuToolbar">
+                  <span
+                    v-if="
+                      tab.state === State.OPEN || tab.state === State.DISCARDED
+                    "
+                    class="hoverMenuSave"
+                    @click="saveTab(tab.id, tab.serialId, window.serialId)"
+                  ></span>
+                  <span
+                    class="hoverMenuClose"
+                    @click="closeTab(tab.id, tab.serialId, window.serialId)"
+                  ></span>
+                </span>
+              </span>
+              <div v-if="tab.selected" class="selected"></div>
+              <a
+                :href="tab.url"
+                class="nodeContainer"
+                target="_blank"
+                @click.prevent
               >
-            </a>
+                <img
+                  class="nodeFavicon"
+                  :src="faviconService.getFavicon(tab.url)"
+                  alt="/icon/16.png"
+                />
+                <span
+                  :class="{
+                    nodeTextOpen: tab.state === State.OPEN,
+                    nodeTextSaved: tab.state === State.SAVED,
+                    nodeTextDiscarded: tab.state === State.DISCARDED,
+                  }"
+                  class="nodeText"
+                  >{{ tab.title }}</span
+                >
+              </a>
+            </div>
           </li>
         </ul>
       </li>

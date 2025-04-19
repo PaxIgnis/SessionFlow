@@ -191,10 +191,15 @@ export default defineBackground(() => {
           const newWindow: Window = {
             id: win.id!,
             serialId: 0,
+            selected: false,
             state: State.OPEN,
+            active: win.focused,
+            activeTabId: win.tabs?.find((tab) => tab.active)?.id,
             tabs: win.tabs!.map((tab) => ({
+              active: tab.active,
               id: tab.id!,
               serialId: 0,
+              selected: false,
               state: State.OPEN,
               title: tab.title!,
               url: tab.url!,
@@ -235,10 +240,13 @@ export default defineBackground(() => {
             window.id = 0
             window.state = State.SAVED
             window.active = false
+            window.activeTabId = 0
+            window.selected = false
             if (!window.savedTime) window.savedTime = Date.now()
             window.tabs.forEach((tab) => {
               tab.active = false
               tab.id = 0
+              tab.selected = false
               tab.state = State.SAVED
               if (!tab.savedTime) tab.savedTime = Date.now()
             })
@@ -268,12 +276,20 @@ export default defineBackground(() => {
      *
      * @param {number} windowId - The ID of the window to add.
      */
-    addWindow(windowId: number) {
+    async addWindow(windowId: number) {
       console.log('Adding Window', windowId)
       if (!this.windows.some((w) => w.id === windowId)) {
+        const win = await browser.windows.get(windowId, { populate: true })
+        if (!win) {
+          console.error('Window not found:', windowId)
+          return
+        }
         const newWindow = {
+          active: win.focused,
+          activeTabId: win.tabs?.find((tab) => tab.active)?.id,
           id: windowId,
           serialId: 0,
+          selected: false,
           state: State.OPEN,
           tabs: [],
           collapsed: false,
@@ -296,8 +312,10 @@ export default defineBackground(() => {
         const window = this.windows.find((w) => w.id === windowId)
         if (window) {
           window.tabs = win.tabs!.map((tab) => ({
+            active: tab.active,
             id: tab.id!,
             serialId: 0,
+            selected: false,
             state: tab.discarded ? State.DISCARDED : State.OPEN,
             title: tab.title!,
             url: tab.url!,
@@ -341,8 +359,10 @@ export default defineBackground(() => {
      * @param {number} index - The index to insert the tab at, if not provided the tab is added to the end.
      */
     addTab(
+      active: boolean,
       windowId: number,
       tabId: number,
+      selected: boolean,
       state: State,
       title: string,
       url: string,
@@ -356,14 +376,24 @@ export default defineBackground(() => {
       }
       if (index !== undefined) {
         window.tabs.splice(index, 0, {
+          active: active,
           id: tabId,
           serialId: 0,
+          selected: false,
           state,
           title,
           url,
         })
       } else {
-        window.tabs.push({ id: tabId, serialId: 0, state, title, url })
+        window.tabs.push({
+          active: active,
+          id: tabId,
+          selected: selected,
+          serialId: 0,
+          state,
+          title,
+          url,
+        })
       }
       this.serializeSessionTree()
     }
@@ -1622,8 +1652,10 @@ export default defineBackground(() => {
         return
       }
       sessionTree.addTab(
+        tab.active,
         tab.windowId,
         tab.id,
+        false,
         tab.discarded ? State.DISCARDED : State.OPEN,
         tab.title || 'Untitled',
         tab.url || ''
@@ -1793,8 +1825,10 @@ export default defineBackground(() => {
     // if there is no tab to the right, add the tab to the end
     if (tabToRightId === undefined) {
       sessionTree.addTab(
+        tab.active,
         attachInfo.newWindowId,
         tabId,
+        false,
         tab.discarded ? State.DISCARDED : State.OPEN,
         tab.title || 'Untitled',
         tab.url || ''
@@ -1806,8 +1840,10 @@ export default defineBackground(() => {
         (tab) => tab.id === tabToRightId
       )
       sessionTree.addTab(
+        tab.active,
         attachInfo.newWindowId,
         tabId,
+        false,
         tab.discarded ? State.DISCARDED : State.OPEN,
         tab.title || 'Untitled',
         tab.url || '',
