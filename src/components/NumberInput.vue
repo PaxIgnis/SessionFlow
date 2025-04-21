@@ -1,4 +1,6 @@
 <script lang="ts" setup>
+import '@/styles/variables.css'
+
 interface Units {
   label: string
   value: string | number | boolean
@@ -134,17 +136,17 @@ const handleUnitToggle = (value: string | number | boolean) => {
   justify-content: space-between;
   align-items: center;
   padding: 12px 0;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--options-list-divider-color);
 }
 
 .number-label {
-  font-size: 14px;
-  color: #333;
+  font-size: var(--font-size-sm);
+  color: var(--text-color-primary);
 }
 
 .number-input-group {
   display: flex;
-  background: #fff;
+  gap: 0px;
   border-radius: 4px;
   padding: 1px;
 }
@@ -152,9 +154,13 @@ const handleUnitToggle = (value: string | number | boolean) => {
 .number-input {
   width: 40px;
   padding: 6px 12px;
-  border: 1px solid #ddd;
+  background-color: var(--background-color-secondary);
+  color: var(--text-color-primary);
+  border-width: 1px;
+  border-style: solid;
+  border-color: var(--options-input-border-color);
   border-radius: 4px;
-  font-size: 14px;
+  font-size: var(--font-size-sm);
   text-align: right;
   margin-right: 5px;
 }
@@ -162,7 +168,7 @@ const handleUnitToggle = (value: string | number | boolean) => {
 .number-input:focus,
 .number-input:focus:hover {
   outline: none;
-  border-color: #2196f3;
+  border-color: var(--options-input-border-color-hover);
 }
 
 .number-input::-webkit-outer-spin-button,
@@ -172,23 +178,23 @@ const handleUnitToggle = (value: string | number | boolean) => {
 }
 
 .number-input[type='number'] {
-  -moz-appearance: textfield; /* Firefox */
+  -moz-appearance: textfield;
 }
 
 .unit-button-group {
   display: flex;
-  gap: 1px;
-  background: #fff;
+  gap: 0px;
   border-radius: 4px;
   padding: 1px;
 }
 
 .unit-button {
+  color: var(--text-color-primary);
   padding: 6px 12px;
-  background: #fff;
-  border: 1px solid #ddd;
+  background: transparent;
+  border-width: 0px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--font-size-sm);
   transition: background-color 0.2s;
 }
 
@@ -197,11 +203,15 @@ const handleUnitToggle = (value: string | number | boolean) => {
 }
 
 .unit-button:hover {
-  background: #f5f5f5;
+  background: var(--nav-panel-hover-color);
 }
 
 .unit-button.active {
-  background: #2196f3;
-  color: #fff;
+  background: var(--button-active-background);
+  color: var(--button-active-foreground);
+}
+
+.unit-button.active:hover {
+  background: var(--button-active-background-hover);
 }
 </style>

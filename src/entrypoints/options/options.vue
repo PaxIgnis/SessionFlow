@@ -5,6 +5,7 @@ import SettingsWindows from './components/settings.windows.vue'
 import SettingsTabs from './components/settings.tabs.vue'
 import Favicons from './components/settings.favicons.vue'
 import { STRINGS } from '@/types/strings'
+import '@/styles/variables.css'
 
 const sections = [
   { id: 'settings_general', level: 0 },
@@ -109,9 +110,9 @@ onUnmounted(() => {
 
 .nav-panel {
   width: 200px;
-  background: #f5f5f5;
+  background-color: var(--background-color-secondary);
   padding: 20px 0;
-  border-right: 1px solid #ddd;
+  border-right: 1px solid var(--nav-panel-border-color);
   position: fixed;
   height: 100%;
   overflow-y: auto;
@@ -126,21 +127,24 @@ onUnmounted(() => {
   -moz-user-select: none;
   user-select: none;
   font-weight: bold;
-  margin: 2px 12px 2px 12px;
+  margin: 0 12px 0 12px;
 }
 
 .nav-item:hover {
-  background: #e8e8e8;
+  background: var(--nav-panel-hover-color);
+  border-radius: 6px;
+}
+
+.nav-item:active {
+  background: var(--nav-panel-active-background);
+  border-radius: 6px;
 }
 
 .nav-item-body {
   content: '';
   width: 100%;
   height: 100%;
-}
-
-.nav-icon {
-  font-size: 1.2em;
+  color: var(--text-color-primary);
 }
 
 .content-panel {
@@ -148,6 +152,7 @@ onUnmounted(() => {
   padding: 20px 40px;
   margin-left: 200px;
   overflow-y: auto;
+  background-color: var(--background-color-primary);
 }
 
 .section {
@@ -159,28 +164,7 @@ h2 {
   padding-top: 24px;
   margin-bottom: 24px;
   padding-bottom: 2px;
-}
-
-.subsections {
-  margin-left: 24px;
-}
-
-.subsection {
-  padding: 8px 24px;
-  font-size: 0.9em;
-  color: #666;
-}
-
-.subsection:hover {
-  background: #e8e8e8;
-  color: #333;
-  border-radius: 6px;
-}
-
-h3 {
-  margin: 16px 0;
-  color: #666;
-  font-size: 1.1em;
+  color: var(--header-text-color);
 }
 
 .child-element {
@@ -191,13 +175,17 @@ h3 {
   -moz-user-select: none;
 }
 
+.content-panel > section:last-child {
+  margin-bottom: 50vh;
+}
+
 .toggle-container,
 .number-container {
   -moz-user-select: none;
 }
 
 .nav-item-active {
-  background: #e8e8e8;
+  background: var(--nav-panel-focused-active-background) !important;
   border-radius: 6px;
 }
 </style>

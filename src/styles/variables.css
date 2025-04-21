@@ -1,5 +1,6 @@
 :root {
   /* Typography */
+  --font-family: system-ui;
   --font-family-session-tree: Tahoma, Geneva, sans-serif;
   --font-size-xs: 0.75rem;
   --font-size-sm: 0.875rem;
@@ -24,4 +25,18 @@
   --list-item-open-foreground: rgb(156, 183, 211);
   --list-item-saved-foreground: rgb(140, 140, 140);
   --list-item-selected-background: rgb(27, 54, 82);
+
+  /* Options */
+  --nav-panel-active-background: rgb(4, 57, 94);
+  --nav-panel-border-color: rgb(43, 43, 43);
+  --nav-panel-focused-active-background: rgb(55, 55, 61);
+  --nav-panel-hover-color: rgb(42, 45, 46);
+  --text-color-primary: rgb(204, 204, 204);
+  --header-text-color: rgb(255, 255, 255);
+  --button-active-background: rgb(100, 140, 89);
+  --button-active-background-hover: rgb(127, 151, 121);
+  --button-active-foreground: rgb(24, 24, 24);
+  --options-input-border-color: rgb(42, 45, 46);
+  --options-input-border-color-hover: rgb(21, 99, 163);
+  --options-list-divider-color: rgb(97, 97, 97);
 }

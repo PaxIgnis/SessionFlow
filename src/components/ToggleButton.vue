@@ -1,4 +1,6 @@
 <script lang="ts" setup>
+import '@/styles/variables.css'
+
 interface Option {
   label: string
   value: string | number | boolean
@@ -49,28 +51,28 @@ const handleToggle = (value: string | number | boolean) => {
   justify-content: space-between;
   align-items: center;
   padding: 12px 0;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--options-list-divider-color);
 }
 
 .toggle-label {
-  font-size: 14px;
-  color: #333;
+  font-size: var(--font-size-sm);
+  color: var(--text-color-primary);
 }
 
 .toggle-button-group {
   display: flex;
-  gap: 1px;
-  background: #fff;
+  gap: 0px;
   border-radius: 4px;
   padding: 1px;
 }
 
 .toggle-button {
+  color: var(--text-color-primary);
   padding: 6px 12px;
-  background: #fff;
-  border: 1px solid #ddd;
+  background: transparent;
+  border-width: 0px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--font-size-sm);
   transition: background-color 0.2s;
 }
 
@@ -79,11 +81,15 @@ const handleToggle = (value: string | number | boolean) => {
 }
 
 .toggle-button:hover {
-  background: #f5f5f5;
+  background: var(--nav-panel-hover-color);
 }
 
 .toggle-button.active {
-  background: #2196f3;
-  color: #fff;
+  background: var(--button-active-background);
+  color: var(--button-active-foreground);
+}
+
+.toggle-button.active:hover {
+  background: var(--button-active-background-hover);
 }
 </style>
