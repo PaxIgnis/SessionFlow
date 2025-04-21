@@ -3,6 +3,7 @@ import { ref, onMounted, triggerRef, onBeforeUnmount } from 'vue'
 import { Window, State, Tab } from './sessiontree.interfaces.ts'
 import { FaviconService } from '../../services/favicon/favicon.index.ts'
 import { FaviconCacheEntry } from '../../services/favicon/favicon.interfaces.ts'
+import '@/styles/variables.css'
 
 // Save Session Tree Window location and size before closing.
 window.onbeforeunload = () => {
@@ -326,17 +327,35 @@ function toggleCollapsedWindow(windowSerialId: number) {
   height: 100vh;
   position: relative;
   margin: 0;
+  background-color: var(--background-color-secondary);
 }
 
 .hoverMenu {
   pointer-events: none;
   position: absolute;
   /* height: 16px; */
-  left: 0;
-  width: 100%;
-  background: rgba(36, 145, 255, 0.08);
+  left: -100vw;
+  right: 0;
+  top: 0px;
+  bottom: 0px;
+  background: var(--list-item-hover-background);
   visibility: visible;
-  margin-bottom: 0;
+}
+
+.hoverMenu.selectedHovered {
+  background: None;
+  z-index: 1;
+}
+
+.selected {
+  pointer-events: none;
+  position: absolute;
+  top: 0px;
+  bottom: 0px;
+  background: var(--list-item-selected-background);
+  left: -100vw;
+  right: -100vw;
+  visibility: visible;
 }
 
 .hoverMenuClose {
@@ -370,12 +389,20 @@ function toggleCollapsedWindow(windowSerialId: number) {
 }
 
 .nodeContainer {
-  cursor: pointer;
   padding-left: 10px;
   display: block;
   text-decoration: none;
   overflow: hidden;
   text-overflow: ellipsis;
+  user-select: none;
+  cursor: default;
+}
+
+.windowNodeContainer {
+  position: relative;
+  padding-top: 1px;
+  padding-bottom: 1px;
+  height: 16px;
 }
 
 .nodeFavicon {
@@ -383,7 +410,9 @@ function toggleCollapsedWindow(windowSerialId: number) {
   height: 16px;
   float: left;
   margin: 0px;
-  margin-right: 3px;
+  margin-right: 4px;
+  position: relative;
+  z-index: 0;
 }
 
 .nodeText {
@@ -391,14 +420,24 @@ function toggleCollapsedWindow(windowSerialId: number) {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  font-size: var(--font-size-xs);
+  min-height: 15px;
+  padding-top: 1px;
+  font-family: var(--font-family-session-tree);
+  position: relative;
+  z-index: 0;
 }
 
 .nodeTextOpen {
-  color: black;
+  color: var(--list-item-open-foreground);
 }
 
 .nodeTextSaved {
-  color: rgb(150, 150, 150);
+  color: var(--list-item-saved-foreground);
+}
+
+.nodeTextDiscarded {
+  color: var(--list-item-discarded-foreground);
 }
 
 .sessiontree ul {
@@ -411,10 +450,45 @@ function toggleCollapsedWindow(windowSerialId: number) {
   position: relative;
   padding-left: 10px;
   white-space: nowrap;
+  padding-top: 0px;
 }
 
-.tabsList {
-  padding-bottom: 10px;
+.treeItem.active .nodeText {
+  color: var(--list-item-active-foreground);
+}
+
+.treeItem {
+  padding-top: 1px;
+  padding-bottom: 1px;
+}
+
+.treeItem.windowActive.active {
+  box-sizing: border-box;
+  width: 100%;
+  position: relative;
+  padding: 1px;
+}
+.treeItem.windowActive.active > .nodeContainer {
+  padding-left: 9px;
+}
+.treeItem.windowActive.active::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border: 1px solid transparent;
+  border-image: linear-gradient(
+      to right,
+      var(--list-item-focused-border-color-gradient-1),
+      var(--list-item-focused-border-color-gradient-2),
+      var(--list-item-focused-border-color-gradient-3),
+      var(--list-item-focused-border-color-gradient-4)
+    )
+    5;
+  pointer-events: none;
+  z-index: 1;
 }
 
 [v-cloak] {
@@ -429,6 +503,8 @@ function toggleCollapsedWindow(windowSerialId: number) {
   padding-left: 0px;
   display: flex;
   align-items: center;
+  user-select: none;
+  cursor: default;
 }
 
 /* Vertical guide line */
@@ -440,7 +516,10 @@ function toggleCollapsedWindow(windowSerialId: number) {
   left: 1px;
   width: 0;
   height: 100%;
-  border: 1px solid #d2d2d2;
+  border-left-width: 1px;
+  border-left-style: solid;
+  border-left-color: var(--list-indent-guide-stroke);
+  z-index: 1;
 }
 
 /* Last item shouldn't extend the vertical line fully */
@@ -455,12 +534,13 @@ function toggleCollapsedWindow(windowSerialId: number) {
   cursor: pointer;
   user-select: none;
   transition: transform 0.1s linear;
-  margin-right: 6px;
-  border: solid #303030;
+  margin-right: 5px;
+  border-style: solid;
+  border-color: var(--list-icon-foreground);
   border-width: 0 1px 1px 0;
   padding: 1px;
   transform: rotate(45deg);
-  margin-left: 0px;
+  margin-left: 1px;
   position: relative;
 }
 

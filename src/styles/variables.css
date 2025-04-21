@@ -1,0 +1,27 @@
+:root {
+  /* Typography */
+  --font-family-session-tree: Tahoma, Geneva, sans-serif;
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.875rem;
+  --font-size-md: 1rem;
+  --font-size-lg: 1.25rem;
+  --font-size-xl: 1.5rem;
+
+  /* Colors */
+  --background-color-primary: rgb(31, 31, 31);
+  --background-color-secondary: rgb(24, 24, 24);
+
+  /* Session tree list items */
+  --list-icon-foreground: rgb(204, 204, 204);
+  --list-indent-guide-stroke: rgb(88, 88, 88);
+  --list-item-active-foreground: rgb(255, 255, 255);
+  --list-item-discarded-foreground: rgb(100, 140, 89);
+  --list-item-focused-border-color-gradient-1: rgb(209, 113, 37);
+  --list-item-focused-border-color-gradient-2: rgb(209, 54, 72);
+  --list-item-focused-border-color-gradient-3: rgb(145, 37, 209);
+  --list-item-focused-border-color-gradient-4: rgb(37, 85, 209);
+  --list-item-hover-background: rgb(25, 34, 42);
+  --list-item-open-foreground: rgb(156, 183, 211);
+  --list-item-saved-foreground: rgb(140, 140, 140);
+  --list-item-selected-background: rgb(27, 54, 82);
+}
