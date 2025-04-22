@@ -34,8 +34,6 @@ window.onbeforeunload = () => {
 
 // Initialize a local reactive sessionTree
 const sessionTree = ref<{ windows: Array<Window> }>({ windows: [] })
-const hoveredTab = ref<string | null>(null) // Track the hovered tab
-const hoveredWindow = ref<number | null>(null) // Track the hovered window
 const selectedItem = ref<Window | Tab | null>(null) // Track the selected item
 const faviconCache = ref<Map<string, FaviconCacheEntry>>(
   new Map<string, FaviconCacheEntry>()
@@ -192,8 +190,6 @@ function toggleCollapsedWindow(windowSerialId: number) {
         class="subNodeContainer"
       >
         <div
-          @mouseover="hoveredWindow = window.serialId"
-          @mouseleave="hoveredWindow = null"
           :class="{
             active: window.active === true,
           }"
@@ -204,7 +200,6 @@ function toggleCollapsedWindow(windowSerialId: number) {
           "
         >
           <span
-            v-if="hoveredWindow === window.serialId"
             class="hoverMenu"
             :class="{
               selectedHovered: window.selected === true,
@@ -246,8 +241,6 @@ function toggleCollapsedWindow(windowSerialId: number) {
             v-for="tab in window.tabs"
             :key="`${window.serialId}-${tab.serialId}`"
             class="subNodeContainer"
-            @mouseover="hoveredTab = `${window.serialId}-${tab.serialId}`"
-            @mouseleave="hoveredTab = null"
           >
             <div
               :class="{
@@ -268,7 +261,6 @@ function toggleCollapsedWindow(windowSerialId: number) {
               "
             >
               <span
-                v-if="hoveredTab === `${window.serialId}-${tab.serialId}`"
                 :class="{
                   selectedHovered: tab.selected === true,
                 }"
@@ -339,6 +331,11 @@ function toggleCollapsedWindow(windowSerialId: number) {
   top: 0px;
   bottom: 0px;
   background: var(--list-item-hover-background);
+  visibility: hidden;
+}
+
+.windowNodeContainer:hover .hoverMenu,
+.tabNodeContainer:hover .hoverMenu {
   visibility: visible;
 }
 
@@ -362,8 +359,9 @@ function toggleCollapsedWindow(windowSerialId: number) {
   pointer-events: auto;
   cursor: pointer;
   display: inline-block;
+  align-items: center;
   width: 16px;
-  height: 16px;
+  height: 100%;
   /* padding-right: -15px; */
   background: transparent url('/icon/16.png') no-repeat;
 }
@@ -372,8 +370,9 @@ function toggleCollapsedWindow(windowSerialId: number) {
   pointer-events: auto;
   cursor: pointer;
   display: inline-block;
+  align-items: center;
   width: 16px;
-  height: 16px;
+  height: 100%;
   padding-right: 4px;
   background: transparent url('/icon/16.png') no-repeat;
 }
@@ -382,10 +381,12 @@ function toggleCollapsedWindow(windowSerialId: number) {
   pointer-events: none;
   position: absolute;
   display: inline-block;
+  height: 18px;
   right: 0px;
   padding-right: 7px;
   fill: darkgrey;
   background-clip: border-box, border-box, content-box;
+  z-index: 1;
 }
 
 .nodeContainer {
