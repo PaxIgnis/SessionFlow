@@ -502,6 +502,7 @@ export default defineBackground(() => {
      * @param {State} state - The new state to assign to the tab.
      * @param {string} title - The new title to assign to the tab.
      * @param {string} url - The new URL to assign to the tab.
+     * @param {number} tries - The number of attempts to try to update, waiting for the tab to be created.
      */
     updateTab(
       windowId: number,
@@ -509,18 +510,38 @@ export default defineBackground(() => {
       newTabId: number,
       state: State,
       title: string,
-      url: string
+      url: string,
+      tries: number = 0
     ) {
       const window = this.windows.find((w) => w.id === windowId)
-      if (window) {
-        const tab = window.tabs.find((t) => t.id === tabId)
-        if (tab) {
-          tab.state = state
-          tab.title = title
-          tab.url = url
-          tab.id = newTabId
+      if (!window) {
+        console.error('Error updating tab, could not find window:', windowId)
+        return
+      }
+      const tab = window.tabs.find((t) => t.id === tabId)
+      if (!tab) {
+        if (tries > 0) {
+          setTimeout(() => {
+            sessionTree.updateTab(
+              windowId,
+              tabId,
+              newTabId,
+              state,
+              title,
+              url,
+              tries - 1
+            )
+          }, 100)
+          return
+        } else {
+          console.error('Error updating tab, could not find tab:', tabId)
+          return
         }
       }
+      tab.state = state
+      tab.title = title
+      tab.url = url
+      tab.id = newTabId
     }
 
     /**
@@ -1716,7 +1737,8 @@ export default defineBackground(() => {
       tab.id,
       tab.discarded ? State.DISCARDED : State.OPEN,
       tab.title || '',
-      tab.url || ''
+      tab.url || '',
+      10
     )
   })
 
