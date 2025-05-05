@@ -1,5 +1,5 @@
-import { Settings, SETTINGS_TYPES } from '../types/settings'
-import { Settings as SettingsValues } from '../services/settings'
+import { Settings, SETTINGS_TYPES } from '@/types/settings'
+import { Settings as SettingsValues } from '@/services/settings'
 
 /**
  * Loads the settings from the browser storage and adds them to the global Settings object.

@@ -1,9 +1,9 @@
 <script lang="ts" setup>
 import { ref, onMounted, triggerRef, onBeforeUnmount } from 'vue'
 import { Window, State, Tab } from './sessiontree.interfaces.ts'
-import { FaviconService } from '../../services/favicon/favicon.index.ts'
-import { FaviconCacheEntry } from '../../services/favicon/favicon.interfaces.ts'
-import { TAB_LOADING } from '@/defaults/favicons.js'
+import { FaviconService } from '@/services/favicons'
+import { FaviconCacheEntry } from '@/types/favicons'
+import { TAB_LOADING } from '@/defaults/favicons'
 import '@/styles/variables.css'
 
 // Save Session Tree Window location and size before closing.

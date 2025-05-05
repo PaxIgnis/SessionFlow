@@ -1,4 +1,4 @@
-import * as SettingsOperations from './settings.storage.operations'
+import * as SettingsOperations from '@/services/settings.storage.operations'
 import { DEFAULT_SETTINGS } from '@/defaults/settings'
 import { reactive } from 'vue'
 

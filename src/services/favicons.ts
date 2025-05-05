@@ -1,7 +1,4 @@
-import {
-  FaviconCacheEntry,
-  FaviconStorageConfig,
-} from './favicon.interfaces.ts'
+import { FaviconCacheEntry, FaviconStorageConfig } from '@/types/favicons'
 
 export class FaviconService {
   private static readonly DEFAULT_CONFIG: FaviconStorageConfig = {
