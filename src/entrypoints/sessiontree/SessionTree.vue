@@ -3,6 +3,7 @@ import { ref, onMounted, triggerRef, onBeforeUnmount } from 'vue'
 import { Window, State, Tab } from './sessiontree.interfaces.ts'
 import { FaviconService } from '../../services/favicon/favicon.index.ts'
 import { FaviconCacheEntry } from '../../services/favicon/favicon.interfaces.ts'
+import { TAB_LOADING } from '@/defaults/favicons.js'
 import '@/styles/variables.css'
 
 // Save Session Tree Window location and size before closing.
@@ -289,8 +290,11 @@ function toggleCollapsedWindow(windowSerialId: number) {
               >
                 <img
                   class="nodeFavicon"
-                  :src="faviconService.getFavicon(tab.url)"
-                  alt="/icon/16.png"
+                  :src="
+                    tab.loadingStatus === 'loading' && tab.state === State.OPEN
+                      ? TAB_LOADING
+                      : faviconService.getFavicon(tab.url)
+                  "
                 />
                 <span
                   :class="{

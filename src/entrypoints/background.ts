@@ -3,6 +3,8 @@ import {
   State,
   PendingItem,
   WindowPosition,
+  Tab,
+  LoadingStatus,
 } from './sessiontree/sessiontree.interfaces'
 import { Settings } from '@/services/settings'
 
@@ -151,7 +153,7 @@ export default defineBackground(() => {
     contexts: ['browser_action'],
   })
 
-  browser.menus.onClicked.addListener((info, tab) => {
+  browser.menus.onClicked.addListener((info) => {
     // if (info.menuItemId === 'toggle-sessiontree-sidebar') {
     //   browser.sidebarAction.toggle()
     // }
@@ -505,43 +507,29 @@ export default defineBackground(() => {
      * @param {number} tries - The number of attempts to try to update, waiting for the tab to be created.
      */
     updateTab(
-      windowId: number,
-      tabId: number,
-      newTabId: number,
-      state: State,
-      title: string,
-      url: string,
+      id: { windowId: number; tabId: number },
+      tabContents: Partial<Tab>,
       tries: number = 0
     ) {
-      const window = this.windows.find((w) => w.id === windowId)
+      const window = this.windows.find((w) => w.id === id.windowId)
       if (!window) {
-        console.error('Error updating tab, could not find window:', windowId)
+        console.error('Error updating tab, could not find window:', id.windowId)
         return
       }
-      const tab = window.tabs.find((t) => t.id === tabId)
+      const tab = window.tabs.find((t) => t.id === id.tabId) as Tab
       if (!tab) {
         if (tries > 0) {
           setTimeout(() => {
-            sessionTree.updateTab(
-              windowId,
-              tabId,
-              newTabId,
-              state,
-              title,
-              url,
-              tries - 1
-            )
+            sessionTree.updateTab(id, tabContents, tries - 1)
           }, 100)
           return
         } else {
-          console.error('Error updating tab, could not find tab:', tabId)
+          console.error('Error updating tab, could not find tab:', id.tabId)
           return
         }
       }
-      tab.state = state
-      tab.title = title
-      tab.url = url
-      tab.id = newTabId
+      // If the tab object exists update the new values
+      Object.assign(tab, tabContents)
     }
 
     /**
@@ -1577,7 +1565,11 @@ export default defineBackground(() => {
    *
    */
   browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-    if (changeInfo.favIconUrl && browser.extension.getViews().length > 0) {
+    if (
+      changeInfo.favIconUrl &&
+      browser.extension.getViews().length > 0 &&
+      tab.status === 'complete'
+    ) {
       window.browser.runtime
         .sendMessage({
           type: 'FAVICON_UPDATED',
@@ -1724,20 +1716,26 @@ export default defineBackground(() => {
 
   /**
    * When a tab is updated, update the session tree to match the new tab state.
-   * This includes tab id, title and url.
    */
   browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     if (tab.windowId === undefined || tab.id === undefined) {
       console.error('Tab or Window ID is undefined')
       return
     }
+    const tabContents: Partial<Tab> = {
+      state: tab.discarded ? State.DISCARDED : State.OPEN,
+    }
+    if (tab.status) tabContents.loadingStatus = tab.status as LoadingStatus
+    // only update title and url if the tab is complete
+    // this is to prevent the tab from being updated with eroneous data such as new tab
+    if (tab.status === 'complete') {
+      if (tab.title) tabContents.title = tab.title
+      if (tab.url) tabContents.url = tab.url
+    }
+
     sessionTree.updateTab(
-      tab.windowId,
-      tab.id,
-      tab.id,
-      tab.discarded ? State.DISCARDED : State.OPEN,
-      tab.title || '',
-      tab.url || '',
+      { windowId: tab.windowId, tabId: tab.id },
+      tabContents,
       10
     )
   })

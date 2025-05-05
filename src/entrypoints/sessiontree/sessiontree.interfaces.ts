@@ -42,4 +42,10 @@ export interface Tab {
   title: string
   url: string
   collapsed?: boolean
+  loadingStatus?: LoadingStatus
+}
+
+export enum LoadingStatus {
+  LOADING = 'loading',
+  COMPLETE = 'complete',
 }
