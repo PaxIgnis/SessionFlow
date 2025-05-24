@@ -43,7 +43,9 @@ export class FaviconService {
     // loop through all open tabs and update the cache with their favicons
     browser.tabs.query({}).then((tabs) => {
       tabs.forEach((tab) => {
-        if (tab.favIconUrl && !this.cache.has(tab.url!)) {
+        const domain = this.getDomainFromUrl(tab.url!)
+        // If the tab has a favicon and the tab's domain is not already in the cache, add it
+        if (tab.favIconUrl && !this.cache.has(domain)) {
           this.updateFavicon(tab.favIconUrl, tab)
         }
       })
@@ -69,13 +71,16 @@ export class FaviconService {
   }
 
   /**
-   * Gets the favicon data URL for a given URL
+   * Gets the favicon data URL for a given URL (domain) from the cache.
    *
    * @param {string} url - The URL to get the favicon for
    * @returns {Promise<string>} - A promise that resolves with the favicon data URL
    */
   public getFavicon(url: string): string {
-    const entry = this.cache.get(url)
+    // extract the domain from the URL
+    const domain = this.getDomainFromUrl(url)
+    // check if the favicon is in the cache
+    const entry = this.cache.get(domain)
     if (entry && entry.dataUrl && entry.dataUrl !== '') {
       return entry.dataUrl
     }
@@ -86,7 +91,7 @@ export class FaviconService {
   /**
    * Updates the favicon in the cache for the given tab
    *
-   * @param {string} favIconUrl - The URL of the favicon
+   * @param {string} favIconUrl - The data URL of the favicon
    * @param {browser.tabs.Tab} tab - The tab to update the favicon for
    * @returns {Promise<void>} - A promise that resolves when the favicon has been updated
    */
@@ -95,23 +100,26 @@ export class FaviconService {
     tab: browser.tabs.Tab
   ): Promise<void> {
     try {
+      // extract the domain from the URL
+      const domain = this.getDomainFromUrl(tab.url!)
+
       // If the favicon URL is a data URL, store it directly
       if (favIconUrl.startsWith('data:')) {
         const faviconData: FaviconCacheEntry = {
           dataUrl: favIconUrl,
           timestamp: Date.now(),
-          url: tab.url!,
+          url: domain,
         }
-        this.cache.set(tab.url!, faviconData)
+        this.cache.set(domain, faviconData)
         return
       }
 
-      // If the favicon URL is a browser internal URL, try to get it from the page
+      // If the favicon URL is a browser internal URL, set custom favicons
       if (
-        favIconUrl.startsWith('chrome://') ||
-        favIconUrl.startsWith('moz-extension://') ||
-        favIconUrl.startsWith('about:') ||
-        favIconUrl.startsWith('resource:')
+        domain.startsWith('chrome://') ||
+        domain.startsWith('moz-extension://') ||
+        domain.startsWith('about:') ||
+        domain.startsWith('resource:')
       ) {
         // TODO: Implement solution to get icons for privileged URLs (e.g. about:config)
         return
@@ -132,11 +140,39 @@ export class FaviconService {
       const faviconData: FaviconCacheEntry = {
         dataUrl,
         timestamp: Date.now(),
-        url: tab.url!,
+        url: domain,
       }
-      this.cache.set(tab.url!, faviconData)
+      this.cache.set(domain, faviconData)
     } catch (error) {
       console.error('Failed to update favicon', error, favIconUrl)
+    }
+  }
+
+  /**
+   * Extracts the domain from a URL
+   *
+   * @param {string} url - The URL to extract the domain from
+   * @returns {string} - The domain extracted from the URL
+   */
+  private getDomainFromUrl(url: string): string {
+    try {
+      let domain = ''
+      // If the URL is a privileged firefox URL, use it directly
+      // Otherwise, extract the domain from the URL
+      if (
+        url.startsWith('chrome://') ||
+        url.startsWith('moz-extension://') ||
+        url.startsWith('about:') ||
+        url.startsWith('resource:')
+      ) {
+        domain = url
+      } else {
+        domain = new URL(url).hostname
+      }
+      return domain
+    } catch (error) {
+      console.error('Failed to parse URL', error, url)
+      return ''
     }
   }
 }
