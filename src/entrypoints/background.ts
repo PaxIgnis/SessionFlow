@@ -7,6 +7,7 @@ import {
   LoadingStatus,
 } from './sessiontree/sessiontree.interfaces'
 import { Settings } from '@/services/settings'
+import { deferredEventsQueue } from '@/services/deferred.events.queue'
 
 export default defineBackground(() => {
   console.log('Hello, SessionFlow Background has Started!', {
@@ -177,6 +178,7 @@ export default defineBackground(() => {
       this.windows = []
       this.windowsBackup = []
       this.initializeWindows()
+      deferredEventsQueue.initializeDeferredEventsQueue()
     }
 
     /**
@@ -299,6 +301,7 @@ export default defineBackground(() => {
         this.windows.push(newWindow)
         this.serializeSessionTree()
         this.updateWindowTabs(windowId)
+        deferredEventsQueue.processDeferredWindowEvents(windowId)
       }
     }
 
@@ -398,6 +401,7 @@ export default defineBackground(() => {
         })
       }
       this.serializeSessionTree()
+      deferredEventsQueue.processDeferredTabEvents(tabId)
     }
 
     /**
@@ -498,35 +502,26 @@ export default defineBackground(() => {
     /**
      * Updates the state, title, URL and id of a tab in the session tree.
      *
-     * @param {number} windowId - The ID of the window containing the tab.
-     * @param {number} tabId - The current ID of the tab to be updated.
-     * @param {number} newTabId - The new ID to assign to the tab.
-     * @param {State} state - The new state to assign to the tab.
-     * @param {string} title - The new title to assign to the tab.
-     * @param {string} url - The new URL to assign to the tab.
-     * @param {number} tries - The number of attempts to try to update, waiting for the tab to be created.
+     * @param {Object} id - An object containing the windowId and tabId of the tab to be updated.
+     * @param {Partial<Tab>} tabContents - An object containing the updated properties for the tab.
      */
     updateTab(
       id: { windowId: number; tabId: number },
-      tabContents: Partial<Tab>,
-      tries: number = 0
+      tabContents: Partial<Tab>
     ) {
       const window = this.windows.find((w) => w.id === id.windowId)
       if (!window) {
-        console.error('Error updating tab, could not find window:', id.windowId)
+        deferredEventsQueue.addDeferredWindowEvent(id.windowId, () =>
+          sessionTree.updateTab(id, tabContents)
+        )
         return
       }
       const tab = window.tabs.find((t) => t.id === id.tabId) as Tab
       if (!tab) {
-        if (tries > 0) {
-          setTimeout(() => {
-            sessionTree.updateTab(id, tabContents, tries - 1)
-          }, 100)
-          return
-        } else {
-          console.error('Error updating tab, could not find tab:', id.tabId)
-          return
-        }
+        deferredEventsQueue.addDeferredTabEvent(id.tabId, () =>
+          this.updateTab(id, tabContents)
+        )
+        return
       }
       // If the tab object exists update the new values
       Object.assign(tab, tabContents)
@@ -543,6 +538,7 @@ export default defineBackground(() => {
       if (window) {
         window.id = newWindowId
       }
+      deferredEventsQueue.processDeferredWindowEvents(newWindowId)
     }
 
     /**
@@ -559,6 +555,7 @@ export default defineBackground(() => {
         if (tab) {
           tab.id = newTabId
         }
+        deferredEventsQueue.processDeferredTabEvents(newTabId)
       }
     }
 
@@ -1566,14 +1563,14 @@ export default defineBackground(() => {
    */
   browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     if (
-      changeInfo.favIconUrl &&
+      tab.favIconUrl &&
       browser.extension.getViews().length > 0 &&
       tab.status === 'complete'
     ) {
       window.browser.runtime
         .sendMessage({
           type: 'FAVICON_UPDATED',
-          favIconUrl: changeInfo.favIconUrl,
+          favIconUrl: tab.favIconUrl,
           tab: tab,
         })
         .catch(() => {
@@ -1735,8 +1732,7 @@ export default defineBackground(() => {
 
     sessionTree.updateTab(
       { windowId: tab.windowId, tabId: tab.id },
-      tabContents,
-      10
+      tabContents
     )
   })
 
