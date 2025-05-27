@@ -1668,7 +1668,8 @@ export default defineBackground(() => {
         false,
         tab.discarded ? State.DISCARDED : State.OPEN,
         tab.title || 'Untitled',
-        tab.url || ''
+        tab.url || '',
+        tab.index
       )
     }
   })
