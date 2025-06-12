@@ -225,6 +225,9 @@ function toggleCollapsedWindow(windowSerialId: number) {
               :class="{ collapsed: window.collapsed }"
               @click="toggleCollapsedWindow(window.serialId)"
             ></span>
+            <div v-if="window.collapsed" class="childCount">
+              [{{ window.tabs.length }}]
+            </div>
             <img class="nodeFavicon" src="/icon/16.png" alt="Window icon" />
             <span
               :class="{
@@ -410,9 +413,20 @@ function toggleCollapsedWindow(windowSerialId: number) {
   height: 16px;
 }
 
+.childCount {
+  color: var(--text-color-primary);
+  font-size: var(--font-size-xs);
+  min-height: 15px;
+  font-family: var(--font-family-session-tree);
+  position: relative;
+  z-index: 0;
+  padding-right: 2px;
+  margin-left: -4px;
+}
+
 .nodeFavicon {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   float: left;
   margin: 0px;
   margin-right: 4px;
