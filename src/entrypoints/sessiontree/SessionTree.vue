@@ -224,11 +224,13 @@ function toggleCollapsedWindow(windowSerialId: number) {
               class="collapseArrow"
               :class="{ collapsed: window.collapsed }"
               @click="toggleCollapsedWindow(window.serialId)"
+              @dblclick="(e) => e.stopPropagation()"
             ></span>
             <div
               v-if="window.collapsed"
               class="childCount"
               @click="toggleCollapsedWindow(window.serialId)"
+              @dblclick="(e) => e.stopPropagation()"
             >
               [{{ window.tabs.length }}]
             </div>
