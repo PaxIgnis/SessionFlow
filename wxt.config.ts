@@ -1,4 +1,5 @@
 import { defineConfig } from 'wxt'
+import createSvgSpritePlugin from 'vite-plugin-svg-sprite'
 
 // See https://wxt.dev/api/config.html
 export default defineConfig({
@@ -30,4 +31,13 @@ export default defineConfig({
   // firefoxArgs: ['profile-create-if-missing'],
   // },
   srcDir: 'src',
+  vite: () => ({
+    plugins: [
+      createSvgSpritePlugin({
+        exportType: 'vanilla',
+        include: ['**/assets/*.svg'],
+        symbolId: '[name]',
+      }),
+    ],
+  }),
 })

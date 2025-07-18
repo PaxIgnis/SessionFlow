@@ -5,6 +5,7 @@ import { FaviconService } from '@/services/favicons'
 import { FaviconCacheEntry } from '@/types/favicons'
 import { TAB_LOADING } from '@/defaults/favicons'
 import '@/styles/variables.css'
+import IconChevronRight from '@/assets/chevron-right.svg'
 
 // Save Session Tree Window location and size before closing.
 window.onbeforeunload = () => {
@@ -183,6 +184,11 @@ function toggleCollapsedWindow(windowSerialId: number) {
 <template>
   <div class="sessiontree">
     <button @click="getTabTree">Get Tab Tree</button>
+    <div class="hiddenAssets" style="display: none">
+      <svg>
+        <use :xlink:href="`#${IconChevronRight}`" />
+      </svg>
+    </div>
 
     <ul v-cloak>
       <li
@@ -220,17 +226,19 @@ function toggleCollapsedWindow(windowSerialId: number) {
           </span>
           <div v-if="window.selected" class="selected"></div>
           <div class="windowContainer">
-            <span
+            <svg
               class="collapseArrow"
               :class="{ collapsed: window.collapsed }"
               @click="toggleCollapsedWindow(window.serialId)"
-              @dblclick="(e) => e.stopPropagation()"
-            ></span>
+              @dblclick.stop
+            >
+              <use :xlink:href="'#chevron-right'" />
+            </svg>
             <div
               v-if="window.collapsed"
               class="childCount"
               @click="toggleCollapsedWindow(window.serialId)"
-              @dblclick="(e) => e.stopPropagation()"
+              @dblclick.stop
             >
               [{{ window.tabs.length }}]
             </div>
@@ -556,35 +564,20 @@ function toggleCollapsedWindow(windowSerialId: number) {
 
 .collapseArrow {
   display: inline-block;
-  width: 5px;
-  height: 5px;
+  width: 12px;
+  height: 12px;
   cursor: pointer;
   user-select: none;
-  transition: transform 0.1s linear;
+  transition: transform 0.2s linear;
   margin-right: 5px;
-  border-style: solid;
-  border-color: var(--list-icon-foreground);
-  border-width: 0 1px 1px 0;
-  padding: 1px;
-  transform: rotate(45deg);
   margin-left: 1px;
   position: relative;
-}
-
-.collapseArrow::after {
-  content: '';
-  position: absolute;
-  top: -4px;
-  left: -4px;
-  right: -4px;
-  bottom: -4px;
-  cursor: pointer;
+  stroke: var(--list-icon-foreground);
+  transform: rotate(90deg);
 }
 
 .collapseArrow.collapsed {
-  margin-left: -1px;
-  margin-right: 7px;
-  transform: rotate(-45deg);
+  transform: rotate(0deg);
 }
 </style>
 
