@@ -5,7 +5,7 @@ import {
   WindowPosition,
   Tab,
   LoadingStatus,
-} from './sessiontree/sessiontree.interfaces'
+} from '@/types/session-tree'
 import { Settings } from '@/services/settings'
 import { deferredEventsQueue } from '@/services/deferred.events.queue'
 
@@ -207,6 +207,7 @@ export default defineBackground(() => {
               state: State.OPEN,
               title: tab.title!,
               url: tab.url!,
+              windowSerialId: 0,
             })),
           }
           this.windows.push(newWindow)
@@ -225,6 +226,7 @@ export default defineBackground(() => {
         window.serialId = windowIndex
         window.tabs.forEach((tab, tabIndex) => {
           tab.serialId = tabIndex
+          tab.windowSerialId = window.serialId
         })
       })
     }
@@ -322,6 +324,7 @@ export default defineBackground(() => {
             serialId: 0,
             selected: false,
             state: tab.discarded ? State.DISCARDED : State.OPEN,
+            windowSerialId: window.serialId,
             title: tab.title!,
             url: tab.url!,
           }))
@@ -388,6 +391,7 @@ export default defineBackground(() => {
           state,
           title,
           url,
+          windowSerialId: window.serialId,
         })
       } else {
         window.tabs.push({
@@ -398,6 +402,7 @@ export default defineBackground(() => {
           state,
           title,
           url,
+          windowSerialId: window.serialId,
         })
       }
       this.serializeSessionTree()

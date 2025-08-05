@@ -41,6 +41,7 @@ export interface Tab {
   state: State
   title: string
   url: string
+  windowSerialId: number
   collapsed?: boolean
   loadingStatus?: LoadingStatus
 }
