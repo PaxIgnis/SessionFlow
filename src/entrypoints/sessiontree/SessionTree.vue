@@ -1,11 +1,21 @@
 <script lang="ts" setup>
 import { ref, onMounted, triggerRef, onBeforeUnmount } from 'vue'
-import { Window, State, Tab } from './sessiontree.interfaces.ts'
+import { Window, State, Tab } from '@/types/session-tree'
 import { FaviconService } from '@/services/favicons'
 import { FaviconCacheEntry } from '@/types/favicons'
 import { TAB_LOADING } from '@/defaults/favicons'
 import '@/styles/variables.css'
 import IconChevronRight from '@/assets/chevron-right.svg'
+import {
+  saveWindow,
+  closeWindow,
+  windowDoubleClick,
+} from '@/services/session-tree-window-messages'
+import {
+  saveTab,
+  closeTab,
+  tabDoubleClick,
+} from '@/services/session-tree-tab-messages'
 
 // Save Session Tree Window location and size before closing.
 window.onbeforeunload = () => {
@@ -80,83 +90,6 @@ onBeforeUnmount(() => {
 const getTabTree = () => {
   console.log(sessionTree.value)
   console.log(sessionTree.value.windows)
-}
-
-function closeTab(tabId: number, tabSerialId: number, windowSerialId: number) {
-  window.browser.runtime.sendMessage({
-    action: 'closeTab',
-    tabId: tabId,
-    tabSerialId: tabSerialId,
-    windowSerialId: windowSerialId,
-  })
-}
-
-function closeWindow(windowId: number, windowSerialId: number) {
-  window.browser.runtime.sendMessage({
-    action: 'closeWindow',
-    windowId: windowId,
-    windowSerialId: windowSerialId,
-  })
-}
-
-function saveTab(tabId: number, tabSerialId: number, windowSerialId: number) {
-  window.browser.runtime.sendMessage({
-    action: 'saveTab',
-    tabId: tabId,
-    tabSerialId: tabSerialId,
-    windowSerialId: windowSerialId,
-  })
-}
-
-function saveWindow(windowId: number, windowSerialId: number) {
-  window.browser.runtime.sendMessage({
-    action: 'saveWindow',
-    windowId: windowId,
-    windowSerialId: windowSerialId,
-  })
-}
-
-function tabDoubleClick(
-  tabId: number,
-  windowId: number,
-  tabSerialId: number,
-  windowSerialId: number,
-  state: State,
-  url: string
-) {
-  if (state === State.SAVED) {
-    window.browser.runtime.sendMessage({
-      action: 'openTab',
-      tabSerialId: tabSerialId,
-      windowSerialId: windowSerialId,
-      url: url,
-    })
-  } else if (state === State.OPEN || state === State.DISCARDED) {
-    window.browser.runtime.sendMessage({
-      action: 'focusTab',
-      tabId: tabId,
-      windowId: windowId,
-    })
-  }
-}
-
-function windowDoubleClick(
-  windowSerialId: number,
-  windowId: number,
-  state: State
-) {
-  console.log('Window double clicked', sessionTree.value)
-  if (state === State.SAVED) {
-    window.browser.runtime.sendMessage({
-      action: 'openWindow',
-      windowSerialId: windowSerialId,
-    })
-  } else if (state === State.OPEN) {
-    window.browser.runtime.sendMessage({
-      action: 'focusWindow',
-      windowId: windowId,
-    })
-  }
 }
 
 function itemClick(item: Window | Tab) {
