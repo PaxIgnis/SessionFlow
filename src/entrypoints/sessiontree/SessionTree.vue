@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { ref, onMounted, triggerRef, onBeforeUnmount } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { Window, State, Tab } from '@/types/session-tree'
 import { FaviconService } from '@/services/favicons'
 import { FaviconCacheEntry } from '@/types/favicons'
@@ -16,6 +16,7 @@ import {
   closeTab,
   tabDoubleClick,
 } from '@/services/session-tree-tab-messages'
+import { SessionTree } from '@/services/session-tree-foreground'
 
 // Save Session Tree Window location and size before closing.
 window.onbeforeunload = () => {
@@ -32,7 +33,7 @@ window.onbeforeunload = () => {
     selectedItem.value.selected = false
     selectedItem.value = null
   }
-  sessionTree.value.windows.forEach((window) => {
+  SessionTree.reactiveWindowsList.value.forEach((window) => {
     window.tabs.forEach((tab) => {
       tab.selected = false
     })
@@ -40,31 +41,41 @@ window.onbeforeunload = () => {
   })
 
   console.log('Unloading')
-  window.browser.extension.getBackgroundPage().resetSessionTree()
+  if (backgroundPage && typeof backgroundPage.resetSessionTree === 'function') {
+    backgroundPage.resetSessionTree()
+  } else {
+    console.error('Background page or associated functions are not available')
+  }
   faviconService.saveCacheToStorage()
 }
 
-// Initialize a local reactive sessionTree
-const sessionTree = ref<{ windows: Array<Window> }>({ windows: [] })
 const selectedItem = ref<Window | Tab | null>(null) // Track the selected item
 const faviconCache = ref<Map<string, FaviconCacheEntry>>(
   new Map<string, FaviconCacheEntry>()
 )
 const faviconService = new FaviconService(undefined, faviconCache.value)
+const backgroundPage =
+  window.browser.extension.getBackgroundPage() as unknown as globalThis.Window
 
 // Function to update sessionTree
 function updateSessionTree(newWindows: Array<Window>) {
-  sessionTree.value.windows = newWindows
+  SessionTree.reactiveWindowsList.value = newWindows
 }
 
 // On component mount
 onMounted(() => {
   console.log('Mounted')
   // Get initial data from the background script
-  const backgroundPage = window.browser.extension.getBackgroundPage()
-  updateSessionTree(backgroundPage.getSessionTree())
-
-  backgroundPage.setSessionTree(sessionTree.value.windows)
+  if (
+    backgroundPage &&
+    typeof backgroundPage.getSessionTree === 'function' &&
+    typeof backgroundPage.setSessionTree === 'function'
+  ) {
+    updateSessionTree(backgroundPage.getSessionTree())
+    backgroundPage.setSessionTree(SessionTree.reactiveWindowsList.value)
+  } else {
+    console.error('Background page or associated functions are not available')
+  }
 
   // Listen for messages from the background script
   window.browser.runtime.onMessage.addListener((message) => {
@@ -82,14 +93,23 @@ onMounted(() => {
 // reset sessionTree to non-ref object to avoid zombie dead object
 onBeforeUnmount(() => {
   console.log('Unmounted')
-  window.browser.extension.getBackgroundPage().resetSessionTree()
+  if (backgroundPage && typeof backgroundPage.resetSessionTree === 'function') {
+    backgroundPage.resetSessionTree()
+  } else {
+    console.error('Background page or associated functions are not available')
+  }
 })
 
 // Handler functions
 
 const getTabTree = () => {
-  console.log(sessionTree.value)
-  console.log(sessionTree.value.windows)
+  console.log(
+    'Session Tree has ',
+    SessionTree.reactiveWindowsList.value.length,
+    ' windows'
+  )
+  console.log(SessionTree.reactiveWindowsList.value)
+  console.log(SessionTree.reactiveWindowsList)
 }
 
 function itemClick(item: Window | Tab) {
@@ -105,7 +125,7 @@ function itemClick(item: Window | Tab) {
 }
 
 function toggleCollapsedWindow(windowSerialId: number) {
-  const window = sessionTree.value.windows.find(
+  const window = SessionTree.reactiveWindowsList.value.find(
     (w) => w.serialId === windowSerialId
   )
   if (window) {
@@ -125,7 +145,7 @@ function toggleCollapsedWindow(windowSerialId: number) {
 
     <ul v-cloak>
       <li
-        v-for="window in sessionTree.windows"
+        v-for="window in SessionTree.reactiveWindowsList.value"
         :key="window.serialId"
         class="subNodeContainer"
       >

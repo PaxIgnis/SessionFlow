@@ -8,6 +8,7 @@ import {
 } from '@/types/session-tree'
 import { Settings } from '@/services/settings'
 import { deferredEventsQueue } from '@/services/deferred.events.queue'
+import { Windows } from '@/services/windows-background'
 
 export default defineBackground(() => {
   console.log('Hello, SessionFlow Background has Started!', {
@@ -171,12 +172,8 @@ export default defineBackground(() => {
 
   class SessionTree {
     private readonly STORAGE_KEY = 'sessionTree'
-    windows: Array<Window>
-    windowsBackup: Array<Window>
 
     constructor() {
-      this.windows = []
-      this.windowsBackup = []
       this.initializeWindows()
       deferredEventsQueue.initializeDeferredEventsQueue()
     }
@@ -210,7 +207,7 @@ export default defineBackground(() => {
               windowSerialId: 0,
             })),
           }
-          this.windows.push(newWindow)
+          Windows.list.push(newWindow)
         })
         this.serializeSessionTree()
       } catch (error) {
@@ -222,7 +219,7 @@ export default defineBackground(() => {
      * Serializes the session tree by assigning serial IDs to windows and tabs.
      */
     serializeSessionTree() {
-      this.windows.forEach((window, windowIndex) => {
+      Windows.list.forEach((window, windowIndex) => {
         window.serialId = windowIndex
         window.tabs.forEach((tab, tabIndex) => {
           tab.serialId = tabIndex
@@ -241,8 +238,12 @@ export default defineBackground(() => {
         const sessionTree = await browser.storage.local.get(this.STORAGE_KEY)
         console.debug('Session Tree from storage:', sessionTree)
         if (sessionTree[this.STORAGE_KEY]) {
-          this.windows = sessionTree[this.STORAGE_KEY]
-          this.windows.forEach((window) => {
+          Windows.list.splice(
+            0,
+            Windows.list.length,
+            ...sessionTree[this.STORAGE_KEY]
+          )
+          Windows.list.forEach((window) => {
             window.id = 0
             window.state = State.SAVED
             window.active = false
@@ -270,7 +271,9 @@ export default defineBackground(() => {
      */
     async saveSessionTreeToStorage() {
       try {
-        await browser.storage.local.set({ [this.STORAGE_KEY]: this.windows })
+        await browser.storage.local.set({
+          [this.STORAGE_KEY]: Windows.list,
+        })
       } catch (error) {
         console.error('Error saving session tree to storage:', error)
       }
@@ -284,7 +287,7 @@ export default defineBackground(() => {
      */
     async addWindow(windowId: number) {
       console.log('Adding Window', windowId)
-      if (!this.windows.some((w) => w.id === windowId)) {
+      if (!Windows.list.some((w) => w.id === windowId)) {
         const win = await browser.windows.get(windowId, { populate: true })
         if (!win) {
           console.error('Window not found:', windowId)
@@ -300,7 +303,7 @@ export default defineBackground(() => {
           tabs: [],
           collapsed: false,
         }
-        this.windows.push(newWindow)
+        Windows.list.push(newWindow)
         this.serializeSessionTree()
         this.updateWindowTabs(windowId)
         deferredEventsQueue.processDeferredWindowEvents(windowId)
@@ -316,7 +319,7 @@ export default defineBackground(() => {
     async updateWindowTabs(windowId: number) {
       try {
         const win = await browser.windows.get(windowId, { populate: true })
-        const window = this.windows.find((w) => w.id === windowId)
+        const window = Windows.list.find((w) => w.id === windowId)
         if (window) {
           window.tabs = win.tabs!.map((tab) => ({
             active: tab.active,
@@ -342,12 +345,12 @@ export default defineBackground(() => {
      */
     removeWindow(windowSerialId: number) {
       console.debug('Remove Window', windowSerialId)
-      const index = this.windows.findIndex((w) => w.serialId === windowSerialId)
+      const index = Windows.list.findIndex((w) => w.serialId === windowSerialId)
       if (index !== -1) {
         console.log(
           `Success Removing Window ${windowSerialId} from sessionTree`
         )
-        this.windows.splice(index, 1)
+        Windows.list.splice(index, 1)
         this.serializeSessionTree()
       } else {
         console.error(
@@ -377,7 +380,7 @@ export default defineBackground(() => {
       index?: number
     ) {
       console.log('Tab Added in background.ts', windowId, tabId, title, url)
-      const window = this.windows.find((w) => w.id === windowId)
+      const window = Windows.list.find((w) => w.id === windowId)
       if (!window) {
         console.error('Error adding tab, could not find window:', windowId)
         return
@@ -417,7 +420,7 @@ export default defineBackground(() => {
      * @returns {string} The title of the tab, or an empty string if not found.
      */
     getTabTitle(windowSerialId: number, tabSerialId: number) {
-      const window = this.windows.find((w) => w.serialId === windowSerialId)
+      const window = Windows.list.find((w) => w.serialId === windowSerialId)
       if (window) {
         const tab = window.tabs.find((t) => t.serialId === tabSerialId)
         if (tab) {
@@ -435,7 +438,7 @@ export default defineBackground(() => {
      * @returns {State} The state of the tab.
      */
     getTabState(windowSerialId: number, tabSerialId: number) {
-      const window = this.windows.find((w) => w.serialId === windowSerialId)
+      const window = Windows.list.find((w) => w.serialId === windowSerialId)
       if (window) {
         const tab = window.tabs.find((t) => t.serialId === tabSerialId)
         if (tab) {
@@ -452,7 +455,7 @@ export default defineBackground(() => {
      * @param {number} tabSerialId - The serial ID of the tab to be removed.
      */
     removeTab(windowSerialId: number, tabSerialId: number) {
-      const window = this.windows.find((w) => w.serialId === windowSerialId)
+      const window = Windows.list.find((w) => w.serialId === windowSerialId)
       if (window) {
         const index = window.tabs.findIndex(
           (tab) => tab.serialId === tabSerialId
@@ -475,7 +478,7 @@ export default defineBackground(() => {
      * @param {State} state - The new state to assign to the tab.
      */
     updateTabState(windowSerialId: number, tabSerialId: number, state: State) {
-      const window = this.windows.find((w) => w.serialId === windowSerialId)
+      const window = Windows.list.find((w) => w.serialId === windowSerialId)
       if (window) {
         const tab = window.tabs.find((t) => t.serialId === tabSerialId)
         if (tab) {
@@ -494,7 +497,7 @@ export default defineBackground(() => {
      * @param {State} state - The new state to assign to the window.
      */
     updateWindowState(windowSerialId: number, state: State) {
-      const window = this.windows.find((w) => w.serialId === windowSerialId)
+      const window = Windows.list.find((w) => w.serialId === windowSerialId)
       if (window) {
         window.state = state
         if (state === State.SAVED) {
@@ -514,7 +517,7 @@ export default defineBackground(() => {
       id: { windowId: number; tabId: number },
       tabContents: Partial<Tab>
     ) {
-      const window = this.windows.find((w) => w.id === id.windowId)
+      const window = Windows.list.find((w) => w.id === id.windowId)
       if (!window) {
         deferredEventsQueue.addDeferredWindowEvent(id.windowId, () =>
           sessionTree.updateTab(id, tabContents)
@@ -539,7 +542,7 @@ export default defineBackground(() => {
      * @param {number} newWindowId - The new ID to assign to the window.
      */
     updateWindowId(windowSerialId: number, newWindowId: number) {
-      const window = this.windows.find((w) => w.serialId === windowSerialId)
+      const window = Windows.list.find((w) => w.serialId === windowSerialId)
       if (window) {
         window.id = newWindowId
       }
@@ -554,7 +557,7 @@ export default defineBackground(() => {
      * @param {number} newTabId - The new ID to assign to the tab.
      */
     updateTabId(windowSerialId: number, tabSerialId: number, newTabId: number) {
-      const window = this.windows.find((w) => w.serialId === windowSerialId)
+      const window = Windows.list.find((w) => w.serialId === windowSerialId)
       if (window) {
         const tab = window.tabs.find((t) => t.serialId === tabSerialId)
         if (tab) {
@@ -577,7 +580,7 @@ export default defineBackground(() => {
      * @param {number} windowSerialId - The Serial ID of the window to save.
      */
     saveWindow(windowSerialId: number) {
-      const window = this.windows.find((w) => w.serialId === windowSerialId)
+      const window = Windows.list.find((w) => w.serialId === windowSerialId)
       if (window) {
         window.state = State.SAVED
         window.id = -1
@@ -599,7 +602,7 @@ export default defineBackground(() => {
      * @param {number} tabSerialId - The Serial ID of the tab to save.
      */
     saveTab(windowSerialId: number, tabSerialId: number) {
-      const window = this.windows.find((w) => w.serialId === windowSerialId)
+      const window = Windows.list.find((w) => w.serialId === windowSerialId)
       if (window) {
         const tab = window.tabs.find((t) => t.serialId === tabSerialId)
         if (tab) {
@@ -645,7 +648,7 @@ export default defineBackground(() => {
    * @param {WindowPosition} position - The new position of the window.
    */
   function updateWindowPosition(windowId: number, position: WindowPosition) {
-    const window = sessionTree.windows.find((w) => w.id === windowId)
+    const window = Windows.list.find((w) => w.id === windowId)
     if (window) {
       window.windowPosition = position
     }
@@ -974,7 +977,7 @@ export default defineBackground(() => {
    * @returns {Array<Window>} The session tree
    */
   function getSessionTree(): Array<Window> {
-    return sessionTree.windows
+    return Windows.list
   }
 
   /**
@@ -983,8 +986,8 @@ export default defineBackground(() => {
    * @param {Array<Window>} newTree - The new session tree
    */
   function setSessionTree(newTree: Array<Window>) {
-    sessionTree.windowsBackup = sessionTree.windows
-    sessionTree.windows = newTree
+    Windows.backupList = Windows.list
+    Windows.list = newTree
   }
 
   /**
@@ -992,7 +995,7 @@ export default defineBackground(() => {
    */
   function resetSessionTree() {
     console.log('Resetting Session Tree')
-    sessionTree.windows = sessionTree.windowsBackup
+    Windows.list = Windows.backupList
     sessionTree.saveSessionTreeToStorage()
   }
 
@@ -1061,7 +1064,7 @@ export default defineBackground(() => {
       sessionTree.removeTab(message.windowSerialId, message.tabSerialId)
       // if this is the last open tab in the window but there are other saved tabs then
       // update the window state to SAVED and reset id
-      const window = sessionTree.windows.find(
+      const window = Windows.list.find(
         (w) => w.serialId === message.windowSerialId
       )
       if (window) {
@@ -1152,7 +1155,7 @@ export default defineBackground(() => {
         return true
       }
       // if this is the last open tab in the window, update the window state to SAVED and reset id
-      const window = sessionTree.windows.find(
+      const window = Windows.list.find(
         (w) => w.serialId === message.windowSerialId
       )
       if (window) {
@@ -1201,7 +1204,7 @@ export default defineBackground(() => {
     url?: string
     discarded?: boolean
   }) {
-    const sessionTreeWindow = sessionTree.windows.find(
+    const sessionTreeWindow = Windows.list.find(
       (w) => w.serialId === message.windowSerialId
     )
     if (!sessionTreeWindow) {
@@ -1384,7 +1387,7 @@ export default defineBackground(() => {
   function printSessionTree(string: string = '') {
     console.log('******************************')
     console.log(`Printing Session Tree: ${string}:`)
-    for (const window of sessionTree.windows) {
+    for (const window of Windows.list) {
       console.log(`Window ID: ${window.id}`)
       for (const tab of window.tabs) {
         console.log(`  Tab ID: ${tab.id}. Title: ${tab.title}. URL: ${tab.url}`)
@@ -1404,7 +1407,7 @@ export default defineBackground(() => {
     // First change the state of the window in sessionTree to from SAVED to OPEN
     sessionTree.updateWindowState(message.windowSerialId, State.OPEN)
     try {
-      const sessionTreeWindow = sessionTree.windows.find(
+      const sessionTreeWindow = Windows.list.find(
         (w) => w.serialId === message.windowSerialId
       )
       if (!sessionTreeWindow) {
@@ -1499,12 +1502,12 @@ export default defineBackground(() => {
       return
     }
 
-    const previousActiveWindow = sessionTree.windows.find((w) => w.active)
+    const previousActiveWindow = Windows.list.find((w) => w.active)
     if (previousActiveWindow) {
       previousActiveWindow.active = false
     }
 
-    const activeWindow = sessionTree.windows.find((w) => w.id === windowId)
+    const activeWindow = Windows.list.find((w) => w.id === windowId)
     // if activeWindow is undefined, wait and try again
     if (activeWindow) {
       activeWindow.active = true
@@ -1524,11 +1527,11 @@ export default defineBackground(() => {
     activeInfo: browser.tabs._OnActivatedActiveInfo,
     tries: number = 0
   ) {
-    const window = sessionTree.windows.find((w) => w.id === activeInfo.windowId)
-    const activeTab = sessionTree.windows
+    const window = Windows.list.find((w) => w.id === activeInfo.windowId)
+    const activeTab = Windows.list
       .find((w) => w.id === activeInfo.windowId)
       ?.tabs.find((t) => t.id === activeInfo.tabId)
-    const previousActiveTab = sessionTree.windows
+    const previousActiveTab = Windows.list
       .find((w) => w.id === activeInfo.windowId)
       ?.tabs.find((t) => t.id === activeInfo.previousTabId)
     // remove active status from previous active tab (not when detached/attached)
@@ -1609,7 +1612,7 @@ export default defineBackground(() => {
     if (!sessionTree) {
       return
     }
-    const window = sessionTree.windows.find((w) => w.id === windowId)
+    const window = Windows.list.find((w) => w.id === windowId)
     if (!window) {
       return
     }
@@ -1660,7 +1663,7 @@ export default defineBackground(() => {
     }
     const extensionTab = await isNewTabExtensionGenerated(tab.id)
     if (!extensionTab) {
-      const window = sessionTree.windows.find((w) => w.id === tab.windowId)
+      const window = Windows.list.find((w) => w.id === tab.windowId)
       // if Window ID is not in session tree, then the window was just opened,
       // so window listener will handle adding the tab to the session tree.
       if (!window) {
@@ -1692,7 +1695,7 @@ export default defineBackground(() => {
     if (!sessionTree) {
       return
     }
-    const window = sessionTree.windows.find((w) => w.id === removeInfo.windowId)
+    const window = Windows.list.find((w) => w.id === removeInfo.windowId)
     if (!window) {
       return
     }
@@ -1755,7 +1758,7 @@ export default defineBackground(() => {
       console.error('Tab or Window ID is undefined')
       return
     }
-    const window = sessionTree.windows.find((w) => w.id === moveInfo.windowId)
+    const window = Windows.list.find((w) => w.id === moveInfo.windowId)
     if (!window) {
       return
     }
@@ -1803,9 +1806,7 @@ export default defineBackground(() => {
       console.error('Tab or Window ID is undefined')
       return
     }
-    const window = sessionTree.windows.find(
-      (w) => w.id === detachInfo.oldWindowId
-    )
+    const window = Windows.list.find((w) => w.id === detachInfo.oldWindowId)
     if (!window) {
       return
     }
@@ -1827,9 +1828,7 @@ export default defineBackground(() => {
       console.error('Tab or Window ID is undefined')
       return
     }
-    const window = sessionTree.windows.find(
-      (w) => w.id === attachInfo.newWindowId
-    )
+    const window = Windows.list.find((w) => w.id === attachInfo.newWindowId)
     if (!window) {
       return
     }
