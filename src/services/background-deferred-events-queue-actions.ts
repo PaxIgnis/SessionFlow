@@ -1,4 +1,4 @@
-import { deferredEventsQueue } from '@/services/deferred.events.queue'
+import { DeferredEventsQueue } from '@/services/background-deferred-events-queue'
 
 /**
  * Initialized deferred events queue for windows and tabs.
@@ -6,8 +6,8 @@ import { deferredEventsQueue } from '@/services/deferred.events.queue'
  * typically after the window or tab is added to the session tree.
  */
 export function initializeDeferredEventsQueue(): void {
-  deferredEventsQueue.windows = new Map()
-  deferredEventsQueue.tabs = new Map()
+  DeferredEventsQueue.windows = new Map()
+  DeferredEventsQueue.tabs = new Map()
 }
 
 /**
@@ -21,11 +21,11 @@ export function addDeferredWindowEvent(
   event: () => void
 ): void {
   // Ensure the window ID exists in the queue
-  if (!deferredEventsQueue.windows.has(windowId)) {
-    deferredEventsQueue.windows.set(windowId, [])
+  if (!DeferredEventsQueue.windows.has(windowId)) {
+    DeferredEventsQueue.windows.set(windowId, [])
   }
 
-  deferredEventsQueue.windows.get(windowId)?.push(event)
+  DeferredEventsQueue.windows.get(windowId)?.push(event)
 }
 
 /**
@@ -36,10 +36,10 @@ export function addDeferredWindowEvent(
  */
 export function addDeferredTabEvent(tabId: number, event: () => void): void {
   // Ensure the tab ID exists in the queue
-  if (!deferredEventsQueue.tabs.has(tabId)) {
-    deferredEventsQueue.tabs.set(tabId, [])
+  if (!DeferredEventsQueue.tabs.has(tabId)) {
+    DeferredEventsQueue.tabs.set(tabId, [])
   }
-  deferredEventsQueue.tabs.get(tabId)?.push(event)
+  DeferredEventsQueue.tabs.get(tabId)?.push(event)
 }
 
 /**
@@ -48,9 +48,9 @@ export function addDeferredTabEvent(tabId: number, event: () => void): void {
  * @param windowId The ID of the window for which to process deferred events
  */
 export function processDeferredWindowEvents(windowId: number): void {
-  const events = deferredEventsQueue.windows.get(windowId)
+  const events = DeferredEventsQueue.windows.get(windowId)
   if (events) {
-    deferredEventsQueue.windows.delete(windowId)
+    DeferredEventsQueue.windows.delete(windowId)
     events.forEach((event) => event())
   }
 }
@@ -61,9 +61,9 @@ export function processDeferredWindowEvents(windowId: number): void {
  * @param tabId The ID of the tab for which to process deferred events
  */
 export function processDeferredTabEvents(tabId: number): void {
-  const events = deferredEventsQueue.tabs.get(tabId)
+  const events = DeferredEventsQueue.tabs.get(tabId)
   if (events) {
-    deferredEventsQueue.tabs.delete(tabId)
+    DeferredEventsQueue.tabs.delete(tabId)
     events.forEach((event) => event())
   }
 }

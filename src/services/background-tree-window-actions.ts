@@ -1,6 +1,6 @@
+import { DeferredEventsQueue } from '@/services/background-deferred-events-queue'
 import { OnCreatedQueue } from '@/services/background-on-created-queue'
 import { Tree } from '@/services/background-tree'
-import { deferredEventsQueue } from '@/services/deferred.events.queue'
 import { Settings } from '@/services/settings'
 import * as Utils from '@/services/utils'
 import { State, WindowPosition } from '@/types/session-tree'
@@ -53,7 +53,7 @@ export async function addWindow(windowId: number): Promise<void> {
     Tree.windowsList.push(newWindow)
     Tree.serializeSessionTree()
     Tree.updateWindowTabs(windowId)
-    deferredEventsQueue.processDeferredWindowEvents(windowId)
+    DeferredEventsQueue.processDeferredWindowEvents(windowId)
   }
 }
 
@@ -132,7 +132,7 @@ export function updateWindowId(
   if (window) {
     window.id = newWindowId
   }
-  deferredEventsQueue.processDeferredWindowEvents(newWindowId)
+  DeferredEventsQueue.processDeferredWindowEvents(newWindowId)
 }
 
 /**

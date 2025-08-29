@@ -1,6 +1,6 @@
+import { DeferredEventsQueue } from '@/services/background-deferred-events-queue'
 import { OnCreatedQueue } from '@/services/background-on-created-queue'
 import { Tree } from '@/services/background-tree'
-import { deferredEventsQueue } from '@/services/deferred.events.queue'
 import { Settings } from '@/services/settings'
 import * as Utils from '@/services/utils'
 import { State, Tab } from '@/types/session-tree'
@@ -57,7 +57,7 @@ export function addTab(
     })
   }
   Tree.serializeSessionTree()
-  deferredEventsQueue.processDeferredTabEvents(tabId)
+  DeferredEventsQueue.processDeferredTabEvents(tabId)
 }
 
 /**
@@ -92,14 +92,14 @@ export function updateTab(
 ): void {
   const window = Tree.windowsList.find((w) => w.id === id.windowId)
   if (!window) {
-    deferredEventsQueue.addDeferredWindowEvent(id.windowId, () =>
+    DeferredEventsQueue.addDeferredWindowEvent(id.windowId, () =>
       Tree.updateTab(id, tabContents)
     )
     return
   }
   const tab = window.tabs.find((t) => t.id === id.tabId) as Tab
   if (!tab) {
-    deferredEventsQueue.addDeferredTabEvent(id.tabId, () =>
+    DeferredEventsQueue.addDeferredTabEvent(id.tabId, () =>
       Tree.updateTab(id, tabContents)
     )
     return
@@ -126,7 +126,7 @@ export function updateTabId(
     if (tab) {
       tab.id = newTabId
     }
-    deferredEventsQueue.processDeferredTabEvents(newTabId)
+    DeferredEventsQueue.processDeferredTabEvents(newTabId)
   }
 }
 
