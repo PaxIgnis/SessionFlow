@@ -1,5 +1,5 @@
-import { Settings, SETTINGS_TYPES } from '@/types/settings'
 import { Settings as SettingsValues } from '@/services/settings'
+import { Settings, SETTINGS_TYPES } from '@/types/settings'
 
 /**
  * Loads the settings from the browser storage and adds them to the global Settings object.
@@ -84,12 +84,14 @@ function validateAndAddSettingKey<K extends keyof Settings>(
   }
 }
 
-// receives the settings updated message
-browser.runtime.onMessage.addListener((message) => {
-  if (message.type === 'settingsUpdated') {
-    // update the settings in the global Settings object
-    loadSettingsFromStorage().catch((error) => {
-      console.error('Failed to load settings from storage:', error)
-    })
-  }
-})
+export function setupSettingsUpdatedListener(): void {
+  // receives the settings updated message
+  browser.runtime.onMessage.addListener((message) => {
+    if (message.type === 'settingsUpdated') {
+      // update the settings in the global Settings object
+      loadSettingsFromStorage().catch((error) => {
+        console.error('Failed to load settings from storage:', error)
+      })
+    }
+  })
+}

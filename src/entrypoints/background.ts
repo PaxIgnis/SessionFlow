@@ -1,7 +1,8 @@
 import * as Actions from '@/services/background-actions'
 import { DeferredEventsQueue } from '@/services/background-deferred-events-queue'
-import { initializeListeners } from '@/services/background-handlers'
+import * as BackgroundHandlers from '@/services/background-handlers'
 import { Tree } from '@/services/background-tree'
+import { Settings } from '@/services/settings'
 
 export default defineBackground(() => {
   console.log('Hello, SessionFlow Background has Started!', {
@@ -10,7 +11,8 @@ export default defineBackground(() => {
 
   Actions.initializeSettings()
   DeferredEventsQueue.initializeDeferredEventsQueue()
-  initializeListeners()
+  BackgroundHandlers.initializeListeners()
+  Settings.setupSettingsUpdatedListener()
   Actions.setupBrowserActionMenu()
   Tree.initializeWindows()
 })
