@@ -11,6 +11,6 @@ export default defineBackground(() => {
   Actions.initializeSettings()
   DeferredEventsQueue.initializeDeferredEventsQueue()
   initializeListeners()
-  console.log('BackgroundTree: ', Tree)
+  Actions.setupBrowserActionMenu()
   Tree.initializeWindows()
 })

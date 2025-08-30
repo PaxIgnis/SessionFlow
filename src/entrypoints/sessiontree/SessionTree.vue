@@ -1,22 +1,13 @@
 <script lang="ts" setup>
-import { ref, onMounted, onBeforeUnmount } from 'vue'
-import { Window, State, Tab } from '@/types/session-tree'
-import { FaviconService } from '@/services/favicons'
-import { FaviconCacheEntry } from '@/types/favicons'
-import { TAB_LOADING } from '@/defaults/favicons'
-import '@/styles/variables.css'
 import IconChevronRight from '@/assets/chevron-right.svg'
-import {
-  saveWindow,
-  closeWindow,
-  windowDoubleClick,
-} from '@/services/session-tree-window-messages'
-import {
-  saveTab,
-  closeTab,
-  tabDoubleClick,
-} from '@/services/session-tree-tab-messages'
-import { SessionTree } from '@/services/session-tree-foreground'
+import { TAB_LOADING } from '@/defaults/favicons'
+import { FaviconService } from '@/services/favicons'
+import * as Messages from '@/services/foreground-messages'
+import { SessionTree } from '@/services/foreground-tree'
+import '@/styles/variables.css'
+import { FaviconCacheEntry } from '@/types/favicons'
+import { State, Tab, Window } from '@/types/session-tree'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 
 // Save Session Tree Window location and size before closing.
 window.onbeforeunload = () => {
@@ -156,7 +147,7 @@ function toggleCollapsedWindow(windowSerialId: number) {
           class="windowNodeContainer treeItem"
           @click="itemClick(window)"
           @dblclick="
-            windowDoubleClick(window.serialId, window.id, window.state)
+            Messages.windowDoubleClick(window.serialId, window.id, window.state)
           "
         >
           <span
@@ -169,11 +160,11 @@ function toggleCollapsedWindow(windowSerialId: number) {
               <span
                 v-if="window.state === State.OPEN"
                 class="hoverMenuSave"
-                @click="saveWindow(window.id, window.serialId)"
+                @click="Messages.saveWindow(window.id, window.serialId)"
               ></span>
               <span
                 class="hoverMenuClose"
-                @click="closeWindow(window.id, window.serialId)"
+                @click="Messages.closeWindow(window.id, window.serialId)"
               ></span>
             </span>
           </span>
@@ -221,7 +212,7 @@ function toggleCollapsedWindow(windowSerialId: number) {
               class="tabNodeContainer treeItem"
               @click="itemClick(tab)"
               @dblclick="
-                tabDoubleClick(
+                Messages.tabDoubleClick(
                   tab.id,
                   window.id,
                   tab.serialId,
@@ -243,11 +234,15 @@ function toggleCollapsedWindow(windowSerialId: number) {
                       tab.state === State.OPEN || tab.state === State.DISCARDED
                     "
                     class="hoverMenuSave"
-                    @click="saveTab(tab.id, tab.serialId, window.serialId)"
+                    @click="
+                      Messages.saveTab(tab.id, tab.serialId, window.serialId)
+                    "
                   ></span>
                   <span
                     class="hoverMenuClose"
-                    @click="closeTab(tab.id, tab.serialId, window.serialId)"
+                    @click="
+                      Messages.closeTab(tab.id, tab.serialId, window.serialId)
+                    "
                   ></span>
                 </span>
               </span>
