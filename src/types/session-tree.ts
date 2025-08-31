@@ -11,6 +11,20 @@ export interface Window {
   tabs: Array<Tab>
 }
 
+export interface Tab {
+  active?: boolean
+  id: number
+  savedTime?: number
+  selected: boolean
+  serialId: number
+  state: State
+  title: string
+  url: string
+  windowSerialId: number
+  collapsed?: boolean
+  loadingStatus?: LoadingStatus
+}
+
 export enum State {
   SAVED = 0,
   OPEN = 1,
@@ -32,21 +46,17 @@ export interface WindowPosition {
   height: number
 }
 
-export interface Tab {
-  active?: boolean
-  id: number
-  savedTime?: number
-  selected: boolean
-  serialId: number
-  state: State
-  title: string
-  url: string
-  windowSerialId: number
-  collapsed?: boolean
-  loadingStatus?: LoadingStatus
-}
-
 export enum LoadingStatus {
   LOADING = 'loading',
   COMPLETE = 'complete',
+}
+
+export const enum SelectionType {
+  WINDOW = 0,
+  TAB = 1,
+}
+
+export interface SelectedItem {
+  item: Window | Tab
+  type: SelectionType
 }

@@ -4,9 +4,10 @@ import { TAB_LOADING } from '@/defaults/favicons'
 import { FaviconService } from '@/services/favicons'
 import * as Messages from '@/services/foreground-messages'
 import { SessionTree } from '@/services/foreground-tree'
+import { Selection } from '@/services/selection'
 import '@/styles/variables.css'
 import { FaviconCacheEntry } from '@/types/favicons'
-import { State, Tab, Window } from '@/types/session-tree'
+import { SelectionType, State, Window } from '@/types/session-tree'
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 
 // Save Session Tree Window location and size before closing.
@@ -19,17 +20,8 @@ window.onbeforeunload = () => {
   }
   localStorage.setItem('sessionTreeWindowConfig', JSON.stringify(bounds))
 
-  // Reset selected status of all items
-  if (selectedItem.value) {
-    selectedItem.value.selected = false
-    selectedItem.value = null
-  }
-  SessionTree.reactiveWindowsList.value.forEach((window) => {
-    window.tabs.forEach((tab) => {
-      tab.selected = false
-    })
-    window.selected = false
-  })
+  Selection.clearSelection()
+  SessionTree.deselectAllItems()
 
   console.log('Unloading')
   if (backgroundPage && typeof backgroundPage.resetSessionTree === 'function') {
@@ -40,7 +32,6 @@ window.onbeforeunload = () => {
   faviconService.saveCacheToStorage()
 }
 
-const selectedItem = ref<Window | Tab | null>(null) // Track the selected item
 const faviconCache = ref<Map<string, FaviconCacheEntry>>(
   new Map<string, FaviconCacheEntry>()
 )
@@ -103,16 +94,8 @@ const getTabTree = () => {
   console.log(SessionTree.reactiveWindowsList)
 }
 
-function itemClick(item: Window | Tab) {
-  console.log('Item clicked', item)
-  if (item.selected) {
-    return
-  }
-  if (selectedItem.value) {
-    selectedItem.value.selected = false
-  }
-  selectedItem.value = item
-  selectedItem.value.selected = true
+function onClick() {
+  Selection.clearSelection()
 }
 
 function toggleCollapsedWindow(windowSerialId: number) {
@@ -126,7 +109,7 @@ function toggleCollapsedWindow(windowSerialId: number) {
 </script>
 
 <template>
-  <div class="sessiontree">
+  <div class="sessiontree" @contextmenu.stop.prevent @click="onClick">
     <button @click="getTabTree">Get Tab Tree</button>
     <div class="hiddenAssets" style="display: none">
       <svg>
@@ -145,7 +128,9 @@ function toggleCollapsedWindow(windowSerialId: number) {
             active: window.active === true,
           }"
           class="windowNodeContainer treeItem"
-          @click="itemClick(window)"
+          @click.stop="
+            Selection.selectItem(window, SelectionType.WINDOW, $event)
+          "
           @dblclick="
             Messages.windowDoubleClick(window.serialId, window.id, window.state)
           "
@@ -210,7 +195,7 @@ function toggleCollapsedWindow(windowSerialId: number) {
                 windowActive: window.active === true,
               }"
               class="tabNodeContainer treeItem"
-              @click="itemClick(tab)"
+              @click.stop="Selection.selectItem(tab, SelectionType.TAB, $event)"
               @dblclick="
                 Messages.tabDoubleClick(
                   tab.id,
