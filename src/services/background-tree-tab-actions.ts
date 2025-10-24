@@ -510,3 +510,21 @@ export function saveTab(message: {
     console.error('Error saving tab:', error)
   })
 }
+
+/**
+ * Reloads a tab in the browser.
+ *
+ * @param {Object} message - The message object containing tab information.
+ * @param {number} message.tabId - The ID of the tab to be reloaded.
+ * @param {number} message.tabSerialId - The Serial ID of the tab to be reloaded.
+ * @param {number} message.windowSerialId - The Serial ID of the window containing the tab.
+ */
+export function reloadTab(message: {
+  tabId: number
+  tabSerialId: number
+  windowSerialId: number
+}): void {
+  browser.tabs.reload(message.tabId).catch((error) => {
+    console.error('Error reloading tab:', error)
+  })
+}

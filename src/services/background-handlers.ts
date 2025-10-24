@@ -1,6 +1,8 @@
+import * as Actions from '@/services/background-actions'
 import { updateBadge } from '@/services/background-actions'
 import { OnCreatedQueue } from '@/services/background-on-created-queue'
 import { Tree } from '@/services/background-tree'
+import { Selection } from '@/services/selection'
 import { Settings } from '@/services/settings'
 import * as Messages from '@/types/messages'
 import { LoadingStatus, State, Tab } from '@/types/session-tree'
@@ -10,6 +12,7 @@ import { LoadingStatus, State, Tab } from '@/types/session-tree'
 // ==============================
 export function initializeListeners() {
   browser.browserAction.onClicked.addListener(browserActionOnClicked)
+  browser.menus.onHidden.addListener(onContextMenuHidden)
   browser.runtime.onInstalled.addListener(updateBadge)
   browser.runtime.onMessage.addListener(onMessage)
   browser.tabs.onActivated.addListener(tabsOnActivated)
@@ -385,6 +388,8 @@ function onMessage(message: Messages.SessionTreeMessage): void {
     Tree.saveTab(message)
   } else if (message.action === 'openTab') {
     Tree.openTab(message)
+  } else if (message.action === 'reloadTab') {
+    Tree.reloadTab(message)
   } else if (message.action === 'closeWindow') {
     Tree.closeWindow(message)
   } else if (message.action === 'saveWindow') {
@@ -398,4 +403,14 @@ function onMessage(message: Messages.SessionTreeMessage): void {
   } else if (message.action === 'openWindowsInSameLocationUpdated') {
     Tree.updateWindowPositionInterval()
   }
+}
+
+/**
+ * When the context menu is closed, clear the selection and remove all context menu items.
+ * Also re-setup the browser action context menu.
+ */
+function onContextMenuHidden(): void {
+  Selection.clearSelection()
+  browser.menus.removeAll()
+  Actions.setupBrowserActionMenu()
 }

@@ -53,6 +53,13 @@ export interface FocusTabMessage {
   windowId: number
 }
 
+export interface ReloadTabMessage {
+  action: 'reloadTab'
+  tabId: number
+  tabSerialId: number
+  windowSerialId: number
+}
+
 export interface OpenWindowsInSameLocationUpdatedMessage {
   action: 'openWindowsInSameLocationUpdated'
 }
@@ -66,4 +73,5 @@ export type SessionTreeMessage =
   | OpenWindowMessage
   | FocusWindowMessage
   | FocusTabMessage
+  | ReloadTabMessage
   | OpenWindowsInSameLocationUpdatedMessage

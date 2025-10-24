@@ -1,11 +1,13 @@
 <script lang="ts" setup>
 import IconChevronRight from '@/assets/chevron-right.svg'
 import { TAB_LOADING } from '@/defaults/favicons'
+import { ContextMenu } from '@/services/context-menu'
 import { FaviconService } from '@/services/favicons'
 import * as Messages from '@/services/foreground-messages'
 import { SessionTree } from '@/services/foreground-tree'
 import { Selection } from '@/services/selection'
 import '@/styles/variables.css'
+import { ContextMenuType } from '@/types/context-menu'
 import { FaviconCacheEntry } from '@/types/favicons'
 import { SelectionType, State, Window } from '@/types/session-tree'
 import { onBeforeUnmount, onMounted, ref } from 'vue'
@@ -109,7 +111,7 @@ function toggleCollapsedWindow(windowSerialId: number) {
 </script>
 
 <template>
-  <div class="sessiontree" @contextmenu.stop.prevent @click="onClick">
+  <div class="sessiontree" @contextmenu.prevent @click="onClick">
     <button @click="getTabTree">Get Tab Tree</button>
     <div class="hiddenAssets" style="display: none">
       <svg>
@@ -133,6 +135,15 @@ function toggleCollapsedWindow(windowSerialId: number) {
           "
           @dblclick="
             Messages.windowDoubleClick(window.serialId, window.id, window.state)
+          "
+          @contextmenu.stop="
+            ContextMenu.handleContextMenuClick(
+              ContextMenuType.Window,
+              $event,
+              window,
+              undefined,
+              SelectionType.WINDOW
+            )
           "
         >
           <span
@@ -204,6 +215,15 @@ function toggleCollapsedWindow(windowSerialId: number) {
                   window.serialId,
                   tab.state,
                   tab.url
+                )
+              "
+              @contextmenu.stop="
+                ContextMenu.handleContextMenuClick(
+                  ContextMenuType.Tab,
+                  $event,
+                  undefined,
+                  tab,
+                  SelectionType.TAB
                 )
               "
             >

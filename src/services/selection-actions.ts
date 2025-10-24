@@ -114,3 +114,36 @@ export function getSelectedTabs(): Array<Tab> {
     .filter((selectedItem) => selectedItem.type === SelectionType.TAB)
     .map((selectedItem) => selectedItem.item as Tab)
 }
+
+/**
+ * Called when right-clicking an item to open context menu.
+ * Current logic: if the item is not selected, select it. If ctrl/meta key is pressed, also include other items already selected,
+ * otherwise clear other selections and only select the right-clicked item.
+ *
+ * @param item The item to select.
+ * @param type The type of the item (enum).
+ * @param e
+ */
+export function selectItemForContextMenu(
+  item: Window | Tab,
+  type: SelectionType,
+  e: MouseEvent
+): void {
+  const firstItem = Selection.selectedItems.value[0]
+  // If the first item is not of the same type, clear the selection
+  if (firstItem && firstItem.type !== type) {
+    clearSelection()
+  }
+
+  const ctrlKey = e.ctrlKey || e.metaKey
+  if (!item.selected && ctrlKey) {
+    // If item is not selected and ctrl/meta key is pressed, select & add to selection
+    item.selected = true
+    Selection.selectedItems.value.push({ item, type })
+  } else if (!item.selected && !ctrlKey) {
+    // If ctrl/meta is not pressed, clear all selection and select item
+    clearSelection()
+    item.selected = true
+    Selection.selectedItems.value.push({ item, type })
+  }
+}
