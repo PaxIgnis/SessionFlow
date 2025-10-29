@@ -4,6 +4,16 @@ import { ContextMenuItem } from '@/types/context-menu'
 import { State } from '@/types/session-tree'
 
 export const contextMenuItemsTab: Record<string, () => ContextMenuItem> = {
+  openTab: () => {
+    return {
+      id: 'openTab',
+      label: 'Open',
+      icon: 'open',
+      enabled: atLeastOneSelectedTabSaved(),
+      action: () => Messages.openTabs(Selection.getSelectedTabs()),
+    }
+  },
+
   reloadTab: () => {
     return {
       id: 'reloadTab',
@@ -39,6 +49,16 @@ function atLeastOneSelectedTabOpen(): boolean {
   const selectedTabs = Selection.getSelectedTabs()
   for (const tab of selectedTabs) {
     if (tab.state === State.OPEN) {
+      return true
+    }
+  }
+  return false
+}
+
+function atLeastOneSelectedTabSaved(): boolean {
+  const selectedTabs = Selection.getSelectedTabs()
+  for (const tab of selectedTabs) {
+    if (tab.state === State.SAVED) {
       return true
     }
   }

@@ -406,8 +406,8 @@ function onMessage(message: Messages.SessionTreeMessage): void {
 }
 
 /**
- * When the context menu is closed, clear the selection and remove all context menu items.
- * Also re-setup the browser action context menu.
+ * When the context menu is closed, clear Selection and remove all custom context menu items,
+ * then recreate the browser action context menu.
  */
 function onContextMenuHidden(): void {
   Selection.clearSelection()

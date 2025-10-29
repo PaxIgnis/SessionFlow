@@ -10,6 +10,7 @@ export const WINDOW_MENU: ContextMenuConfig = [
 ]
 
 export const TAB_MENU: ContextMenuConfig = [
+  { type: ContextMenuItemType.Action, id: 'openTab' },
   { type: ContextMenuItemType.Action, id: 'reloadTab' },
   { type: ContextMenuItemType.Action, id: 'saveTab' },
   { type: ContextMenuItemType.Action, id: 'closeTab' },

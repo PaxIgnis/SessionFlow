@@ -62,6 +62,25 @@ export function saveTabs(tabs: Array<Tab>) {
   })
 }
 
+export function openTab(
+  tabSerialId: number,
+  windowSerialId: number,
+  url: string
+) {
+  window.browser.runtime.sendMessage({
+    action: 'openTab',
+    tabSerialId: tabSerialId,
+    windowSerialId: windowSerialId,
+    url: url,
+  })
+}
+
+export function openTabs(tabs: Array<Tab>) {
+  tabs.forEach((tab) => {
+    openTab(tab.serialId, tab.windowSerialId, tab.url)
+  })
+}
+
 export function tabDoubleClick(
   tabId: number,
   windowId: number,
@@ -71,12 +90,7 @@ export function tabDoubleClick(
   url: string
 ) {
   if (state === State.SAVED) {
-    window.browser.runtime.sendMessage({
-      action: 'openTab',
-      tabSerialId: tabSerialId,
-      windowSerialId: windowSerialId,
-      url: url,
-    })
+    openTab(tabSerialId, windowSerialId, url)
   } else if (state === State.OPEN || state === State.DISCARDED) {
     window.browser.runtime.sendMessage({
       action: 'focusTab',
@@ -101,20 +115,6 @@ export function closeWindow(windowId: number, windowSerialId: number) {
 export function closeWindows(windows: Array<Window>) {
   windows.forEach((window) => {
     closeWindow(window.id, window.serialId)
-  })
-}
-
-export function reloadWindow(windowId: number, windowSerialId: number) {
-  window.browser.runtime.sendMessage({
-    action: 'reloadWindow',
-    windowId: windowId,
-    windowSerialId: windowSerialId,
-  })
-}
-
-export function reloadWindows(windows: Array<Window>) {
-  windows.forEach((window) => {
-    reloadWindow(window.id, window.serialId)
   })
 }
 
