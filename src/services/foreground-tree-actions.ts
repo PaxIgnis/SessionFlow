@@ -152,7 +152,10 @@ export function tabIndentIncrease(tabs: Tab[]): void {
 
   const childrenMap = buildChildrenMap(win.tabs)
 
-  for (const tab of tabs) {
+  // remove any tabs from the selection that are descendants of other selected tabs
+  const filteredTabs = removeDescendantTabs(tabs, childrenMap)
+
+  for (const tab of filteredTabs) {
     if (tab.serialId === undefined) continue
     if (tab.serialId === 0) continue // skip root tabs
     if (tab.parentId && tab.parentId === tab.serialId - 1) continue // already indented under immediate previous tab
@@ -193,6 +196,43 @@ function increaseIndentRecursively(
   }
 }
 
+function collectDescendantIds(
+  nodes: Tab[],
+  childrenMap: Map<number, Tab[]>,
+  set: Set<number>
+) {
+  for (const node of nodes) {
+    if (node.serialId !== undefined) set.add(node.serialId)
+    const children = childrenMap.get(node.serialId) || []
+    if (children.length) collectDescendantIds(children, childrenMap, set)
+  }
+}
+
+/**
+ * Given a list of selected tabs and a children map for the full window,
+ * return a new array containing only those tabs that are not descendants
+ * of any other tab in the selected list. This prevents double-processing
+ * when the input selection contains both a parent and its children.
+ */
+function removeDescendantTabs(
+  selectedTabs: Tab[],
+  childrenMap: Map<number, Tab[]>
+) {
+  const skip = new Set<number>()
+  const result: Tab[] = []
+
+  for (const t of selectedTabs) {
+    if (t.serialId === undefined) continue
+    if (skip.has(t.serialId)) continue
+    result.push(t)
+    // mark all descendants so they will be skipped
+    const children = childrenMap.get(t.serialId) || []
+    if (children.length) collectDescendantIds(children, childrenMap, skip)
+  }
+
+  return result
+}
+
 /**
  * Decreases indent level recursively for child tabs.
  */
@@ -222,7 +262,11 @@ export function tabIndentDecrease(tabs: Tab[]): void {
   }
 
   const childrenMap = buildChildrenMap(win.tabs)
-  for (const tab of tabs) {
+
+  // remove any tabs from the selection that are descendants of other selected tabs
+  const filteredTabs = removeDescendantTabs(tabs, childrenMap)
+
+  for (const tab of filteredTabs) {
     if (tab.serialId === undefined) continue
     if (tab.serialId === 0) continue // skip root tabs
     if (tab.indentLevel <= 1) continue // already at root level
