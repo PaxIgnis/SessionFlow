@@ -9,6 +9,7 @@ export interface Window {
   collapsed?: boolean
   windowPosition?: WindowPosition
   tabs: Array<Tab>
+  indentLevel: number
 }
 
 export interface Tab {
@@ -23,6 +24,15 @@ export interface Tab {
   windowSerialId: number
   collapsed?: boolean
   loadingStatus?: LoadingStatus
+  indentLevel: number
+  isParent?: boolean
+  parentId?: number
+  isVisible?: boolean
+}
+
+export interface VisibleWindow {
+  window: Window
+  visibleTabs: Tab[]
 }
 
 export enum State {

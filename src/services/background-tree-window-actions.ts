@@ -49,6 +49,7 @@ export async function addWindow(windowId: number): Promise<void> {
       state: State.OPEN,
       tabs: [],
       collapsed: false,
+      indentLevel: 0,
     }
     Tree.windowsList.push(newWindow)
     Tree.serializeSessionTree()
@@ -77,6 +78,7 @@ export async function updateWindowTabs(windowId: number): Promise<void> {
         windowSerialId: window.serialId,
         title: tab.title!,
         url: tab.url!,
+        indentLevel: 1,
       }))
       Tree.serializeSessionTree()
     }

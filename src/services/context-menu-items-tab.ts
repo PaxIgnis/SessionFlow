@@ -1,4 +1,5 @@
 import * as Messages from '@/services/foreground-messages'
+import { SessionTree } from '@/services/foreground-tree'
 import { Selection } from '@/services/selection'
 import { ContextMenuItem } from '@/types/context-menu'
 import { State } from '@/types/session-tree'
@@ -43,12 +44,32 @@ export const contextMenuItemsTab: Record<string, () => ContextMenuItem> = {
       action: () => Messages.closeTabs(Selection.getSelectedTabs()),
     }
   },
+
+  tabIndentIncrease: () => {
+    return {
+      id: 'tabIndentIncrease',
+      label: 'Increase Indent',
+      icon: 'indent-increase',
+      enabled: Selection.getSelectedTabs().length > 0,
+      action: () => SessionTree.tabIndentIncrease(Selection.getSelectedTabs()),
+    }
+  },
+
+  tabIndentDecrease: () => {
+    return {
+      id: 'tabIndentDecrease',
+      label: 'Decrease Indent',
+      icon: 'indent-decrease',
+      enabled: Selection.getSelectedTabs().length > 0,
+      action: () => SessionTree.tabIndentDecrease(Selection.getSelectedTabs()),
+    }
+  },
 }
 
 function atLeastOneSelectedTabOpen(): boolean {
   const selectedTabs = Selection.getSelectedTabs()
   for (const tab of selectedTabs) {
-    if (tab.state === State.OPEN) {
+    if (tab.state === State.OPEN || tab.state === State.DISCARDED) {
       return true
     }
   }

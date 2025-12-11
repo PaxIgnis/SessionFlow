@@ -2,7 +2,7 @@ import { STORAGE_KEY } from '@/defaults/constants'
 import { OnCreatedQueue } from '@/services/background-on-created-queue'
 import { Tree } from '@/services/background-tree'
 import { Settings } from '@/services/settings'
-import { State, Window } from '@/types/session-tree'
+import { State, Tab, Window } from '@/types/session-tree'
 
 /**
  * Initializes the session tree by first loading the save tree from storage,
@@ -22,6 +22,7 @@ export async function initializeWindows(): Promise<void> {
         state: State.OPEN,
         active: win.focused,
         activeTabId: win.tabs?.find((tab) => tab.active)?.id,
+        indentLevel: 0,
         tabs: win.tabs!.map((tab) => ({
           active: tab.active,
           id: tab.id!,
@@ -31,6 +32,7 @@ export async function initializeWindows(): Promise<void> {
           title: tab.title!,
           url: tab.url!,
           windowSerialId: 0,
+          indentLevel: 1,
         })),
       }
       Tree.windowsList.push(newWindow)
@@ -52,6 +54,67 @@ export function serializeSessionTree(): void {
       tab.windowSerialId = window.serialId
     })
   })
+  setVisibility()
+  setIndentLevel()
+}
+
+/**
+ * Sets visibility of tree items based on collapsed state.
+ */
+function setVisibility(): void {
+  Tree.windowsList.forEach((win) => {
+    if (win.collapsed) {
+      win.tabs.forEach((tab) => {
+        tab.isVisible = false
+      })
+    } else {
+      const childrenMap = new Map<number, Tab[]>()
+      win.tabs.forEach((tab) => {
+        if (tab.parentId !== undefined) {
+          if (!childrenMap.has(tab.parentId)) {
+            childrenMap.set(tab.parentId, [])
+          }
+          childrenMap.get(tab.parentId)!.push(tab)
+        }
+      })
+      const roots = win.tabs.filter((t) => t.parentId === undefined)
+      setVisibilityRecursively(roots, childrenMap, true)
+    }
+  })
+}
+
+/*
+ * Recursively sets visibility for tabs and their children.
+ */
+function setVisibilityRecursively(
+  tabs: Tab[],
+  childrenMap: Map<number, Tab[]>,
+  isVisible: boolean
+): void {
+  for (const tab of tabs) {
+    tab.isVisible = isVisible
+    const children = childrenMap.get(tab.serialId) || []
+    if (children.length > 0) {
+      const childVisibility = isVisible && !tab.collapsed
+      setVisibilityRecursively(children, childrenMap, childVisibility)
+    }
+  }
+}
+
+/*
+ * Sets indent levels for windows and tabs if not already set.
+ */
+function setIndentLevel(): void {
+  for (const w of Tree.windowsList) {
+    if (w.indentLevel === undefined) {
+      w.indentLevel = 0
+    }
+    for (const tab of w.tabs) {
+      if (tab.indentLevel === undefined) {
+        tab.indentLevel = 1
+      }
+    }
+  }
 }
 
 /**
@@ -98,7 +161,7 @@ export async function loadSessionTreeFromStorage(): Promise<void> {
 export async function saveSessionTreeToStorage(): Promise<void> {
   try {
     await browser.storage.local.set({
-      [STORAGE_KEY]: Tree.windowsList,
+      [STORAGE_KEY]: structuredClone(Tree.windowsList),
     })
   } catch (error) {
     console.error('Error saving session tree to storage:', error)

@@ -25,7 +25,9 @@ export function addTab(
   state: State,
   title: string,
   url: string,
-  index?: number
+  index?: number,
+  isParent?: boolean,
+  indentLevel?: number
 ): void {
   console.log('Tab Added in background.ts', windowId, tabId, title, url)
   const window = Tree.windowsList.find((w) => w.id === windowId)
@@ -43,6 +45,8 @@ export function addTab(
       title,
       url,
       windowSerialId: window.serialId,
+      isParent: isParent ?? false,
+      indentLevel: indentLevel ?? 1,
     })
   } else {
     window.tabs.push({
@@ -54,6 +58,8 @@ export function addTab(
       title,
       url,
       windowSerialId: window.serialId,
+      isParent: isParent ?? false,
+      indentLevel: indentLevel ?? 1,
     })
   }
   Tree.serializeSessionTree()
