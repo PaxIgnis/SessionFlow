@@ -37,9 +37,9 @@ function toggleCollapsedItem() {
 }
 
 /*
- * Returns the number of child tabs for a window or tab item.
+ * Computed property to track the number of child tabs for a window or tab item.
  */
-function getChildCount(): number {
+const childCount = computed(() => {
   if (isWindow(props.item)) {
     return props.item.tabs.length
   } else if (isTab(props.item)) {
@@ -63,7 +63,7 @@ function getChildCount(): number {
     return count
   }
   return 0
-}
+})
 
 function itemDblClickAction() {
   if (isWindow(props.item)) {
@@ -238,7 +238,7 @@ const childrenOpen = computed(() => {
         @click="toggleCollapsedItem()"
         @dblclick.stop
       >
-        {{ getChildCount() }}
+        {{ childCount }}
       </div>
       <img
         class="tree-item-favicon"
