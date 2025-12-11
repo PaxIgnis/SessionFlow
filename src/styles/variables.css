@@ -17,6 +17,7 @@
   --list-icon-foreground: rgb(204, 204, 204);
   --list-indent-guide-stroke: rgb(140, 140, 140);
   --list-item-active-foreground: rgb(255, 255, 255);
+  --list-item-child-open-foreground: rgb(40, 190, 0);
   --list-item-discarded-foreground: rgb(100, 140, 89);
   --list-item-focused-border-color-gradient-1: rgb(209, 113, 37);
   --list-item-focused-border-color-gradient-2: rgb(209, 54, 72);

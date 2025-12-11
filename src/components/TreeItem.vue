@@ -7,6 +7,7 @@ import { SessionTree } from '@/services/foreground-tree'
 import { Selection } from '@/services/selection'
 import { ContextMenuType } from '@/types/context-menu'
 import { SelectionType, State, Tab, Window } from '@/types/session-tree'
+import { computed } from 'vue'
 
 const props = defineProps<{
   item: Tab | Window
@@ -21,6 +22,9 @@ function isTab(item: Tab | Window): item is Tab {
   return (item as Tab).url !== undefined
 }
 
+/*
+ * Toggles the collapsed state of a window or tab item.
+ */
 function toggleCollapsedItem() {
   if (isWindow(props.item)) {
     SessionTree.toggleCollapseWindow(props.item.serialId)
@@ -32,6 +36,9 @@ function toggleCollapsedItem() {
   }
 }
 
+/*
+ * Returns the number of child tabs for a window or tab item.
+ */
 function getChildCount(): number {
   if (isWindow(props.item)) {
     return props.item.tabs.length
@@ -110,6 +117,36 @@ function closeItemAction() {
     )
   }
 }
+
+/**
+ * Computed property to determine if the item has any open children in the browser.
+ */
+const childrenOpen = computed(() => {
+  if (isWindow(props.item)) {
+    return props.item.tabs.some(
+      (tab) => tab.state === State.OPEN || tab.state === State.DISCARDED
+    )
+  } else if (isTab(props.item)) {
+    const window = SessionTree.reactiveWindowsList.value.find(
+      (w) => w.serialId === (props.item as Tab).windowSerialId
+    )
+    if (!window) return false
+    const allTabs = window.tabs
+    const parentIndex = allTabs.findIndex(
+      (t) => t.serialId === props.item.serialId
+    )
+    if (parentIndex === -1) return false
+
+    const parentIndent = props.item.indentLevel ?? 1
+    for (let i = parentIndex + 1; i < allTabs.length; i++) {
+      const tab = allTabs[i]
+      const indent = tab.indentLevel ?? 1
+      if (indent <= parentIndent) break
+      if (tab.state === State.OPEN || tab.state === State.DISCARDED) return true
+    }
+  }
+  return false
+})
 </script>
 
 <template>
@@ -197,6 +234,7 @@ function closeItemAction() {
       <div
         v-if="item.collapsed"
         class="child-count"
+        :class="{ 'tree-item-child-active': childrenOpen }"
         @click="toggleCollapsedItem()"
         @dblclick.stop
       >
@@ -351,7 +389,7 @@ function closeItemAction() {
   top: 0;
   left: 0;
   right: 0;
-  bottom: 0;
+  bottom: -1px;
   border: 1px solid transparent;
   border-image: linear-gradient(
       to right,
@@ -515,7 +553,11 @@ function closeItemAction() {
   margin-left: 2px;
   cursor: pointer;
   user-select: none;
-  bottom: -6px;
+  bottom: -5px;
+}
+
+.tree-item-child-active {
+  color: var(--list-item-child-open-foreground) !important;
 }
 
 .tree-item {
