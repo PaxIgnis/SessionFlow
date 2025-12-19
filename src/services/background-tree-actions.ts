@@ -2,6 +2,7 @@ import { STORAGE_KEY } from '@/defaults/constants'
 import { OnCreatedQueue } from '@/services/background-on-created-queue'
 import { Tree } from '@/services/background-tree'
 import { Settings } from '@/services/settings'
+import * as Utils from '@/services/utils'
 import { State, Tab, Window } from '@/types/session-tree'
 
 /**
@@ -15,29 +16,36 @@ export async function initializeWindows(): Promise<void> {
     await Tree.loadSessionTreeFromStorage()
     const currentWindows = await browser.windows.getAll({ populate: true })
     currentWindows.forEach((win) => {
+      const windowUid = Utils.createUid(Tree.existingUidsSet)
       const newWindow: Window = {
+        uid: windowUid,
         id: win.id!,
-        serialId: 0,
         selected: false,
         state: State.OPEN,
         active: win.focused,
         activeTabId: win.tabs?.find((tab) => tab.active)?.id,
         indentLevel: 0,
         tabs: win.tabs!.map((tab) => ({
+          uid: Utils.createUid(Tree.existingUidsSet),
           active: tab.active,
           id: tab.id!,
-          serialId: 0,
           selected: false,
           state: State.OPEN,
           title: tab.title!,
           url: tab.url!,
-          windowSerialId: 0,
+          windowUid: windowUid,
           indentLevel: 1,
         })),
       }
       Tree.windowsList.push(newWindow)
+      // TODO: use after implementing independent data source for foreground context
+      // Tree.windowsByUid.set(windowUid, newWindow)
+      // for (const tab of newWindow.tabs) {
+      //   Tree.tabsByUid.set(tab.uid, tab)
+      // }
     })
-    Tree.serializeSessionTree()
+    rebuildUIDMaps() // and then remove this
+    Tree.recomputeSessionTree()
   } catch (error) {
     console.error('Error initializing windows:', error)
   }
@@ -46,59 +54,34 @@ export async function initializeWindows(): Promise<void> {
 /**
  * Serializes the session tree by assigning serial IDs to windows and tabs.
  */
-export function serializeSessionTree(): void {
-  Tree.windowsList.forEach((window, windowIndex) => {
-    window.serialId = windowIndex
-    window.tabs.forEach((tab, tabIndex) => {
-      tab.serialId = tabIndex
-      tab.windowSerialId = window.serialId
-    })
-  })
-  setVisibility()
+export function recomputeSessionTree(): void {
+  computeVisibility()
   setIndentLevel()
 }
 
 /**
  * Sets visibility of tree items based on collapsed state.
  */
-function setVisibility(): void {
+function computeVisibility(): void {
   Tree.windowsList.forEach((win) => {
     if (win.collapsed) {
       win.tabs.forEach((tab) => {
         tab.isVisible = false
       })
     } else {
-      const childrenMap = new Map<number, Tab[]>()
+      const childrenMap = new Map<UID, Tab[]>()
       win.tabs.forEach((tab) => {
-        if (tab.parentId !== undefined) {
-          if (!childrenMap.has(tab.parentId)) {
-            childrenMap.set(tab.parentId, [])
+        if (tab.parentUid !== undefined) {
+          if (!childrenMap.has(tab.parentUid)) {
+            childrenMap.set(tab.parentUid, [])
           }
-          childrenMap.get(tab.parentId)!.push(tab)
+          childrenMap.get(tab.parentUid)!.push(tab)
         }
       })
-      const roots = win.tabs.filter((t) => t.parentId === undefined)
-      setVisibilityRecursively(roots, childrenMap, true)
+      const roots = win.tabs.filter((t) => t.parentUid === undefined)
+      Tree.setTabVisibilityRecursively(roots, childrenMap, true)
     }
   })
-}
-
-/*
- * Recursively sets visibility for tabs and their children.
- */
-function setVisibilityRecursively(
-  tabs: Tab[],
-  childrenMap: Map<number, Tab[]>,
-  isVisible: boolean
-): void {
-  for (const tab of tabs) {
-    tab.isVisible = isVisible
-    const children = childrenMap.get(tab.serialId) || []
-    if (children.length > 0) {
-      const childVisibility = isVisible && !tab.collapsed
-      setVisibilityRecursively(children, childrenMap, childVisibility)
-    }
-  }
 }
 
 /*
@@ -139,12 +122,17 @@ export async function loadSessionTreeFromStorage(): Promise<void> {
         window.activeTabId = 0
         window.selected = false
         if (!window.savedTime) window.savedTime = Date.now()
+        if (!window.uid) window.uid = Utils.createUid(Tree.existingUidsSet)
+        Tree.windowsByUid.set(window.uid, window)
         window.tabs.forEach((tab) => {
           tab.active = false
           tab.id = 0
           tab.selected = false
           tab.state = State.SAVED
           if (!tab.savedTime) tab.savedTime = Date.now()
+          if (!tab.uid) tab.uid = Utils.createUid(Tree.existingUidsSet)
+          Tree.tabsByUid.set(tab.uid, tab)
+          tab.windowUid = window.uid
         })
       })
     }
@@ -236,6 +224,8 @@ function getSessionTree(): Array<Window> {
 function setSessionTree(newTree: Array<Window>): void {
   Tree.windowsBackupList = Tree.windowsList
   Tree.windowsList = newTree
+
+  rebuildUIDMaps()
 }
 
 /**
@@ -277,4 +267,39 @@ export function focusTabAndWindow(message: {
 }): void {
   Tree.focusTab({ tabId: message.tabId })
   Tree.focusWindow({ windowId: message.windowId })
+}
+
+/**
+ * Deselects all windows and tabs in the session tree.
+ */
+export function deselectAllItems(): void {
+  Tree.windowsList.forEach((window) => {
+    window.tabs.forEach((tab) => {
+      tab.selected = false
+    })
+    window.selected = false
+  })
+}
+
+function rebuildUIDMaps(): void {
+  // Rebuild lookup maps and existing UID set to match the new contents.
+  Tree.windowsByUid.clear()
+  Tree.tabsByUid.clear()
+  Tree.existingUidsSet.clear()
+  for (const win of Tree.windowsList) {
+    if (win.uid) {
+      Tree.windowsByUid.set(win.uid, win)
+      Tree.existingUidsSet.add(win.uid)
+    }
+    for (const tab of win.tabs) {
+      if (tab.uid) {
+        Tree.tabsByUid.set(tab.uid, tab)
+        Tree.existingUidsSet.add(tab.uid)
+      }
+    }
+  }
+}
+
+export function printSessionTree(): void {
+  console.log('Background Session Tree:', Tree.windowsList)
 }

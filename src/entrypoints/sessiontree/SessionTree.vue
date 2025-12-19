@@ -2,11 +2,12 @@
 import IconChevronRight from '@/assets/chevron-right.svg'
 import TreeItem from '@/components/TreeItem.vue'
 import { FaviconService } from '@/services/favicons'
+import * as Messages from '@/services/foreground-messages'
 import { SessionTree } from '@/services/foreground-tree'
 import { Selection } from '@/services/selection'
 import '@/styles/variables.css'
 import { FaviconCacheEntry } from '@/types/favicons'
-import { Tab, VisibleWindow, Window } from '@/types/session-tree'
+import { VisibleWindow, Window } from '@/types/session-tree'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 
 // Save Session Tree Window location and size before closing.
@@ -20,7 +21,7 @@ window.onbeforeunload = () => {
   localStorage.setItem('sessionTreeWindowConfig', JSON.stringify(bounds))
 
   Selection.clearSelection()
-  SessionTree.deselectAllItems()
+  Messages.deselectAllItems()
 
   console.log('Unloading')
   if (backgroundPage && typeof backgroundPage.resetSessionTree === 'function') {
@@ -39,9 +40,12 @@ const backgroundPage =
   window.browser.extension.getBackgroundPage() as unknown as globalThis.Window
 
 const visibleTreeItems = computed<VisibleWindow[]>(() => {
+  SessionTree.reactiveWindowsList.value.forEach((w) =>
+    w.tabs.forEach((t) => void t.isVisible)
+  )
   return SessionTree.reactiveWindowsList.value.map((w) => ({
     window: w,
-    visibleTabs: w.tabs.filter((t) => (t as Tab).isVisible === true),
+    visibleTabs: w.tabs.filter((t) => t.isVisible === true),
   }))
 })
 
@@ -98,6 +102,8 @@ const getTabTree = () => {
   )
   console.log(SessionTree.reactiveWindowsList.value)
   console.log(SessionTree.reactiveWindowsList)
+  console.log('Visible Tree Items:', visibleTreeItems.value)
+  Messages.printSessionTree()
 }
 
 function onClick() {
@@ -114,12 +120,12 @@ function onClick() {
       </svg>
     </div>
 
-    <template v-for="item in visibleTreeItems" :key="item.window.serialId">
+    <template v-for="item in visibleTreeItems" :key="item.window.uid">
       <TreeItem :item="item.window" :favicon-service="faviconService" />
 
       <template
         v-for="tab in item.visibleTabs"
-        :key="`${item.window.serialId}-${tab.serialId}`"
+        :key="`${item.window.uid}-${tab.uid}`"
       >
         <TreeItem :item="tab" :favicon-service="faviconService" />
       </template>

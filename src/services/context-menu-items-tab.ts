@@ -1,5 +1,4 @@
 import * as Messages from '@/services/foreground-messages'
-import { SessionTree } from '@/services/foreground-tree'
 import { Selection } from '@/services/selection'
 import { ContextMenuItem } from '@/types/context-menu'
 import { State } from '@/types/session-tree'
@@ -51,7 +50,7 @@ export const contextMenuItemsTab: Record<string, () => ContextMenuItem> = {
       label: 'Increase Indent',
       icon: 'indent-increase',
       enabled: Selection.getSelectedTabs().length > 0,
-      action: () => SessionTree.tabIndentIncrease(Selection.getSelectedTabs()),
+      action: () => Messages.tabIndentIncrease(Selection.getSelectedTabs()),
     }
   },
 
@@ -61,7 +60,7 @@ export const contextMenuItemsTab: Record<string, () => ContextMenuItem> = {
       label: 'Decrease Indent',
       icon: 'indent-decrease',
       enabled: Selection.getSelectedTabs().length > 0,
-      action: () => SessionTree.tabIndentDecrease(Selection.getSelectedTabs()),
+      action: () => Messages.tabIndentDecrease(Selection.getSelectedTabs()),
     }
   },
 }

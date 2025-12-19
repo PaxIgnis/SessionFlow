@@ -43,3 +43,42 @@ export function isPrivilegedUrl(url: string): boolean {
     !url.startsWith('about:newtab')
   return isPrivilegedUrl || startsWithAbout
 }
+
+/**
+ * Creates a new unique identifier (UUID), ensuring it does not exist in the provided set.
+ * Additionally, the new UUID is added to the existing set.
+ *
+ */
+export function createUid(existing: Set<string>): string {
+  // Try built-in Web Crypto first
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    const c = crypto as Crypto & { randomUUID?: () => string }
+    for (let i = 0; i < 3; i++) {
+      const uuid = c.randomUUID ? c.randomUUID() : undefined
+      if (uuid && !existing.has(uuid)) {
+        existing.add(uuid)
+        return uuid
+      }
+    }
+  }
+
+  // Fallback mechanism
+  for (let i = 0; i < 3; i++) {
+    const fallback =
+      'uid-' +
+      Date.now().toString(36) +
+      '-' +
+      Math.floor(Math.random() * 0xfffff).toString(36)
+    existing.add(fallback)
+    return fallback
+  }
+
+  // As a last resort, return a non-unique ID (should not happen)
+  const nonUniqueId = 'uid-nonunique-' + Date.now().toString(36)
+  existing.add(nonUniqueId)
+  console.error(
+    'Failed to generate unique UID, returning non-unique ID:',
+    nonUniqueId
+  )
+  return nonUniqueId
+}

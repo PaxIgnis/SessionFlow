@@ -27,12 +27,9 @@ function isTab(item: Tab | Window): item is Tab {
  */
 function toggleCollapsedItem() {
   if (isWindow(props.item)) {
-    SessionTree.toggleCollapseWindow(props.item.serialId)
+    Messages.toggleCollapseWindow(props.item.uid)
   } else if (isTab(props.item)) {
-    SessionTree.toggleCollapseTab(
-      props.item.serialId,
-      props.item.windowSerialId
-    )
+    Messages.toggleCollapseTab(props.item.uid)
   }
 }
 
@@ -43,17 +40,16 @@ const childCount = computed(() => {
   if (isWindow(props.item)) {
     return props.item.tabs.length
   } else if (isTab(props.item)) {
-    const allTabs = SessionTree.reactiveWindowsList.value.flatMap((w) => w.tabs)
-    const parentIndex = allTabs.findIndex(
-      (t) =>
-        isTab(t) &&
-        t.serialId === props.item.serialId &&
-        t.windowSerialId === (props.item as Tab).windowSerialId
+    const win = SessionTree.reactiveWindowsList.value.find(
+      (w) => w.uid === (props.item as Tab).windowUid
     )
+    if (!win) return 0
+    const allTabs = win.tabs
+    const parentIndex = allTabs.findIndex((t) => t.uid === props.item.uid)
     if (parentIndex === -1) return 0
 
     let count = 0
-    const parentIndent = (props.item as Tab).indentLevel ?? 0
+    const parentIndent = (props.item as Tab).indentLevel ?? 1
     for (let i = parentIndex + 1; i < allTabs.length; i++) {
       const t = allTabs[i]
       const indent = t.indentLevel ?? 0
@@ -67,14 +63,10 @@ const childCount = computed(() => {
 
 function itemDblClickAction() {
   if (isWindow(props.item)) {
-    Messages.windowDoubleClick(
-      props.item.serialId,
-      props.item.id,
-      props.item.state
-    )
+    Messages.windowDoubleClick(props.item.uid, props.item.id, props.item.state)
   } else if (isTab(props.item)) {
     const window = SessionTree.reactiveWindowsList.value.find(
-      (w) => w.serialId === (props.item as Tab).windowSerialId
+      (w) => w.uid === (props.item as Tab).windowUid
     )
     if (!window) {
       console.warn(
@@ -86,8 +78,8 @@ function itemDblClickAction() {
     Messages.tabDoubleClick(
       props.item.id,
       window.id,
-      props.item.serialId,
-      props.item.windowSerialId,
+      props.item.uid,
+      props.item.windowUid,
       props.item.state,
       props.item.url
     )
@@ -96,25 +88,17 @@ function itemDblClickAction() {
 
 function saveItemAction() {
   if (isWindow(props.item)) {
-    Messages.saveWindow(props.item.id, props.item.serialId)
+    Messages.saveWindow(props.item.id, props.item.uid)
   } else if (isTab(props.item)) {
-    Messages.saveTab(
-      props.item.id,
-      props.item.serialId,
-      props.item.windowSerialId
-    )
+    Messages.saveTab(props.item.id, props.item.uid)
   }
 }
 
 function closeItemAction() {
   if (isWindow(props.item)) {
-    Messages.closeWindow(props.item.id, props.item.serialId)
+    Messages.closeWindow(props.item.id, props.item.uid)
   } else if (isTab(props.item)) {
-    Messages.closeTab(
-      props.item.id,
-      props.item.serialId,
-      props.item.windowSerialId
-    )
+    Messages.closeTab(props.item.id, props.item.uid)
   }
 }
 
@@ -128,13 +112,11 @@ const childrenOpen = computed(() => {
     )
   } else if (isTab(props.item)) {
     const window = SessionTree.reactiveWindowsList.value.find(
-      (w) => w.serialId === (props.item as Tab).windowSerialId
+      (w) => w.uid === (props.item as Tab).windowUid
     )
     if (!window) return false
     const allTabs = window.tabs
-    const parentIndex = allTabs.findIndex(
-      (t) => t.serialId === props.item.serialId
-    )
+    const parentIndex = allTabs.findIndex((t) => t.uid === props.item.uid)
     if (parentIndex === -1) return false
 
     const parentIndent = props.item.indentLevel ?? 1
@@ -160,7 +142,7 @@ const childrenOpen = computed(() => {
         'tree-item-active-latest-tab':
         isTab(item) &&
         item.active === true &&
-        SessionTree.reactiveWindowsList.value.find(w => w.serialId === (item as Tab).windowSerialId)
+        SessionTree.reactiveWindowsList.value.find(w => w.uid === (item as Tab).windowUid)
           ?.active === true,
       },
     ]"
@@ -263,8 +245,8 @@ const childrenOpen = computed(() => {
             'tree-item-text-active': props.item.active === true,
           }"
         >
-          Window id {{ props.item.id }} Window serialId
-          {{ props.item.serialId }}
+          Window id {{ props.item.id }} Window UID
+          {{ props.item.uid }}
         </div>
       </template>
       <template v-else-if="isTab(props.item)">

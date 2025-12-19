@@ -101,7 +101,7 @@ function windowsOnRemoved(windowId: number): void {
       (Settings.values.saveWindowOnCloseIfPreviouslySaved &&
         window.savedTime! > 0))
   ) {
-    Tree.saveWindow(window.serialId)
+    Tree.saveWindow(window.uid)
     return
   }
 
@@ -109,7 +109,7 @@ function windowsOnRemoved(windowId: number): void {
   if (tabCount === 1) {
     const openTab = window.tabs.filter((tab) => tab.state === State.OPEN)[0]
     if (!openTab) {
-      Tree.removeWindow(window.serialId)
+      Tree.removeWindow(window.uid)
     }
     // if settings set to save tab on close
     if (
@@ -117,10 +117,10 @@ function windowsOnRemoved(windowId: number): void {
       (Settings.values.saveTabOnCloseIfPreviouslySaved &&
         openTab.savedTime! > 0)
     ) {
-      Tree.saveWindow(window.serialId)
+      Tree.saveWindow(window.uid)
     }
   }
-  Tree.removeWindow(window.serialId)
+  Tree.removeWindow(window.uid)
 }
 
 /**
@@ -128,6 +128,7 @@ function windowsOnRemoved(windowId: number): void {
  * If the tab is created by the extension, do nothing as it is already in the session tree.
  */
 async function tabsOnCreated(tab: browser.tabs.Tab): Promise<void> {
+  console.debug('Tab Created:', tab)
   if (tab.windowId === undefined || tab.id === undefined) {
     console.error('Tab or Window ID is undefined')
     return
@@ -162,6 +163,7 @@ function tabsOnRemoved(
   tabId: number,
   removeInfo: browser.tabs._OnRemovedRemoveInfo
 ): void {
+  console.debug('Tab Removed:', tabId, removeInfo)
   if (removeInfo.windowId === undefined) {
     console.error('Window ID is undefined')
     return
@@ -185,10 +187,10 @@ function tabsOnRemoved(
     (Settings.values.saveTabOnCloseIfPreviouslySaved &&
       window.tabs[index].savedTime! > 0)
   ) {
-    Tree.setTabSaved(window.serialId, window.tabs[index].serialId)
+    Tree.setTabSaved(window.tabs[index].uid)
     return
   }
-  Tree.removeTab(window.serialId, window.tabs[index].serialId)
+  Tree.removeTab(window.tabs[index].uid)
 }
 
 /**
@@ -235,6 +237,7 @@ async function tabsOnMoved(
   }
   const window = Tree.windowsList.find((w) => w.id === moveInfo.windowId)
   if (!window) {
+    console.error('Window not found in session tree')
     return
   }
   const openSessionTreeTabs = window.tabs.filter(
@@ -257,17 +260,35 @@ async function tabsOnMoved(
   }
   // if order doesn't match, update the sessionTree order to match the browser order
   const movedTabIndex = window.tabs.findIndex((tab) => tab.id === tabId)
-  const tab = window.tabs.splice(movedTabIndex, 1)[0]
+  const tab = window.tabs[movedTabIndex]
+  Tree.removeTab(tab.uid)
   if (moveInfo.toIndex + 1 >= openSessionTreeTabs.length) {
     // place in last position
-    window.tabs.push(tab)
+    Tree.addTab(
+      tab.active ?? false,
+      window.id,
+      tab.id,
+      false,
+      tab.state,
+      tab.title,
+      tab.url
+    )
   } else {
     // move to the position immediately before the tab to the right in the browser
     const rightTabId = openBrowserTabs[moveInfo.toIndex + 1].id
     const rightTabIndex = window.tabs.findIndex((tab) => tab.id === rightTabId)
-    window.tabs.splice(rightTabIndex, 0, tab)
+    Tree.addTab(
+      tab.active ?? false,
+      window.id,
+      tab.id,
+      false,
+      tab.state,
+      tab.title,
+      tab.url,
+      rightTabIndex
+    )
   }
-  Tree.serializeSessionTree()
+  Tree.recomputeSessionTree()
 }
 
 /**
@@ -290,8 +311,7 @@ function tabsOnDetached(
   if (index === -1) {
     return
   }
-  window.tabs.splice(index, 1)
-  Tree.serializeSessionTree()
+  Tree.removeTab(window.tabs[index].uid)
 }
 
 /**
@@ -309,6 +329,7 @@ async function tabsOnAttached(
   }
   const window = Tree.windowsList.find((w) => w.id === attachInfo.newWindowId)
   if (!window) {
+    console.error('Window not found in session tree')
     return
   }
   const tab = await browser.tabs.get(tabId)
@@ -402,6 +423,18 @@ function onMessage(message: Messages.SessionTreeMessage): void {
     Tree.focusWindow(message)
   } else if (message.action === 'openWindowsInSameLocationUpdated') {
     Tree.updateWindowPositionInterval()
+  } else if (message.action === 'toggleCollapseTab') {
+    Tree.toggleCollapseTab(message.tabUid)
+  } else if (message.action === 'toggleCollapseWindow') {
+    Tree.toggleCollapseWindow(message.windowUid)
+  } else if (message.action === 'deselectAllItems') {
+    Tree.deselectAllItems()
+  } else if (message.action === 'tabIndentIncrease') {
+    Tree.tabIndentIncrease(message.tabUids)
+  } else if (message.action === 'tabIndentDecrease') {
+    Tree.tabIndentDecrease(message.tabUids)
+  } else if (message.action === 'printSessionTree') {
+    Tree.printSessionTree()
   }
 }
 

@@ -6,5 +6,7 @@ declare global {
     setSessionTree?: (windows: Array<SessionWindow>) => void
     resetSessionTree?: () => void
   }
+
+  type UID = string
 }
 export {}

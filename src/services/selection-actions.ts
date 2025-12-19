@@ -31,7 +31,7 @@ export function selectItem(
     shiftKey &&
     firstItem &&
     type === SelectionType.TAB &&
-    (firstItem.item as Tab).windowSerialId === (item as Tab).windowSerialId
+    (firstItem.item as Tab).windowUid === (item as Tab).windowUid
   ) {
     // If multiple tabs selected in same window & shift, then select all tabs between firstItem and item
     Selection.selectMultipleTabsInWindow(firstItem.item as Tab, item as Tab)
@@ -58,7 +58,7 @@ export function selectMultipleTabsInWindow(firstTab: Tab, lastTab: Tab) {
   Selection.clearSelection()
   // First find all tabs between the firstTab and lastTab
   const window = SessionTree.reactiveWindowsList.value.find(
-    (w) => w.serialId === firstTab.windowSerialId
+    (w) => w.uid === firstTab.windowUid
   )
   if (!window) {
     console.error('Invalid window selection')

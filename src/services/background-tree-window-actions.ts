@@ -1,17 +1,19 @@
 import { DeferredEventsQueue } from '@/services/background-deferred-events-queue'
 import { OnCreatedQueue } from '@/services/background-on-created-queue'
 import { Tree } from '@/services/background-tree'
+import { setTabVisibilityRecursively } from '@/services/background-tree-tab-actions'
 import { Settings } from '@/services/settings'
+import * as TreeUtils from '@/services/tree-utils'
 import * as Utils from '@/services/utils'
 import { State, WindowPosition } from '@/types/session-tree'
 
 /**
  * Sets the state of the window and all tabs to SAVED and resets the IDs.
  *
- * @param {number} windowSerialId - The Serial ID of the window to save.
+ * @param {UID} windowUid - The UID of the window to save.
  */
-export function saveWindow(windowSerialId: number): void {
-  const window = Tree.windowsList.find((w) => w.serialId === windowSerialId)
+export function saveWindow(windowUid: UID): void {
+  const window = Tree.windowsByUid.get(windowUid)
   if (window) {
     window.state = State.SAVED
     window.id = -1
@@ -41,10 +43,10 @@ export async function addWindow(windowId: number): Promise<void> {
       return
     }
     const newWindow = {
+      uid: Utils.createUid(Tree.existingUidsSet),
       active: win.focused,
       activeTabId: win.tabs?.find((tab) => tab.active)?.id,
       id: windowId,
-      serialId: 0,
       selected: false,
       state: State.OPEN,
       tabs: [],
@@ -52,7 +54,12 @@ export async function addWindow(windowId: number): Promise<void> {
       indentLevel: 0,
     }
     Tree.windowsList.push(newWindow)
-    Tree.serializeSessionTree()
+    // TODO: use newWindow variable instead after foreground context independent data source is implemented
+    Tree.windowsByUid.set(
+      newWindow.uid,
+      Tree.windowsList[Tree.windowsList.length - 1]
+    )
+    Tree.recomputeSessionTree()
     Tree.updateWindowTabs(windowId)
     DeferredEventsQueue.processDeferredWindowEvents(windowId)
   }
@@ -69,18 +76,22 @@ export async function updateWindowTabs(windowId: number): Promise<void> {
     const win = await browser.windows.get(windowId, { populate: true })
     const window = Tree.windowsList.find((w) => w.id === windowId)
     if (window) {
+      // TODO: convert this to use addTab() in the future
       window.tabs = win.tabs!.map((tab) => ({
+        uid: Utils.createUid(Tree.existingUidsSet),
         active: tab.active,
         id: tab.id!,
-        serialId: 0,
         selected: false,
         state: tab.discarded ? State.DISCARDED : State.OPEN,
-        windowSerialId: window.serialId,
+        windowUid: window.uid,
         title: tab.title!,
         url: tab.url!,
         indentLevel: 1,
       }))
-      Tree.serializeSessionTree()
+      for (const tab of window.tabs) {
+        Tree.tabsByUid.set(tab.uid, tab)
+      }
+      Tree.recomputeSessionTree()
     }
   } catch (error) {
     console.error('Error updating window tabs:', error)
@@ -90,28 +101,35 @@ export async function updateWindowTabs(windowId: number): Promise<void> {
 /**
  * Removes a window from the session tree.
  *
- * @param {number} windowSerialId - The serial ID of the window to remove.
+ * @param {UID} windowUid - The UID of the window to remove.
  */
-export function removeWindow(windowSerialId: number): void {
-  console.debug('Remove Window', windowSerialId)
-  const index = Tree.windowsList.findIndex((w) => w.serialId === windowSerialId)
-  if (index !== -1) {
-    console.log(`Success Removing Window ${windowSerialId} from sessionTree`)
+export function removeWindow(windowUid: UID): void {
+  const index = Tree.windowsList.findIndex((w) => w.uid === windowUid)
+  const window = Tree.windowsByUid.get(windowUid)
+  if (window && index !== -1) {
+    // remove uids of tabs and window from set and maps
+    for (const tab of window.tabs) {
+      Tree.existingUidsSet.delete(tab.uid)
+      Tree.tabsByUid.delete(tab.uid)
+    }
+    Tree.existingUidsSet.delete(window.uid)
+    Tree.windowsByUid.delete(window.uid)
+
     Tree.windowsList.splice(index, 1)
-    Tree.serializeSessionTree()
+    Tree.recomputeSessionTree()
   } else {
-    console.error(`Error Removing Window ${windowSerialId} from sessionTree`)
+    console.error(`Error Removing Window ${windowUid} from sessionTree`)
   }
 }
 
 /**
  * Updates the state of a window in the session tree.
  *
- * @param {number} windowSerialId - The serial ID of the window to update.
+ * @param {UID} windowUid - The UID of the window to update.
  * @param {State} state - The new state to assign to the window.
  */
-export function updateWindowState(windowSerialId: number, state: State): void {
-  const window = Tree.windowsList.find((w) => w.serialId === windowSerialId)
+export function updateWindowState(windowUid: UID, state: State): void {
+  const window = Tree.windowsByUid.get(windowUid)
   if (window) {
     window.state = state
     if (state === State.SAVED) {
@@ -123,14 +141,11 @@ export function updateWindowState(windowSerialId: number, state: State): void {
 /**
  * Updates the id of a window in the session tree
  *
- * @param {number} windowSerialId - The current Serial ID of the window to be updated.
+ * @param {UID} windowUid - The UID of the window to be updated.
  * @param {number} newWindowId - The new ID to assign to the window.
  */
-export function updateWindowId(
-  windowSerialId: number,
-  newWindowId: number
-): void {
-  const window = Tree.windowsList.find((w) => w.serialId === windowSerialId)
+export function updateWindowId(windowUid: UID, newWindowId: number): void {
+  const window = Tree.windowsByUid.get(windowUid)
   if (window) {
     window.id = newWindowId
   }
@@ -237,14 +252,14 @@ export function setActiveWindow(windowId: number, tries: number = 0): void {
  *
  * @param {Object} message - The message object containing window information.
  * @param {number} message.windowId - The ID of the window to be closed.
- * @param {number} message.windowSerialId - The Serial ID of the window to be closed.
+ * @param {UID} message.windowUid - The UID of the window to be closed.
  */
 export function closeWindow(message: {
   windowId: number
-  windowSerialId: number
+  windowUid: UID
 }): void {
-  if (message.windowSerialId !== undefined) {
-    Tree.removeWindow(message.windowSerialId)
+  if (message.windowUid !== undefined) {
+    Tree.removeWindow(message.windowUid)
   }
   if (message.windowId === -1 || message.windowId === 0) {
     return
@@ -279,17 +294,13 @@ export function focusWindow(message: { windowId: number }): void {
  * Opens a window by creating it in the browser and updating the session tree.
  *
  * @param {Object} message - The message object containing window information.
- * @param {number} message.windowSerialId - The Serial ID of the window to be opened from sessionTree.
+ * @param {UID} message.windowUid - The UID of the window to be opened from sessionTree.
  */
-export async function openWindow(message: {
-  windowSerialId: number
-}): Promise<void> {
+export async function openWindow(message: { windowUid: UID }): Promise<void> {
   // First change the state of the window in sessionTree to from SAVED to OPEN
-  Tree.updateWindowState(message.windowSerialId, State.OPEN)
+  Tree.updateWindowState(message.windowUid, State.OPEN)
   try {
-    const sessionTreeWindow = Tree.windowsList.find(
-      (w) => w.serialId === message.windowSerialId
-    )
+    const sessionTreeWindow = Tree.windowsByUid.get(message.windowUid)
     if (!sessionTreeWindow) {
       throw new Error('Saved window not found')
     }
@@ -298,7 +309,7 @@ export async function openWindow(message: {
       let url = String(tab.url)
       // if the URL is a privileged URL, open a redirect page instead
       if (Utils.isPrivilegedUrl(url)) {
-        const title = Tree.getTabTitle(sessionTreeWindow.serialId, tab.serialId)
+        const title = Tree.getTabTitle(tab.uid)
         url = Utils.getRedirectUrl(url, title)
       } else if (
         url === 'about:newtab' ||
@@ -334,25 +345,17 @@ export async function openWindow(message: {
     }
 
     // then update the saved window object id to represent the newly opened window
-    Tree.updateWindowId(message.windowSerialId, window.id)
+    Tree.updateWindowId(message.windowUid, window.id)
     window.tabs.forEach((tab, index) => {
-      Tree.updateTabId(
-        sessionTreeWindow?.serialId,
-        sessionTreeWindow?.tabs[index].serialId,
-        tab.id!
-      )
-      Tree.updateTabState(
-        sessionTreeWindow?.serialId,
-        sessionTreeWindow?.tabs[index].serialId,
-        State.OPEN
-      )
+      Tree.updateTabId(sessionTreeWindow?.tabs[index].uid, tab.id!)
+      Tree.updateTabState(sessionTreeWindow?.tabs[index].uid, State.OPEN)
     })
     if (Settings.values.openWindowWithTabsDiscarded && urls.length > 1) {
       for (const tab of sessionTreeWindow.tabs) {
         if (tab.state === State.SAVED) {
           Tree.openTab({
-            tabSerialId: tab.serialId,
-            windowSerialId: message.windowSerialId,
+            tabUid: tab.uid,
+            windowUid: message.windowUid,
             discarded: true,
           })
         }
@@ -368,14 +371,45 @@ export async function openWindow(message: {
  *
  * @param {Object} message - The message object containing window information.
  * @param {number} message.windowId - The ID of the window to be saved.
- * @param {number} message.windowSerialId - The Serial ID of the window to be saved.
+ * @param {UID} message.windowUid - The UID of the window to be saved.
  */
 export function saveAndRemoveWindow(message: {
   windowId: number
-  windowSerialId: number
+  windowUid: UID
 }): void {
-  Tree.saveWindow(message.windowSerialId)
+  Tree.saveWindow(message.windowUid)
   browser.windows.remove(message.windowId).catch((error) => {
     console.error('Error saving window:', error)
   })
+}
+
+/**
+ * Toggles the collapsed state of a window.
+ * When collapsing, all tabs are hidden.
+ * When expanding, root tabs are shown and child tab visibility respects their own collapsed states.
+ *
+ * @param {UID} windowUid - The UID of the window to toggle.
+ */
+export function toggleCollapseWindow(windowUid: UID): void {
+  const win = Tree.windowsByUid.get(windowUid)
+  if (!win) {
+    console.error(`Window with UID ${windowUid} not found`)
+    return
+  }
+
+  win.collapsed = !win.collapsed
+
+  // build parent -> children map for tabs in this window
+  const childrenMap = TreeUtils.buildChildrenMap(win.tabs)
+
+  // root tabs are those without a parentUid
+  const roots = win.tabs.filter((t) => t.parentUid === undefined)
+
+  // if window is collapsed, hide all tabs; otherwise show roots and
+  // let recursion respect per-tab collapsed flags
+  if (win.collapsed) {
+    setTabVisibilityRecursively(roots, childrenMap, false)
+  } else {
+    setTabVisibilityRecursively(roots, childrenMap, true)
+  }
 }

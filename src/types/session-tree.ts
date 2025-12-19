@@ -1,10 +1,10 @@
 export interface Window {
+  uid: UID
   active?: boolean
   activeTabId?: number
   id: number
   savedTime?: number
   selected: boolean
-  serialId: number
   state: State
   collapsed?: boolean
   windowPosition?: WindowPosition
@@ -13,20 +13,20 @@ export interface Window {
 }
 
 export interface Tab {
+  uid: UID
   active?: boolean
   id: number
   savedTime?: number
   selected: boolean
-  serialId: number
   state: State
   title: string
   url: string
-  windowSerialId: number
+  windowUid: UID
   collapsed?: boolean
   loadingStatus?: LoadingStatus
   indentLevel: number
   isParent?: boolean
-  parentId?: number
+  parentUid?: UID
   isVisible?: boolean
 }
 

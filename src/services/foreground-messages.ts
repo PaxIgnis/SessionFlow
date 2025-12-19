@@ -5,92 +5,72 @@ import { State, Tab, Window } from '@/types/session-tree'
 // Tab Messages
 // ==============================
 
-export function closeTab(
-  tabId: number,
-  tabSerialId: number,
-  windowSerialId: number
-) {
+export function closeTab(tabId: number, tabUid: UID) {
   window.browser.runtime.sendMessage({
     action: 'closeTab',
     tabId: tabId,
-    tabSerialId: tabSerialId,
-    windowSerialId: windowSerialId,
+    tabUid: tabUid,
   } as Messages.CloseTabMessage)
 }
 
 export function closeTabs(tabs: Array<Tab>) {
   tabs.forEach((tab) => {
-    closeTab(tab.id, tab.serialId, tab.windowSerialId)
+    closeTab(tab.id, tab.uid)
   })
 }
 
-export function reloadTab(
-  tabId: number,
-  tabSerialId: number,
-  windowSerialId: number
-) {
+export function reloadTab(tabId: number) {
   window.browser.runtime.sendMessage({
     action: 'reloadTab',
     tabId: tabId,
-    tabSerialId: tabSerialId,
-    windowSerialId: windowSerialId,
   })
 }
 
 export function reloadTabs(tabs: Array<Tab>) {
   tabs.forEach((tab) => {
-    reloadTab(tab.id, tab.serialId, tab.windowSerialId)
+    reloadTab(tab.id)
   })
 }
 
-export function saveTab(
-  tabId: number,
-  tabSerialId: number,
-  windowSerialId: number
-) {
+export function saveTab(tabId: number, tabUid: UID) {
   window.browser.runtime.sendMessage({
     action: 'saveTab',
     tabId: tabId,
-    tabSerialId: tabSerialId,
-    windowSerialId: windowSerialId,
+    tabUid: tabUid,
   })
 }
 
 export function saveTabs(tabs: Array<Tab>) {
   tabs.forEach((tab) => {
-    saveTab(tab.id, tab.serialId, tab.windowSerialId)
+    saveTab(tab.id, tab.uid)
   })
 }
 
-export function openTab(
-  tabSerialId: number,
-  windowSerialId: number,
-  url: string
-) {
+export function openTab(tabUid: UID, windowUid: UID, url: string) {
   window.browser.runtime.sendMessage({
     action: 'openTab',
-    tabSerialId: tabSerialId,
-    windowSerialId: windowSerialId,
+    tabUid: tabUid,
+    windowUid: windowUid,
     url: url,
   })
 }
 
 export function openTabs(tabs: Array<Tab>) {
   tabs.forEach((tab) => {
-    openTab(tab.serialId, tab.windowSerialId, tab.url)
+    openTab(tab.uid, tab.windowUid, tab.url)
   })
 }
 
 export function tabDoubleClick(
   tabId: number,
   windowId: number,
-  tabSerialId: number,
-  windowSerialId: number,
+  tabUid: UID,
+  windowUid: UID,
   state: State,
   url: string
 ) {
   if (state === State.SAVED) {
-    openTab(tabSerialId, windowSerialId, url)
+    openTab(tabUid, windowUid, url)
   } else if (state === State.OPEN || state === State.DISCARDED) {
     window.browser.runtime.sendMessage({
       action: 'focusTab',
@@ -100,40 +80,63 @@ export function tabDoubleClick(
   }
 }
 
+export function toggleCollapseTab(tabUid: UID) {
+  window.browser.runtime.sendMessage({
+    action: 'toggleCollapseTab',
+    tabUid: tabUid,
+  })
+}
+
+export function tabIndentIncrease(tabs: Array<Tab>) {
+  const tabUids = tabs.map((tab) => tab.uid)
+  window.browser.runtime.sendMessage({
+    action: 'tabIndentIncrease',
+    tabUids: tabUids,
+  })
+}
+
+export function tabIndentDecrease(tabs: Array<Tab>) {
+  const tabUids = tabs.map((tab) => tab.uid)
+  window.browser.runtime.sendMessage({
+    action: 'tabIndentDecrease',
+    tabUids: tabUids,
+  })
+}
+
 // ==============================
 // Window Messages
 // ==============================
 
-export function closeWindow(windowId: number, windowSerialId: number) {
+export function closeWindow(windowId: number, windowUid: UID) {
   window.browser.runtime.sendMessage({
     action: 'closeWindow',
     windowId: windowId,
-    windowSerialId: windowSerialId,
+    windowUid: windowUid,
   })
 }
 
 export function closeWindows(windows: Array<Window>) {
   windows.forEach((window) => {
-    closeWindow(window.id, window.serialId)
+    closeWindow(window.id, window.uid)
   })
 }
 
-export function saveWindow(windowId: number, windowSerialId: number) {
+export function saveWindow(windowId: number, windowUid: UID) {
   window.browser.runtime.sendMessage({
     action: 'saveWindow',
     windowId: windowId,
-    windowSerialId: windowSerialId,
+    windowUid: windowUid,
   })
 }
 
 export function saveWindows(windows: Array<Window>) {
   windows.forEach((window) => {
-    saveWindow(window.id, window.serialId)
+    saveWindow(window.id, window.uid)
   })
 }
 
 export function windowDoubleClick(
-  windowSerialId: number,
+  windowUid: UID,
   windowId: number,
   state: State
 ) {
@@ -141,7 +144,7 @@ export function windowDoubleClick(
   if (state === State.SAVED) {
     window.browser.runtime.sendMessage({
       action: 'openWindow',
-      windowSerialId: windowSerialId,
+      windowUid: windowUid,
     })
   } else if (state === State.OPEN) {
     window.browser.runtime.sendMessage({
@@ -149,4 +152,29 @@ export function windowDoubleClick(
       windowId: windowId,
     })
   }
+}
+
+export function toggleCollapseWindow(windowUid: UID) {
+  window.browser.runtime.sendMessage({
+    action: 'toggleCollapseWindow',
+    windowUid: windowUid,
+  })
+}
+
+// ==============================
+// Tree Messages
+// ==============================
+export function deselectAllItems() {
+  window.browser.runtime.sendMessage({
+    action: 'deselectAllItems',
+  })
+}
+
+// ==============================
+// Debug Messages
+// ==============================
+export function printSessionTree() {
+  window.browser.runtime.sendMessage({
+    action: 'printSessionTree',
+  })
 }
