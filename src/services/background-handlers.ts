@@ -143,7 +143,7 @@ async function tabsOnCreated(tab: browser.tabs.Tab): Promise<void> {
     }
     Tree.addTab(
       tab.active,
-      tab.windowId,
+      window.uid,
       tab.id,
       false,
       tab.discarded ? State.DISCARDED : State.OPEN,
@@ -266,7 +266,7 @@ async function tabsOnMoved(
     // place in last position
     Tree.addTab(
       tab.active ?? false,
-      window.id,
+      window.uid,
       tab.id,
       false,
       tab.state,
@@ -279,7 +279,7 @@ async function tabsOnMoved(
     const rightTabIndex = window.tabs.findIndex((tab) => tab.id === rightTabId)
     Tree.addTab(
       tab.active ?? false,
-      window.id,
+      window.uid,
       tab.id,
       false,
       tab.state,
@@ -347,7 +347,7 @@ async function tabsOnAttached(
   if (tabToRightId === undefined) {
     Tree.addTab(
       tab.active,
-      attachInfo.newWindowId,
+      window.uid,
       tabId,
       false,
       tab.discarded ? State.DISCARDED : State.OPEN,
@@ -362,7 +362,7 @@ async function tabsOnAttached(
     )
     Tree.addTab(
       tab.active,
-      attachInfo.newWindowId,
+      window.uid,
       tabId,
       false,
       tab.discarded ? State.DISCARDED : State.OPEN,

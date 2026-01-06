@@ -10,7 +10,7 @@ import { State, Tab } from '@/types/session-tree'
  * Adds a tab to the session tree.
  *
  * @param {boolean} active - Whether the tab is active.
- * @param {number} windowId - The ID of the window containing the tab.
+ * @param {UID} windowUID - The UID of the window containing the tab.
  * @param {number} tabId - The ID of the tab to add.
  * @param {boolean} selected - Whether the tab is selected.
  * @param {State} state - The state of the tab.
@@ -21,7 +21,7 @@ import { State, Tab } from '@/types/session-tree'
  */
 export function addTab(
   active: boolean,
-  windowId: number,
+  windowUID: UID,
   tabId: number,
   selected: boolean,
   state: State,
@@ -30,10 +30,10 @@ export function addTab(
   index?: number,
   parentUid?: UID
 ): void {
-  console.log('Tab Added in background.ts', windowId, tabId, title, url)
-  const window = Tree.windowsList.find((w) => w.id === windowId)
+  console.log('Tab Added in background.ts', windowUID, tabId, title, url)
+  const window = Tree.windowsByUid.get(windowUID)
   if (!window) {
-    console.error('Error adding tab, could not find window:', windowId)
+    console.error('Error adding tab, could not find window:', windowUID)
     return
   }
   const tab: Tab = {
