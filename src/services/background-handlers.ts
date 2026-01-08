@@ -323,6 +323,12 @@ async function tabsOnAttached(
   attachInfo: browser.tabs._OnAttachedAttachInfo
 ): Promise<void> {
   console.debug('Tab Attached:', tabId, attachInfo)
+  const extensionTab = await OnCreatedQueue.isNewTabExtensionGenerated(tabId)
+  if (extensionTab) {
+    console.log('tabsOnAttached: Tab created by extension, ignoring: ', tabId)
+    return
+  }
+  console.log('tabsOnAttached: Processing attached tab: ', tabId)
   if (attachInfo.newWindowId === undefined || tabId === undefined) {
     console.error('Tab or Window ID is undefined')
     return
@@ -337,6 +343,11 @@ async function tabsOnAttached(
     console.error('Tab not found in window')
     return
   }
+
+  // if tab is already added to tree, return
+  const existingTab = window.tabs.find((t) => t.id === tabId)
+  if (existingTab) return
+
   // get the id of the tab to the right in the browser
   const tabToRight = await browser.tabs.query({
     windowId: attachInfo.newWindowId,
@@ -433,6 +444,14 @@ function onMessage(message: Messages.SessionTreeMessage): void {
     Tree.tabIndentIncrease(message.tabUids)
   } else if (message.action === 'tabIndentDecrease') {
     Tree.tabIndentDecrease(message.tabUids)
+  } else if (message.action === 'moveTabs') {
+    Tree.moveTabs(
+      message.tabUIDs,
+      message.targetWindowUid,
+      message.targetIndex,
+      message.parentUid,
+      message.copy
+    )
   } else if (message.action === 'printSessionTree') {
     Tree.printSessionTree()
   }

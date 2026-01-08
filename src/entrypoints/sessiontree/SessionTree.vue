@@ -1,6 +1,7 @@
 <script lang="ts" setup>
 import IconChevronRight from '@/assets/chevron-right.svg'
 import TreeItem from '@/components/TreeItem.vue'
+import { DragAndDrop } from '@/services/drag-and-drop'
 import { FaviconService } from '@/services/favicons'
 import * as Messages from '@/services/foreground-messages'
 import { SessionTree } from '@/services/foreground-tree'
@@ -112,7 +113,16 @@ function onClick() {
 </script>
 
 <template>
-  <div class="sessiontree" @contextmenu.prevent @click="onClick">
+  <div
+    class="sessiontree"
+    @contextmenu.prevent
+    @click="onClick"
+    @dragend="DragAndDrop.onDragEnd"
+    @dragenter="DragAndDrop.onDragEnter"
+    @dragleave="DragAndDrop.onDragLeave"
+    @dragover.prevent="DragAndDrop.onDragMove"
+    @drop.stop.prevent="DragAndDrop.onDrop"
+  >
     <button @click="getTabTree">Get Tab Tree</button>
     <div class="hiddenAssets" style="display: none">
       <svg>

@@ -212,8 +212,13 @@ export async function createWindowAndWait(
   if (properties?.url) {
     // Handle both string and string[] cases
     tabCount = Array.isArray(properties.url) ? properties.url.length : 1
-    OnCreatedQueue.pendingTabCount += tabCount
   }
+  // case when creating window with specific tabIds (e.g., moving tabs to new window)
+  if (properties?.tabId) {
+    tabCount += Array.isArray(properties.tabId) ? properties.tabId.length : 1
+  }
+  if (tabCount > 0) OnCreatedQueue.pendingTabCount += tabCount
+
   const window = await browser.windows
     .create(properties || {})
     .catch((error) => {

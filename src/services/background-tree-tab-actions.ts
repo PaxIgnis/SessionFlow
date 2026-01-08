@@ -29,7 +29,7 @@ export function addTab(
   url: string,
   index?: number,
   parentUid?: UID
-): void {
+): UID | void {
   console.log('Tab Added in background.ts', windowUID, tabId, title, url)
   const window = Tree.windowsByUid.get(windowUID)
   if (!window) {
@@ -60,7 +60,8 @@ export function addTab(
       if (siblingTabCount === 0 && parent) parent.isParent = true
 
       tab.parentUid = parent?.uid
-      tab.indentLevel = parent?.indentLevel ?? 1
+      // set indent level one more than parent, or default to 1
+      tab.indentLevel = parent?.indentLevel ? parent?.indentLevel + 1 : 1
     } else {
       // else match indent level and parentUid of the tab to the right
       const tabToRight = window.tabs[index]
@@ -79,10 +80,11 @@ export function addTab(
   Tree.tabsByUid.set(tab.uid, window.tabs[window.tabs.indexOf(tab)])
   Tree.recomputeSessionTree()
   DeferredEventsQueue.processDeferredTabEvents(tabId)
+  return tab.uid
 }
 
 /**
- * Removes a tab from the session tree and updates the state.
+ * Removes a tab from the session tree.
  *
  * @param {UID} tabUid - The UID of the tab to be removed.
  */
@@ -829,5 +831,259 @@ function increaseIndentRecursively(nodes: Tab[], childrenMap: Map<UID, Tab[]>) {
     node.indentLevel = (node.indentLevel ?? 1) + 1
     const children = childrenMap.get(node.uid) || []
     if (children.length) increaseIndentRecursively(children, childrenMap)
+  }
+}
+
+/**
+ * Moves a list of tabs to a specified position within a target window.
+ * Tabs can be from more than one window.
+ *
+ * @param {UID[]} tabUIDs - Unsorted list of tabs to move in the tree
+ * @param {UID} targetWindowUid - The UID of the target window where tabs will be moved
+ * @param {number} targetIndex - The index in the target window's tab list where tabs will be inserted
+ * @param {boolean} copy - Whether to copy the tabs instead of moving them
+ */
+export async function moveTabs(
+  tabUIDs: UID[],
+  targetWindowUid: UID,
+  targetIndex: number,
+  parentUid?: UID,
+  copy: boolean = false
+): Promise<void> {
+  // TODO: implement copy functionality
+  console.log(
+    `moveTabs: Moving tabs to window ${targetWindowUid} at index ${targetIndex}`
+  )
+  const tabs: Tab[] = []
+  for (const uid of tabUIDs) {
+    const tab = Tree.tabsByUid.get(uid)
+    if (tab) {
+      tabs.push({ ...tab })
+    } else {
+      console.error(`Tab with UID ${uid} not found`)
+    }
+  }
+
+  // first sort tabs in descending order of how they appear in the tree
+  tabs.sort((a, b) => {
+    const winIndexA = Tree.windowsList.findIndex((w) => w.uid === a.windowUid)
+    const winIndexB = Tree.windowsList.findIndex((w) => w.uid === b.windowUid)
+    if (winIndexA === -1 || winIndexB === -1) return 0
+    if (winIndexA !== winIndexB) return winIndexA - winIndexB
+
+    const win = Tree.windowsByUid.get(a.windowUid)
+    if (!win) return 0
+    const indexA = win.tabs.findIndex((t) => t.uid === a.uid)
+    const indexB = win.tabs.findIndex((t) => t.uid === b.uid)
+    if (indexA === -1 || indexB === -1) return 0
+    return indexA - indexB
+  })
+
+  // check if destination window and target index are valid
+  const targetWindow = Tree.windowsByUid.get(targetWindowUid)
+  if (!targetWindow) {
+    console.error(`Target window with UID ${targetWindowUid} not found`)
+    return
+  }
+  if (targetIndex < 0 || targetIndex > targetWindow.tabs.length) {
+    console.error(
+      `Invalid target index ${targetIndex} for window ${targetWindowUid}`
+    )
+    // if index is invalid, set to last position
+    targetIndex = targetWindow.tabs.length
+  }
+
+  // move each tab
+  for (const tab of tabs) {
+    // check if removing tab will affect index
+    if (
+      !copy &&
+      tab.windowUid === targetWindowUid &&
+      targetWindow.tabs.findIndex((t) => t.uid === tab.uid) < targetIndex
+    ) {
+      targetIndex--
+    }
+
+    await moveTab(tab.uid, targetWindowUid, targetIndex, parentUid)
+    targetIndex++
+  }
+}
+
+/**
+ * Moves a single tab to a specified position within a target window.
+ * Handles both saved and open tabs.
+ *
+ * @param {UID} tabUID - The UID of the tab to move.
+ * @param {UID} targetWindowUid - The UID of the target window where the tab will be moved.
+ * @param {number} targetIndex - The index in the target window's tab list where the tab will be inserted.
+ * @param {UID} [parentUid] - Optional UID of the parent tab, used to calculate indent.
+ * @param {boolean} [copy=false] - Whether to copy the tab instead of moving.
+ */
+export async function moveTab(
+  tabUID: UID,
+  targetWindowUid: UID,
+  targetIndex: number,
+  parentUid?: UID,
+  copy: boolean = false
+): Promise<void> {
+  // TODO: implement copy functionality
+  console.log(
+    'moveTab: ',
+    tabUID,
+    targetWindowUid,
+    targetIndex,
+    parentUid,
+    copy
+  )
+  // check if tab and target window exists
+  const tab = Tree.tabsByUid.get(tabUID)
+  const targetWindow = Tree.windowsByUid.get(targetWindowUid)
+  if (!tab || !targetWindow) {
+    console.error(`moveTab: Tab or target window not found`)
+    return
+  }
+
+  // if tab is not open in browser, just update session tree
+  if (tab.state === State.SAVED) {
+    // remove tab from current window
+    removeTab(tab.uid)
+
+    // add tab to target window at target index
+    addTab(
+      false,
+      targetWindow.uid,
+      tab.id,
+      tab.selected,
+      tab.state,
+      tab.title,
+      tab.url,
+      targetIndex,
+      parentUid
+    )
+  }
+  // else if tab is open in browser
+  else if (tab.state === State.OPEN || tab.state === State.DISCARDED) {
+    // calculate target index for the browser by counting only opened tabs between 0 and targetIndex
+    let targetIndexInBrowser = 0
+    for (let i = 0; i < targetIndex; i++) {
+      const targetTabFromIndex = targetWindow.tabs[i]
+      if (!targetTabFromIndex || !targetTabFromIndex.state) continue
+      if (
+        targetTabFromIndex.state === State.OPEN ||
+        targetTabFromIndex.state === State.DISCARDED
+      ) {
+        targetIndexInBrowser++
+      }
+    }
+
+    // move tab in browser, but first check if target window needs to be created
+    if (targetWindow.state === State.SAVED) {
+      // copy the tab item to the new window
+      const newTabUid = addTab(
+        tab.active ? true : false,
+        targetWindow.uid,
+        tab.id,
+        tab.selected,
+        tab.state,
+        tab.title,
+        tab.url,
+        targetIndex,
+        parentUid
+      )
+      if (!newTabUid) {
+        console.error(
+          'moveTab: Error adding tab to target window in session tree'
+        )
+        return
+      }
+
+      // create the window first
+      Tree.updateWindowState(targetWindowUid, State.OPEN)
+      const properties: browser.windows._CreateCreateData = {}
+      properties.tabId = tab.id
+      // TODO: use window position from saved window if setting is enabled
+
+      try {
+        const window = await OnCreatedQueue.createWindowAndWait(
+          properties
+        ).catch((error) => {
+          console.error('Error creating window:', error)
+          // revert changes since window wasn't created
+          Tree.updateWindowState(targetWindowUid, State.SAVED)
+          Tree.updateTabState(newTabUid, State.SAVED)
+          return
+        })
+        if (!window) {
+          console.error('Window is undefined')
+          return
+        }
+        // because Firefox doesn't support opening unfocused windows, we send focus back
+        if (Tree.sessionTreeWindowId) {
+          Tree.focusWindow({ windowId: Tree.sessionTreeWindowId })
+        }
+        if (!window.id) {
+          throw new Error('Window ID is undefined')
+        }
+        // then update the saved window object id to represent the newly opened window
+        Tree.updateWindowId(targetWindowUid, window.id)
+        const newTab = window.tabs![0]
+        Tree.updateTabId(newTabUid, newTab.id!)
+        Tree.updateTabState(newTabUid, State.OPEN)
+      } catch (error) {
+        console.error('Error opening window:', error)
+      }
+    }
+    // else the target window is already open, just handle the move
+    else {
+      // manually remove and add tab in session tree, then move in browser
+
+      // remove tab from current window
+      removeTab(tab.uid)
+
+      let active = false
+      if (
+        (targetWindow.activeTabId === undefined ||
+          targetWindow.uid === tab.windowUid) &&
+        tab.active
+      )
+        active = true
+
+      // add tab to target window at target index
+      addTab(
+        active,
+        targetWindow.uid,
+        tab.id,
+        tab.selected,
+        tab.state,
+        tab.title,
+        tab.url,
+        targetIndex,
+        parentUid
+      )
+      // TODO: create a 'moveTabAndWait' flow to safeguard against the tabid changing after move?
+      // handle move
+      browser.tabs
+        .move(tab.id, {
+          windowId: targetWindow.id,
+          index: targetIndexInBrowser,
+        })
+        .catch((error) => {
+          console.error('Error moving tab in browser:', error)
+          return
+        })
+        .then((moved) => {
+          const movedTab = Array.isArray(moved) ? moved[0] : moved
+          // tab moved successfully in browser, now verify tab id in session tree matches
+          const newTab = targetWindow.tabs.find((t) => t.id === movedTab?.id)
+          if (!newTab) console.error('Moved tab not found in session tree')
+          if (newTab && newTab.id !== tab.id)
+            console.error(
+              'Tab ID mismatch after move. TabID:',
+              newTab.id,
+              'Expected:',
+              tab.id
+            )
+        })
+    }
   }
 }

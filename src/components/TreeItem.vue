@@ -1,12 +1,20 @@
 <script lang="ts" setup>
 import { TAB_LOADING } from '@/defaults/favicons'
 import { ContextMenu } from '@/services/context-menu'
+import { DragAndDrop } from '@/services/drag-and-drop'
 import { FaviconService } from '@/services/favicons'
 import * as Messages from '@/services/foreground-messages'
 import { SessionTree } from '@/services/foreground-tree'
 import { Selection } from '@/services/selection'
 import { ContextMenuType } from '@/types/context-menu'
-import { SelectionType, State, Tab, Window } from '@/types/session-tree'
+import {
+  DragInfo,
+  DragType,
+  SelectionType,
+  State,
+  Tab,
+  Window,
+} from '@/types/session-tree'
 import { computed } from 'vue'
 
 const props = defineProps<{
@@ -14,12 +22,82 @@ const props = defineProps<{
   faviconService: FaviconService
 }>()
 
+function onDragStart(e: DragEvent) {
+  // collect dragged items info
+  let items = Selection.getSelectedItems(getType(props.item))
+  console.debug('Drag started for items:', items, 'origin item:', props.item)
+
+  // if the dragged item is not in the selection, add it by simulating a ctrl+click
+  if (!items.find((it) => it.uid === props.item.uid)) {
+    Selection.selectItem(
+      props.item,
+      getType(props.item),
+      new MouseEvent('click', {
+        bubbles: true,
+        cancelable: true,
+        ctrlKey: true,
+      })
+    )
+  }
+  items = Selection.getSelectedItems(getType(props.item))
+
+  console.debug('Final dragged items:', items)
+
+  const dragInfo: DragInfo = {
+    dragType:
+      getType(props.item) === SelectionType.TAB
+        ? DragType.TAB
+        : DragType.WINDOW,
+    items: items,
+  }
+
+  // initialize drag-and-drop operation
+  DragAndDrop.start(dragInfo)
+
+  // prepare native drag data
+  if (e.dataTransfer) {
+    const uris = []
+    const urls = []
+    const plain = []
+
+    if (isTab(props.item)) {
+      for (const item of items) {
+        uris.push((item as Tab).url)
+        uris.push(`# ${item.title}`)
+        urls.push(`<a href="${(item as Tab).url}">${item.title}</a>`)
+        plain.push((item as Tab).url)
+      }
+    } else if (isWindow(props.item)) {
+      for (const item of items) {
+        const title = item.title ? item.title : `Window id ${item.id}`
+        urls.push(`<span>${title}</span>`)
+        plain.push(title)
+      }
+    }
+
+    // set native drag data
+    e.dataTransfer.setData(
+      'application/x-sessionflow-draganddrop',
+      JSON.stringify(dragInfo)
+    )
+    e.dataTransfer.setData('text/x-moz-url', uris.join('\r\n'))
+    if (isTab(props.item))
+      e.dataTransfer.setData('text/uri-list', uris.join('\r\n'))
+    e.dataTransfer.setData('text/html', urls.join('\r\n'))
+    e.dataTransfer.setData('text/plain', plain.join('\r\n'))
+  }
+}
+
 function isWindow(item: Tab | Window): item is Window {
   return (item as Window).tabs !== undefined
 }
 
 function isTab(item: Tab | Window): item is Tab {
   return (item as Tab).url !== undefined
+}
+
+function getType(item: Tab | Window): SelectionType {
+  return isWindow(item) ? SelectionType.WINDOW : SelectionType.TAB
 }
 
 /*
@@ -133,7 +211,11 @@ const childrenOpen = computed(() => {
 
 <template>
   <div
-    class="tree-item"
+    class="tree-item drag-and-drop-target"
+    draggable="true"
+    @dragstart="onDragStart"
+    :drag-and-drop-id="String(item.uid)"
+    :drag-and-drop-type="getType(item) === SelectionType.TAB ? 'tab' : 'window'"
     :class="[
       'indentLevel-' + (item.indentLevel ?? 0),
       {
@@ -544,5 +626,40 @@ const childrenOpen = computed(() => {
 
 .tree-item {
   user-select: none;
+}
+
+/* Drag-over visual indicators */
+.tree-item.drag-over-above::before {
+  content: '';
+  position: absolute;
+  left: calc(16px + var(--prepend-width, 16px) * (var(--indent-level, 0) + 1));
+  right: 8px;
+  height: 2px;
+  top: -1px;
+  background: var(--drag-and-drop-foreground);
+  z-index: 20;
+  border-radius: 2px;
+}
+
+.tree-item.drag-over-below::after {
+  content: '';
+  position: absolute;
+  left: calc(16px + var(--prepend-width, 16px) * (var(--indent-level, 0) + 1));
+  right: 8px;
+  height: 2px;
+  bottom: -1px;
+  background: var(--drag-and-drop-foreground);
+  z-index: 20;
+  border-radius: 2px;
+}
+
+.tree-item.drag-over-mid,
+.tree-item.drag-over-above,
+.tree-item.drag-over-below {
+  background: var(--drag-and-drop-hover);
+}
+
+.tree-item.drag-over-mid {
+  background: var(--drag-and-drop-background);
 }
 </style>

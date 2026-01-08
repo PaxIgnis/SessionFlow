@@ -103,6 +103,23 @@ export function tabIndentDecrease(tabs: Array<Tab>) {
   })
 }
 
+export function moveTabs(
+  tabUIDs: Array<UID>,
+  targetWindowUid: UID,
+  targetIndex: number,
+  parentUid: UID | undefined,
+  copy: boolean = false
+) {
+  window.browser.runtime.sendMessage({
+    action: 'moveTabs',
+    tabUIDs: tabUIDs,
+    targetWindowUid: targetWindowUid,
+    targetIndex: targetIndex,
+    parentUid: parentUid,
+    copy: copy,
+  })
+}
+
 // ==============================
 // Window Messages
 // ==============================

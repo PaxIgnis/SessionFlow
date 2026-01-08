@@ -115,6 +115,15 @@ export function getSelectedTabs(): Array<Tab> {
     .map((selectedItem) => selectedItem.item as Tab)
 }
 
+export function getSelectedItems(type: SelectionType): Array<Window | Tab> {
+  if (type === SelectionType.WINDOW) {
+    return getSelectedWindows()
+  } else if (type === SelectionType.TAB) {
+    return getSelectedTabs()
+  }
+  return []
+}
+
 /**
  * Called when right-clicking an item to open context menu.
  * Current logic: if the item is not selected, select it. If ctrl/meta key is pressed, also include other items already selected,

@@ -52,7 +52,7 @@ export async function initializeWindows(): Promise<void> {
 }
 
 /**
- * Serializes the session tree by assigning serial IDs to windows and tabs.
+ * Verifys visibility and indent levels of tree items.
  */
 export function recomputeSessionTree(): void {
   computeVisibility()
