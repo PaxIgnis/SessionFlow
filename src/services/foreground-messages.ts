@@ -178,6 +178,19 @@ export function toggleCollapseWindow(windowUid: UID) {
   })
 }
 
+export function moveWindows(
+  windowUIDs: Array<UID>,
+  targetIndex: number,
+  copy: boolean = false
+) {
+  window.browser.runtime.sendMessage({
+    action: 'moveWindows',
+    windowUIDs: windowUIDs,
+    targetIndex: targetIndex,
+    copy: copy,
+  })
+}
+
 // ==============================
 // Tree Messages
 // ==============================

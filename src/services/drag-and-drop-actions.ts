@@ -119,8 +119,11 @@ export function onDrop(e: DragEvent): void {
   let dropParentUid: UID | undefined = undefined
   let targetWindowUid: UID | undefined = undefined
   const id = DragAndDrop.dragState.destinationId
-  // if drop target is a tab
-  if (DragAndDrop.dragState.destinationType === DropType.TAB) {
+  // if src and drop target is type tab
+  if (
+    DragAndDrop.dragState.destinationType === DropType.TAB &&
+    DragAndDrop.dragState.sourceType === DragType.TAB
+  ) {
     const destinationWindow = SessionTree.reactiveWindowsList.value.find(
       (win) => win.tabs.find((tab) => tab.uid === id)
     )
@@ -167,16 +170,25 @@ export function onDrop(e: DragEvent): void {
     const destinationWindowIndex =
       SessionTree.reactiveWindowsList.value.findIndex((win) => win.uid === id)
     if (destinationWindowIndex === -1 || !destinationWindow) return
-    // dropping as window above
-    if (DragAndDrop.dragState.dropPosition === DropPosition.ABOVE) {
+    // dropping as window above (src window only)
+    if (
+      DragAndDrop.dragState.dropPosition === DropPosition.ABOVE &&
+      DragAndDrop.dragState.sourceType === DragType.WINDOW
+    ) {
       dropIndex = destinationWindowIndex
     }
-    // dropping as window below
-    else if (DragAndDrop.dragState.dropPosition === DropPosition.BELOW) {
+    // dropping as window below (src window only)
+    else if (
+      DragAndDrop.dragState.dropPosition === DropPosition.BELOW &&
+      DragAndDrop.dragState.sourceType === DragType.WINDOW
+    ) {
       dropIndex = destinationWindowIndex + 1
     }
-    // dropping as tab in window
-    else if (DragAndDrop.dragState.dropPosition === DropPosition.MID) {
+    // dropping as tab in window (mid) (src tab only)
+    else if (
+      DragAndDrop.dragState.dropPosition === DropPosition.MID &&
+      DragAndDrop.dragState.sourceType === DragType.TAB
+    ) {
       // TODO: Add setting to control whether new child tabs are added at start or end of children
       dropIndex = 0 // currently always adds as first tab
     }
@@ -206,7 +218,11 @@ export function onDrop(e: DragEvent): void {
     DragAndDrop.dragState.destinationType === DropType.WINDOW
   ) {
     console.log('Dropping window onto window')
-    // TODO: Implement moveWindows in foreground messages and tree
+    Messages.moveWindows(
+      DragAndDrop.dragInfo!.items.map((win) => win.uid),
+      dropIndex,
+      false
+    )
   }
   clearDragIndicators(DragAndDrop.dragState.prevEl)
   reset()

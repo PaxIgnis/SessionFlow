@@ -93,6 +93,13 @@ export interface MoveTabsMessage {
   copy: boolean
 }
 
+export interface MoveWindowsMessage {
+  action: 'moveWindows'
+  windowUIDs: UID[]
+  targetIndex: number
+  copy: boolean
+}
+
 export interface PrintSessionTreeMessage {
   action: 'printSessionTree'
 }
@@ -114,4 +121,5 @@ export type SessionTreeMessage =
   | TabIndentDecreaseMessage
   | DeselectAllItemsMessage
   | MoveTabsMessage
+  | MoveWindowsMessage
   | PrintSessionTreeMessage

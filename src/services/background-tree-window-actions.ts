@@ -5,7 +5,7 @@ import { setTabVisibilityRecursively } from '@/services/background-tree-tab-acti
 import { Settings } from '@/services/settings'
 import * as TreeUtils from '@/services/tree-utils'
 import * as Utils from '@/services/utils'
-import { State, WindowPosition } from '@/types/session-tree'
+import { State, Window, WindowPosition } from '@/types/session-tree'
 
 /**
  * Sets the state of the window and all tabs to SAVED and resets the IDs.
@@ -411,5 +411,67 @@ export function toggleCollapseWindow(windowUid: UID): void {
     setTabVisibilityRecursively(roots, childrenMap, false)
   } else {
     setTabVisibilityRecursively(roots, childrenMap, true)
+  }
+}
+
+/**
+ * Moves windows to a new position in the session tree.
+ *
+ * @param {UID[]} windowUIDs - The UIDs of the windows to move.
+ * @param {number} targetIndex - The index to move the windows to.
+ * @param {boolean} copy - Whether to copy the windows instead of moving them.
+ */
+export function moveWindows(
+  windowUIDs: UID[],
+  targetIndex: number,
+  copy: boolean
+): void {
+  console.log(
+    `Moving windows ${windowUIDs} to index ${targetIndex} (copy: ${copy})`
+  )
+  const windows: Window[] = []
+  for (const uid of windowUIDs) {
+    const window = Tree.windowsByUid.get(uid)
+    if (window) {
+      windows.push(window)
+    } else {
+      console.error(`Window with UID ${uid} not found`)
+    }
+  }
+
+  // first sort windows in order they appear in session tree
+  windows.sort((a, b) => {
+    const indexA = Tree.windowsList.indexOf(a)
+    const indexB = Tree.windowsList.indexOf(b)
+    return indexA - indexB
+  })
+
+  // check if targetIndex is valid
+  if (targetIndex < 0 || targetIndex > Tree.windowsList.length) {
+    console.error(`Invalid target index: ${targetIndex}`)
+    targetIndex = Tree.windowsList.length
+  }
+
+  // move each window
+  for (const window of windows) {
+    const currentIndex = Tree.windowsList.indexOf(window)
+    if (currentIndex === -1) {
+      console.error(`Window with UID ${window.uid} not found in windowsList`)
+      continue
+    }
+
+    // adjust targetIndex if window is before targetIndex and not copying
+    if (!copy && currentIndex < targetIndex) {
+      targetIndex--
+    }
+
+    // remove window from current position
+    if (!copy) {
+      Tree.windowsList.splice(currentIndex, 1)
+    }
+
+    // insert window at target position
+    Tree.windowsList.splice(targetIndex, 0, window)
+    targetIndex++
   }
 }

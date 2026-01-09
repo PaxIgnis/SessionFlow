@@ -452,6 +452,8 @@ function onMessage(message: Messages.SessionTreeMessage): void {
       message.parentUid,
       message.copy
     )
+  } else if (message.action === 'moveWindows') {
+    Tree.moveWindows(message.windowUIDs, message.targetIndex, message.copy)
   } else if (message.action === 'printSessionTree') {
     Tree.printSessionTree()
   }
