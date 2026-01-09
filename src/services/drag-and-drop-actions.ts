@@ -2,6 +2,7 @@ import { DragAndDrop } from '@/services/drag-and-drop'
 import * as Messages from '@/services/foreground-messages'
 import { SessionTree } from '@/services/foreground-tree'
 import { Selection } from '@/services/selection'
+import { Settings } from '@/services/settings'
 import {
   DragInfo,
   DragType,
@@ -18,13 +19,20 @@ export function start(dragInfo: DragInfo): void {
 }
 
 export function onDragEnd(e: DragEvent): void {
-  console.debug('drag-and-drop-actions.onDragEnd: Drag ended:', e)
   reset()
+  if (!Settings.values.enableDragAndDrop) return
+  console.debug('drag-and-drop-actions.onDragEnd: Drag ended:', e)
 }
 
 export function onDragEnter(e: DragEvent): void {
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'none'
+  if (!Settings.values.enableDragAndDrop) return
   if (!DragAndDrop.dragState.dragEventStarted) {
-    // TODO: Handle drop from external source here
+    if (!Settings.values.enableDropFromExternalSources) return
+    // TODO: Handle drop from external source verification here
+    console.warn('drag-and-drop-actions.onDragEnter: External drag enter', e)
+
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
     return
   }
 
@@ -42,6 +50,9 @@ export function onDragEnter(e: DragEvent): void {
   if (!type || !id) {
     return
   }
+
+  // TODO: drop effect can also be copy when it is implemented
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
 
   // TODO: Validate drop target here, later
   if (type === 'tab') {
@@ -65,7 +76,15 @@ export function onDragLeave(e: DragEvent): void {
 }
 
 export function onDragMove(e: DragEvent): void {
-  if (!DragAndDrop.dragState.dragEventStarted) return
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'none'
+  if (!Settings.values.enableDragAndDrop) return
+  // verify external drag is valid before setting drop effect
+  if (!DragAndDrop.dragState.dragEventStarted) {
+    if (!Settings.values.enableDropFromExternalSources) return
+    // TODO: Handle drop from external source verification here
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
+    return
+  }
   updateDropTarget(e)
 
   const el = (e.target as HTMLElement)?.closest(
@@ -81,6 +100,8 @@ export function onDragMove(e: DragEvent): void {
 
   // add drag indicator classes to visualize drop position
   if (DragAndDrop.dragState.isValidDropTarget) {
+    // TODO: drop effect can also be copy when it is implemented
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
     switch (DragAndDrop.dragState.dropPosition) {
       case DropPosition.ABOVE:
         el.classList.add('drag-over-above')
@@ -101,6 +122,7 @@ export function onDragMove(e: DragEvent): void {
 }
 
 export function onDrop(e: DragEvent): void {
+  if (!Settings.values.enableDragAndDrop) return
   updateDropTarget(e)
 
   if (
@@ -247,6 +269,8 @@ function reset(): void {
   })
 
   DragAndDrop.dragState.prevEl = null
+
+  if (!Settings.values.enableDragAndDrop) return
 
   Selection.clearSelection()
 }

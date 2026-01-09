@@ -6,6 +6,7 @@ import { FaviconService } from '@/services/favicons'
 import * as Messages from '@/services/foreground-messages'
 import { SessionTree } from '@/services/foreground-tree'
 import { Selection } from '@/services/selection'
+import { Settings } from '@/services/settings'
 import '@/styles/variables.css'
 import { FaviconCacheEntry } from '@/types/favicons'
 import { VisibleWindow, Window } from '@/types/session-tree'
@@ -83,6 +84,11 @@ onMounted(() => {
   })
 })
 
+onMounted(async () => {
+  await Settings.loadSettingsFromStorage()
+  Settings.setupSettingsUpdatedListener()
+})
+
 // reset sessionTree to non-ref object to avoid zombie dead object
 onBeforeUnmount(() => {
   console.log('Unmounted')
@@ -118,9 +124,9 @@ function onClick() {
     @contextmenu.prevent
     @click="onClick"
     @dragend="DragAndDrop.onDragEnd"
-    @dragenter="DragAndDrop.onDragEnter"
+    @dragenter.stop.prevent="DragAndDrop.onDragEnter"
     @dragleave="DragAndDrop.onDragLeave"
-    @dragover.prevent="DragAndDrop.onDragMove"
+    @dragover.stop.prevent="DragAndDrop.onDragMove"
     @drop.stop.prevent="DragAndDrop.onDrop"
   >
     <button @click="getTabTree">Get Tab Tree</button>

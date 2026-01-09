@@ -6,6 +6,7 @@ import { FaviconService } from '@/services/favicons'
 import * as Messages from '@/services/foreground-messages'
 import { SessionTree } from '@/services/foreground-tree'
 import { Selection } from '@/services/selection'
+import { Settings } from '@/services/settings'
 import { ContextMenuType } from '@/types/context-menu'
 import {
   DragInfo,
@@ -23,6 +24,7 @@ const props = defineProps<{
 }>()
 
 function onDragStart(e: DragEvent) {
+  if (!Settings.values.enableDragAndDrop) return
   // collect dragged items info
   let items = Selection.getSelectedItems(getType(props.item))
   console.debug('Drag started for items:', items, 'origin item:', props.item)

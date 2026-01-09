@@ -20,6 +20,10 @@ export interface Settings {
   doubleClickOnOpenTab: (typeof SETTINGS_TYPES.doubleClickOnOpenTab)[number]
   doubleClickOnSavedTab: (typeof SETTINGS_TYPES.doubleClickOnSavedTab)[number]
 
+  // Drag and Drop
+  enableDragAndDrop: boolean
+  enableDropFromExternalSources: boolean
+
   // Favicons
   fetchMissingFaviconsOnStartup: boolean
   refreshFaviconsAfterPeriodOfTime: boolean

@@ -1,16 +1,18 @@
 <script lang="ts" setup>
-import { ref, onMounted, onUnmounted } from 'vue'
-import SettingsGeneral from './components/settings.general.vue'
-import SettingsWindows from './components/settings.windows.vue'
-import SettingsTabs from './components/settings.tabs.vue'
-import Favicons from './components/settings.favicons.vue'
-import { STRINGS } from '@/types/strings'
 import '@/styles/variables.css'
+import { STRINGS } from '@/types/strings'
+import { onMounted, onUnmounted, ref } from 'vue'
+import SettingsDragAndDrop from './components/settings.drag-and-drop.vue'
+import Favicons from './components/settings.favicons.vue'
+import SettingsGeneral from './components/settings.general.vue'
+import SettingsTabs from './components/settings.tabs.vue'
+import SettingsWindows from './components/settings.windows.vue'
 
 const sections = [
   { id: 'settings_general', level: 0 },
   { id: 'settings_windows', level: 0 },
   { id: 'settings_tabs', level: 0 },
+  { id: 'settings_drag_and_drop', level: 0 },
   { id: 'settings_favicons', level: 0 },
   { id: 'settings_storage', level: 0 },
 ]
@@ -95,6 +97,7 @@ onUnmounted(() => {
       <SettingsGeneral />
       <SettingsWindows />
       <SettingsTabs />
+      <SettingsDragAndDrop />
       <Favicons />
       <!-- <Storage /> -->
     </div>

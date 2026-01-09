@@ -426,9 +426,6 @@ export function moveWindows(
   targetIndex: number,
   copy: boolean
 ): void {
-  console.log(
-    `Moving windows ${windowUIDs} to index ${targetIndex} (copy: ${copy})`
-  )
   const windows: Window[] = []
   for (const uid of windowUIDs) {
     const window = Tree.windowsByUid.get(uid)

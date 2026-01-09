@@ -22,6 +22,10 @@ export const DEFAULT_SETTINGS: Settings = {
   doubleClickOnOpenTab: 'focus',
   doubleClickOnSavedTab: 'open',
 
+  // Drag and Drop
+  enableDragAndDrop: true,
+  enableDropFromExternalSources: false,
+
   // Favicons
   fetchMissingFaviconsOnStartup: false,
   refreshFaviconsAfterPeriodOfTime: false,
