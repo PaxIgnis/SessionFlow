@@ -30,6 +30,14 @@ import { STRINGS } from '@/types/strings'
       :disabled="!Settings.values.enableDragAndDrop"
       @update="Settings.saveSettingsToStorage()"
     />
+    <ToggleButton
+      class="dependent-element"
+      label="On Drag, Include Children of Selected Items"
+      v-model="Settings.values.includeChildrenOfSelectedItems"
+      :options="OPTIONS.includeChildrenOfSelectedItems"
+      :disabled="!Settings.values.enableDragAndDrop"
+      @update="Settings.saveSettingsToStorage()"
+    />
   </section>
 </template>
 

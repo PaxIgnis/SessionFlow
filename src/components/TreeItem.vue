@@ -27,6 +27,7 @@ function onDragStart(e: DragEvent) {
   if (!Settings.values.enableDragAndDrop) return
   let items: Array<Tab | Window> = []
 
+  // determine which items to drag based on settings
   if (Settings.values.includeSelectedItemsWithDraggedItem) {
     // collect dragged items info
     items = Selection.getSelectedItems(getType(props.item))
@@ -48,6 +49,43 @@ function onDragStart(e: DragEvent) {
   } else {
     // only drag the single item
     items = [props.item]
+  }
+  // include children of selected tabs if applicable
+  if (
+    getType(props.item) === SelectionType.TAB &&
+    (Settings.values.includeChildrenOfSelectedItems === 'always' ||
+      Settings.values.includeChildrenOfSelectedItems === 'collapsed')
+  ) {
+    const additionalItems: Tab[] = []
+    for (const item of items) {
+      if (!isTab(item)) continue
+      if (
+        (item.isParent &&
+          Settings.values.includeChildrenOfSelectedItems === 'always') ||
+        (item.isParent &&
+          item.collapsed &&
+          Settings.values.includeChildrenOfSelectedItems === 'collapsed')
+      ) {
+        // add all children of this parent tab
+        const window = SessionTree.reactiveWindowsList.value.find(
+          (w) => w.uid === item.windowUid
+        )
+        if (!window) continue
+        const allTabs = window.tabs
+        const parentIndex = allTabs.findIndex((t) => t.uid === item.uid)
+        if (parentIndex === -1) continue
+        const parentIndent = item.indentLevel ?? 1
+        for (let i = parentIndex + 1; i < allTabs.length; i++) {
+          const t = allTabs[i]
+          const indent = t.indentLevel ?? 0
+          if (indent <= parentIndent) break // reached sibling/ancestor
+          if (!additionalItems.find((it) => it.uid === t.uid)) {
+            additionalItems.push(t)
+          }
+        }
+      }
+    }
+    items = items.concat(additionalItems)
   }
 
   console.debug('Final dragged items:', items)

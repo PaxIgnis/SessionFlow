@@ -24,6 +24,7 @@ export interface Settings {
   enableDragAndDrop: boolean
   enableDropFromExternalSources: boolean
   includeSelectedItemsWithDraggedItem: boolean
+  includeChildrenOfSelectedItems: (typeof SETTINGS_TYPES.includeChildrenOfSelectedItems)[number]
 
   // Favicons
   fetchMissingFaviconsOnStartup: boolean
@@ -35,6 +36,7 @@ export interface Settings {
 export const SETTINGS_TYPES = {
   doubleClickOnOpenTab: ['save', 'close', 'reload', 'duplicate', 'focus'],
   doubleClickOnSavedTab: ['open', 'remove', 'duplicate'],
+  includeChildrenOfSelectedItems: ['always', 'collapsed', 'never'],
   refreshFaviconsAfterPeriodOfTimeUnit: [
     'seconds',
     'minutes',
@@ -61,6 +63,11 @@ export const OPTIONS = {
     { label: 'Open', value: 'open' },
     { label: 'Remove', value: 'remove' },
     { label: 'Duplicate', value: 'duplicate' },
+  ],
+  includeChildrenOfSelectedItems: [
+    { label: 'Always', value: 'always' },
+    { label: 'Only if Collapsed', value: 'collapsed' },
+    { label: 'Never', value: 'never' },
   ],
   refreshFaviconsAfterPeriodOfTimeUnit: [
     { label: 'Seconds', value: 'seconds' },
