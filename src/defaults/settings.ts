@@ -25,6 +25,7 @@ export const DEFAULT_SETTINGS: Settings = {
   // Drag and Drop
   enableDragAndDrop: true,
   enableDropFromExternalSources: false,
+  includeSelectedItemsWithDraggedItem: true,
 
   // Favicons
   fetchMissingFaviconsOnStartup: false,

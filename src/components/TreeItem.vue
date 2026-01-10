@@ -25,23 +25,30 @@ const props = defineProps<{
 
 function onDragStart(e: DragEvent) {
   if (!Settings.values.enableDragAndDrop) return
-  // collect dragged items info
-  let items = Selection.getSelectedItems(getType(props.item))
-  console.debug('Drag started for items:', items, 'origin item:', props.item)
+  let items: Array<Tab | Window> = []
 
-  // if the dragged item is not in the selection, add it by simulating a ctrl+click
-  if (!items.find((it) => it.uid === props.item.uid)) {
-    Selection.selectItem(
-      props.item,
-      getType(props.item),
-      new MouseEvent('click', {
-        bubbles: true,
-        cancelable: true,
-        ctrlKey: true,
-      })
-    )
+  if (Settings.values.includeSelectedItemsWithDraggedItem) {
+    // collect dragged items info
+    items = Selection.getSelectedItems(getType(props.item))
+    console.debug('Drag started for items:', items, 'origin item:', props.item)
+
+    // if the dragged item is not in the selection, add it by simulating a ctrl+click
+    if (!items.find((it) => it.uid === props.item.uid)) {
+      Selection.selectItem(
+        props.item,
+        getType(props.item),
+        new MouseEvent('click', {
+          bubbles: true,
+          cancelable: true,
+          ctrlKey: true,
+        })
+      )
+    }
+    items = Selection.getSelectedItems(getType(props.item))
+  } else {
+    // only drag the single item
+    items = [props.item]
   }
-  items = Selection.getSelectedItems(getType(props.item))
 
   console.debug('Final dragged items:', items)
 

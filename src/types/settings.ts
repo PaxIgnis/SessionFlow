@@ -23,6 +23,7 @@ export interface Settings {
   // Drag and Drop
   enableDragAndDrop: boolean
   enableDropFromExternalSources: boolean
+  includeSelectedItemsWithDraggedItem: boolean
 
   // Favicons
   fetchMissingFaviconsOnStartup: boolean
