@@ -893,6 +893,8 @@ export async function moveTabs(
     targetIndex = targetWindow.tabs.length
   }
 
+  const newUidMapping: Map<UID, UID> = new Map()
+
   // move each tab
   for (const tab of tabs) {
     // check if removing tab will affect index
@@ -904,7 +906,22 @@ export async function moveTabs(
       targetIndex--
     }
 
-    await moveTab(tab.uid, targetWindowUid, targetIndex, parentUid)
+    let newParentUid: UID | undefined = undefined
+    if (
+      Settings.values.tryToMaintainHierarchyOfDraggedItems &&
+      tab.parentUid &&
+      newUidMapping.has(tab.parentUid as UID)
+    ) {
+      newParentUid = newUidMapping.get(tab.parentUid as UID)
+    }
+
+    const newTabUid = await moveTab(
+      tab.uid,
+      targetWindowUid,
+      targetIndex,
+      newParentUid ?? parentUid
+    )
+    if (newTabUid) newUidMapping.set(tab.uid, newTabUid)
     targetIndex++
   }
 }
@@ -925,7 +942,7 @@ export async function moveTab(
   targetIndex: number,
   parentUid?: UID,
   copy: boolean = false
-): Promise<void> {
+): Promise<UID | void> {
   // TODO: implement copy functionality
   console.log(
     'moveTab: ',
@@ -949,7 +966,7 @@ export async function moveTab(
     removeTab(tab.uid)
 
     // add tab to target window at target index
-    addTab(
+    return addTab(
       false,
       targetWindow.uid,
       tab.id,
@@ -1029,6 +1046,7 @@ export async function moveTab(
         const newTab = window.tabs![0]
         Tree.updateTabId(newTabUid, newTab.id!)
         Tree.updateTabState(newTabUid, State.OPEN)
+        return newTabUid
       } catch (error) {
         console.error('Error opening window:', error)
       }
@@ -1049,7 +1067,7 @@ export async function moveTab(
         active = true
 
       // add tab to target window at target index
-      addTab(
+      const newTabUid = addTab(
         active,
         targetWindow.uid,
         tab.id,
@@ -1062,7 +1080,7 @@ export async function moveTab(
       )
       // TODO: create a 'moveTabAndWait' flow to safeguard against the tabid changing after move?
       // handle move
-      browser.tabs
+      await browser.tabs
         .move(tab.id, {
           windowId: targetWindow.id,
           index: targetIndexInBrowser,
@@ -1084,6 +1102,8 @@ export async function moveTab(
               tab.id
             )
         })
+      return newTabUid
     }
   }
+  return
 }

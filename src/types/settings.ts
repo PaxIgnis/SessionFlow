@@ -25,6 +25,7 @@ export interface Settings {
   enableDropFromExternalSources: boolean
   includeSelectedItemsWithDraggedItem: boolean
   includeChildrenOfSelectedItems: (typeof SETTINGS_TYPES.includeChildrenOfSelectedItems)[number]
+  tryToMaintainHierarchyOfDraggedItems: boolean
 
   // Favicons
   fetchMissingFaviconsOnStartup: boolean

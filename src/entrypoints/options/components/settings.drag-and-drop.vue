@@ -38,6 +38,17 @@ import { STRINGS } from '@/types/strings'
       :disabled="!Settings.values.enableDragAndDrop"
       @update="Settings.saveSettingsToStorage()"
     />
+    <ToggleButton
+      class="dependent-element"
+      label="On Drag, Try to Maintain Relative Hierarchy of Selected Items and Their Children"
+      v-model="Settings.values.tryToMaintainHierarchyOfDraggedItems"
+      :options="OPTIONS.boolean"
+      :disabled="
+        !Settings.values.enableDragAndDrop ||
+        Settings.values.includeChildrenOfSelectedItems === 'never'
+      "
+      @update="Settings.saveSettingsToStorage()"
+    />
   </section>
 </template>
 
