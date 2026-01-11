@@ -27,7 +27,8 @@ export const DEFAULT_SETTINGS: Settings = {
   enableDropFromExternalSources: false,
   includeSelectedItemsWithDraggedItem: true,
   includeChildrenOfSelectedItems: 'collapsed',
-  tryToMaintainHierarchyOfDraggedItems: false,
+  tryToMaintainHierarchyOfDraggedItems: true,
+  tryToMaintainCollapsedStateOfDraggedItems: true,
 
   // Favicons
   fetchMissingFaviconsOnStartup: false,

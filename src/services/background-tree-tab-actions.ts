@@ -514,7 +514,6 @@ export function reloadTab(message: { tabId: number }): void {
  * When expanding, child tab visibility respects their own collapsed states and ancestor states.
  *
  * @param {UID} tabUid - The UID of the tab to toggle.
- * @param {UID} windowUid - The UID of the window containing the tab.
  */
 export function toggleCollapseTab(tabUid: UID): void {
   console.log(`Toggling collapse for tab ${tabUid}`)
@@ -923,6 +922,20 @@ export async function moveTabs(
     )
     if (newTabUid) newUidMapping.set(tab.uid, newTabUid)
     targetIndex++
+  }
+
+  // loop through moved tabs that were collapsed and re-collapse them if they have children
+  if (Settings.values.tryToMaintainCollapsedStateOfDraggedItems) {
+    for (const tab of tabs) {
+      if (!tab.collapsed) continue
+      const newTabUid = newUidMapping.get(tab.uid)
+      if (!newTabUid) continue
+      const newTab = Tree.tabsByUid.get(newTabUid)
+      if (!newTab) continue
+      if (newTab.isParent) {
+        toggleCollapseTab(newTabUid)
+      }
+    }
   }
 }
 

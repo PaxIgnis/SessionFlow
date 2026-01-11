@@ -26,6 +26,7 @@ export interface Settings {
   includeSelectedItemsWithDraggedItem: boolean
   includeChildrenOfSelectedItems: (typeof SETTINGS_TYPES.includeChildrenOfSelectedItems)[number]
   tryToMaintainHierarchyOfDraggedItems: boolean
+  tryToMaintainCollapsedStateOfDraggedItems: boolean
 
   // Favicons
   fetchMissingFaviconsOnStartup: boolean

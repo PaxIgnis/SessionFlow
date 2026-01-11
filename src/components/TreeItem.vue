@@ -79,7 +79,10 @@ function onDragStart(e: DragEvent) {
           const t = allTabs[i]
           const indent = t.indentLevel ?? 0
           if (indent <= parentIndent) break // reached sibling/ancestor
-          if (!additionalItems.find((it) => it.uid === t.uid)) {
+          if (
+            !additionalItems.find((it) => it.uid === t.uid) &&
+            !items.find((it) => it.uid === t.uid)
+          ) {
             additionalItems.push(t)
           }
         }
