@@ -368,3 +368,46 @@ function updateDropTarget(e: DragEvent): void {
   }
   DragAndDrop.dragState.isValidDropTarget = true
 }
+
+/**
+ * Draws text on a canvas context, truncating it with an ellipsis if it exceeds the specified maximum width.
+ *
+ * @param {CanvasRenderingContext2D} ctx - The canvas rendering context.
+ * @param {string} text - The text to be drawn.
+ * @param {number} x - The x-coordinate where the text should start.
+ * @param {number} y - The y-coordinate where the text should be drawn.
+ * @param {number} maxWidth - The maximum width allowed for the text.
+ */
+export function drawTextEllipsisOnCanvas(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  maxWidth: number
+) {
+  if (ctx.measureText(text).width <= maxWidth) {
+    ctx.fillText(text, x, y)
+    return
+  }
+  const ell = '…'
+  let low = 0
+  let high = text.length
+  let fit = ''
+  // binary search for the max substring that fits
+  while (low < high) {
+    const mid = Math.floor((low + high) / 2)
+    const substr = text.slice(0, mid) + ell
+    if (ctx.measureText(substr).width <= maxWidth) {
+      low = mid + 1
+      fit = substr
+    } else {
+      high = mid
+    }
+  }
+  if (!fit) {
+    // fallback: draw ellipsis only
+    ctx.fillText(ell, x, y)
+  } else {
+    ctx.fillText(fit, x, y)
+  }
+}

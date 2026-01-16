@@ -135,6 +135,103 @@ function onDragStart(e: DragEvent) {
       e.dataTransfer.setData('text/uri-list', uris.join('\r\n'))
     e.dataTransfer.setData('text/html', urls.join('\r\n'))
     e.dataTransfer.setData('text/plain', plain.join('\r\n'))
+
+    // prepare and set drag image
+    try {
+      // update preview text/title for the drag image
+      let title = ''
+      let body = [] as string[]
+      if (dragInfo.items && dragInfo.items.length > 0) {
+        const item = dragInfo.items[0]
+
+        if (isTab(item)) {
+          if (dragInfo.items.length === 1) {
+            title = (item as Tab).title || `Tab id ${(item as Tab).id}`
+            body = [(item as Tab).url || '']
+          } else {
+            title = `${dragInfo.items.length} tabs`
+            body = dragInfo.items
+              .map((i) => (i as Tab).url || '')
+              .filter(Boolean)
+              .slice(0, 15)
+          }
+        } else {
+          if (dragInfo.items.length === 1) {
+            title = (item as Window).title || `Window id ${(item as Window).id}`
+            body = [`Including ${(item as Window).tabs.length} tabs`]
+          } else {
+            title = `${dragInfo.items.length} windows`
+            body = dragInfo.items
+              .map(
+                (i) =>
+                  (i as Window).title || `Window id ${(i as Window).id}` || ''
+              )
+              .filter(Boolean)
+              .slice(0, 15)
+          }
+        }
+      }
+
+      const padding = 8
+      const lineHeight = 18
+      const titleFont = 'bold 14px system-ui'
+      const bodyFont = '14px system-ui'
+
+      // measure and cap text width to 300 CSS pixels, draw with ellipsis if needed
+      const canvas = document.createElement('canvas')
+      const ctx = canvas.getContext('2d')!
+      ctx.font = titleFont
+      const measuredTitle = ctx.measureText(title).width
+      let measuredMax = measuredTitle
+      ctx.font = bodyFont
+      for (const line of body) {
+        const measuredSubtitle = ctx.measureText(line).width
+        measuredMax = Math.max(measuredMax, measuredSubtitle)
+      }
+
+      const MAX_TEXT_WIDTH = 284 // CSS pixels
+      const textWidth = Math.min(measuredMax, MAX_TEXT_WIDTH)
+
+      canvas.width = Math.ceil(textWidth + padding * 2)
+      canvas.height = Math.ceil(
+        lineHeight * (body && body.length > 0 ? body.length + 1 : 1) + padding
+      )
+
+      // draw background and border
+      ctx.fillStyle = '#fff'
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+      ctx.fillStyle = '#111' // title color
+      ctx.font = titleFont
+      ctx.textBaseline = 'top'
+      DragAndDrop.drawTextEllipsisOnCanvas(
+        ctx,
+        title,
+        padding,
+        padding,
+        textWidth
+      )
+      ctx.font = bodyFont
+      if (body && body.length > 0) {
+        for (let i = 0; i < body.length; i++) {
+          ctx.fillStyle = '#555'
+          DragAndDrop.drawTextEllipsisOnCanvas(
+            ctx,
+            body[i],
+            padding,
+            padding + lineHeight * (i + 1),
+            textWidth
+          )
+        }
+      }
+
+      e.dataTransfer.setDragImage(canvas, -10, -10)
+    } catch (error) {
+      console.error(
+        'onDragStart: Error preparing and setting drag image:',
+        error
+      )
+    }
   }
 }
 
