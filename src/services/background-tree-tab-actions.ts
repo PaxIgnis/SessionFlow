@@ -131,15 +131,28 @@ export function removeTab(tabUid: UID): void {
 }
 
 /**
- * Updates the state, title, URL and id of a tab in the session tree.
+ * Updates all shallow properties of a tab in the session tree.
+ * Note: does not update nested objects within the tab.
  *
- * @param {Object} id - An object containing the windowId and tabId of the tab to be updated.
+ * @param {Object} id - An object containing EITHER the (windowId and tabId) OR (tabUid) of the tab to be updated.
  * @param {Partial<Tab>} tabContents - An object containing the updated properties for the tab.
  */
 export function updateTab(
-  id: { windowId: number; tabId: number },
+  id: { windowId?: number; tabId?: number; tabUid?: UID },
   tabContents: Partial<Tab>
 ): void {
+  if (id.tabUid) {
+    const tab = Tree.tabsByUid.get(id.tabUid)
+    if (tab) {
+      Object.assign(tab, tabContents)
+    }
+    return
+  }
+  if (!id.windowId || !id.tabId) {
+    console.error('Error updating tab, invalid id:', id)
+    return
+  }
+
   const window = Tree.windowsList.find((w) => w.id === id.windowId)
   if (!window) {
     DeferredEventsQueue.addDeferredWindowEvent(id.windowId, () =>
