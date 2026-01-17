@@ -1,9 +1,8 @@
-import { defineConfig } from 'wxt'
 import createSvgSpritePlugin from 'vite-plugin-svg-sprite'
+import { defineConfig } from 'wxt'
 
 // See https://wxt.dev/api/config.html
 export default defineConfig({
-  extensionApi: 'chrome',
   manifest: {
     action: {
       default_area: 'navbar',
