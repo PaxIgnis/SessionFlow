@@ -127,6 +127,10 @@ export function removeTab(tabUid: UID): void {
   Tree.existingUidsSet.delete(tab.uid)
   Tree.tabsByUid.delete(tab.uid)
   window.tabs.splice(index, 1)
+  // if this was the last tab in the window, remove the window
+  if (window.tabs.length === 0) {
+    Tree.removeWindow(window.uid)
+  }
   Tree.recomputeSessionTree()
 }
 
@@ -988,6 +992,14 @@ export async function moveTab(
 
   // if tab is not open in browser, just update session tree
   if (tab.state === State.SAVED) {
+    // handle the case when the tab is being moved within the same window and is the only tab
+    if (
+      tab.windowUid === targetWindowUid &&
+      !copy &&
+      targetWindow.tabs.length === 1
+    ) {
+      return tab.uid
+    }
     // remove tab from current window
     removeTab(tab.uid)
 
