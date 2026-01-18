@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -16,8 +16,16 @@
   </head>
   <body>
     <p id="message">Redirecting</p>
-    <a id="target-url" href="#" target="_self"></a>
-    <span id="copied-message" class="copied-message">Copied!</span>
+    <a
+      id="target-url"
+      href="#"
+      target="_self"
+    ></a>
+    <span
+      id="copied-message"
+      class="copied-message"
+      >Copied!</span
+    >
     <script>
       document.addEventListener('DOMContentLoaded', () => {
         const params = new URLSearchParams(window.location.search)

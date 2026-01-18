@@ -6,7 +6,10 @@ import { STRINGS } from '@/types/strings'
 </script>
 
 <template>
-  <section id="settings_tabs" class="content-panel-section">
+  <section
+    id="settings_tabs"
+    class="content-panel-section"
+  >
     <h2>{{ STRINGS.settings_tabs }}</h2>
     <ToggleButton
       label="Focus Tab When Opened"

@@ -2,6 +2,7 @@ import globals from 'globals'
 import pluginJs from '@eslint/js'
 import tseslint from 'typescript-eslint'
 import pluginVue from 'eslint-plugin-vue'
+import eslintConfigPrettier from 'eslint-config-prettier/flat'
 
 /** @type {import('eslint').Linter.Config[]} */
 export default [
@@ -19,4 +20,5 @@ export default [
       'vue/multi-word-component-names': 'off',
     },
   },
+  eslintConfigPrettier,
 ]

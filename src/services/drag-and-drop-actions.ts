@@ -37,7 +37,7 @@ export function onDragEnter(e: DragEvent): void {
   }
 
   const el = (e.target as HTMLElement)?.closest(
-    '.drag-and-drop-target'
+    '.drag-and-drop-target',
   ) as HTMLElement | null
   if (!el) return
   if (!el.getAttribute) return
@@ -63,7 +63,7 @@ export function onDragEnter(e: DragEvent): void {
   } else if (type === 'window') {
     // TODO: Switch to windowsByUid when implemented in foreground tree
     const window = SessionTree.reactiveWindowsList.value.find(
-      (win) => win.uid === id
+      (win) => win.uid === id,
     )
     if (!window) return
     DragAndDrop.dragState.destinationId = id
@@ -88,7 +88,7 @@ export function onDragMove(e: DragEvent): void {
   updateDropTarget(e)
 
   const el = (e.target as HTMLElement)?.closest(
-    '.drag-and-drop-target'
+    '.drag-and-drop-target',
   ) as HTMLElement | null
 
   if (!el) return
@@ -147,13 +147,13 @@ export function onDrop(e: DragEvent): void {
     DragAndDrop.dragState.sourceType === DragType.TAB
   ) {
     const destinationWindow = SessionTree.reactiveWindowsList.value.find(
-      (win) => win.tabs.find((tab) => tab.uid === id)
+      (win) => win.tabs.find((tab) => tab.uid === id),
     )
     targetWindowUid = destinationWindow?.uid
     if (!destinationWindow) return
     const destTab = destinationWindow.tabs.find((tab) => tab.uid === id)
     const destTabIndex = destinationWindow.tabs.findIndex(
-      (tab) => tab.uid === id
+      (tab) => tab.uid === id,
     )
     if (destTabIndex === -1 || !destTab) return
 
@@ -186,7 +186,7 @@ export function onDrop(e: DragEvent): void {
   // if drop target is a window
   else if (DragAndDrop.dragState.destinationType === DropType.WINDOW) {
     const destinationWindow = SessionTree.reactiveWindowsList.value.find(
-      (win) => win.uid === id
+      (win) => win.uid === id,
     )
     targetWindowUid = destinationWindow?.uid
     const destinationWindowIndex =
@@ -230,7 +230,7 @@ export function onDrop(e: DragEvent): void {
         targetWindowUid as UID,
         dropIndex,
         dropParentUid,
-        false
+        false,
       )
     }
   }
@@ -243,7 +243,7 @@ export function onDrop(e: DragEvent): void {
     Messages.moveWindows(
       DragAndDrop.dragInfo!.items.map((win) => win.uid),
       dropIndex,
-      false
+      false,
     )
   }
   clearDragIndicators(DragAndDrop.dragState.prevEl)
@@ -261,7 +261,7 @@ function reset(): void {
 
   // clear any drag indicators anywhere in the DOM
   const elements = document.querySelectorAll<HTMLElement>(
-    '.drag-over-above, .drag-over-mid, .drag-over-below'
+    '.drag-over-above, .drag-over-mid, .drag-over-below',
   )
 
   elements.forEach((el) => {
@@ -292,7 +292,7 @@ function clearDragIndicators(el: HTMLElement | null) {
  */
 function updateDropTarget(e: DragEvent): void {
   const el = (e.target as HTMLElement)?.closest(
-    '.drag-and-drop-target'
+    '.drag-and-drop-target',
   ) as HTMLElement | null
 
   DragAndDrop.dragState.isValidDropTarget = false
@@ -383,7 +383,7 @@ export function drawTextEllipsisOnCanvas(
   text: string,
   x: number,
   y: number,
-  maxWidth: number
+  maxWidth: number,
 ) {
   if (ctx.measureText(text).width <= maxWidth) {
     ctx.fillText(text, x, y)

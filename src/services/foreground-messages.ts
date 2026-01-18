@@ -67,7 +67,7 @@ export function tabDoubleClick(
   tabUid: UID,
   windowUid: UID,
   state: State,
-  url: string
+  url: string,
 ) {
   if (state === State.SAVED) {
     openTab(tabUid, windowUid, url)
@@ -108,7 +108,7 @@ export function moveTabs(
   targetWindowUid: UID,
   targetIndex: number,
   parentUid: UID | undefined,
-  copy: boolean = false
+  copy: boolean = false,
 ) {
   window.browser.runtime.sendMessage({
     action: 'moveTabs',
@@ -155,7 +155,7 @@ export function saveWindows(windows: Array<Window>) {
 export function windowDoubleClick(
   windowUid: UID,
   windowId: number,
-  state: State
+  state: State,
 ) {
   console.log('Window double clicked. Window ID: ', windowId)
   if (state === State.SAVED) {
@@ -181,7 +181,7 @@ export function toggleCollapseWindow(windowUid: UID) {
 export function moveWindows(
   windowUIDs: Array<UID>,
   targetIndex: number,
-  copy: boolean = false
+  copy: boolean = false,
 ) {
   window.browser.runtime.sendMessage({
     action: 'moveWindows',

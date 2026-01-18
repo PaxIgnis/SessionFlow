@@ -57,7 +57,7 @@ export async function addWindow(windowId: number): Promise<void> {
     // TODO: use newWindow variable instead after foreground context independent data source is implemented
     Tree.windowsByUid.set(
       newWindow.uid,
-      Tree.windowsList[Tree.windowsList.length - 1]
+      Tree.windowsList[Tree.windowsList.length - 1],
     )
     Tree.recomputeSessionTree()
     Tree.updateWindowTabs(windowId)
@@ -160,7 +160,7 @@ export function updateWindowId(windowUid: UID, newWindowId: number): void {
  */
 export function updateWindowPosition(
   windowId: number,
-  position: WindowPosition
+  position: WindowPosition,
 ): void {
   const window = Tree.windowsList.find((w) => w.id === windowId)
   if (window) {
@@ -424,7 +424,7 @@ export function toggleCollapseWindow(windowUid: UID): void {
 export function moveWindows(
   windowUIDs: UID[],
   targetIndex: number,
-  copy: boolean
+  copy: boolean,
 ): void {
   const windows: Window[] = []
   for (const uid of windowUIDs) {

@@ -16,7 +16,10 @@ function updateLocation() {
 </script>
 
 <template>
-  <section id="settings_windows" class="content-panel-section">
+  <section
+    id="settings_windows"
+    class="content-panel-section"
+  >
     <h2>{{ STRINGS.settings_windows }}</h2>
     <ToggleButton
       label="Focus Window When Opened"

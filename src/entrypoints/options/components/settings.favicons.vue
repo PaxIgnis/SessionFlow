@@ -6,7 +6,10 @@ import { STRINGS } from '@/types/strings'
 </script>
 
 <template>
-  <section id="settings_favicons" class="content-panel-section">
+  <section
+    id="settings_favicons"
+    class="content-panel-section"
+  >
     <h2>{{ STRINGS.settings_favicons }}</h2>
     <ToggleButton
       label="Fetch Missing Favicons On Startup"

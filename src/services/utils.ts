@@ -35,7 +35,7 @@ export function getRedirectUrl(targetUrl: string, targetTitle: string): string {
  */
 export function isPrivilegedUrl(url: string): boolean {
   const isPrivilegedUrl = PRIVILEGED_URLS.some((privilegedUrl) =>
-    url.startsWith(privilegedUrl)
+    url.startsWith(privilegedUrl),
   )
   const startsWithAbout =
     url.startsWith('about:') &&
@@ -78,7 +78,7 @@ export function createUid(existing: Set<string>): string {
   existing.add(nonUniqueId)
   console.error(
     'Failed to generate unique UID, returning non-unique ID:',
-    nonUniqueId
+    nonUniqueId,
   )
   return nonUniqueId
 }

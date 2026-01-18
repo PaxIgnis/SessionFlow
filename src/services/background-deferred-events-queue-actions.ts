@@ -18,7 +18,7 @@ export function initializeDeferredEventsQueue(): void {
  */
 export function addDeferredWindowEvent(
   windowId: number,
-  event: () => void
+  event: () => void,
 ): void {
   // Ensure the window ID exists in the queue
   if (!DeferredEventsQueue.windows.has(windowId)) {

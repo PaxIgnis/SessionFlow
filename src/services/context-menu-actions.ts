@@ -45,7 +45,7 @@ export function open(type: ContextMenuType): void {
  * @returns items - The array of context menu items.
  */
 export function createContextMenuItems(
-  config: ContextMenuConfig
+  config: ContextMenuConfig,
 ): ContextMenuItem[] {
   const items: ContextMenuItem[] = []
   config.forEach((item) => {
@@ -110,19 +110,19 @@ export function handleContextMenuClick(
   e: MouseEvent,
   window?: Window,
   tab?: Tab,
-  selectionType?: SelectionType
+  selectionType?: SelectionType,
 ): void {
   if (type === ContextMenuType.Window && window) {
     Selection.selectItemForContextMenu(
       window,
       selectionType || SelectionType.WINDOW,
-      e
+      e,
     )
   } else if (type === ContextMenuType.Tab && tab) {
     Selection.selectItemForContextMenu(
       tab,
       selectionType || SelectionType.TAB,
-      e
+      e,
     )
   }
   ContextMenu.open(type)

@@ -28,7 +28,7 @@ export function addTab(
   title: string,
   url: string,
   index?: number,
-  parentUid?: UID
+  parentUid?: UID,
 ): UID | void {
   console.log('Tab Added in background.ts', windowUID, tabId, title, url)
   const window = Tree.windowsByUid.get(windowUID)
@@ -53,7 +53,7 @@ export function addTab(
     if (parentUid) {
       const parent = Tree.tabsByUid.get(parentUid)
       const siblingTabCount = window.tabs.filter(
-        (tab) => tab.parentUid === parentUid
+        (tab) => tab.parentUid === parentUid,
       ).length
 
       // if this is the first child tab, set parent tab's isParent to true
@@ -139,7 +139,7 @@ export function removeTab(tabUid: UID): void {
  */
 export function updateTab(
   id: { windowId?: number; tabId?: number; tabUid?: UID },
-  tabContents: Partial<Tab>
+  tabContents: Partial<Tab>,
 ): void {
   if (id.tabUid) {
     const tab = Tree.tabsByUid.get(id.tabUid)
@@ -156,14 +156,14 @@ export function updateTab(
   const window = Tree.windowsList.find((w) => w.id === id.windowId)
   if (!window) {
     DeferredEventsQueue.addDeferredWindowEvent(id.windowId, () =>
-      Tree.updateTab(id, tabContents)
+      Tree.updateTab(id, tabContents),
     )
     return
   }
   const tab = window.tabs.find((t) => t.id === id.tabId) as Tab
   if (!tab) {
     DeferredEventsQueue.addDeferredTabEvent(id.tabId, () =>
-      Tree.updateTab(id, tabContents)
+      Tree.updateTab(id, tabContents),
     )
     return
   }
@@ -221,7 +221,7 @@ export function setTabSaved(tabUid: UID): void {
  */
 export function tabOnActivated(
   activeInfo: browser.tabs._OnActivatedActiveInfo,
-  tries: number = 0
+  tries: number = 0,
 ): void {
   const window = Tree.windowsList.find((w) => w.id === activeInfo.windowId)
   const activeTab = Tree.windowsList
@@ -295,7 +295,7 @@ export function closeTab(message: { tabId: number; tabUid: UID }): void {
     // update the window state to SAVED and reset id
     if (window) {
       const openTabs = window.tabs.filter(
-        (tab) => tab.state === State.OPEN || tab.state === State.DISCARDED
+        (tab) => tab.state === State.OPEN || tab.state === State.DISCARDED,
       )
       if (window.tabs.length > 0 && openTabs.length === 0) {
         Tree.updateWindowState(window.uid, State.SAVED)
@@ -373,7 +373,7 @@ export async function openTab(message: {
   }
   Tree.updateTabState(
     message.tabUid,
-    message.discarded ? State.DISCARDED : State.OPEN
+    message.discarded ? State.DISCARDED : State.OPEN,
   )
   if (sessionTreeWindow.state === State.SAVED) {
     // if the window is saved, open the window first
@@ -397,7 +397,7 @@ export async function openTab(message: {
           Tree.updateWindowState(message.windowUid, State.SAVED)
           Tree.updateTabState(message.tabUid, State.SAVED)
           return
-        }
+        },
       )
       if (!window) {
         console.error('Window is undefined')
@@ -440,10 +440,10 @@ export async function openTab(message: {
     // find id of first open tab to the right
     const tabToRightIndex = sessionTreeWindow.tabs
       .filter(
-        (tab) => tab.state === State.OPEN || tab.state === State.DISCARDED
+        (tab) => tab.state === State.OPEN || tab.state === State.DISCARDED,
       )
       .findIndex(
-        (tab, index, array) => array[index - 1]?.uid === message.tabUid
+        (tab, index, array) => array[index - 1]?.uid === message.tabUid,
       )
     if (tabToRightIndex !== -1) {
       properties.index = tabToRightIndex - 1
@@ -455,7 +455,7 @@ export async function openTab(message: {
           // revert changes since window wasn't created
           Tree.updateTabState(message.tabUid, State.SAVED)
           return
-        }
+        },
       )
       if (!tab) {
         console.error('Tab is undefined')
@@ -464,7 +464,7 @@ export async function openTab(message: {
       Tree.updateTabId(message.tabUid, tab.id!)
       Tree.updateTabState(
         message.tabUid,
-        tab.discarded ? State.DISCARDED : State.OPEN
+        tab.discarded ? State.DISCARDED : State.OPEN,
       )
     } catch (error) {
       console.error('Error opening tab:', error)
@@ -496,7 +496,7 @@ export function saveTab(message: { tabId: number; tabUid: UID }): void {
     const window = Tree.windowsByUid.get(tab.windowUid)
     if (window) {
       const openTabs = window.tabs.filter(
-        (tab) => tab.state === State.OPEN || tab.state === State.DISCARDED
+        (tab) => tab.state === State.OPEN || tab.state === State.DISCARDED,
       )
       if (openTabs.length === 1) {
         Tree.saveWindow(window.uid)
@@ -578,7 +578,7 @@ export function toggleCollapseTab(tabUid: UID): void {
 export function setTabVisibilityRecursively(
   tabs: Tab[],
   childrenMap: Map<UID, Tab[]>,
-  isVisible: boolean
+  isVisible: boolean,
 ): void {
   for (const tab of tabs) {
     tab.isVisible = isVisible
@@ -607,7 +607,7 @@ export function tabIndentIncrease(tabUids: UID[]): void {
   const win = Tree.windowsByUid.get(tabs[0].windowUid)
   if (!win) {
     console.error(
-      `Window with uid ${tabs[0].windowUid} not found for indent increase`
+      `Window with uid ${tabs[0].windowUid} not found for indent increase`,
     )
     return
   }
@@ -631,7 +631,7 @@ export function tabIndentIncrease(tabUids: UID[]): void {
     const newParent = findParentTab(tab)
     if (!newParent) {
       console.error(
-        `Failed to find new parent for tab ${tab.uid} during indent increase`
+        `Failed to find new parent for tab ${tab.uid} during indent increase`,
       )
       return
     }
@@ -696,7 +696,7 @@ export function tabIndentDecrease(tabUids: UID[]): void {
     // siblings directly below the tab now become its children
     const siblings = childrenMap.get(tab.parentUid!) || []
     const lowerSiblings = siblings.filter(
-      (s) => win.tabs.findIndex((t) => t.uid === s.uid) > tabIndex
+      (s) => win.tabs.findIndex((t) => t.uid === s.uid) > tabIndex,
     )
     if (lowerSiblings.length > 0) {
       tab.isParent = true // now a parent
@@ -711,7 +711,7 @@ export function tabIndentDecrease(tabUids: UID[]): void {
         newParent.isParent = true
       } else {
         console.error(
-          `Failed to find new parent for tab ${tab.uid} during indent decrease`
+          `Failed to find new parent for tab ${tab.uid} during indent decrease`,
         )
       }
     }
@@ -733,7 +733,7 @@ export function tabIndentDecrease(tabUids: UID[]): void {
  */
 function removeDescendantTabs(
   selectedTabs: Tab[],
-  childrenMap: Map<UID, Tab[]>
+  childrenMap: Map<UID, Tab[]>,
 ): Tab[] {
   const skip = new Set<UID>()
   const result: Tab[] = []
@@ -761,7 +761,7 @@ function removeDescendantTabs(
 function collectDescendantTabIds(
   tabs: Tab[],
   childrenMap: Map<UID, Tab[]>,
-  set: Set<UID>
+  set: Set<UID>,
 ): void {
   for (const tab of tabs) {
     if (tab.uid !== undefined) set.add(tab.uid)
@@ -860,11 +860,11 @@ export async function moveTabs(
   targetWindowUid: UID,
   targetIndex: number,
   parentUid?: UID,
-  copy: boolean = false
+  copy: boolean = false,
 ): Promise<void> {
   // TODO: implement copy functionality
   console.log(
-    `moveTabs: Moving tabs to window ${targetWindowUid} at index ${targetIndex}`
+    `moveTabs: Moving tabs to window ${targetWindowUid} at index ${targetIndex}`,
   )
   const tabs: Tab[] = []
   for (const uid of tabUIDs) {
@@ -899,7 +899,7 @@ export async function moveTabs(
   }
   if (targetIndex < 0 || targetIndex > targetWindow.tabs.length) {
     console.error(
-      `Invalid target index ${targetIndex} for window ${targetWindowUid}`
+      `Invalid target index ${targetIndex} for window ${targetWindowUid}`,
     )
     // if index is invalid, set to last position
     targetIndex = targetWindow.tabs.length
@@ -931,7 +931,7 @@ export async function moveTabs(
       tab.uid,
       targetWindowUid,
       targetIndex,
-      newParentUid ?? parentUid
+      newParentUid ?? parentUid,
     )
     if (newTabUid) newUidMapping.set(tab.uid, newTabUid)
     targetIndex++
@@ -967,7 +967,7 @@ export async function moveTab(
   targetWindowUid: UID,
   targetIndex: number,
   parentUid?: UID,
-  copy: boolean = false
+  copy: boolean = false,
 ): Promise<UID | void> {
   // TODO: implement copy functionality
   console.log(
@@ -976,7 +976,7 @@ export async function moveTab(
     targetWindowUid,
     targetIndex,
     parentUid,
-    copy
+    copy,
   )
   // check if tab and target window exists
   const tab = Tree.tabsByUid.get(tabUID)
@@ -1001,7 +1001,7 @@ export async function moveTab(
       tab.title,
       tab.url,
       targetIndex,
-      parentUid
+      parentUid,
     )
   }
   // else if tab is open in browser
@@ -1031,11 +1031,11 @@ export async function moveTab(
         tab.title,
         tab.url,
         targetIndex,
-        parentUid
+        parentUid,
       )
       if (!newTabUid) {
         console.error(
-          'moveTab: Error adding tab to target window in session tree'
+          'moveTab: Error adding tab to target window in session tree',
         )
         return
       }
@@ -1048,7 +1048,7 @@ export async function moveTab(
 
       try {
         const window = await OnCreatedQueue.createWindowAndWait(
-          properties
+          properties,
         ).catch((error) => {
           console.error('Error creating window:', error)
           // revert changes since window wasn't created
@@ -1102,7 +1102,7 @@ export async function moveTab(
         tab.title,
         tab.url,
         targetIndex,
-        parentUid
+        parentUid,
       )
       // TODO: create a 'moveTabAndWait' flow to safeguard against the tabid changing after move?
       // handle move
@@ -1125,7 +1125,7 @@ export async function moveTab(
               'Tab ID mismatch after move. TabID:',
               newTab.id,
               'Expected:',
-              tab.id
+              tab.id,
             )
         })
       return newTabUid

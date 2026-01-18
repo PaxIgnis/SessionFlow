@@ -42,7 +42,7 @@ function onDragStart(e: DragEvent) {
           bubbles: true,
           cancelable: true,
           ctrlKey: true,
-        })
+        }),
       )
     }
     items = Selection.getSelectedItems(getType(props.item))
@@ -68,7 +68,7 @@ function onDragStart(e: DragEvent) {
       ) {
         // add all children of this parent tab
         const window = SessionTree.reactiveWindowsList.value.find(
-          (w) => w.uid === item.windowUid
+          (w) => w.uid === item.windowUid,
         )
         if (!window) continue
         const allTabs = window.tabs
@@ -128,7 +128,7 @@ function onDragStart(e: DragEvent) {
     // set native drag data
     e.dataTransfer.setData(
       'application/x-sessionflow-draganddrop',
-      JSON.stringify(dragInfo)
+      JSON.stringify(dragInfo),
     )
     e.dataTransfer.setData('text/x-moz-url', uris.join('\r\n'))
     if (isTab(props.item))
@@ -164,7 +164,7 @@ function onDragStart(e: DragEvent) {
             body = dragInfo.items
               .map(
                 (i) =>
-                  (i as Window).title || `Window id ${(i as Window).id}` || ''
+                  (i as Window).title || `Window id ${(i as Window).id}` || '',
               )
               .filter(Boolean)
               .slice(0, 15)
@@ -194,7 +194,7 @@ function onDragStart(e: DragEvent) {
 
       canvas.width = Math.ceil(textWidth + padding * 2)
       canvas.height = Math.ceil(
-        lineHeight * (body && body.length > 0 ? body.length + 1 : 1) + padding
+        lineHeight * (body && body.length > 0 ? body.length + 1 : 1) + padding,
       )
 
       // draw background and border
@@ -209,7 +209,7 @@ function onDragStart(e: DragEvent) {
         title,
         padding,
         padding,
-        textWidth
+        textWidth,
       )
       ctx.font = bodyFont
       if (body && body.length > 0) {
@@ -220,7 +220,7 @@ function onDragStart(e: DragEvent) {
             body[i],
             padding,
             padding + lineHeight * (i + 1),
-            textWidth
+            textWidth,
           )
         }
       }
@@ -229,7 +229,7 @@ function onDragStart(e: DragEvent) {
     } catch (error) {
       console.error(
         'onDragStart: Error preparing and setting drag image:',
-        error
+        error,
       )
     }
   }
@@ -266,7 +266,7 @@ const childCount = computed(() => {
     return props.item.tabs.length
   } else if (isTab(props.item)) {
     const win = SessionTree.reactiveWindowsList.value.find(
-      (w) => w.uid === (props.item as Tab).windowUid
+      (w) => w.uid === (props.item as Tab).windowUid,
     )
     if (!win) return 0
     const allTabs = win.tabs
@@ -291,12 +291,12 @@ function itemDblClickAction() {
     Messages.windowDoubleClick(props.item.uid, props.item.id, props.item.state)
   } else if (isTab(props.item)) {
     const window = SessionTree.reactiveWindowsList.value.find(
-      (w) => w.uid === (props.item as Tab).windowUid
+      (w) => w.uid === (props.item as Tab).windowUid,
     )
     if (!window) {
       console.warn(
         'Could not find parent window for tab double-click action',
-        props.item
+        props.item,
       )
       return
     }
@@ -306,7 +306,7 @@ function itemDblClickAction() {
       props.item.uid,
       props.item.windowUid,
       props.item.state,
-      props.item.url
+      props.item.url,
     )
   }
 }
@@ -333,11 +333,11 @@ function closeItemAction() {
 const childrenOpen = computed(() => {
   if (isWindow(props.item)) {
     return props.item.tabs.some(
-      (tab) => tab.state === State.OPEN || tab.state === State.DISCARDED
+      (tab) => tab.state === State.OPEN || tab.state === State.DISCARDED,
     )
   } else if (isTab(props.item)) {
     const window = SessionTree.reactiveWindowsList.value.find(
-      (w) => w.uid === (props.item as Tab).windowUid
+      (w) => w.uid === (props.item as Tab).windowUid,
     )
     if (!window) return false
     const allTabs = window.tabs
@@ -369,10 +369,11 @@ const childrenOpen = computed(() => {
         'tree-item-selected': item.selected === true,
         'tree-item-active': item.active === true,
         'tree-item-active-latest-tab':
-        isTab(item) &&
-        item.active === true &&
-        SessionTree.reactiveWindowsList.value.find(w => w.uid === (item as Tab).windowUid)
-          ?.active === true,
+          isTab(item) &&
+          item.active === true &&
+          SessionTree.reactiveWindowsList.value.find(
+            (w) => w.uid === (item as Tab).windowUid,
+          )?.active === true,
       },
     ]"
     :style="{
@@ -382,7 +383,7 @@ const childrenOpen = computed(() => {
       Selection.selectItem(
         item,
         isTab(item) ? SelectionType.TAB : SelectionType.WINDOW,
-        $event
+        $event,
       )
     "
     @contextmenu.stop="
@@ -391,14 +392,17 @@ const childrenOpen = computed(() => {
         $event,
         isWindow(item) ? item : undefined,
         isTab(item) ? item : undefined,
-        isTab(item) ? SelectionType.TAB : SelectionType.WINDOW
+        isTab(item) ? SelectionType.TAB : SelectionType.WINDOW,
       )
     "
     @dblclick="itemDblClickAction()"
   >
     <span class="tree-item-overlay"></span>
     <span class="tree-item-underlay"></span>
-    <span class="tree-item-hover-menu" @dblclick.stop>
+    <span
+      class="tree-item-hover-menu"
+      @dblclick.stop
+    >
       <span
         v-if="item.state === State.OPEN || item.state === State.DISCARDED"
         class="tree-item-hover-menu-save"
@@ -436,11 +440,17 @@ const childrenOpen = computed(() => {
           @click.stop="toggleCollapsedItem()"
           @dblclick.stop
         >
-          <svg class="collapse-arrow" :class="{ collapsed: item.collapsed }">
+          <svg
+            class="collapse-arrow"
+            :class="{ collapsed: item.collapsed }"
+          >
             <use :xlink:href="'#chevron-right'" />
           </svg>
         </div>
-        <div v-else class="tree-item-action-spacer"></div>
+        <div
+          v-else
+          class="tree-item-action-spacer"
+        ></div>
       </div>
       <div
         v-if="item.collapsed"

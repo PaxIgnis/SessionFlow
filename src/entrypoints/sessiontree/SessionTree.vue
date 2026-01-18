@@ -35,7 +35,7 @@ window.onbeforeunload = () => {
 }
 
 const faviconCache = ref<Map<string, FaviconCacheEntry>>(
-  new Map<string, FaviconCacheEntry>()
+  new Map<string, FaviconCacheEntry>(),
 )
 const faviconService = new FaviconService(undefined, faviconCache.value)
 const backgroundPage =
@@ -43,7 +43,7 @@ const backgroundPage =
 
 const visibleTreeItems = computed<VisibleWindow[]>(() => {
   SessionTree.reactiveWindowsList.value.forEach((w) =>
-    w.tabs.forEach((t) => void t.isVisible)
+    w.tabs.forEach((t) => void t.isVisible),
   )
   return SessionTree.reactiveWindowsList.value.map((w) => ({
     window: w,
@@ -105,7 +105,7 @@ const getTabTree = () => {
   console.log(
     'Session Tree has ',
     SessionTree.reactiveWindowsList.value.length,
-    ' windows'
+    ' windows',
   )
   console.log(SessionTree.reactiveWindowsList.value)
   console.log(SessionTree.reactiveWindowsList)
@@ -130,20 +130,32 @@ function onClick() {
     @drop.stop.prevent="DragAndDrop.onDrop"
   >
     <button @click="getTabTree">Get Tab Tree</button>
-    <div class="hiddenAssets" style="display: none">
+    <div
+      class="hiddenAssets"
+      style="display: none"
+    >
       <svg>
         <use :xlink:href="`#${IconChevronRight}`" />
       </svg>
     </div>
 
-    <template v-for="item in visibleTreeItems" :key="item.window.uid">
-      <TreeItem :item="item.window" :favicon-service="faviconService" />
+    <template
+      v-for="item in visibleTreeItems"
+      :key="item.window.uid"
+    >
+      <TreeItem
+        :item="item.window"
+        :favicon-service="faviconService"
+      />
 
       <template
         v-for="tab in item.visibleTabs"
         :key="`${item.window.uid}-${tab.uid}`"
       >
-        <TreeItem :item="tab" :favicon-service="faviconService" />
+        <TreeItem
+          :item="tab"
+          :favicon-service="faviconService"
+        />
       </template>
     </template>
 

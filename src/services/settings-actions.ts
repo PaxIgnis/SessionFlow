@@ -22,7 +22,7 @@ export async function loadSettingsFromStorage(): Promise<void> {
     try {
       validateAndAddSettingKey(
         key as keyof Settings,
-        settingsFromStorage.settings[key]
+        settingsFromStorage.settings[key],
       )
     } catch (error) {
       console.error(`Error validating settings ${key}:`, error)
@@ -54,7 +54,7 @@ export async function saveSettingsToStorage(): Promise<void> {
  */
 function validateAndAddSettingKey<K extends keyof Settings>(
   key: K,
-  value: unknown
+  value: unknown,
 ): void {
   // first check if the value of the key is a valid value for one of the keys
   // with a custom type from SETTINGS_TYPES
@@ -63,8 +63,8 @@ function validateAndAddSettingKey<K extends keyof Settings>(
     if (!allowedValues.includes(value as (typeof allowedValues)[number])) {
       throw new Error(
         `Invalid value for ${String(key)}: ${String(
-          value
-        )}. Expected one of: ${allowedValues.join(', ')}`
+          value,
+        )}. Expected one of: ${allowedValues.join(', ')}`,
       )
     } else {
       SettingsValues.values[key] = value as Settings[K]
@@ -75,8 +75,8 @@ function validateAndAddSettingKey<K extends keyof Settings>(
     if (typeof value !== expectedType) {
       throw new Error(
         `Invalid type for ${String(
-          key
-        )}: expected ${expectedType}, got ${typeof value}`
+          key,
+        )}: expected ${expectedType}, got ${typeof value}`,
       )
     } else {
       SettingsValues.values[key] = value as Settings[K]

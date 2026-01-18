@@ -11,7 +11,7 @@ export class FaviconService {
 
   constructor(
     config?: FaviconStorageConfig,
-    cache?: Map<string, FaviconCacheEntry>
+    cache?: Map<string, FaviconCacheEntry>,
   ) {
     this.config = { ...FaviconService.DEFAULT_CONFIG, ...config }
     this.cache = cache ? cache : new Map()
@@ -28,7 +28,7 @@ export class FaviconService {
     const cached = await browser.storage.local.get(this.config.storageKey)
     if (!cached?.[this.config.storageKey]) return
     const parsedCache = JSON.parse(
-      cached[this.config.storageKey]
+      cached[this.config.storageKey],
     ) as FaviconCacheEntry[]
     parsedCache.forEach((entry) => {
       this.cache.set(entry.url, entry)
@@ -62,7 +62,7 @@ export class FaviconService {
     try {
       await browser.storage.local.set({
         [this.config.storageKey]: JSON.stringify(
-          Array.from(this.cache.values())
+          Array.from(this.cache.values()),
         ),
       })
     } catch (error) {
@@ -97,7 +97,7 @@ export class FaviconService {
    */
   public async updateFavicon(
     favIconUrl: string,
-    tab: browser.tabs.Tab
+    tab: browser.tabs.Tab,
   ): Promise<void> {
     try {
       // extract the domain from the URL

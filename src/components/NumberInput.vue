@@ -98,7 +98,11 @@ const handleUnitToggle = (value: string | number | boolean) => {
 
 <template>
   <div class="number-container">
-    <label class="number-label" :for="id">{{ props.label }}</label>
+    <label
+      class="number-label"
+      :for="id"
+      >{{ props.label }}</label
+    >
     <div class="number-input-group">
       <input
         :id="id"
@@ -114,7 +118,10 @@ const handleUnitToggle = (value: string | number | boolean) => {
         inputmode="numeric"
         pattern="[0-9]*"
       />
-      <div v-if="units" class="unit-button-group">
+      <div
+        v-if="units"
+        class="unit-button-group"
+      >
         <button
           v-for="unit in units"
           :key="String(unit.value)"

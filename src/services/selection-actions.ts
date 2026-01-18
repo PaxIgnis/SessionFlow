@@ -5,7 +5,7 @@ import { SelectionType, Tab, Window } from '@/types/session-tree'
 export function selectItem(
   item: Window | Tab,
   type: SelectionType,
-  e: MouseEvent
+  e: MouseEvent,
 ) {
   const firstItem = Selection.selectedItems.value[0]
   // If the first item is not of the same type, clear the selection
@@ -45,7 +45,7 @@ export function selectItem(
 
 export function removeSelectedItem(item: Window | Tab, type: SelectionType) {
   const index = Selection.selectedItems.value.findIndex(
-    (selectedItem) => selectedItem.item === item && selectedItem.type === type
+    (selectedItem) => selectedItem.item === item && selectedItem.type === type,
   )
   if (index !== -1) {
     Selection.selectedItems.value.splice(index, 1)
@@ -58,7 +58,7 @@ export function selectMultipleTabsInWindow(firstTab: Tab, lastTab: Tab) {
   Selection.clearSelection()
   // First find all tabs between the firstTab and lastTab
   const window = SessionTree.reactiveWindowsList.value.find(
-    (w) => w.uid === firstTab.windowUid
+    (w) => w.uid === firstTab.windowUid,
   )
   if (!window) {
     console.error('Invalid window selection')
@@ -136,7 +136,7 @@ export function getSelectedItems(type: SelectionType): Array<Window | Tab> {
 export function selectItemForContextMenu(
   item: Window | Tab,
   type: SelectionType,
-  e: MouseEvent
+  e: MouseEvent,
 ): void {
   const firstItem = Selection.selectedItems.value[0]
   // If the first item is not of the same type, clear the selection

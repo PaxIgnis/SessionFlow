@@ -113,7 +113,7 @@ export async function loadSessionTreeFromStorage(): Promise<void> {
       Tree.windowsList.splice(
         0,
         Tree.windowsList.length,
-        ...sessionTree[STORAGE_KEY]
+        ...sessionTree[STORAGE_KEY],
       )
       Tree.windowsList.forEach((window) => {
         window.id = 0
@@ -163,7 +163,7 @@ export async function openSessionTree(): Promise<void> {
   if (Tree.sessionTreeWindowId) {
     const openWindows = await browser.windows.getAll()
     const exists = openWindows.some(
-      (window) => window.id === Tree.sessionTreeWindowId
+      (window) => window.id === Tree.sessionTreeWindowId,
     )
 
     if (exists) {
@@ -181,7 +181,7 @@ export async function openSessionTree(): Promise<void> {
     let bounds
     // get last window position and size from storage
     const sessionTreeWindowConfigLocal = localStorage.getItem(
-      'sessionTreeWindowConfig'
+      'sessionTreeWindowConfig',
     )
     if (sessionTreeWindowConfigLocal) {
       bounds = JSON.parse(sessionTreeWindowConfigLocal)

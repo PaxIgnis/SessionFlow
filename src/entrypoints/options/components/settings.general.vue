@@ -6,7 +6,10 @@ import { STRINGS } from '@/types/strings'
 </script>
 
 <template>
-  <section id="settings_general" class="content-panel-section">
+  <section
+    id="settings_general"
+    class="content-panel-section"
+  >
     <h2>{{ STRINGS.settings_general }}</h2>
     <ToggleButton
       label="Open Session Tree In Same Location"

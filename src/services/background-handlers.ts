@@ -39,7 +39,7 @@ export function initializeListeners() {
 function tabsOnUpdatedFavicon(
   tabId: number,
   changeInfo: browser.tabs._OnUpdatedChangeInfo,
-  tab: browser.tabs.Tab
+  tab: browser.tabs.Tab,
 ): void {
   if (
     tab.favIconUrl &&
@@ -68,7 +68,7 @@ async function windowsOnCreated(window: browser.windows.Window): Promise<void> {
     return
   }
   const extensionWindow = await OnCreatedQueue.isNewWindowExtensionGenerated(
-    window.id
+    window.id,
   )
   if (!extensionWindow) {
     Tree.addWindow(window.id)
@@ -149,7 +149,7 @@ async function tabsOnCreated(tab: browser.tabs.Tab): Promise<void> {
       tab.discarded ? State.DISCARDED : State.OPEN,
       tab.title || 'Untitled',
       tab.url || '',
-      tab.index
+      tab.index,
     )
   }
 }
@@ -161,7 +161,7 @@ async function tabsOnCreated(tab: browser.tabs.Tab): Promise<void> {
  */
 function tabsOnRemoved(
   tabId: number,
-  removeInfo: browser.tabs._OnRemovedRemoveInfo
+  removeInfo: browser.tabs._OnRemovedRemoveInfo,
 ): void {
   console.debug('Tab Removed:', tabId, removeInfo)
   if (removeInfo.windowId === undefined) {
@@ -199,7 +199,7 @@ function tabsOnRemoved(
 function tabsOnUpdated(
   tabId: number,
   changeInfo: browser.tabs._OnUpdatedChangeInfo,
-  tab: browser.tabs.Tab
+  tab: browser.tabs.Tab,
 ): void {
   if (tab.windowId === undefined || tab.id === undefined) {
     console.error('Tab or Window ID is undefined')
@@ -224,7 +224,7 @@ function tabsOnUpdated(
  */
 async function tabsOnMoved(
   tabId: number,
-  moveInfo: browser.tabs._OnMovedMoveInfo
+  moveInfo: browser.tabs._OnMovedMoveInfo,
 ): Promise<void> {
   console.debug('Tab Moved:', tabId, moveInfo)
   if (
@@ -241,7 +241,7 @@ async function tabsOnMoved(
     return
   }
   const openSessionTreeTabs = window.tabs.filter(
-    (tab) => tab.state === State.OPEN || tab.state === State.DISCARDED
+    (tab) => tab.state === State.OPEN || tab.state === State.DISCARDED,
   )
   const openBrowserTabs = await browser.tabs.query({
     windowId: moveInfo.windowId,
@@ -253,7 +253,7 @@ async function tabsOnMoved(
   // return if order matches
   if (
     openSessionTreeTabs.every(
-      (tab, index) => tab.id === openBrowserTabs[index].id
+      (tab, index) => tab.id === openBrowserTabs[index].id,
     )
   ) {
     return
@@ -271,7 +271,7 @@ async function tabsOnMoved(
       false,
       tab.state,
       tab.title,
-      tab.url
+      tab.url,
     )
   } else {
     // move to the position immediately before the tab to the right in the browser
@@ -285,7 +285,7 @@ async function tabsOnMoved(
       tab.state,
       tab.title,
       tab.url,
-      rightTabIndex
+      rightTabIndex,
     )
   }
   Tree.recomputeSessionTree()
@@ -296,7 +296,7 @@ async function tabsOnMoved(
  */
 function tabsOnDetached(
   tabId: number,
-  detachInfo: browser.tabs._OnDetachedDetachInfo
+  detachInfo: browser.tabs._OnDetachedDetachInfo,
 ): void {
   console.debug('Tab Detached:', tabId, detachInfo)
   if (detachInfo.oldWindowId === undefined || tabId === undefined) {
@@ -320,7 +320,7 @@ function tabsOnDetached(
  */
 async function tabsOnAttached(
   tabId: number,
-  attachInfo: browser.tabs._OnAttachedAttachInfo
+  attachInfo: browser.tabs._OnAttachedAttachInfo,
 ): Promise<void> {
   console.debug('Tab Attached:', tabId, attachInfo)
   const extensionTab = await OnCreatedQueue.isNewTabExtensionGenerated(tabId)
@@ -363,13 +363,13 @@ async function tabsOnAttached(
       false,
       tab.discarded ? State.DISCARDED : State.OPEN,
       tab.title || 'Untitled',
-      tab.url || ''
+      tab.url || '',
     )
     return
   } else {
     // if there is a tab to the right, insert it to the left of that tab
     const tabToRightIndex = window.tabs.findIndex(
-      (tab) => tab.id === tabToRightId
+      (tab) => tab.id === tabToRightId,
     )
     Tree.addTab(
       tab.active,
@@ -379,7 +379,7 @@ async function tabsOnAttached(
       tab.discarded ? State.DISCARDED : State.OPEN,
       tab.title || 'Untitled',
       tab.url || '',
-      tabToRightIndex
+      tabToRightIndex,
     )
   }
 }
@@ -395,7 +395,7 @@ function windowsOnFocusChanged(windowId: number): void {
  * When a tab is activated, set the active tab in the session tree.
  */
 function tabsOnActivated(
-  activeInfo: browser.tabs._OnActivatedActiveInfo
+  activeInfo: browser.tabs._OnActivatedActiveInfo,
 ): void {
   Tree.tabOnActivated(activeInfo, 5)
 }
@@ -450,7 +450,7 @@ function onMessage(message: Messages.SessionTreeMessage): void {
       message.targetWindowUid,
       message.targetIndex,
       message.parentUid,
-      message.copy
+      message.copy,
     )
   } else if (message.action === 'moveWindows') {
     Tree.moveWindows(message.windowUIDs, message.targetIndex, message.copy)

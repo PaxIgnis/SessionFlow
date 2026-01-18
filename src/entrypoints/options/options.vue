@@ -93,7 +93,10 @@ onUnmounted(() => {
     </nav>
 
     <!-- Right Content Panel -->
-    <div ref="contentPanel" class="content-panel">
+    <div
+      ref="contentPanel"
+      class="content-panel"
+    >
       <SettingsGeneral />
       <SettingsWindows />
       <SettingsTabs />

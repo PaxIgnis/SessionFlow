@@ -6,7 +6,10 @@ import { STRINGS } from '@/types/strings'
 </script>
 
 <template>
-  <section id="settings_drag_and_drop" class="content-panel-section">
+  <section
+    id="settings_drag_and_drop"
+    class="content-panel-section"
+  >
     <h2>{{ STRINGS.settings_drag_and_drop }}</h2>
     <ToggleButton
       label="Enable Drag And Drop"

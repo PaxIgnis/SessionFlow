@@ -16,7 +16,7 @@ import { OnCreatedQueue } from '@/services/background-on-created-queue'
 export function addPendingTabToQueue(
   tabId: number,
   creatorResolved: boolean,
-  listenerResolved: boolean
+  listenerResolved: boolean,
 ): void {
   if (!OnCreatedQueue.pendingTabs.has(tabId)) {
     OnCreatedQueue.pendingTabs.set(tabId, {
@@ -53,7 +53,7 @@ export function addPendingTabToQueue(
 export function addPendingWindowToQueue(
   windowId: number,
   creatorResolved: boolean,
-  listenerResolved: boolean
+  listenerResolved: boolean,
 ): void {
   if (!OnCreatedQueue.pendingWindows.has(windowId)) {
     OnCreatedQueue.pendingWindows.set(windowId, {
@@ -83,7 +83,7 @@ export function addPendingWindowToQueue(
  * @returns {Promise<boolean>} A promise that resolves to true if tab was created by extension.
  */
 export async function isNewTabExtensionGenerated(
-  tabId: number
+  tabId: number,
 ): Promise<boolean> {
   const waitForTabId = (tabId: number): Promise<boolean> => {
     return new Promise((resolve) => {
@@ -117,7 +117,7 @@ export async function isNewTabExtensionGenerated(
  * @returns {Promise<boolean>} A promise that resolves to true if window was created by extension.
  */
 export async function isNewWindowExtensionGenerated(
-  windowId: number
+  windowId: number,
 ): Promise<boolean> {
   const waitForWindowId = (windowId: number): Promise<boolean> => {
     return new Promise((resolve) => {
@@ -159,7 +159,7 @@ export async function isNewWindowExtensionGenerated(
  *
  */
 export async function createTabAndWait(
-  properties: browser.tabs._CreateCreateProperties
+  properties: browser.tabs._CreateCreateProperties,
 ): Promise<browser.tabs.Tab> {
   OnCreatedQueue.pendingTabCount++
   const tab = await browser.tabs.create(properties).catch((error) => {
@@ -205,7 +205,7 @@ export async function createTabAndWait(
  *
  */
 export async function createWindowAndWait(
-  properties?: browser.windows._CreateCreateData
+  properties?: browser.windows._CreateCreateData,
 ): Promise<browser.windows.Window> {
   OnCreatedQueue.pendingWindowCount++
   let tabCount = 0
