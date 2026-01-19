@@ -255,21 +255,6 @@ export async function removeSessionWindowId(windowId: number): Promise<void> {
 }
 
 /**
- * Focuses a tab and corresponding window.
- *
- * @param {Object} message - The message object containing tab information.
- * @param {number} message.tabId - The ID of the tab to be focused.
- * @param {number} message.windowId - The ID of the window containing the tab.
- */
-export function focusTabAndWindow(message: {
-  tabId: number
-  windowId: number
-}): void {
-  Tree.focusTab({ tabId: message.tabId })
-  Tree.focusWindow({ windowId: message.windowId })
-}
-
-/**
  * Deselects all windows and tabs in the session tree.
  */
 export function deselectAllItems(): void {

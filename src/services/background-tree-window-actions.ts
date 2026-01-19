@@ -1,3 +1,4 @@
+import { Browser } from '@/services/background-browser'
 import { DeferredEventsQueue } from '@/services/background-deferred-events-queue'
 import { OnCreatedQueue } from '@/services/background-on-created-queue'
 import { Tree } from '@/services/background-tree'
@@ -279,18 +280,6 @@ export function closeWindow(message: {
 }
 
 /**
- * Focuses a window by updating the browser window to be active.
- *
- * @param {Object} message - The message object containing window information.
- * @param {number} message.windowId - The ID of the window to be focused.
- */
-export function focusWindow(message: { windowId: number }): void {
-  browser.windows.update(message.windowId, { focused: true }).catch((error) => {
-    console.error('Error focusing window:', error)
-  })
-}
-
-/**
  * Opens a window by creating it in the browser and updating the session tree.
  *
  * @param {Object} message - The message object containing window information.
@@ -338,7 +327,7 @@ export async function openWindow(message: { windowUid: UID }): Promise<void> {
     }
     const window = await OnCreatedQueue.createWindowAndWait(properties)
     if (!Settings.values.focusWindowOnOpen && Tree.sessionTreeWindowId) {
-      focusWindow({ windowId: Tree.sessionTreeWindowId })
+      Browser.focusWindow({ windowId: Tree.sessionTreeWindowId })
     }
     if (!window.id || !window.tabs) {
       throw new Error('Window ID is undefined')

@@ -1,5 +1,6 @@
 import * as Actions from '@/services/background-actions'
 import { updateBadge } from '@/services/background-actions'
+import { Browser } from '@/services/background-browser'
 import { OnCreatedQueue } from '@/services/background-on-created-queue'
 import { Tree } from '@/services/background-tree'
 import { Selection } from '@/services/selection'
@@ -421,7 +422,7 @@ function onMessage(message: Messages.SessionTreeMessage): void {
   } else if (message.action === 'openTab') {
     Tree.openTab(message)
   } else if (message.action === 'reloadTab') {
-    Tree.reloadTab(message)
+    Browser.reloadTab(message)
   } else if (message.action === 'closeWindow') {
     Tree.closeWindow(message)
   } else if (message.action === 'saveWindow') {
@@ -429,9 +430,9 @@ function onMessage(message: Messages.SessionTreeMessage): void {
   } else if (message.action === 'openWindow') {
     Tree.openWindow(message)
   } else if (message.action === 'focusTab') {
-    Tree.focusTabAndWindow(message)
+    Browser.focusTabAndWindow(message)
   } else if (message.action === 'focusWindow') {
-    Tree.focusWindow(message)
+    Browser.focusWindow(message)
   } else if (message.action === 'openWindowsInSameLocationUpdated') {
     Tree.updateWindowPositionInterval()
   } else if (message.action === 'toggleCollapseTab') {

@@ -1,3 +1,4 @@
+import { Browser } from '@/services/background-browser'
 import { DeferredEventsQueue } from '@/services/background-deferred-events-queue'
 import { OnCreatedQueue } from '@/services/background-on-created-queue'
 import { Tree } from '@/services/background-tree'
@@ -327,18 +328,6 @@ export function closeTab(message: { tabId: number; tabUid: UID }): void {
 }
 
 /**
- * Focuses a tab by updating the browser tab to be active.
- *
- * @param {Object} message - The message object containing tab information.
- * @param {number} message.tabId - The ID of the tab to be focused.
- */
-export function focusTab(message: { tabId: number }): void {
-  browser.tabs.update(message.tabId, { active: true }).catch((error) => {
-    console.error('Error focusing tab:', error)
-  })
-}
-
-/**
  * Opens a tab by creating it in the browser and updating the session tree.
  *
  * @param {Object} message - The message object containing tab and window information.
@@ -409,7 +398,7 @@ export async function openTab(message: {
       }
       // because Firefox doesn't support opening unfocused windows, we send focus back
       if (!Settings.values.focusWindowOnOpen && Tree.sessionTreeWindowId) {
-        Tree.focusWindow({ windowId: Tree.sessionTreeWindowId })
+        Browser.focusWindow({ windowId: Tree.sessionTreeWindowId })
       }
       if (!window.id) {
         throw new Error('Window ID is undefined')
@@ -510,18 +499,6 @@ export function saveTab(message: { tabId: number; tabUid: UID }): void {
   }
   browser.tabs.remove(message.tabId).catch((error) => {
     console.error('Error saving tab:', error)
-  })
-}
-
-/**
- * Reloads a tab in the browser.
- *
- * @param {Object} message - The message object containing tab information.
- * @param {number} message.tabId - The ID of the tab to be reloaded.
- */
-export function reloadTab(message: { tabId: number }): void {
-  browser.tabs.reload(message.tabId).catch((error) => {
-    console.error('Error reloading tab:', error)
   })
 }
 
@@ -1074,7 +1051,7 @@ export async function moveTab(
         }
         // because Firefox doesn't support opening unfocused windows, we send focus back
         if (Tree.sessionTreeWindowId) {
-          Tree.focusWindow({ windowId: Tree.sessionTreeWindowId })
+          Browser.focusWindow({ windowId: Tree.sessionTreeWindowId })
         }
         if (!window.id) {
           throw new Error('Window ID is undefined')
