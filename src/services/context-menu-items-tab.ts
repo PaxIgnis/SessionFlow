@@ -44,6 +44,26 @@ export const contextMenuItemsTab: Record<string, () => ContextMenuItem> = {
     }
   },
 
+  pinTab: () => {
+    return {
+      id: 'pinTab',
+      label: 'Pin',
+      icon: 'pin',
+      enabled: atLeastOneSelectedTabUnpinned(),
+      action: () => Messages.pinTabs(Selection.getSelectedTabs()),
+    }
+  },
+
+  unpinTab: () => {
+    return {
+      id: 'unpinTab',
+      label: 'Unpin',
+      icon: 'unpin',
+      enabled: atLeastOneSelectedTabPinned(),
+      action: () => Messages.unpinTabs(Selection.getSelectedTabs()),
+    }
+  },
+
   tabIndentIncrease: () => {
     return {
       id: 'tabIndentIncrease',
@@ -79,6 +99,26 @@ function atLeastOneSelectedTabSaved(): boolean {
   const selectedTabs = Selection.getSelectedTabs()
   for (const tab of selectedTabs) {
     if (tab.state === State.SAVED) {
+      return true
+    }
+  }
+  return false
+}
+
+function atLeastOneSelectedTabPinned(): boolean {
+  const selectedTabs = Selection.getSelectedTabs()
+  for (const tab of selectedTabs) {
+    if (tab.pinned) {
+      return true
+    }
+  }
+  return false
+}
+
+function atLeastOneSelectedTabUnpinned(): boolean {
+  const selectedTabs = Selection.getSelectedTabs()
+  for (const tab of selectedTabs) {
+    if (!tab.pinned) {
       return true
     }
   }

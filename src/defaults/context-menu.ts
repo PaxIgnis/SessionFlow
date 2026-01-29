@@ -14,6 +14,8 @@ export const TAB_MENU: ContextMenuConfig = [
   { type: ContextMenuItemType.Action, id: 'reloadTab' },
   { type: ContextMenuItemType.Action, id: 'saveTab' },
   { type: ContextMenuItemType.Action, id: 'closeTab' },
+  { type: ContextMenuItemType.Action, id: 'pinTab' },
+  { type: ContextMenuItemType.Action, id: 'unpinTab' },
   { type: ContextMenuItemType.Action, id: 'tabIndentIncrease' },
   { type: ContextMenuItemType.Action, id: 'tabIndentDecrease' },
   // 'unloadTab',

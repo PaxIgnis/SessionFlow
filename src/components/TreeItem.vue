@@ -461,6 +461,12 @@ const childrenOpen = computed(() => {
       >
         {{ childCount }}
       </div>
+      <svg
+        v-if="isTab(item) && item.pinned"
+        class="tree-item-pinned"
+      >
+        <use :xlink:href="'#pinned'" />
+      </svg>
       <img
         class="tree-item-favicon"
         :src="
@@ -720,6 +726,7 @@ const childrenOpen = computed(() => {
   height: calc(50% + 1px);
   margin-inline-start: 0;
   margin-inline-end: 0;
+  width: calc(40% + 1px);
 }
 
 .tree-item-favicon {
@@ -732,6 +739,17 @@ const childrenOpen = computed(() => {
   min-width: 1em;
   height: 1em;
   width: 1em;
+}
+
+.tree-item-pinned {
+  position: absolute;
+  margin-left: 8px;
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  cursor: pointer;
+  user-select: none;
+  fill: var(--pin-icon-foreground);
 }
 
 .tree-item-title {

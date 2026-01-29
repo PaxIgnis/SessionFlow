@@ -30,6 +30,7 @@
   --drag-and-drop-foreground: rgba(40, 190, 0, 0.8);
   --drag-and-drop-background: rgba(106, 255, 0, 0.1);
   --drag-and-drop-hover: rgba(255, 255, 255, 0.03);
+  --pin-icon-foreground: rgb(204, 204, 204);
 
   /* Options */
   --nav-panel-active-background: rgb(4, 57, 94);

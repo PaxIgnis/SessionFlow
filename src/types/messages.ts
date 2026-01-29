@@ -56,6 +56,16 @@ export interface ReloadTabMessage {
   tabId: number
 }
 
+export interface PinTabMessage {
+  action: 'pinTab'
+  tabUid: UID
+}
+
+export interface UnpinTabMessage {
+  action: 'unpinTab'
+  tabUid: UID
+}
+
 export interface ToggleCollapseWindowMessage {
   action: 'toggleCollapseWindow'
   windowUid: UID
@@ -122,4 +132,6 @@ export type SessionTreeMessage =
   | DeselectAllItemsMessage
   | MoveTabsMessage
   | MoveWindowsMessage
+  | PinTabMessage
+  | UnpinTabMessage
   | PrintSessionTreeMessage

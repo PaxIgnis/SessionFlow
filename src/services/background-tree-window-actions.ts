@@ -87,6 +87,7 @@ export async function updateWindowTabs(windowId: number): Promise<void> {
         windowUid: window.uid,
         title: tab.title!,
         url: tab.url!,
+        pinned: tab.pinned || false,
         indentLevel: 1,
       }))
       for (const tab of window.tabs) {
@@ -294,6 +295,7 @@ export async function openWindow(message: { windowUid: UID }): Promise<void> {
       throw new Error('Saved window not found')
     }
     const urls: string[] = []
+    const pinnedTabs: UID[] = []
     for (const tab of sessionTreeWindow.tabs) {
       let url = String(tab.url)
       // if the URL is a privileged URL, open a redirect page instead
@@ -308,6 +310,7 @@ export async function openWindow(message: { windowUid: UID }): Promise<void> {
         url = 'about:blank'
       }
       urls.push(url)
+      if (tab.pinned) pinnedTabs.push(tab.uid)
     }
     const properties: browser.windows._CreateCreateData = {}
     if (urls.length > 0) properties.url = urls
@@ -338,6 +341,9 @@ export async function openWindow(message: { windowUid: UID }): Promise<void> {
     window.tabs.forEach((tab, index) => {
       Tree.updateTabId(sessionTreeWindow?.tabs[index].uid, tab.id!)
       Tree.updateTabState(sessionTreeWindow?.tabs[index].uid, State.OPEN)
+      // need to manually pin tab because pinned state is not preserved when creating window with URLs
+      if (pinnedTabs.includes(sessionTreeWindow?.tabs[index].uid))
+        Browser.pinTab(tab.id!)
     })
     if (Settings.values.openWindowWithTabsDiscarded && urls.length > 1) {
       for (const tab of sessionTreeWindow.tabs) {

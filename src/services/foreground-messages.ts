@@ -61,6 +61,24 @@ export function openTabs(tabs: Array<Tab>) {
   })
 }
 
+export function pinTabs(tabs: Array<Tab>) {
+  tabs.forEach((tab) => {
+    window.browser.runtime.sendMessage({
+      action: 'pinTab',
+      tabUid: tab.uid,
+    })
+  })
+}
+
+export function unpinTabs(tabs: Array<Tab>) {
+  tabs.forEach((tab) => {
+    window.browser.runtime.sendMessage({
+      action: 'unpinTab',
+      tabUid: tab.uid,
+    })
+  })
+}
+
 export function tabDoubleClick(
   tabId: number,
   windowId: number,

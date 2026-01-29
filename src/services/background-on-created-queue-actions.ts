@@ -213,9 +213,24 @@ export async function createWindowAndWait(
     // Handle both string and string[] cases
     tabCount = Array.isArray(properties.url) ? properties.url.length : 1
   }
-  // case when creating window with specific tabIds (e.g., moving tabs to new window)
+  // Capture pinned state for any existing tabs being moved (properties.tabId)
+  const pinnedTabIds = new Set<number>()
   if (properties?.tabId) {
-    tabCount += Array.isArray(properties.tabId) ? properties.tabId.length : 1
+    const ids = Array.isArray(properties.tabId)
+      ? properties.tabId
+      : [properties.tabId]
+    // record pinned state before moving tabs
+    await Promise.all(
+      ids.map(async (id) => {
+        try {
+          const t = await browser.tabs.get(id as number)
+          if (t && t.pinned) pinnedTabIds.add(id as number)
+        } catch (e) {
+          console.error('Error reading tab before move:', id, e)
+        }
+      }),
+    )
+    tabCount += ids.length
   }
   if (tabCount > 0) OnCreatedQueue.pendingTabCount += tabCount
 
@@ -274,6 +289,12 @@ export async function createWindowAndWait(
       promises.push(waitForTabId(tab.id))
     }
     await Promise.all(promises)
+    // then pin tabs that were previously pinned
+    for (const tab of window.tabs) {
+      if ((tab.id && pinnedTabIds.has(tab.id)) || tab.pinned) {
+        await browser.tabs.update(tab.id!, { pinned: true })
+      }
+    }
   }
   return window
 }

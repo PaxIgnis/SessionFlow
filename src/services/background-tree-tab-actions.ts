@@ -17,8 +17,10 @@ import { State, Tab } from '@/types/session-tree'
  * @param {State} state - The state of the tab.
  * @param {string} title - The title of the tab.
  * @param {string} url - The URL of the tab.
+ * @param {boolean} pinned - Whether the tab is pinned.
  * @param {number} index - The index to insert the tab at, if not provided the tab is added to the end.
  * @param {UID} parentUid - The UID of the parent tab, if any.
+ * @param {UID} tabUid - The UID of the tab, if passed it is expected to be unique.
  */
 export function addTab(
   active: boolean,
@@ -28,17 +30,27 @@ export function addTab(
   state: State,
   title: string,
   url: string,
+  pinned: boolean,
   index?: number,
   parentUid?: UID,
+  tabUid?: UID,
 ): UID | void {
   console.log('Tab Added in background.ts', windowUID, tabId, title, url)
+  const tabExists = Tree.tabsByUid.get(tabUid ?? '')
+  if (tabExists) {
+    console.error(
+      'Error adding tab, tab with uid already exists:',
+      tabExists.uid,
+    )
+    return
+  }
   const window = Tree.windowsByUid.get(windowUID)
   if (!window) {
     console.error('Error adding tab, could not find window:', windowUID)
     return
   }
   const tab: Tab = {
-    uid: Utils.createUid(Tree.existingUidsSet),
+    uid: tabUid ?? Utils.createUid(Tree.existingUidsSet),
     active: active,
     id: tabId,
     selected: selected,
@@ -48,6 +60,7 @@ export function addTab(
     windowUid: window.uid,
     isParent: false,
     indentLevel: 1,
+    pinned: pinned,
   }
   if (index !== undefined) {
     // if parentUid is provided, insert as child tab
@@ -146,32 +159,35 @@ export function updateTab(
   id: { windowId?: number; tabId?: number; tabUid?: UID },
   tabContents: Partial<Tab>,
 ): void {
+  let tab: Tab | undefined = undefined
   if (id.tabUid) {
-    const tab = Tree.tabsByUid.get(id.tabUid)
-    if (tab) {
-      Object.assign(tab, tabContents)
+    tab = Tree.tabsByUid.get(id.tabUid)
+    if (!tab) return
+  } else {
+    if (!id.windowId || !id.tabId) {
+      console.error('Error updating tab, invalid id:', id)
+      return
     }
-    return
-  }
-  if (!id.windowId || !id.tabId) {
-    console.error('Error updating tab, invalid id:', id)
-    return
-  }
 
-  const window = Tree.windowsList.find((w) => w.id === id.windowId)
-  if (!window) {
-    DeferredEventsQueue.addDeferredWindowEvent(id.windowId, () =>
-      Tree.updateTab(id, tabContents),
-    )
-    return
+    const window = Tree.windowsList.find((w) => w.id === id.windowId)
+    if (!window) {
+      DeferredEventsQueue.addDeferredWindowEvent(id.windowId, () =>
+        Tree.updateTab(id, tabContents),
+      )
+      return
+    }
+    tab = window.tabs.find((t) => t.id === id.tabId) as Tab
+    if (!tab) {
+      DeferredEventsQueue.addDeferredTabEvent(id.tabId, () =>
+        Tree.updateTab(id, tabContents),
+      )
+      return
+    }
   }
-  const tab = window.tabs.find((t) => t.id === id.tabId) as Tab
-  if (!tab) {
-    DeferredEventsQueue.addDeferredTabEvent(id.tabId, () =>
-      Tree.updateTab(id, tabContents),
-    )
-    return
-  }
+  if (tabContents.pinned !== undefined && tabContents.pinned)
+    Tree.pinTabInTree(tab.uid)
+  if (tabContents.pinned !== undefined && !tabContents.pinned)
+    Tree.unpinTabInTree(tab.uid)
   // If the tab object exists update the new values
   Object.assign(tab, tabContents)
 }
@@ -350,6 +366,8 @@ export async function openTab(message: {
   if (!sessionTreeTab) {
     throw new Error('Saved tab not found')
   }
+  const pinned = sessionTreeTab.pinned || false
+  if (pinned) message.discarded = false // pinned tabs cannot be opened as discarded with firefox api
   let url = message.url
   if (url === undefined) url = sessionTreeTab.url
   // if the URL is a privileged URL, open a redirect page instead
@@ -408,6 +426,7 @@ export async function openTab(message: {
       const tab = window.tabs![0]
       Tree.updateTabId(message.tabUid, tab.id!)
       Tree.updateTabState(message.tabUid, State.OPEN)
+      if (pinned) Browser.pinTab(tab.id!)
     } catch (error) {
       console.error('Error opening window:', error)
     }
@@ -429,6 +448,7 @@ export async function openTab(message: {
     } else {
       properties.active = true
     }
+    if (sessionTreeTab.pinned) properties.pinned = true
 
     // find id of first open tab to the right
     const tabToRightIndex = sessionTreeWindow.tabs
@@ -500,6 +520,95 @@ export function saveTab(message: { tabId: number; tabUid: UID }): void {
   browser.tabs.remove(message.tabId).catch((error) => {
     console.error('Error saving tab:', error)
   })
+}
+
+/**
+ * Pins a tab in the session tree, and in the browser if it is open.
+ *
+ * @param {UID} tabUid - The UID of the tab to be pinned.
+ */
+export function pinTab(tabUid: UID): void {
+  const tab = Tree.tabsByUid.get(tabUid)
+  if (!tab) {
+    console.error('Error pinning tab, could not find tab:', tabUid)
+    return
+  }
+
+  // if tab is saved, just update the session tree
+  if (tab.state === State.SAVED) {
+    Tree.pinTabInTree(tab.uid)
+  } else {
+    // if tab is open, pin tab in browser
+    Browser.pinTab(tab.id)
+  }
+}
+
+/**
+ * Pins a tab in the session tree.
+ *
+ * @param {UID} tabUid - The UID of the tab to be pinned.
+ */
+export function pinTabInTree(tabUid: UID): void {
+  const tab = Tree.tabsByUid.get(tabUid)
+  if (!tab) {
+    console.error('Error pinning tab, could not find tab:', tabUid)
+    return
+  }
+  if (tab.pinned) return // already pinned
+
+  const window = Tree.windowsByUid.get(tab.windowUid)
+  if (!window) {
+    console.error('Error pinning tab, could not find window:', tab.windowUid)
+    return
+  }
+  // find index of last pinned tab
+  const lastPinnedIndex = window.tabs.findLastIndex((t) => t.pinned)
+  tab.pinned = true
+  Tree.moveTab(tab.uid, window.uid, lastPinnedIndex + 1)
+  return
+}
+
+/**
+ * Unpins a tab in the session tree, and in the browser if it is open.
+ *
+ * @param {UID} tabUid - The UID of the tab to be unpinned.
+ */
+export function unpinTab(tabUid: UID): void {
+  const tab = Tree.tabsByUid.get(tabUid)
+  if (!tab) {
+    console.error('Error unpinning tab, could not find tab:', tabUid)
+    return
+  }
+  if (tab.state === State.SAVED) {
+    // move to after last pinned tab in window
+    Tree.unpinTabInTree(tab.uid)
+  } else {
+    // if tab is open, let browser unpin the tab and handle logic in handlers
+    Browser.unpinTab(tab.id)
+  }
+}
+
+/**
+ * Unpins a tab in the session tree.
+ *
+ * @param {UID} tabUid - The UID of the tab to be unpinned.
+ */
+export function unpinTabInTree(tabUid: UID): void {
+  const tab = Tree.tabsByUid.get(tabUid)
+  if (!tab) {
+    console.error('Error unpinning tab, could not find tab:', tabUid)
+    return
+  }
+
+  const window = Tree.windowsByUid.get(tab.windowUid)
+  if (!window) {
+    console.error('Error unpinning tab, could not find window:', tab.windowUid)
+    return
+  }
+  const lastPinnedIndex = window.tabs.findLastIndex((t) => t.pinned)
+  tab.pinned = false
+  Tree.moveTab(tab.uid, window.uid, Math.max(lastPinnedIndex, 0))
+  return
 }
 
 /**
@@ -890,11 +999,34 @@ export async function moveTabs(
 
   // move each tab
   for (const tab of tabs) {
+    // check if target index needs to be adjusted depending on tab pinned state
+    // i.e. pinned tabs cannot be moved after unpinned tabs and vice versa
+    const isPinned = tab.pinned || false
+    let originalTargetIndex = targetIndex
+    let targetIndexAdjusted = false
+    if (isPinned) {
+      const lastPinnedIndex = targetWindow.tabs.findLastIndex((t) => t.pinned)
+      // if tab is pinned and target index is after last pinned tab, move it to after last pinned tab
+      if (lastPinnedIndex + 1 < targetIndex) {
+        targetIndex = lastPinnedIndex + 1
+        targetIndexAdjusted = true
+      }
+    } else {
+      let firstUnpinnedIndex = targetWindow.tabs.findIndex((t) => !t.pinned)
+      if (firstUnpinnedIndex === -1)
+        firstUnpinnedIndex = targetWindow.tabs.length
+      // if tab is unpinned and target index is before first unpinned tab, move it to first unpinned tab
+      if (firstUnpinnedIndex > targetIndex) {
+        targetIndex = firstUnpinnedIndex
+        targetIndexAdjusted = true
+      }
+    }
+    const sourceIndex = targetWindow.tabs.findIndex((t) => t.uid === tab.uid)
     // check if removing tab will affect index
     if (
       !copy &&
       tab.windowUid === targetWindowUid &&
-      targetWindow.tabs.findIndex((t) => t.uid === tab.uid) < targetIndex
+      sourceIndex < targetIndex
     ) {
       targetIndex--
     }
@@ -912,10 +1044,24 @@ export async function moveTabs(
       tab.uid,
       targetWindowUid,
       targetIndex,
-      newParentUid ?? parentUid,
+      targetIndexAdjusted ? undefined : (newParentUid ?? parentUid), // only use parentUid if target index was not adjusted
     )
     if (newTabUid) newUidMapping.set(tab.uid, newTabUid)
-    targetIndex++
+    if (targetIndexAdjusted) {
+      // reset target index for next tab
+      if (targetIndex <= originalTargetIndex) originalTargetIndex++
+      if (
+        !copy &&
+        tab.windowUid === targetWindowUid &&
+        sourceIndex < originalTargetIndex
+      ) {
+        originalTargetIndex--
+      }
+
+      targetIndex = originalTargetIndex
+    } else {
+      targetIndex++
+    }
   }
 
   // loop through moved tabs that were collapsed and re-collapse them if they have children
@@ -959,166 +1105,144 @@ export async function moveTab(
     parentUid,
     copy,
   )
+
   // check if tab and target window exists
   const tab = Tree.tabsByUid.get(tabUID)
   const targetWindow = Tree.windowsByUid.get(targetWindowUid)
+
   if (!tab || !targetWindow) {
     console.error(`moveTab: Tab or target window not found`)
     return
   }
+  // determine if tab should be active in new window
+  const tabActive =
+    targetWindow.state === State.OPEN &&
+    (targetWindow.activeTabId === undefined ||
+      targetWindow.uid === tab.windowUid) &&
+    tab.active
+      ? true
+      : false
 
-  // if tab is not open in browser, just update session tree
-  if (tab.state === State.SAVED) {
-    // handle the case when the tab is being moved within the same window and is the only tab
-    if (
-      tab.windowUid === targetWindowUid &&
-      !copy &&
-      targetWindow.tabs.length === 1
-    ) {
-      return tab.uid
-    }
-    // remove tab from current window
-    removeTab(tab.uid)
+  const currentIndexInBrowser = targetWindow.tabs
+    .filter((t) => t.state === State.OPEN || t.state === State.DISCARDED)
+    .findIndex((t) => t.uid === tab.uid)
 
-    // add tab to target window at target index
-    return addTab(
-      false,
-      targetWindow.uid,
-      tab.id,
-      tab.selected,
-      tab.state,
-      tab.title,
-      tab.url,
-      targetIndex,
-      parentUid,
-    )
+  // if tab is already in correct position and indent lvl in the session tree, do nothing
+  if (
+    tab.windowUid === targetWindowUid &&
+    (targetWindow.tabs.length === 1 ||
+      (targetWindow.tabs.findIndex((t) => t.uid === tab.uid) === targetIndex &&
+        tab.parentUid === parentUid))
+  ) {
+    return tab.uid
   }
-  // else if tab is open in browser
-  else if (tab.state === State.OPEN || tab.state === State.DISCARDED) {
-    // calculate target index for the browser by counting only opened tabs between 0 and targetIndex
-    let targetIndexInBrowser = 0
-    for (let i = 0; i < targetIndex; i++) {
-      const targetTabFromIndex = targetWindow.tabs[i]
-      if (!targetTabFromIndex || !targetTabFromIndex.state) continue
-      if (
-        targetTabFromIndex.state === State.OPEN ||
-        targetTabFromIndex.state === State.DISCARDED
-      ) {
-        targetIndexInBrowser++
-      }
-    }
 
-    // move tab in browser, but first check if target window needs to be created
-    if (targetWindow.state === State.SAVED) {
-      // copy the tab item to the new window
-      const newTabUid = addTab(
-        tab.active ? true : false,
-        targetWindow.uid,
-        tab.id,
-        tab.selected,
-        tab.state,
-        tab.title,
-        tab.url,
-        targetIndex,
-        parentUid,
-      )
-      if (!newTabUid) {
-        console.error(
-          'moveTab: Error adding tab to target window in session tree',
-        )
-        return
-      }
+  // remove and add tab in session tree to simulate move
+  removeTab(tab.uid)
 
-      // create the window first
-      Tree.updateWindowState(targetWindowUid, State.OPEN)
-      const properties: browser.windows._CreateCreateData = {}
-      properties.tabId = tab.id
-      // TODO: use window position from saved window if setting is enabled
+  addTab(
+    tabActive,
+    targetWindow.uid,
+    tab.id,
+    tab.selected,
+    tab.state,
+    tab.title,
+    tab.url,
+    tab.pinned || false,
+    targetIndex,
+    parentUid,
+    tab.uid,
+  )
 
-      try {
-        const window = await OnCreatedQueue.createWindowAndWait(
-          properties,
-        ).catch((error) => {
+  const targetIndexInBrowser = targetWindow.tabs.filter(
+    (t, index) =>
+      index < targetIndex &&
+      // t.uid !== tab.uid && // removed this line to allow moving within same window
+      (t.state === State.OPEN || t.state === State.DISCARDED),
+  ).length
+
+  // if tab is open in browser but target window is not open then create the window first
+  if (
+    (tab.state === State.OPEN || tab.state === State.DISCARDED) &&
+    targetWindow.state === State.SAVED
+  ) {
+    Tree.updateWindowState(targetWindowUid, State.OPEN)
+    const properties: browser.windows._CreateCreateData = {}
+    properties.tabId = tab.id
+    // TODO: use window position from saved window if setting is enabled
+
+    try {
+      const window = await OnCreatedQueue.createWindowAndWait(properties).catch(
+        (error) => {
           console.error('Error creating window:', error)
           // revert changes since window wasn't created
           Tree.updateWindowState(targetWindowUid, State.SAVED)
-          Tree.updateTabState(newTabUid, State.SAVED)
+          Tree.updateTabState(tab.uid, State.SAVED)
           return
-        })
-        if (!window) {
-          console.error('Window is undefined')
-          return
-        }
-        // because Firefox doesn't support opening unfocused windows, we send focus back
-        if (Tree.sessionTreeWindowId) {
-          Browser.focusWindow({ windowId: Tree.sessionTreeWindowId })
-        }
-        if (!window.id) {
-          throw new Error('Window ID is undefined')
-        }
-        // then update the saved window object id to represent the newly opened window
-        Tree.updateWindowId(targetWindowUid, window.id)
-        const newTab = window.tabs![0]
-        Tree.updateTabId(newTabUid, newTab.id!)
-        Tree.updateTabState(newTabUid, State.OPEN)
-        return newTabUid
-      } catch (error) {
-        console.error('Error opening window:', error)
+        },
+      )
+      if (!window) {
+        console.error('Window is undefined')
+        return
       }
-    }
-    // else the target window is already open, just handle the move
-    else {
-      // manually remove and add tab in session tree, then move in browser
-
-      // remove tab from current window
-      removeTab(tab.uid)
-
-      let active = false
-      if (
-        (targetWindow.activeTabId === undefined ||
-          targetWindow.uid === tab.windowUid) &&
-        tab.active
-      )
-        active = true
-
-      // add tab to target window at target index
-      const newTabUid = addTab(
-        active,
-        targetWindow.uid,
-        tab.id,
-        tab.selected,
-        tab.state,
-        tab.title,
-        tab.url,
-        targetIndex,
-        parentUid,
-      )
-      // TODO: create a 'moveTabAndWait' flow to safeguard against the tabid changing after move?
-      // handle move
-      await browser.tabs
-        .move(tab.id, {
-          windowId: targetWindow.id,
-          index: targetIndexInBrowser,
-        })
-        .catch((error) => {
-          console.error('Error moving tab in browser:', error)
-          return
-        })
-        .then((moved) => {
-          const movedTab = Array.isArray(moved) ? moved[0] : moved
-          // tab moved successfully in browser, now verify tab id in session tree matches
-          const newTab = targetWindow.tabs.find((t) => t.id === movedTab?.id)
-          if (!newTab) console.error('Moved tab not found in session tree')
-          if (newTab && newTab.id !== tab.id)
-            console.error(
-              'Tab ID mismatch after move. TabID:',
-              newTab.id,
-              'Expected:',
-              tab.id,
-            )
-        })
-      return newTabUid
+      // because Firefox doesn't support opening unfocused windows, we send focus back
+      if (Tree.sessionTreeWindowId) {
+        Browser.focusWindow({ windowId: Tree.sessionTreeWindowId })
+      }
+      if (!window.id) {
+        throw new Error('Window ID is undefined')
+      }
+      // then update the saved window object id to represent the newly opened window
+      Tree.updateWindowId(targetWindowUid, window.id)
+      const newTab = window.tabs![0]
+      Tree.updateTabId(tab.uid, newTab.id!)
+      Tree.updateTabState(tab.uid, State.OPEN)
+      return tab.uid
+    } catch (error) {
+      console.error('Error opening window:', error)
     }
   }
-  return
+
+  // if the target window is already open, just handle the move
+  if (
+    (tab.state === State.OPEN || tab.state === State.DISCARDED) &&
+    targetWindow.state === State.OPEN
+  ) {
+    console.debug(
+      `moveTab: currentIndexInBrowser: ${currentIndexInBrowser} targetIndexInBrowser: ${targetIndexInBrowser}`,
+    )
+    // check if move is actually needed in browser
+    if (
+      tab.windowUid === targetWindowUid &&
+      currentIndexInBrowser === targetIndexInBrowser
+    ) {
+      return tab.uid
+    }
+    // TODO: create a 'moveTabAndWait' flow to safeguard against the tabid changing after move?
+    // handle move
+    await browser.tabs
+      .move(tab.id, {
+        windowId: targetWindow.id,
+        index: targetIndexInBrowser,
+      })
+      .catch((error) => {
+        console.error('Error moving tab in browser:', error)
+        return
+      })
+      .then((moved) => {
+        const movedTab = Array.isArray(moved) ? moved[0] : moved
+        // tab moved successfully in browser, now verify tab id in session tree matches
+        const newTab = targetWindow.tabs.find((t) => t.id === movedTab?.id)
+        if (!newTab) console.error('Moved tab not found in session tree')
+        if (newTab && newTab.id !== tab.id)
+          console.error(
+            'Tab ID mismatch after move. TabID:',
+            newTab.id,
+            'Expected:',
+            tab.id,
+          )
+      })
+    return tab.uid
+  }
+  return tab.uid
 }

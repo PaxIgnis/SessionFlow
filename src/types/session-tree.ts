@@ -26,6 +26,7 @@ export interface Tab {
   collapsed?: boolean
   loadingStatus?: LoadingStatus
   indentLevel: number
+  pinned: boolean
   isParent?: boolean
   parentUid?: UID
   isVisible?: boolean

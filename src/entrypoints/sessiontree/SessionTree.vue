@@ -1,5 +1,6 @@
 <script lang="ts" setup>
 import IconChevronRight from '@/assets/chevron-right.svg'
+import IconPinned from '@/assets/pinned.svg'
 import TreeItem from '@/components/TreeItem.vue'
 import { DragAndDrop } from '@/services/drag-and-drop'
 import { FaviconService } from '@/services/favicons'
@@ -136,6 +137,7 @@ function onClick() {
     >
       <svg>
         <use :xlink:href="`#${IconChevronRight}`" />
+        <use :xlink:href="`#${IconPinned}`" />
       </svg>
     </div>
 

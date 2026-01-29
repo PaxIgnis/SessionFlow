@@ -35,6 +35,7 @@ export async function initializeWindows(): Promise<void> {
           url: tab.url!,
           windowUid: windowUid,
           indentLevel: 1,
+          pinned: tab.pinned || false,
         })),
       }
       Tree.windowsList.push(newWindow)
@@ -133,6 +134,7 @@ export async function loadSessionTreeFromStorage(): Promise<void> {
           if (!tab.uid) tab.uid = Utils.createUid(Tree.existingUidsSet)
           Tree.tabsByUid.set(tab.uid, tab)
           tab.windowUid = window.uid
+          if (!tab.pinned) tab.pinned = false
         })
       })
     }

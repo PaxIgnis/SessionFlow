@@ -150,6 +150,7 @@ async function tabsOnCreated(tab: browser.tabs.Tab): Promise<void> {
       tab.discarded ? State.DISCARDED : State.OPEN,
       tab.title || 'Untitled',
       tab.url || '',
+      tab.pinned || false,
       tab.index,
     )
   }
@@ -216,6 +217,7 @@ function tabsOnUpdated(
     if (tab.title) tabContents.title = tab.title
     if (tab.url) tabContents.url = tab.url
   }
+  if (changeInfo.pinned !== undefined) tabContents.pinned = tab.pinned
 
   Tree.updateTab({ windowId: tab.windowId, tabId: tab.id }, tabContents)
 }
@@ -264,7 +266,8 @@ async function tabsOnMoved(
   const tab = window.tabs[movedTabIndex]
   Tree.removeTab(tab.uid)
   if (moveInfo.toIndex + 1 >= openSessionTreeTabs.length) {
-    // place in last position
+    // place in last position, or if pinned, at end of pinned tabs
+    const targetTabIndex = window.tabs.findLastIndex((t) => t.pinned) + 1
     Tree.addTab(
       tab.active ?? false,
       window.uid,
@@ -273,11 +276,20 @@ async function tabsOnMoved(
       tab.state,
       tab.title,
       tab.url,
+      tab.pinned || false,
+      tab.pinned ? targetTabIndex : undefined,
+      undefined,
+      tab.uid,
     )
   } else {
     // move to the position immediately before the tab to the right in the browser
     const rightTabId = openBrowserTabs[moveInfo.toIndex + 1].id
-    const rightTabIndex = window.tabs.findIndex((tab) => tab.id === rightTabId)
+    let targetTabIndex = window.tabs.findIndex((tab) => tab.id === rightTabId)
+    // if tab is pinned and the tab to the right is not pinned, adjust to place at end of pinned tabs
+    if (tab.pinned && !openBrowserTabs[moveInfo.toIndex + 1].pinned) {
+      targetTabIndex = window.tabs.findLastIndex((t) => t.pinned) + 1
+    }
+
     Tree.addTab(
       tab.active ?? false,
       window.uid,
@@ -286,7 +298,10 @@ async function tabsOnMoved(
       tab.state,
       tab.title,
       tab.url,
-      rightTabIndex,
+      tab.pinned || false,
+      targetTabIndex,
+      undefined,
+      tab.uid,
     )
   }
   Tree.recomputeSessionTree()
@@ -355,8 +370,11 @@ async function tabsOnAttached(
     index: tab.index + 1,
   })
   const tabToRightId = tabToRight.length > 0 ? tabToRight[0].id : undefined
-  // if there is no tab to the right, add the tab to the end
+  // if there is no tab to the right, add the tab to the end, if pinned, at end of pinned tabs
   if (tabToRightId === undefined) {
+    const targetTabIndex = tab.pinned
+      ? window.tabs.findLastIndex((t) => t.pinned) + 1
+      : undefined
     Tree.addTab(
       tab.active,
       window.uid,
@@ -365,6 +383,8 @@ async function tabsOnAttached(
       tab.discarded ? State.DISCARDED : State.OPEN,
       tab.title || 'Untitled',
       tab.url || '',
+      tab.pinned || false,
+      targetTabIndex,
     )
     return
   } else {
@@ -372,6 +392,7 @@ async function tabsOnAttached(
     const tabToRightIndex = window.tabs.findIndex(
       (tab) => tab.id === tabToRightId,
     )
+    const lastPinnedIndex = window.tabs.findLastIndex((t) => t.pinned) + 1
     Tree.addTab(
       tab.active,
       window.uid,
@@ -380,7 +401,10 @@ async function tabsOnAttached(
       tab.discarded ? State.DISCARDED : State.OPEN,
       tab.title || 'Untitled',
       tab.url || '',
-      tabToRightIndex,
+      tab.pinned || false,
+      tab.pinned && lastPinnedIndex < tabToRightIndex
+        ? lastPinnedIndex
+        : tabToRightIndex,
     )
   }
 }
@@ -455,6 +479,10 @@ function onMessage(message: Messages.SessionTreeMessage): void {
     )
   } else if (message.action === 'moveWindows') {
     Tree.moveWindows(message.windowUIDs, message.targetIndex, message.copy)
+  } else if (message.action === 'pinTab') {
+    Tree.pinTab(message.tabUid)
+  } else if (message.action === 'unpinTab') {
+    Tree.unpinTab(message.tabUid)
   } else if (message.action === 'printSessionTree') {
     Tree.printSessionTree()
   }
