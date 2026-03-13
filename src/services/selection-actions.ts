@@ -24,7 +24,7 @@ export function selectItem(
     item.selected = true
     Selection.selectedItems.value.push({ item, type })
   } else if (!item.selected && shiftKey && !firstItem) {
-    // If item is not selected and shiftkey is pressed, then select
+    // If no items are selected and shiftkey is pressed, then select
     item.selected = true
     Selection.selectedItems.value.push({ item, type })
   } else if (
@@ -35,6 +35,15 @@ export function selectItem(
   ) {
     // If multiple tabs selected in same window & shift, then select all tabs between firstItem and item
     Selection.selectMultipleTabsInWindow(firstItem.item as Tab, item as Tab)
+  } else if (
+    shiftKey &&
+    firstItem &&
+    type === SelectionType.WINDOW &&
+    firstItem.type === SelectionType.WINDOW &&
+    (firstItem.item as Window).uid !== (item as Window).uid
+  ) {
+    // If multiple windows selected & shift, then select all windows between firstItem and item
+    Selection.selectMultipleWindows(firstItem.item as Window, item as Window)
   } else {
     // Clear selection and select item
     clearSelection()
@@ -89,6 +98,39 @@ export function selectMultipleTabsInWindow(firstTab: Tab, lastTab: Tab) {
     if (tab) {
       tab.selected = true
       Selection.selectedItems.value.push({ item: tab, type: SelectionType.TAB })
+    }
+  }
+}
+
+export function selectMultipleWindows(firstWindow: Window, lastWindow: Window) {
+  Selection.clearSelection()
+  const allWindows = SessionTree.reactiveWindowsList.value
+  const startIndex = allWindows.findIndex((w) => w.uid === firstWindow.uid)
+  const endIndex = allWindows.findIndex((w) => w.uid === lastWindow.uid)
+
+  if (startIndex === -1 || endIndex === -1) {
+    console.error('Invalid window selection')
+    return
+  }
+
+  // Push the firstWindow first
+  firstWindow.selected = true
+  Selection.selectedItems.value.push({
+    item: firstWindow,
+    type: SelectionType.WINDOW,
+  })
+
+  // Then push all windows in between
+  const [minIndex, maxIndex] = [startIndex, endIndex].sort((a, b) => a - b)
+  for (let i = minIndex; i <= maxIndex; i++) {
+    if (i === startIndex) continue // Skip the firstWindow as it's already added
+    const window = allWindows[i]
+    if (window) {
+      window.selected = true
+      Selection.selectedItems.value.push({
+        item: window,
+        type: SelectionType.WINDOW,
+      })
     }
   }
 }
