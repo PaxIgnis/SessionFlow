@@ -63,6 +63,23 @@ export function addTab(
     pinned: pinned,
   }
   if (index !== undefined) {
+    // if not pinned but index before last pinned tab, change index to
+    // after last pinned tab
+    if (!tab.pinned) {
+      const lastPinnedIndex = window.tabs.reduce(
+        (maxIndex, currentTab, currentIndex) => {
+          return currentTab.pinned && currentIndex > maxIndex
+            ? currentIndex
+            : maxIndex
+        },
+        -1,
+      )
+      if (lastPinnedIndex !== -1 && index <= lastPinnedIndex) {
+        index = lastPinnedIndex + 1
+        // if moving to after last pinned tab, remove parentUid to avoid issues with parent-child relationships
+        parentUid = undefined
+      }
+    }
     // if parentUid is provided, insert as child tab
     if (parentUid) {
       const parent = Tree.tabsByUid.get(parentUid)
@@ -341,6 +358,41 @@ export function closeTab(message: { tabId: number; tabUid: UID }): void {
     .catch((error) => {
       console.debug('Error closing tab:', error)
     })
+}
+
+/**
+ *
+ * Duplicates a tab by creating a new tab in the browser with the same URL and title,
+ * and adding it to the session tree as a sibling of the original tab.
+ *
+ * @param {Object} message - The message object containing the tab id and UID
+ * @param {number} message.tabId - The ID of the tab to be duplicated
+ * @param {UID} message.tabUid - The UID of the tab to be duplicated
+ */
+export function duplicateTab(message: { tabId: number; tabUid: UID }): void {
+  const tab = Tree.tabsByUid.get(message.tabUid)
+  // if tab open let browser duplicate the tab and handle logic in onCreated handler
+  if (tab && tab.state === State.OPEN) {
+    browser.tabs.duplicate(message.tabId).catch((error) => {
+      console.error('Error duplicating tab:', error)
+    })
+  }
+  // if tab is saved create a new tab with the same URL and title and add to session tree
+  else if (tab && tab.state === State.SAVED) {
+    const window = Tree.windowsByUid.get(tab.windowUid)
+    addTab(
+      false,
+      tab.windowUid,
+      -1,
+      false,
+      tab.state,
+      tab.title,
+      tab.url,
+      tab.pinned,
+      window ? window.tabs.indexOf(tab) + 1 : undefined,
+      tab.parentUid,
+    )
+  }
 }
 
 /**

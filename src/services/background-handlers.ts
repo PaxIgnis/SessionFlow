@@ -142,6 +142,14 @@ async function tabsOnCreated(tab: browser.tabs.Tab): Promise<void> {
     if (!window) {
       return
     }
+    // translate index from browser to session tree, as browser index includes all tabs, but session tree index only includes open and discarded tabs
+    const openSessionTreeTabs = window.tabs.filter(
+      (tab) => tab.state === State.OPEN || tab.state === State.DISCARDED,
+    )
+    const tabToLeft = openSessionTreeTabs[Math.max(tab.index - 1, 0)]
+    const tabToLeftIndex = tabToLeft
+      ? window.tabs.findIndex((t) => t.uid === tabToLeft.uid)
+      : 0
     Tree.addTab(
       tab.active,
       window.uid,
@@ -151,7 +159,7 @@ async function tabsOnCreated(tab: browser.tabs.Tab): Promise<void> {
       tab.title || 'Untitled',
       tab.url || '',
       tab.pinned || false,
-      tab.index,
+      tabToLeft ? tabToLeftIndex + 1 : undefined,
     )
   }
 }
@@ -441,6 +449,8 @@ function browserActionOnClicked(): void {
 function onMessage(message: Messages.SessionTreeMessage): void {
   if (message.action === 'closeTab') {
     Tree.closeTab(message)
+  } else if (message.action === 'duplicateTab') {
+    Tree.duplicateTab(message)
   } else if (message.action === 'saveTab') {
     Tree.saveTab(message)
   } else if (message.action === 'openTab') {

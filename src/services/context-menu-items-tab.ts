@@ -4,6 +4,16 @@ import { ContextMenuItem } from '@/types/context-menu'
 import { State } from '@/types/session-tree'
 
 export const contextMenuItemsTab: Record<string, () => ContextMenuItem> = {
+  duplicateTab: () => {
+    return {
+      id: 'duplicateTab',
+      label: 'Duplicate',
+      icon: 'duplicate',
+      enabled: Selection.getSelectedTabs().length > 0,
+      action: () => Messages.duplicateTabs(Selection.getSelectedTabs()),
+    }
+  },
+
   openTab: () => {
     return {
       id: 'openTab',
