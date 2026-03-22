@@ -1,6 +1,7 @@
 import { STORAGE_KEY } from '@/defaults/constants'
 import { OnCreatedQueue } from '@/services/background-on-created-queue'
 import { Tree } from '@/services/background-tree'
+import { Favicons } from '@/services/favicons'
 import { Settings } from '@/services/settings'
 import * as Utils from '@/services/utils'
 import { State, Tab, Window } from '@/types/session-tree'
@@ -47,6 +48,20 @@ export async function initializeWindows(): Promise<void> {
     })
     rebuildUIDMaps() // and then remove this
     Tree.recomputeSessionTree()
+    if (Settings.values.fetchMissingFaviconsOnStartup) {
+      await Favicons.init()
+      const hasPermissions = await Favicons.hasFetchPermissions()
+      if (!hasPermissions) {
+        console.info(
+          'Skipping startup favicon fetch: host permissions are not granted',
+        )
+        return
+      }
+      const tabUrls = Array.from(Tree.tabsByUid.values())
+        .map((tab) => tab.url)
+        .filter((url): url is string => typeof url === 'string' && url !== '')
+      await Favicons.fetchMissingFavicons(tabUrls)
+    }
   } catch (error) {
     console.error('Error initializing windows:', error)
   }

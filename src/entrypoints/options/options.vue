@@ -173,8 +173,16 @@ h2 {
   color: var(--header-text-color);
 }
 
-.child-element {
-  margin-left: 24px;
+.child-setting {
+  margin-left: 20px;
+  opacity: var(--child-opacity, 1);
+  pointer-events: var(--child-events, auto);
+}
+
+.child-setting:has(input:disabled),
+.child-setting:has(button:disabled) {
+  --child-opacity: 0.5;
+  --child-events: none;
 }
 
 .content-panel > section > h2 {

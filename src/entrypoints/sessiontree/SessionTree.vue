@@ -3,15 +3,14 @@ import IconChevronRight from '@/assets/chevron-right.svg'
 import IconPinned from '@/assets/pinned.svg'
 import TreeItem from '@/components/TreeItem.vue'
 import { DragAndDrop } from '@/services/drag-and-drop'
-import { FaviconService } from '@/services/favicons'
+import { Favicons } from '@/services/favicons'
 import * as Messages from '@/services/foreground-messages'
 import { SessionTree } from '@/services/foreground-tree'
 import { Selection } from '@/services/selection'
 import { Settings } from '@/services/settings'
 import '@/styles/variables.css'
-import { FaviconCacheEntry } from '@/types/favicons'
 import { VisibleWindow, Window } from '@/types/session-tree'
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted } from 'vue'
 
 // Save Session Tree Window location and size before closing.
 window.onbeforeunload = () => {
@@ -35,10 +34,7 @@ window.onbeforeunload = () => {
   faviconService.saveCacheToStorage()
 }
 
-const faviconCache = ref<Map<string, FaviconCacheEntry>>(
-  new Map<string, FaviconCacheEntry>(),
-)
-const faviconService = new FaviconService(undefined, faviconCache.value)
+const faviconService = Favicons
 const backgroundPage =
   window.browser.extension.getBackgroundPage() as unknown as globalThis.Window
 
@@ -58,8 +54,12 @@ function updateSessionTree(newWindows: Array<Window>) {
 }
 
 // On component mount
-onMounted(() => {
+onMounted(async () => {
   console.log('Mounted')
+  await faviconService.init()
+  const openTabs = await window.browser.tabs.query({})
+  faviconService.warmCacheFromTabs(openTabs)
+
   // Get initial data from the background script
   if (
     backgroundPage &&

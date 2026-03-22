@@ -20,7 +20,14 @@ export default defineConfig({
       'storage',
       'tabs',
     ],
+    optional_host_permissions: ['http://*/*', 'https://*/*'],
+    optional_permissions: ['http://*/*' as never, 'https://*/*' as never],
     name: 'Session Flow',
+    browser_specific_settings: {
+      gecko: {
+        id: '6b9a5897787af169ae058e65c75ac90a98506c61@temporary-addon',
+      },
+    },
   },
   modules: ['@wxt-dev/module-vue'],
   // runner: {

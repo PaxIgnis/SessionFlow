@@ -1,5 +1,9 @@
 import { FaviconCacheEntry, FaviconStorageConfig } from '@/types/favicons'
 
+type FaviconTabSource = Pick<browser.tabs.Tab, 'url' | 'favIconUrl'>
+
+const FAVICON_PERMISSION_ORIGINS = ['http://*/*', 'https://*/*']
+
 export class FaviconService {
   private static readonly DEFAULT_CONFIG: FaviconStorageConfig = {
     expiryDays: 7,
@@ -8,6 +12,8 @@ export class FaviconService {
 
   private cache: Map<string, FaviconCacheEntry>
   private config: FaviconStorageConfig
+  private initialized = false
+  private initPromise: Promise<void> | undefined
 
   constructor(
     config?: FaviconStorageConfig,
@@ -15,8 +21,46 @@ export class FaviconService {
   ) {
     this.config = { ...FaviconService.DEFAULT_CONFIG, ...config }
     this.cache = cache ? cache : new Map()
-    this.loadCacheFromStorage()
-    this.updateCacheFromSessionTree()
+  }
+
+  /**
+   * Initializes the service by loading persisted cache.
+   *
+   * @returns {Promise<void>} - A promise that resolves when initialization is complete
+   */
+  public async init(): Promise<void> {
+    if (this.initialized) return
+    if (!this.initPromise) {
+      this.initPromise = this.loadCacheFromStorage()
+    }
+    try {
+      await this.initPromise
+      this.initialized = true
+    } finally {
+      this.initPromise = undefined
+    }
+  }
+
+  public async hasFetchPermissions(): Promise<boolean> {
+    try {
+      return await browser.permissions.contains({
+        origins: FAVICON_PERMISSION_ORIGINS,
+      })
+    } catch (error) {
+      console.error('Failed to check favicon host permissions', error)
+      return false
+    }
+  }
+
+  public async requestFetchPermissions(): Promise<boolean> {
+    try {
+      return await browser.permissions.request({
+        origins: FAVICON_PERMISSION_ORIGINS,
+      })
+    } catch (error) {
+      console.error('Failed to request favicon host permissions', error)
+      return false
+    }
   }
 
   /**
@@ -39,16 +83,15 @@ export class FaviconService {
    * Updates the favicon cache to include all favicons from open tabs
    *
    */
-  private updateCacheFromSessionTree() {
-    // loop through all open tabs and update the cache with their favicons
-    browser.tabs.query({}).then((tabs) => {
-      tabs.forEach((tab) => {
-        const domain = this.getDomainFromUrl(tab.url!)
-        // If the tab has a favicon and the tab's domain is not already in the cache, add it
-        if (tab.favIconUrl && !this.cache.has(domain)) {
-          this.updateFavicon(tab.favIconUrl, tab)
-        }
-      })
+  public warmCacheFromTabs(tabs: Iterable<FaviconTabSource>) {
+    Array.from(tabs).forEach((tab) => {
+      if (!tab.url || !tab.favIconUrl) return
+      if (!this.isWebUrl(tab.url)) return
+      const domain = this.getDomainFromUrl(tab.url)
+      // If the tab has a favicon and the tab's domain is not already in the cache, add it
+      if (domain && !this.cache.has(domain)) {
+        void this.updateFavicon(tab.favIconUrl, tab as browser.tabs.Tab)
+      }
     })
   }
 
@@ -71,6 +114,30 @@ export class FaviconService {
   }
 
   /**
+   * Fetches and stores the favicon for a given URL
+   *
+   * @param url - The URL to fetch the favicon for
+   */
+  public async fetchAndStoreFavicon(url: string): Promise<void> {
+    try {
+      if (!this.isWebUrl(url)) {
+        return
+      }
+
+      const domain = this.getDomainFromUrl(url)
+      if (!domain) {
+        return
+      }
+
+      const parsedUrl = new URL(url)
+      const faviconUrl = `${parsedUrl.protocol}//${domain}/favicon.ico`
+      await this.updateFavicon(faviconUrl, { url } as browser.tabs.Tab)
+    } catch (error) {
+      console.error('Failed to fetch favicon for URL', error, url)
+    }
+  }
+
+  /**
    * Gets the favicon data URL for a given URL (domain) from the cache.
    *
    * @param {string} url - The URL to get the favicon for
@@ -89,19 +156,46 @@ export class FaviconService {
   }
 
   /**
+   * Fetches favicons for URL domains that are not already in the cache.
+   *
+   * @param urls - Iterable of web page URLs
+   */
+  public async fetchMissingFavicons(urls: Iterable<string>): Promise<void> {
+    // create list of domains from URL list, remove duplicates and domains that are already in the cache
+    const firstUrlByDomain = new Map<string, string>()
+    Array.from(urls).forEach((url) => {
+      if (!url) return
+      if (!this.isWebUrl(url)) return
+      const domain = this.getDomainFromUrl(url)
+      if (domain && !this.cache.has(domain) && !firstUrlByDomain.has(domain)) {
+        firstUrlByDomain.set(domain, url)
+      }
+    })
+
+    const tasks = Array.from(firstUrlByDomain.values()).map((url) =>
+      this.fetchAndStoreFavicon(url),
+    )
+    await Promise.allSettled(tasks)
+    await this.saveCacheToStorage()
+  }
+
+  /**
    * Updates the favicon in the cache for the given tab
    *
    * @param {string} favIconUrl - The data URL of the favicon
    * @param {browser.tabs.Tab} tab - The tab to update the favicon for
+   * @param {string} url - The URL of the tab to update the favicon for (used if tab.url is undefined)
    * @returns {Promise<void>} - A promise that resolves when the favicon has been updated
    */
   public async updateFavicon(
     favIconUrl: string,
-    tab: browser.tabs.Tab,
+    tab?: browser.tabs.Tab,
+    url?: string,
   ): Promise<void> {
     try {
       // extract the domain from the URL
-      const domain = this.getDomainFromUrl(tab.url!)
+      const domain = this.getDomainFromUrl(tab?.url || url!)
+      if (!domain) return
 
       // If the favicon URL is a data URL, store it directly
       if (favIconUrl.startsWith('data:')) {
@@ -114,29 +208,41 @@ export class FaviconService {
         return
       }
 
-      // If the favicon URL is a browser internal URL, set custom favicons
-      if (
-        domain.startsWith('chrome://') ||
-        domain.startsWith('moz-extension://') ||
-        domain.startsWith('about:') ||
-        domain.startsWith('resource:')
-      ) {
-        // TODO: Implement solution to get icons for privileged URLs (e.g. about:config)
+      if (!this.isWebUrl(favIconUrl)) {
         return
       }
 
-      // Otherwise fetch and convert
-      const response = await fetch(favIconUrl)
-      const blob = await response.blob()
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onloadend = () => resolve(reader.result as string)
-        reader.onerror = reject
-        reader.readAsDataURL(blob)
-      })
+      await this.fetchAndCacheFavicon(domain, favIconUrl, tab?.url || url)
+    } catch (error) {
+      console.error('Failed to update favicon', error, favIconUrl)
+    }
+  }
+
+  private async fetchAndCacheFavicon(
+    domain: string,
+    favIconUrl: string,
+    pageUrl?: string,
+  ): Promise<void> {
+    try {
+      const dataUrl = await this.fetchImageAsDataUrl(favIconUrl)
       if (!dataUrl || dataUrl === '') {
+        const fallbackDataUrl = await this.fetchFaviconFromHtmlFallback(
+          domain,
+          pageUrl,
+        )
+        if (!fallbackDataUrl || fallbackDataUrl === '') {
+          return
+        }
+
+        const faviconData: FaviconCacheEntry = {
+          dataUrl: fallbackDataUrl,
+          timestamp: Date.now(),
+          url: domain,
+        }
+        this.cache.set(domain, faviconData)
         return
       }
+
       const faviconData: FaviconCacheEntry = {
         dataUrl,
         timestamp: Date.now(),
@@ -148,6 +254,62 @@ export class FaviconService {
     }
   }
 
+  private async fetchImageAsDataUrl(url: string): Promise<string | undefined> {
+    try {
+      const response = await fetch(url)
+      if (!response.ok) {
+        return undefined
+      }
+
+      const blob = await response.blob()
+      return await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onloadend = () => resolve(reader.result as string)
+        reader.onerror = reject
+        reader.readAsDataURL(blob)
+      })
+    } catch {
+      return undefined
+    }
+  }
+
+  private async fetchFaviconFromHtmlFallback(
+    domain: string,
+    pageUrl?: string,
+  ): Promise<string | undefined> {
+    try {
+      const candidatePageUrl =
+        pageUrl && this.isWebUrl(pageUrl) ? pageUrl : `https://${domain}`
+
+      const response = await fetch(candidatePageUrl)
+      if (!response.ok) {
+        return undefined
+      }
+
+      const html = await response.text()
+      const iconHref = this.extractFaviconHrefFromHtml(html)
+      if (!iconHref) {
+        return undefined
+      }
+
+      const iconUrl = new URL(iconHref, candidatePageUrl).toString()
+      if (!this.isWebUrl(iconUrl)) {
+        return undefined
+      }
+
+      return await this.fetchImageAsDataUrl(iconUrl)
+    } catch {
+      return undefined
+    }
+  }
+
+  private extractFaviconHrefFromHtml(html: string): string | undefined {
+    const iconLinkRegex =
+      /<link[^>]*rel=["'][^"']*icon[^"']*["'][^>]*href=["']([^"']+)["'][^>]*>|<link[^>]*href=["']([^"']+)["'][^>]*rel=["'][^"']*icon[^"']*["'][^>]*>/i
+    const match = html.match(iconLinkRegex)
+    return match?.[1] || match?.[2] || undefined
+  }
+
   /**
    * Extracts the domain from a URL
    *
@@ -156,23 +318,21 @@ export class FaviconService {
    */
   private getDomainFromUrl(url: string): string {
     try {
-      let domain = ''
-      // If the URL is a privileged firefox URL, use it directly
-      // Otherwise, extract the domain from the URL
-      if (
-        url.startsWith('chrome://') ||
-        url.startsWith('moz-extension://') ||
-        url.startsWith('about:') ||
-        url.startsWith('resource:')
-      ) {
-        domain = url
-      } else {
-        domain = new URL(url).hostname
-      }
-      return domain
+      return new URL(url).hostname
     } catch (error) {
       console.error('Failed to parse URL', error, url)
       return ''
     }
   }
+
+  private isWebUrl(url: string): boolean {
+    try {
+      const protocol = new URL(url).protocol
+      return protocol === 'http:' || protocol === 'https:'
+    } catch {
+      return false
+    }
+  }
 }
+
+export const Favicons = new FaviconService()
