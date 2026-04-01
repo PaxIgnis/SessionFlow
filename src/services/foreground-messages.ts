@@ -1,3 +1,4 @@
+import { sendTreeCommand } from '@/services/runtime-port-service'
 import { Settings } from '@/services/settings'
 import * as Messages from '@/types/messages'
 import { State, Tab, Window } from '@/types/session-tree'
@@ -7,7 +8,7 @@ import { State, Tab, Window } from '@/types/session-tree'
 // ==============================
 
 export function closeTab(tabId: number, tabUid: UID) {
-  window.browser.runtime.sendMessage({
+  void sendTreeCommand({
     action: 'closeTab',
     tabId: tabId,
     tabUid: tabUid,
@@ -21,7 +22,7 @@ export function closeTabs(tabs: Array<Tab>) {
 }
 
 export function duplicateTab(tabId: number, tabUid: UID) {
-  window.browser.runtime.sendMessage({
+  void sendTreeCommand({
     action: 'duplicateTab',
     tabId: tabId,
     tabUid: tabUid,
@@ -35,7 +36,7 @@ export function duplicateTabs(tabs: Array<Tab>) {
 }
 
 export function focusTab(tabId: number, windowId: number) {
-  window.browser.runtime.sendMessage({
+  void sendTreeCommand({
     action: 'focusTab',
     tabId: tabId,
     windowId: windowId,
@@ -49,7 +50,7 @@ export function moveTabs(
   parentUid: UID | undefined,
   copy: boolean = false,
 ) {
-  window.browser.runtime.sendMessage({
+  void sendTreeCommand({
     action: 'moveTabs',
     tabUIDs: tabUIDs,
     targetWindowUid: targetWindowUid,
@@ -60,7 +61,7 @@ export function moveTabs(
 }
 
 export function openTab(tabUid: UID, windowUid: UID, url: string) {
-  window.browser.runtime.sendMessage({
+  void sendTreeCommand({
     action: 'openTab',
     tabUid: tabUid,
     windowUid: windowUid,
@@ -76,7 +77,7 @@ export function openTabs(tabs: Array<Tab>) {
 
 export function pinTabs(tabs: Array<Tab>) {
   tabs.forEach((tab) => {
-    window.browser.runtime.sendMessage({
+    void sendTreeCommand({
       action: 'pinTab',
       tabUid: tab.uid,
     })
@@ -84,7 +85,7 @@ export function pinTabs(tabs: Array<Tab>) {
 }
 
 export function reloadTab(tabId: number) {
-  window.browser.runtime.sendMessage({
+  void sendTreeCommand({
     action: 'reloadTab',
     tabId: tabId,
   })
@@ -97,7 +98,7 @@ export function reloadTabs(tabs: Array<Tab>) {
 }
 
 export function saveTab(tabId: number, tabUid: UID) {
-  window.browser.runtime.sendMessage({
+  void sendTreeCommand({
     action: 'saveTab',
     tabId: tabId,
     tabUid: tabUid,
@@ -148,7 +149,7 @@ export function tabDoubleClick(
 
 export function tabIndentDecrease(tabs: Array<Tab>) {
   const tabUids = tabs.map((tab) => tab.uid)
-  window.browser.runtime.sendMessage({
+  void sendTreeCommand({
     action: 'tabIndentDecrease',
     tabUids: tabUids,
   })
@@ -156,14 +157,14 @@ export function tabIndentDecrease(tabs: Array<Tab>) {
 
 export function tabIndentIncrease(tabs: Array<Tab>) {
   const tabUids = tabs.map((tab) => tab.uid)
-  window.browser.runtime.sendMessage({
+  void sendTreeCommand({
     action: 'tabIndentIncrease',
     tabUids: tabUids,
   })
 }
 
 export function toggleCollapseTab(tabUid: UID) {
-  window.browser.runtime.sendMessage({
+  void sendTreeCommand({
     action: 'toggleCollapseTab',
     tabUid: tabUid,
   })
@@ -171,7 +172,7 @@ export function toggleCollapseTab(tabUid: UID) {
 
 export function unpinTabs(tabs: Array<Tab>) {
   tabs.forEach((tab) => {
-    window.browser.runtime.sendMessage({
+    void sendTreeCommand({
       action: 'unpinTab',
       tabUid: tab.uid,
     })
@@ -183,7 +184,7 @@ export function unpinTabs(tabs: Array<Tab>) {
 // ==============================
 
 export function closeWindow(windowId: number, windowUid: UID) {
-  window.browser.runtime.sendMessage({
+  void sendTreeCommand({
     action: 'closeWindow',
     windowId: windowId,
     windowUid: windowUid,
@@ -197,7 +198,7 @@ export function closeWindows(windows: Array<Window>) {
 }
 
 export function saveWindow(windowId: number, windowUid: UID) {
-  window.browser.runtime.sendMessage({
+  void sendTreeCommand({
     action: 'saveWindow',
     windowId: windowId,
     windowUid: windowUid,
@@ -217,12 +218,12 @@ export function windowDoubleClick(
 ) {
   console.log('Window double clicked. Window ID: ', windowId)
   if (state === State.SAVED) {
-    window.browser.runtime.sendMessage({
+    void sendTreeCommand({
       action: 'openWindow',
       windowUid: windowUid,
     })
   } else if (state === State.OPEN) {
-    window.browser.runtime.sendMessage({
+    void sendTreeCommand({
       action: 'focusWindow',
       windowId: windowId,
     })
@@ -230,7 +231,7 @@ export function windowDoubleClick(
 }
 
 export function toggleCollapseWindow(windowUid: UID) {
-  window.browser.runtime.sendMessage({
+  void sendTreeCommand({
     action: 'toggleCollapseWindow',
     windowUid: windowUid,
   })
@@ -241,7 +242,7 @@ export function moveWindows(
   targetIndex: number,
   copy: boolean = false,
 ) {
-  window.browser.runtime.sendMessage({
+  void sendTreeCommand({
     action: 'moveWindows',
     windowUIDs: windowUIDs,
     targetIndex: targetIndex,
@@ -253,7 +254,7 @@ export function moveWindows(
 // Tree Messages
 // ==============================
 export function deselectAllItems() {
-  window.browser.runtime.sendMessage({
+  void sendTreeCommand({
     action: 'deselectAllItems',
   })
 }
@@ -262,7 +263,7 @@ export function deselectAllItems() {
 // Debug Messages
 // ==============================
 export function printSessionTree() {
-  window.browser.runtime.sendMessage({
+  void sendTreeCommand({
     action: 'printSessionTree',
   })
 }

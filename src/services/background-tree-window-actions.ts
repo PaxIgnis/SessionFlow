@@ -3,6 +3,7 @@ import { DeferredEventsQueue } from '@/services/background-deferred-events-queue
 import { OnCreatedQueue } from '@/services/background-on-created-queue'
 import { Tree } from '@/services/background-tree'
 import { setTabVisibilityRecursively } from '@/services/background-tree-tab-actions'
+import { emitTreeDelta } from '@/services/runtime-port-service'
 import { Settings } from '@/services/settings'
 import * as TreeUtils from '@/services/tree-utils'
 import * as Utils from '@/services/utils'
@@ -25,6 +26,10 @@ export function saveWindow(windowUid: UID): void {
       tab.id = -1
       tab.savedTime = Date.now()
       tab.active = false
+    })
+    emitTreeDelta({
+      op: 'windowUpdated',
+      window: structuredClone(window),
     })
   }
 }
@@ -60,6 +65,11 @@ export async function addWindow(windowId: number): Promise<void> {
       newWindow.uid,
       Tree.windowsList[Tree.windowsList.length - 1],
     )
+    emitTreeDelta({
+      op: 'windowCreated',
+      window: structuredClone(newWindow),
+      index: Tree.windowsList.length - 1,
+    })
     Tree.recomputeSessionTree()
     Tree.updateWindowTabs(windowId)
     DeferredEventsQueue.processDeferredWindowEvents(windowId)
@@ -94,6 +104,10 @@ export async function updateWindowTabs(windowId: number): Promise<void> {
         Tree.tabsByUid.set(tab.uid, tab)
       }
       Tree.recomputeSessionTree()
+      emitTreeDelta({
+        op: 'windowUpdated',
+        window: structuredClone(window),
+      })
     }
   } catch (error) {
     console.error('Error updating window tabs:', error)
@@ -119,6 +133,10 @@ export function removeWindow(windowUid: UID): void {
 
     Tree.windowsList.splice(index, 1)
     Tree.recomputeSessionTree()
+    emitTreeDelta({
+      op: 'windowRemoved',
+      windowUid,
+    })
   } else {
     console.error(`Error Removing Window ${windowUid} from sessionTree`)
   }
@@ -137,6 +155,30 @@ export function updateWindowState(windowUid: UID, state: State): void {
     if (state === State.SAVED) {
       window.savedTime = Date.now()
     }
+    emitTreeDelta({
+      op: 'windowUpdated',
+      window: structuredClone(window),
+    })
+  }
+}
+
+/**
+ * Updates a window in the session tree with the given fields.
+ *
+ * @param {UID} windowUid - The UID of the window to update.
+ * @param {Partial<Window>} updatedFields - The fields to update in the window.
+ */
+export function updateWindow(
+  windowUid: UID,
+  updatedFields: Partial<Window>,
+): void {
+  const window = Tree.windowsByUid.get(windowUid)
+  if (window) {
+    Object.assign(window, updatedFields)
+    emitTreeDelta({
+      op: 'windowUpdated',
+      window: structuredClone(window),
+    })
   }
 }
 
@@ -150,6 +192,10 @@ export function updateWindowId(windowUid: UID, newWindowId: number): void {
   const window = Tree.windowsByUid.get(windowUid)
   if (window) {
     window.id = newWindowId
+    emitTreeDelta({
+      op: 'windowUpdated',
+      window: structuredClone(window),
+    })
   }
   DeferredEventsQueue.processDeferredWindowEvents(newWindowId)
 }
@@ -167,6 +213,10 @@ export function updateWindowPosition(
   const window = Tree.windowsList.find((w) => w.id === windowId)
   if (window) {
     window.windowPosition = position
+    emitTreeDelta({
+      op: 'windowUpdated',
+      window: structuredClone(window),
+    })
   }
 }
 
@@ -233,13 +283,13 @@ export function setActiveWindow(windowId: number, tries: number = 0): void {
 
   const previousActiveWindow = Tree.windowsList.find((w) => w.active)
   if (previousActiveWindow) {
-    previousActiveWindow.active = false
+    Tree.updateWindow(previousActiveWindow.uid, { active: false })
   }
 
   const activeWindow = Tree.windowsList.find((w) => w.id === windowId)
   // if activeWindow is undefined, wait and try again
   if (activeWindow) {
-    activeWindow.active = true
+    Tree.updateWindow(activeWindow.uid, { active: true })
   } else {
     if (tries > 0) {
       setTimeout(() => {
@@ -407,6 +457,10 @@ export function toggleCollapseWindow(windowUid: UID): void {
   } else {
     setTabVisibilityRecursively(roots, childrenMap, true)
   }
+  emitTreeDelta({
+    op: 'windowUpdated',
+    window: structuredClone(win),
+  })
 }
 
 /**
@@ -460,10 +514,19 @@ export function moveWindows(
     // remove window from current position
     if (!copy) {
       Tree.windowsList.splice(currentIndex, 1)
+      emitTreeDelta({
+        op: 'windowRemoved',
+        windowUid: window.uid,
+      })
     }
 
     // insert window at target position
     Tree.windowsList.splice(targetIndex, 0, window)
+    emitTreeDelta({
+      op: 'windowCreated',
+      window: structuredClone(window),
+      index: targetIndex,
+    })
     targetIndex++
   }
 }

@@ -2,6 +2,7 @@ import { Browser } from '@/services/background-browser'
 import { DeferredEventsQueue } from '@/services/background-deferred-events-queue'
 import { OnCreatedQueue } from '@/services/background-on-created-queue'
 import { Tree } from '@/services/background-tree'
+import { emitTreeDelta } from '@/services/runtime-port-service'
 import { Settings } from '@/services/settings'
 import * as TreeUtils from '@/services/tree-utils'
 import * as Utils from '@/services/utils'
@@ -34,6 +35,7 @@ export function addTab(
   index?: number,
   parentUid?: UID,
   tabUid?: UID,
+  emitDelta: boolean = true,
 ): UID | void {
   console.log('Tab Added in background.ts', windowUID, tabId, title, url)
   const tabExists = Tree.tabsByUid.get(tabUid ?? '')
@@ -88,7 +90,8 @@ export function addTab(
       ).length
 
       // if this is the first child tab, set parent tab's isParent to true
-      if (siblingTabCount === 0 && parent) parent.isParent = true
+      if (siblingTabCount === 0 && parent)
+        Tree.updateTab({ tabUid: parentUid }, { isParent: true }, emitDelta)
 
       tab.parentUid = parent?.uid
       // set indent level one more than parent, or default to 1
@@ -107,9 +110,17 @@ export function addTab(
     tab.indentLevel = 1
     window.tabs.push(tab)
   }
-  // TODO: can use tab object instead when independent data source for foreground context implemented
+  // TODO: can use tab object instead when independent data source for foreground context implemented (i.e. use 'tab' instead of windws.tabs... lookup)
   Tree.tabsByUid.set(tab.uid, window.tabs[window.tabs.indexOf(tab)])
-  Tree.recomputeSessionTree()
+  Tree.recomputeSessionTree(emitDelta)
+  if (emitDelta) {
+    emitTreeDelta({
+      op: 'tabCreated',
+      windowUid: window.uid,
+      tab: structuredClone(tab),
+      index: window.tabs.indexOf(tab),
+    })
+  }
   DeferredEventsQueue.processDeferredTabEvents(tabId)
   return tab.uid
 }
@@ -118,8 +129,9 @@ export function addTab(
  * Removes a tab from the session tree.
  *
  * @param {UID} tabUid - The UID of the tab to be removed.
+ * @param {boolean = true} emitDelta - Whether to emit a tree delta event.
  */
-export function removeTab(tabUid: UID): void {
+export function removeTab(tabUid: UID, emitDelta: boolean = true): void {
   const tab = Tree.tabsByUid.get(tabUid)
   if (!tab) {
     console.error('Error removing tab, could not find tab:', tabUid)
@@ -147,22 +159,33 @@ export function removeTab(tabUid: UID): void {
 
   if (directChildren.length === 0 && siblings.length === 1 && parentTab) {
     // if no children and no siblings, remove parent status from parent tab
-    parentTab.isParent = false
+    Tree.updateTab({ tabUid: parentTab.uid }, { isParent: false }, emitDelta)
   } else if (directChildren.length > 0) {
     for (const child of directChildren) {
-      child.parentUid = tab.parentUid
+      Tree.updateTab(
+        { tabUid: child.uid },
+        { parentUid: tab.parentUid },
+        emitDelta,
+      )
     }
-    decreaseIndentRecursively(directChildren, childrenMap)
+    decreaseIndentRecursively(directChildren, childrenMap, emitDelta)
   }
 
   Tree.existingUidsSet.delete(tab.uid)
   Tree.tabsByUid.delete(tab.uid)
   window.tabs.splice(index, 1)
+  if (emitDelta) {
+    emitTreeDelta({
+      op: 'tabRemoved',
+      windowUid: window.uid,
+      tabUid: tab.uid,
+    })
+  }
   // if this was the last tab in the window, remove the window
   if (window.tabs.length === 0) {
     Tree.removeWindow(window.uid)
   }
-  Tree.recomputeSessionTree()
+  Tree.recomputeSessionTree(emitDelta)
 }
 
 /**
@@ -171,10 +194,12 @@ export function removeTab(tabUid: UID): void {
  *
  * @param {Object} id - An object containing EITHER the (windowId and tabId) OR (tabUid) of the tab to be updated.
  * @param {Partial<Tab>} tabContents - An object containing the updated properties for the tab.
+ * @param {boolean = true} emitDelta - Whether to emit a tree delta event for this update.
  */
 export function updateTab(
   id: { windowId?: number; tabId?: number; tabUid?: UID },
   tabContents: Partial<Tab>,
+  emitDelta: boolean = true,
 ): void {
   let tab: Tab | undefined = undefined
   if (id.tabUid) {
@@ -189,24 +214,30 @@ export function updateTab(
     const window = Tree.windowsList.find((w) => w.id === id.windowId)
     if (!window) {
       DeferredEventsQueue.addDeferredWindowEvent(id.windowId, () =>
-        Tree.updateTab(id, tabContents),
+        Tree.updateTab(id, tabContents, emitDelta),
       )
       return
     }
     tab = window.tabs.find((t) => t.id === id.tabId) as Tab
     if (!tab) {
       DeferredEventsQueue.addDeferredTabEvent(id.tabId, () =>
-        Tree.updateTab(id, tabContents),
+        Tree.updateTab(id, tabContents, emitDelta),
       )
       return
     }
   }
   if (tabContents.pinned !== undefined && tabContents.pinned)
-    Tree.pinTabInTree(tab.uid)
+    Tree.pinTabInTree(tab.uid, emitDelta)
   if (tabContents.pinned !== undefined && !tabContents.pinned)
-    Tree.unpinTabInTree(tab.uid)
+    Tree.unpinTabInTree(tab.uid, emitDelta)
   // If the tab object exists update the new values
   Object.assign(tab, tabContents)
+  if (emitDelta) {
+    emitTreeDelta({
+      op: 'tabUpdated',
+      tab: structuredClone(tab),
+    })
+  }
 }
 
 /**
@@ -218,7 +249,7 @@ export function updateTab(
 export function updateTabId(tabUid: UID, newTabId: number): void {
   const tab = Tree.tabsByUid.get(tabUid)
   if (tab) {
-    tab.id = newTabId
+    Tree.updateTab({ tabUid: tabUid }, { id: newTabId })
   }
   DeferredEventsQueue.processDeferredTabEvents(newTabId)
 }
@@ -232,10 +263,11 @@ export function updateTabId(tabUid: UID, newTabId: number): void {
 export function updateTabState(tabUid: UID, state: State): void {
   const tab = Tree.tabsByUid.get(tabUid)
   if (tab) {
-    tab.state = state
+    const updatedTab = { state: state } as Partial<Tab>
     if (state === State.SAVED) {
-      tab.savedTime = Date.now()
+      updatedTab.savedTime = Date.now()
     }
+    Tree.updateTab({ tabUid: tabUid }, updatedTab)
   }
 }
 
@@ -247,10 +279,13 @@ export function updateTabState(tabUid: UID, state: State): void {
 export function setTabSaved(tabUid: UID): void {
   const tab = Tree.tabsByUid.get(tabUid)
   if (tab) {
-    tab.state = State.SAVED
-    tab.id = -1
-    tab.savedTime = Date.now()
-    tab.active = false
+    const updatedTab = {
+      state: State.SAVED,
+      id: -1,
+      savedTime: Date.now(),
+      active: false,
+    } as Partial<Tab>
+    Tree.updateTab({ tabUid: tabUid }, updatedTab)
   }
 }
 
@@ -270,7 +305,7 @@ export function tabOnActivated(
     ?.tabs.find((t) => t.id === activeInfo.previousTabId)
   // remove active status from previous active tab (not when detached/attached)
   if (activeInfo.previousTabId !== activeInfo.tabId && previousActiveTab) {
-    previousActiveTab.active = false
+    Tree.updateTab({ tabUid: previousActiveTab.uid }, { active: false })
   }
   // if window or activeTab is undefined, wait and try again
   if (!window || !activeTab) {
@@ -281,8 +316,8 @@ export function tabOnActivated(
     }
     return
   }
-  window.activeTabId = activeInfo.tabId
-  activeTab.active = true
+  Tree.updateWindow(window.uid, { activeTabId: activeInfo.tabId })
+  Tree.updateTab({ tabUid: activeTab.uid }, { active: true })
 }
 
 /**
@@ -599,8 +634,9 @@ export function pinTab(tabUid: UID): void {
  * Pins a tab in the session tree.
  *
  * @param {UID} tabUid - The UID of the tab to be pinned.
+ * @param {boolean = true} emitDelta - Whether to emit a tree delta event for this update.
  */
-export function pinTabInTree(tabUid: UID): void {
+export function pinTabInTree(tabUid: UID, emitDelta: boolean = true): void {
   const tab = Tree.tabsByUid.get(tabUid)
   if (!tab) {
     console.error('Error pinning tab, could not find tab:', tabUid)
@@ -615,8 +651,8 @@ export function pinTabInTree(tabUid: UID): void {
   }
   // find index of last pinned tab
   const lastPinnedIndex = window.tabs.findLastIndex((t) => t.pinned)
-  tab.pinned = true
-  Tree.moveTab(tab.uid, window.uid, lastPinnedIndex + 1)
+  Tree.updateTab({ tabUid: tab.uid }, { pinned: true }, emitDelta)
+  Tree.moveTab(tab.uid, window.uid, lastPinnedIndex + 1, undefined, emitDelta)
   return
 }
 
@@ -644,8 +680,9 @@ export function unpinTab(tabUid: UID): void {
  * Unpins a tab in the session tree.
  *
  * @param {UID} tabUid - The UID of the tab to be unpinned.
+ * @param {boolean = true} emitDelta - Whether to emit a tree delta event for this update.
  */
-export function unpinTabInTree(tabUid: UID): void {
+export function unpinTabInTree(tabUid: UID, emitDelta: boolean = true): void {
   const tab = Tree.tabsByUid.get(tabUid)
   if (!tab) {
     console.error('Error unpinning tab, could not find tab:', tabUid)
@@ -658,8 +695,14 @@ export function unpinTabInTree(tabUid: UID): void {
     return
   }
   const lastPinnedIndex = window.tabs.findLastIndex((t) => t.pinned)
-  tab.pinned = false
-  Tree.moveTab(tab.uid, window.uid, Math.max(lastPinnedIndex, 0))
+  Tree.updateTab({ tabUid: tab.uid }, { pinned: false }, emitDelta)
+  Tree.moveTab(
+    tab.uid,
+    window.uid,
+    Math.max(lastPinnedIndex, 0),
+    undefined,
+    emitDelta,
+  )
   return
 }
 
@@ -669,8 +712,12 @@ export function unpinTabInTree(tabUid: UID): void {
  * When expanding, child tab visibility respects their own collapsed states and ancestor states.
  *
  * @param {UID} tabUid - The UID of the tab to toggle.
+ * @param {boolean = true} emitDelta - Whether to emit tree delta events for this update.
  */
-export function toggleCollapseTab(tabUid: UID): void {
+export function toggleCollapseTab(
+  tabUid: UID,
+  emitDelta: boolean = true,
+): void {
   console.log(`Toggling collapse for tab ${tabUid}`)
   const tab = Tree.tabsByUid.get(tabUid)
   if (!tab) {
@@ -683,13 +730,13 @@ export function toggleCollapseTab(tabUid: UID): void {
     return
   }
 
-  tab.collapsed = !tab.collapsed
+  Tree.updateTab({ tabUid: tab.uid }, { collapsed: !tab.collapsed }, emitDelta)
   const childrenMap = TreeUtils.buildChildrenMap(window.tabs)
   const children = childrenMap.get(tab.uid) || []
 
   if (tab.collapsed) {
     // hiding this tab's subtree
-    setTabVisibilityRecursively(children, childrenMap, false)
+    setTabVisibilityRecursively(children, childrenMap, false, emitDelta)
   } else {
     // before showing children, ensure no ancestor is collapsed
     let ancestorCollapsed = false
@@ -705,7 +752,7 @@ export function toggleCollapseTab(tabUid: UID): void {
     }
 
     if (!ancestorCollapsed) {
-      setTabVisibilityRecursively(children, childrenMap, true)
+      setTabVisibilityRecursively(children, childrenMap, true, emitDelta)
     }
   }
 }
@@ -716,18 +763,27 @@ export function toggleCollapseTab(tabUid: UID): void {
  * @param {Tab[]} tabs - The list of tabs to set visibility for.
  * @param {Map<UID, Tab[]>} childrenMap - A map of parent UIDs to their child tabs.
  * @param {boolean} isVisible - The visibility state to set.
+ * @param {boolean = true} emitDelta - Whether to emit tree delta events for each tab updated.
  */
 export function setTabVisibilityRecursively(
   tabs: Tab[],
   childrenMap: Map<UID, Tab[]>,
   isVisible: boolean,
+  emitDelta: boolean = true,
 ): void {
   for (const tab of tabs) {
-    tab.isVisible = isVisible
+    const t = Tree.tabsByUid.get(tab.uid)
+    if (t && t.isVisible !== isVisible)
+      Tree.updateTab({ tabUid: tab.uid }, { isVisible: isVisible }, emitDelta)
     const children = childrenMap.get(tab.uid) || []
     if (children.length > 0) {
       const childVisibility = isVisible && !tab.collapsed
-      setTabVisibilityRecursively(children, childrenMap, childVisibility)
+      setTabVisibilityRecursively(
+        children,
+        childrenMap,
+        childVisibility,
+        emitDelta,
+      )
     }
   }
 }
@@ -767,7 +823,8 @@ export function tabIndentIncrease(tabUids: UID[]): void {
     if (parentIndex === tabIndex - 1) continue // already indented under immediate previous tab
     // if tab has a sibling tab with same indent level above it, indent is possible
     if (tabHasSiblingsAbove(tab) === false) continue
-    tab.indentLevel += 1
+    const newIndent = (tab.indentLevel ?? 1) + 1
+    Tree.updateTab({ tabUid: tab.uid }, { indentLevel: newIndent })
 
     // find new parent tab (nearest preceding sibling with indentLevel one less than this tab)
     const newParent = findParentTab(tab)
@@ -778,15 +835,25 @@ export function tabIndentIncrease(tabUids: UID[]): void {
       return
     }
 
-    tab.parentUid = newParent.uid
-    newParent.isParent = true
+    Tree.updateTab({ tabUid: tab.uid }, { parentUid: newParent.uid })
+    Tree.updateTab({ tabUid: newParent.uid }, { isParent: true })
 
     // increase indent level for all descendants of this tab
     const children = childrenMap.get(tab.uid) || []
 
-    // match visibility of new parent for tab and all decendants
-    tab.isVisible = newParent.collapsed ? false : true
-    setTabVisibilityRecursively(children, childrenMap, tab.isVisible)
+    // if new parent is collapsed, match visibility of new parent for tab and all decendants
+    if (newParent.collapsed) {
+      Tree.updateTab(
+        { tabUid: tab.uid },
+        { isVisible: newParent.collapsed ? false : true },
+      )
+
+      setTabVisibilityRecursively(
+        children,
+        childrenMap,
+        tab.isVisible ? true : false,
+      )
+    }
 
     if (children.length) increaseIndentRecursively(children, childrenMap)
   }
@@ -822,7 +889,9 @@ export function tabIndentDecrease(tabUids: UID[]): void {
     const tabIndex = win.tabs.findIndex((t) => t.uid === tab.uid)
     if (tabIndex === 0) continue // skip root tabs
     if (tab.indentLevel <= 1) continue // already at root level
-    tab.indentLevel -= 1
+    const newIndent = tab.indentLevel - 1
+    Tree.updateTab({ tabUid: tab.uid }, { indentLevel: newIndent })
+
     const oldParent = Tree.tabsByUid.get(tab.parentUid as UID)
     const oldParentIndex = win.tabs.findIndex((t) => t.uid === tab.parentUid)
     // if this was the only child or first child, clear isParent flag on old parent
@@ -833,7 +902,7 @@ export function tabIndentDecrease(tabUids: UID[]): void {
       (childrenMap.get(tab.parentUid)?.length === 1 ||
         oldParentIndex === tabIndex - 1)
     )
-      oldParent.isParent = false
+      Tree.updateTab({ tabUid: oldParent.uid }, { isParent: false })
 
     // siblings directly below the tab now become its children
     const siblings = childrenMap.get(tab.parentUid!) || []
@@ -841,16 +910,18 @@ export function tabIndentDecrease(tabUids: UID[]): void {
       (s) => win.tabs.findIndex((t) => t.uid === s.uid) > tabIndex,
     )
     if (lowerSiblings.length > 0) {
-      tab.isParent = true // now a parent
-      for (const child of lowerSiblings) child.parentUid = tab.uid
+      Tree.updateTab({ tabUid: tab.uid }, { isParent: true }) // now a parent
+      for (const child of lowerSiblings) {
+        Tree.updateTab({ tabUid: child.uid }, { parentUid: tab.uid })
+      }
     }
     if (tab.indentLevel === 1) {
-      tab.parentUid = undefined
+      Tree.updateTab({ tabUid: tab.uid }, { parentUid: undefined })
     } else {
       const newParent = findParentTab(tab)
       if (newParent) {
-        tab.parentUid = newParent.uid
-        newParent.isParent = true
+        Tree.updateTab({ tabUid: tab.uid }, { parentUid: newParent.uid })
+        Tree.updateTab({ tabUid: newParent.uid }, { isParent: true })
       } else {
         console.error(
           `Failed to find new parent for tab ${tab.uid} during indent decrease`,
@@ -965,12 +1036,22 @@ function findParentTab(tab: Tab): Tab | undefined {
  *
  * @param {Tab[]} nodes - The list of tabs to decrease indent for.
  * @param {Map<UID, Tab[]>} childrenMap - A map of parent UIDs to their child tabs.
+ * @param {boolean = true} emitDelta - Whether to emit a tree delta event for this update.
  */
-function decreaseIndentRecursively(nodes: Tab[], childrenMap: Map<UID, Tab[]>) {
+function decreaseIndentRecursively(
+  nodes: Tab[],
+  childrenMap: Map<UID, Tab[]>,
+  emitDelta: boolean = true,
+) {
   for (const node of nodes) {
-    node.indentLevel = Math.max((node.indentLevel ?? 1) - 1, 1)
+    Tree.updateTab(
+      { tabUid: node.uid },
+      { indentLevel: Math.max((node.indentLevel ?? 1) - 1, 1) },
+      emitDelta,
+    )
     const children = childrenMap.get(node.uid) || []
-    if (children.length) decreaseIndentRecursively(children, childrenMap)
+    if (children.length)
+      decreaseIndentRecursively(children, childrenMap, emitDelta)
   }
 }
 
@@ -982,7 +1063,10 @@ function decreaseIndentRecursively(nodes: Tab[], childrenMap: Map<UID, Tab[]>) {
  */
 function increaseIndentRecursively(nodes: Tab[], childrenMap: Map<UID, Tab[]>) {
   for (const node of nodes) {
-    node.indentLevel = (node.indentLevel ?? 1) + 1
+    Tree.updateTab(
+      { tabUid: node.uid },
+      { indentLevel: (node.indentLevel ?? 1) + 1 },
+    )
     const children = childrenMap.get(node.uid) || []
     if (children.length) increaseIndentRecursively(children, childrenMap)
   }
@@ -1048,9 +1132,12 @@ export async function moveTabs(
   }
 
   const newUidMapping: Map<UID, UID> = new Map()
+  const updatedWindows: Set<UID> = new Set() // to track which windows have been updated for emitting deltas at the end
+  updatedWindows.add(targetWindowUid)
 
   // move each tab
   for (const tab of tabs) {
+    updatedWindows.add(tab.windowUid)
     // check if target index needs to be adjusted depending on tab pinned state
     // i.e. pinned tabs cannot be moved after unpinned tabs and vice versa
     const isPinned = tab.pinned || false
@@ -1097,6 +1184,8 @@ export async function moveTabs(
       targetWindowUid,
       targetIndex,
       targetIndexAdjusted ? undefined : (newParentUid ?? parentUid), // only use parentUid if target index was not adjusted
+      copy,
+      false, // emitDelta is set to false here to batch updates until the end of the loop
     )
     if (newTabUid) newUidMapping.set(tab.uid, newTabUid)
     if (targetIndexAdjusted) {
@@ -1125,8 +1214,19 @@ export async function moveTabs(
       const newTab = Tree.tabsByUid.get(newTabUid)
       if (!newTab) continue
       if (newTab.isParent) {
-        toggleCollapseTab(newTabUid)
+        toggleCollapseTab(newTabUid, false) // emitDelta is set to false here to batch updates until the end of the loop
       }
+    }
+  }
+
+  // emit tree delta events for all updated windows at the end to batch changes
+  for (const windowUid of updatedWindows) {
+    const window = Tree.windowsByUid.get(windowUid)
+    if (window) {
+      emitTreeDelta({
+        op: 'windowUpdated',
+        window: structuredClone(window),
+      })
     }
   }
 }
@@ -1147,6 +1247,7 @@ export async function moveTab(
   targetIndex: number,
   parentUid?: UID,
   copy: boolean = false,
+  emitDelta: boolean = true,
 ): Promise<UID | void> {
   // TODO: implement copy functionality
   console.log(
@@ -1190,7 +1291,7 @@ export async function moveTab(
   }
 
   // remove and add tab in session tree to simulate move
-  removeTab(tab.uid)
+  removeTab(tab.uid, emitDelta)
 
   addTab(
     tabActive,
@@ -1204,6 +1305,7 @@ export async function moveTab(
     targetIndex,
     parentUid,
     tab.uid,
+    emitDelta,
   )
 
   const targetIndexInBrowser = targetWindow.tabs.filter(

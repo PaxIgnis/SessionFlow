@@ -69,20 +69,26 @@ export async function initializeWindows(): Promise<void> {
 
 /**
  * Verifys visibility and indent levels of tree items.
+ *
+ * @param {boolean = true} emitDelta - Whether to emit tree delta events for each tab updated.
  */
-export function recomputeSessionTree(): void {
-  computeVisibility()
-  setIndentLevel()
+export function recomputeSessionTree(emitDelta: boolean = true): void {
+  computeVisibility(emitDelta)
+  setIndentLevel(emitDelta)
 }
 
 /**
  * Sets visibility of tree items based on collapsed state.
+ *
+ * @param {boolean = true} emitDelta - Whether to emit tree delta events for each tab updated.
  */
-function computeVisibility(): void {
+function computeVisibility(emitDelta: boolean = true): void {
   Tree.windowsList.forEach((win) => {
     if (win.collapsed) {
       win.tabs.forEach((tab) => {
-        tab.isVisible = false
+        if (tab.isVisible) {
+          Tree.updateTab({ tabUid: tab.uid }, { isVisible: false }, emitDelta)
+        }
       })
     } else {
       const childrenMap = new Map<UID, Tab[]>()
@@ -95,22 +101,24 @@ function computeVisibility(): void {
         }
       })
       const roots = win.tabs.filter((t) => t.parentUid === undefined)
-      Tree.setTabVisibilityRecursively(roots, childrenMap, true)
+      Tree.setTabVisibilityRecursively(roots, childrenMap, true, emitDelta)
     }
   })
 }
 
-/*
+/**
  * Sets indent levels for windows and tabs if not already set.
+ *
+ * @param {boolean = true} emitDelta - Whether to emit tree delta events for each tab updated.
  */
-function setIndentLevel(): void {
+function setIndentLevel(emitDelta: boolean = true): void {
   for (const w of Tree.windowsList) {
     if (w.indentLevel === undefined) {
-      w.indentLevel = 0
+      Tree.updateWindow(w.uid, { indentLevel: 0 }, emitDelta)
     }
     for (const tab of w.tabs) {
       if (tab.indentLevel === undefined) {
-        tab.indentLevel = 1
+        Tree.updateTab({ tabUid: tab.uid }, { indentLevel: 1 }, emitDelta)
       }
     }
   }

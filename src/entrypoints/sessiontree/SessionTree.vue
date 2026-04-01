@@ -6,11 +6,19 @@ import { DragAndDrop } from '@/services/drag-and-drop'
 import { Favicons } from '@/services/favicons'
 import * as Messages from '@/services/foreground-messages'
 import { SessionTree } from '@/services/foreground-tree'
+import {
+  disconnectTreePort,
+  onTreeDeltaPort,
+  subscribeTreePort,
+} from '@/services/runtime-port-service'
 import { Selection } from '@/services/selection'
 import { Settings } from '@/services/settings'
 import '@/styles/variables.css'
-import { VisibleWindow, Window } from '@/types/session-tree'
+import { VisibleWindow } from '@/types/session-tree'
 import { computed, onBeforeUnmount, onMounted } from 'vue'
+
+let unsubscribeFromTreeDelta: (() => void) | undefined
+let removeRuntimeListener: (() => void) | undefined
 
 // Save Session Tree Window location and size before closing.
 window.onbeforeunload = () => {
@@ -26,17 +34,11 @@ window.onbeforeunload = () => {
   Messages.deselectAllItems()
 
   console.log('Unloading')
-  if (backgroundPage && typeof backgroundPage.resetSessionTree === 'function') {
-    backgroundPage.resetSessionTree()
-  } else {
-    console.error('Background page or associated functions are not available')
-  }
+  disconnectTreePort()
   faviconService.saveCacheToStorage()
 }
 
 const faviconService = Favicons
-const backgroundPage =
-  window.browser.extension.getBackgroundPage() as unknown as globalThis.Window
 
 const visibleTreeItems = computed<VisibleWindow[]>(() => {
   SessionTree.reactiveWindowsList.value.forEach((w) =>
@@ -48,11 +50,6 @@ const visibleTreeItems = computed<VisibleWindow[]>(() => {
   }))
 })
 
-// Function to update sessionTree
-function updateSessionTree(newWindows: Array<Window>) {
-  SessionTree.reactiveWindowsList.value = newWindows
-}
-
 // On component mount
 onMounted(async () => {
   console.log('Mounted')
@@ -60,29 +57,38 @@ onMounted(async () => {
   const openTabs = await window.browser.tabs.query({})
   faviconService.warmCacheFromTabs(openTabs)
 
-  // Get initial data from the background script
-  if (
-    backgroundPage &&
-    typeof backgroundPage.getSessionTree === 'function' &&
-    typeof backgroundPage.setSessionTree === 'function'
-  ) {
-    updateSessionTree(backgroundPage.getSessionTree())
-    backgroundPage.setSessionTree(SessionTree.reactiveWindowsList.value)
-  } else {
-    console.error('Background page or associated functions are not available')
-  }
+  const initialSnapshot = await subscribeTreePort()
+  SessionTree.replaceSessionTree(initialSnapshot)
+  unsubscribeFromTreeDelta = onTreeDeltaPort((delta) => {
+    SessionTree.applyDelta(delta)
+  })
 
   // Listen for messages from the background script
-  window.browser.runtime.onMessage.addListener((message) => {
+  const faviconListener = (message: {
+    type?: string
+    favIconUrl?: string
+    tab?: unknown
+  }) => {
     switch (message.type) {
       case 'FAVICON_UPDATED':
         console.log('FaviconUpdated message received')
-        faviconService.updateFavicon(message.favIconUrl, message.tab)
+        if (message.favIconUrl) {
+          const tabLike = message.tab as { url?: string } | undefined
+          void faviconService.updateFavicon(
+            message.favIconUrl,
+            undefined,
+            tabLike?.url,
+          )
+        }
         break
       default:
       // console.warn('Unknown message type:', message.type)
     }
-  })
+  }
+  window.browser.runtime.onMessage.addListener(faviconListener)
+  removeRuntimeListener = () => {
+    window.browser.runtime.onMessage.removeListener(faviconListener)
+  }
 })
 
 onMounted(async () => {
@@ -93,11 +99,9 @@ onMounted(async () => {
 // reset sessionTree to non-ref object to avoid zombie dead object
 onBeforeUnmount(() => {
   console.log('Unmounted')
-  if (backgroundPage && typeof backgroundPage.resetSessionTree === 'function') {
-    backgroundPage.resetSessionTree()
-  } else {
-    console.error('Background page or associated functions are not available')
-  }
+  unsubscribeFromTreeDelta?.()
+  removeRuntimeListener?.()
+  disconnectTreePort()
 })
 
 // Handler functions

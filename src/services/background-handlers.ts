@@ -3,6 +3,7 @@ import { updateBadge } from '@/services/background-actions'
 import { Browser } from '@/services/background-browser'
 import { OnCreatedQueue } from '@/services/background-on-created-queue'
 import { Tree } from '@/services/background-tree'
+import { initializeSessionTreePort } from '@/services/runtime-port-service'
 import { Selection } from '@/services/selection'
 import { Settings } from '@/services/settings'
 import * as Messages from '@/types/messages'
@@ -12,6 +13,11 @@ import { LoadingStatus, State, Tab } from '@/types/session-tree'
 // Event Listeners
 // ==============================
 export function initializeListeners() {
+  initializeSessionTreePort({
+    dispatchCommand,
+    getSnapshot: () => Tree.windowsList,
+  })
+
   browser.browserAction.onClicked.addListener(browserActionOnClicked)
   browser.menus.onHidden.addListener(onContextMenuHidden)
   browser.runtime.onInstalled.addListener(updateBadge)
@@ -72,7 +78,7 @@ async function windowsOnCreated(window: browser.windows.Window): Promise<void> {
     window.id,
   )
   if (!extensionWindow) {
-    Tree.addWindow(window.id)
+    await Tree.addWindow(window.id)
   }
 }
 
@@ -447,6 +453,10 @@ function browserActionOnClicked(): void {
  * Most of these will be user actions performed in the session tree.
  */
 function onMessage(message: Messages.SessionTreeMessage): void {
+  dispatchCommand(message)
+}
+
+function dispatchCommand(message: Messages.SessionTreeMessage): void {
   if (message.action === 'closeTab') {
     Tree.closeTab(message)
   } else if (message.action === 'duplicateTab') {
