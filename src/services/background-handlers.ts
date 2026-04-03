@@ -231,7 +231,25 @@ function tabsOnUpdated(
     if (tab.title) tabContents.title = tab.title
     if (tab.url) tabContents.url = tab.url
   }
-  if (changeInfo.pinned !== undefined) tabContents.pinned = tab.pinned
+  if (changeInfo.pinned !== undefined) {
+    tabContents.pinned = tab.pinned
+    const t = Tree.windowsList
+      .find((t) => t.id === tab.windowId)
+      ?.tabs.find((t) => t.id === tab.id)
+    if (!t) {
+      console.error(
+        'Error updating pinned state, could not find tab in tree:',
+        tab.windowId,
+        tab.id,
+      )
+      return
+    }
+    if (tab.pinned) {
+      Tree.pinTabInTree(t.uid)
+    } else {
+      Tree.unpinTabInTree(t.uid)
+    }
+  }
 
   Tree.updateTab({ windowId: tab.windowId, tabId: tab.id }, tabContents)
 }

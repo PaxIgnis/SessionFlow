@@ -171,12 +171,15 @@ export function toggleCollapseTab(tabUid: UID) {
 }
 
 export function unpinTabs(tabs: Array<Tab>) {
-  tabs.forEach((tab) => {
-    void sendTreeCommand({
-      action: 'unpinTab',
-      tabUid: tab.uid,
+  tabs
+    .slice()
+    .reverse()
+    .forEach((tab) => {
+      void sendTreeCommand({
+        action: 'unpinTab',
+        tabUid: tab.uid,
+      })
     })
-  })
 }
 
 // ==============================

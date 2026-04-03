@@ -226,10 +226,6 @@ export function updateTab(
       return
     }
   }
-  if (tabContents.pinned !== undefined && tabContents.pinned)
-    Tree.pinTabInTree(tab.uid, emitDelta)
-  if (tabContents.pinned !== undefined && !tabContents.pinned)
-    Tree.unpinTabInTree(tab.uid, emitDelta)
   // If the tab object exists update the new values
   Object.assign(tab, tabContents)
   if (emitDelta) {
@@ -664,8 +660,15 @@ export function pinTabInTree(tabUid: UID, emitDelta: boolean = true): void {
   }
   // find index of last pinned tab
   const lastPinnedIndex = window.tabs.findLastIndex((t) => t.pinned)
+  const index = window.tabs.indexOf(tab)
   Tree.updateTab({ tabUid: tab.uid }, { pinned: true }, emitDelta)
-  Tree.moveTab(tab.uid, window.uid, lastPinnedIndex + 1, undefined, emitDelta)
+  Tree.moveTab(
+    tab.uid,
+    window.uid,
+    lastPinnedIndex + 1,
+    lastPinnedIndex + 1 === index ? tab.parentUid : undefined,
+    emitDelta,
+  )
   return
 }
 
@@ -708,12 +711,13 @@ export function unpinTabInTree(tabUid: UID, emitDelta: boolean = true): void {
     return
   }
   const lastPinnedIndex = window.tabs.findLastIndex((t) => t.pinned)
+  const index = window.tabs.indexOf(tab)
   Tree.updateTab({ tabUid: tab.uid }, { pinned: false }, emitDelta)
   Tree.moveTab(
     tab.uid,
     window.uid,
     Math.max(lastPinnedIndex, 0),
-    undefined,
+    lastPinnedIndex === index ? tab.parentUid : undefined,
     emitDelta,
   )
   return
