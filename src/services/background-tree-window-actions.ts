@@ -171,14 +171,17 @@ export function updateWindowState(windowUid: UID, state: State): void {
 export function updateWindow(
   windowUid: UID,
   updatedFields: Partial<Window>,
+  emitDelta: boolean = true,
 ): void {
   const window = Tree.windowsByUid.get(windowUid)
   if (window) {
     Object.assign(window, updatedFields)
-    emitTreeDelta({
-      op: 'windowUpdated',
-      window: structuredClone(window),
-    })
+    if (emitDelta) {
+      emitTreeDelta({
+        op: 'windowUpdated',
+        window: structuredClone(window),
+      })
+    }
   }
 }
 
@@ -213,10 +216,6 @@ export function updateWindowPosition(
   const window = Tree.windowsList.find((w) => w.id === windowId)
   if (window) {
     window.windowPosition = position
-    emitTreeDelta({
-      op: 'windowUpdated',
-      window: structuredClone(window),
-    })
   }
 }
 
