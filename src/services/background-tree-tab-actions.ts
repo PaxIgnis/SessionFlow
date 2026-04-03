@@ -415,6 +415,19 @@ export function duplicateTab(message: { tabId: number; tabUid: UID }): void {
   // if tab is saved create a new tab with the same URL and title and add to session tree
   else if (tab && tab.state === State.SAVED) {
     const window = Tree.windowsByUid.get(tab.windowUid)
+    if (!window) {
+      console.error(
+        'Error duplicating tab, could not find window:',
+        tab.windowUid,
+      )
+      return
+    }
+    const index = window.tabs.indexOf(tab)
+    const nextBoundaryIndex = window.tabs.findIndex(
+      (t, i) => i > index && t.indentLevel <= tab.indentLevel,
+    )
+    const newIndex =
+      nextBoundaryIndex === -1 ? window.tabs.length : nextBoundaryIndex
     addTab(
       false,
       tab.windowUid,
@@ -423,8 +436,8 @@ export function duplicateTab(message: { tabId: number; tabUid: UID }): void {
       tab.state,
       tab.title,
       tab.url,
-      tab.pinned,
-      window ? window.tabs.indexOf(tab) + 1 : undefined,
+      false,
+      newIndex,
       tab.parentUid,
     )
   }
