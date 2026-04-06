@@ -2,6 +2,7 @@ import { Settings } from '../types/settings'
 
 export const DEFAULT_SETTINGS: Settings = {
   // General
+  matchOpenedWindowsWithSavedWindowsOnStartup: true,
   openSessionTreeInSameLocation: true,
   openSessionTreeOnStartup: false,
 

@@ -15,6 +15,16 @@ export async function updateBadge() {
   })
 }
 
+/**
+ * Calls the updateBadge function every second for 10 seconds after startup to ensure the badge is updated correctly.
+ */
+export async function updateBadgeOnStartup() {
+  for (let i = 0; i < 10; i++) {
+    await updateBadge()
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+  }
+}
+
 export const initializeSettings = async () => {
   try {
     await Settings.loadSettingsFromStorage()

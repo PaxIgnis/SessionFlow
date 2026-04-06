@@ -1,3 +1,4 @@
+import { Tree } from '@/services/background-tree'
 import * as Messages from '@/types/messages'
 import {
   SESSION_TREE_PORT_NAME,
@@ -119,9 +120,7 @@ function onConnect(port: browser.runtime.Port): void {
   port.onMessage.addListener((message: object) => {
     const typedMessage = message as SessionTreePortRequest
     if (typedMessage.type === 'subscribe') {
-      sendResponse(port, typedMessage.requestId, true, {
-        windows: getTreeSnapshot(),
-      })
+      void handleSubscribe(port, typedMessage.requestId)
       return
     }
 
@@ -138,6 +137,30 @@ function onConnect(port: browser.runtime.Port): void {
         })
       }
     }
+  })
+}
+
+async function handleSubscribe(
+  port: browser.runtime.Port,
+  requestId: string,
+): Promise<void> {
+  const timeoutMs = 10000 // 10 second timeout
+  const startTime = Date.now()
+
+  while (!Tree.initialized && Date.now() - startTime < timeoutMs) {
+    await new Promise((resolve) => setTimeout(resolve, 100))
+  }
+
+  console.log('Handling subscribe request, tree initialized:', Tree.initialized)
+  if (!Tree.initialized) {
+    sendResponse(port, requestId, false, {
+      error: 'Tree initialization timeout',
+    })
+    return
+  }
+
+  sendResponse(port, requestId, true, {
+    windows: getTreeSnapshot(),
   })
 }
 

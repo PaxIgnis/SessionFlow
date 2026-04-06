@@ -1,6 +1,6 @@
 <script lang="ts" setup>
-import { Settings } from '@/services/settings'
 import ToggleButton from '@/components/ToggleButton.vue'
+import { Settings } from '@/services/settings'
 import { OPTIONS } from '@/types/settings'
 import { STRINGS } from '@/types/strings'
 </script>
@@ -20,6 +20,12 @@ import { STRINGS } from '@/types/strings'
     <ToggleButton
       label="Open Session Tree On Startup"
       v-model="Settings.values.openSessionTreeOnStartup"
+      :options="OPTIONS.boolean"
+      @update="Settings.saveSettingsToStorage()"
+    />
+    <ToggleButton
+      label="On browser startup, try to match opened windows with saved windows."
+      v-model="Settings.values.matchOpenedWindowsWithSavedWindowsOnStartup"
       :options="OPTIONS.boolean"
       @update="Settings.saveSettingsToStorage()"
     />

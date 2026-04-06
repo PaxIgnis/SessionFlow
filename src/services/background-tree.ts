@@ -11,6 +11,7 @@ export const Tree = {
   existingUidsSet: new Set<UID>(),
   tabsByUid: new Map<UID, Tab>(),
   windowsByUid: new Map<UID, Window>(),
+  initialized: false as boolean,
 
   ...Actions,
   ...TabActions,

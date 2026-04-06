@@ -109,6 +109,11 @@ export interface OpenWindowsInSameLocationUpdatedMessage {
   action: 'openWindowsInSameLocationUpdated'
 }
 
+export interface RegisterSessionTreeWindowMessage {
+  action: 'registerSessionTreeWindow'
+  windowId: number
+}
+
 export interface SaveAndRemoveWindowMessage {
   action: 'saveWindow'
   windowId: number
@@ -148,6 +153,7 @@ export type SessionTreeMessage =
   | OpenTabMessage
   | OpenWindowMessage
   | OpenWindowsInSameLocationUpdatedMessage
+  | RegisterSessionTreeWindowMessage
   | PinTabMessage
   | PrintSessionTreeMessage
   | ReloadTabMessage

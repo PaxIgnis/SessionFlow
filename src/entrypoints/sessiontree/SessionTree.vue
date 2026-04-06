@@ -19,6 +19,22 @@ import { computed, onBeforeUnmount, onMounted } from 'vue'
 
 let unsubscribeFromTreeDelta: (() => void) | undefined
 let removeRuntimeListener: (() => void) | undefined
+let isSessionTreeUnmounted = false
+
+const wait = (ms: number) =>
+  new Promise<void>((resolve) => setTimeout(resolve, ms))
+
+async function subscribeTreePortWithRetry() {
+  while (!isSessionTreeUnmounted) {
+    try {
+      return await subscribeTreePort()
+    } catch (error) {
+      console.error('Failed to subscribe to tree port, retrying...', error)
+      await wait(250)
+    }
+  }
+  return []
+}
 
 // Save Session Tree Window location and size before closing.
 window.onbeforeunload = () => {
@@ -53,11 +69,18 @@ const visibleTreeItems = computed<VisibleWindow[]>(() => {
 // On component mount
 onMounted(async () => {
   console.log('Mounted')
-  await faviconService.init()
-  const openTabs = await window.browser.tabs.query({})
-  faviconService.warmCacheFromTabs(openTabs)
+  await Settings.loadSettingsFromStorage()
+  Settings.setupSettingsUpdatedListener()
 
-  const initialSnapshot = await subscribeTreePort()
+  await faviconService.init().then(async () => {
+    const openTabs = await window.browser.tabs.query({})
+    faviconService.warmCacheFromTabs(openTabs)
+  })
+
+  const initialSnapshot = await subscribeTreePortWithRetry()
+  if (isSessionTreeUnmounted) {
+    return
+  }
   SessionTree.replaceSessionTree(initialSnapshot)
   unsubscribeFromTreeDelta = onTreeDeltaPort((delta) => {
     SessionTree.applyDelta(delta)
@@ -89,15 +112,16 @@ onMounted(async () => {
   removeRuntimeListener = () => {
     window.browser.runtime.onMessage.removeListener(faviconListener)
   }
-})
 
-onMounted(async () => {
-  await Settings.loadSettingsFromStorage()
-  Settings.setupSettingsUpdatedListener()
+  const currentWindow = await window.browser.windows.getCurrent()
+  if (typeof currentWindow.id === 'number') {
+    Messages.registerSessionTreeWindow(currentWindow.id)
+  }
 })
 
 // reset sessionTree to non-ref object to avoid zombie dead object
 onBeforeUnmount(() => {
+  isSessionTreeUnmounted = true
   console.log('Unmounted')
   unsubscribeFromTreeDelta?.()
   removeRuntimeListener?.()

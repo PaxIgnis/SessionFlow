@@ -262,6 +262,13 @@ export function deselectAllItems() {
   })
 }
 
+export function registerSessionTreeWindow(windowId: number) {
+  void sendTreeCommand({
+    action: 'registerSessionTreeWindow',
+    windowId,
+  })
+}
+
 // ==============================
 // Debug Messages
 // ==============================

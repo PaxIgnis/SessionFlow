@@ -1,5 +1,6 @@
 export interface Settings {
   // General
+  matchOpenedWindowsWithSavedWindowsOnStartup: boolean
   openSessionTreeInSameLocation: boolean
   openSessionTreeOnStartup: boolean
 

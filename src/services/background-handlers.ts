@@ -22,6 +22,7 @@ export function initializeListeners() {
   browser.menus.onHidden.addListener(onContextMenuHidden)
   browser.runtime.onInstalled.addListener(updateBadge)
   browser.runtime.onMessage.addListener(onMessage)
+  browser.runtime.onStartup.addListener(updateBadge)
   browser.tabs.onActivated.addListener(tabsOnActivated)
   browser.tabs.onAttached.addListener(tabsOnAttached)
   browser.tabs.onCreated.addListener(updateBadge)
@@ -497,6 +498,8 @@ function dispatchCommand(message: Messages.SessionTreeMessage): void {
     Browser.focusWindow(message)
   } else if (message.action === 'openWindowsInSameLocationUpdated') {
     Tree.updateWindowPositionInterval()
+  } else if (message.action === 'registerSessionTreeWindow') {
+    Tree.registerSessionTreeWindow(message.windowId)
   } else if (message.action === 'toggleCollapseTab') {
     Tree.toggleCollapseTab(message.tabUid)
   } else if (message.action === 'toggleCollapseWindow') {

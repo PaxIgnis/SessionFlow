@@ -5,6 +5,7 @@ import { Favicons } from '@/services/favicons'
 import { Settings } from '@/services/settings'
 import * as Utils from '@/services/utils'
 import { State, Tab, Window } from '@/types/session-tree'
+import { emitTreeDelta } from './runtime-port-service'
 
 /**
  * Initializes the session tree by first loading the save tree from storage,
@@ -16,38 +17,65 @@ export async function initializeWindows(): Promise<void> {
   try {
     await Tree.loadSessionTreeFromStorage()
     const currentWindows = await browser.windows.getAll({ populate: true })
+    const matchedWindowUids = new Set<UID>()
+    const openWindowUIDs = new Set<UID>()
+    Tree.windowsList.forEach((w) => {
+      if (w.state !== State.SAVED) {
+        openWindowUIDs.add(w.uid)
+      }
+    })
     currentWindows.forEach((win) => {
-      const windowUid = Utils.createUid(Tree.existingUidsSet)
-      const newWindow: Window = {
-        uid: windowUid,
-        id: win.id!,
-        selected: false,
-        state: State.OPEN,
-        active: win.focused,
-        activeTabId: win.tabs?.find((tab) => tab.active)?.id,
-        indentLevel: 0,
-        tabs: win.tabs!.map((tab) => ({
-          uid: Utils.createUid(Tree.existingUidsSet),
-          active: tab.active,
-          id: tab.id!,
+      let bestMatch = undefined
+      if (Settings.values.matchOpenedWindowsWithSavedWindowsOnStartup) {
+        // Reuse a saved window when the current browser window looks like a restored session window.
+        bestMatch = findBestSavedWindowMatch(win, matchedWindowUids)
+      }
+      if (
+        Settings.values.matchOpenedWindowsWithSavedWindowsOnStartup &&
+        bestMatch
+      ) {
+        matchedWindowUids.add(bestMatch.uid)
+        reconcileSavedWindowWithOpenWindow(bestMatch, win)
+      } else {
+        const windowUid = Utils.createUid(Tree.existingUidsSet)
+        const newWindow: Window = {
+          uid: windowUid,
+          id: win.id!,
           selected: false,
           state: State.OPEN,
-          title: tab.title!,
-          url: tab.url!,
-          windowUid: windowUid,
-          indentLevel: 1,
-          pinned: tab.pinned || false,
-        })),
+          active: win.focused,
+          activeTabId: win.tabs?.find((tab) => tab.active)?.id,
+          indentLevel: 0,
+          tabs: win.tabs!.map((tab) => ({
+            uid: Utils.createUid(Tree.existingUidsSet),
+            active: tab.active,
+            id: tab.id!,
+            selected: false,
+            state: tab.discarded ? State.DISCARDED : State.OPEN,
+            title: tab.title || 'Untitled',
+            url: tab.url || '',
+            windowUid: windowUid,
+            indentLevel: 1,
+            pinned: tab.pinned || false,
+          })),
+        }
+        Tree.windowsList.push(newWindow)
       }
-      Tree.windowsList.push(newWindow)
-      // TODO: use after implementing independent data source for foreground context
-      // Tree.windowsByUid.set(windowUid, newWindow)
-      // for (const tab of newWindow.tabs) {
-      //   Tree.tabsByUid.set(tab.uid, tab)
-      // }
     })
-    rebuildUIDMaps() // and then remove this
+    openWindowUIDs.forEach((uid) => {
+      if (!matchedWindowUids.has(uid)) {
+        const orphanedWindow = Tree.windowsByUid.get(uid)
+        if (orphanedWindow) {
+          orphanedWindow.state = State.SAVED
+          orphanedWindow.tabs.forEach((tab) => {
+            tab.state = State.SAVED
+          })
+        }
+      }
+    })
+    rebuildUIDMaps()
     Tree.recomputeSessionTree()
+    Tree.initialized = true
     if (Settings.values.fetchMissingFaviconsOnStartup) {
       await Favicons.init()
       const hasPermissions = await Favicons.hasFetchPermissions()
@@ -65,6 +93,219 @@ export async function initializeWindows(): Promise<void> {
   } catch (error) {
     console.error('Error initializing windows:', error)
   }
+}
+
+/**
+ * Finds the best matching non-saved window in the session tree for the given browser window.
+ *
+ * @param {browser.windows.Window} openWindow - The currently open browser window.
+ * @param {Set<UID>} matchedWindowUids - The set of session tree window UIDs that were already matched.
+ * @returns {Window | undefined} The best matching window, or undefined if no match is good enough.
+ */
+function findBestSavedWindowMatch(
+  openWindow: browser.windows.Window,
+  matchedWindowUids: Set<UID>,
+): Window | undefined {
+  let bestMatch: Window | undefined
+  let bestScore = -1
+
+  for (const savedWindow of Tree.windowsList) {
+    if (matchedWindowUids.has(savedWindow.uid)) {
+      continue
+    }
+    if (savedWindow.state === State.SAVED) {
+      continue
+    }
+
+    const score = scoreWindowMatch(savedWindow, openWindow)
+    if (score > bestScore) {
+      bestScore = score
+      bestMatch = savedWindow
+    }
+  }
+
+  // conservative threshold: require at least one meaningful tab match
+  return bestScore >= 3 ? bestMatch : undefined
+}
+
+/**
+ * Scores how well a saved window matches an open browser window.
+ *
+ * Only tabs that are not already saved are considered, because saved tabs were not open at shutdown.
+ *
+ * @param {Window} savedWindow - The candidate session tree window.
+ * @param {browser.windows.Window} openWindow - The currently open browser window.
+ * @returns {number} A higher score indicates a better match.
+ */
+function scoreWindowMatch(
+  savedWindow: Window,
+  openWindow: browser.windows.Window,
+): number {
+  const openTabs = openWindow.tabs ?? []
+  const candidateTabs = savedWindow.tabs.filter(
+    (tab) => tab.state !== State.SAVED,
+  )
+  if (candidateTabs.length === 0) {
+    return -1
+  }
+
+  const minLen = Math.min(candidateTabs.length, openTabs.length)
+  let score = 0
+
+  for (let i = 0; i < minLen; i++) {
+    const savedTab = candidateTabs[i]
+    const openTab = openTabs[i]
+    const savedUrl = savedTab.url || ''
+    const openUrl = openTab.url || ''
+
+    if (savedUrl !== '' && savedUrl === openUrl) {
+      score += 4
+    }
+    if (savedTab.title && openTab.title && savedTab.title === openTab.title) {
+      score += 1
+    }
+    if ((savedTab.pinned || false) === (openTab.pinned || false)) {
+      score += 1
+    }
+  }
+
+  score -= Math.abs(candidateTabs.length - openTabs.length) * 2
+  return score
+}
+
+/**
+ * Reconciles an open browser window with an existing saved session tree window.
+ *
+ * Tabs that match by URL/title/pinned state are reused, and any remaining open tabs are appended as new open tabs.
+ *
+ * @param {Window} savedWindow - The saved session tree window to update.
+ * @param {browser.windows.Window} openWindow - The currently open browser window.
+ */
+function reconcileSavedWindowWithOpenWindow(
+  savedWindow: Window,
+  openWindow: browser.windows.Window,
+): void {
+  const openTabs = openWindow.tabs ?? []
+
+  // Mark the saved window as currently open and refresh the browser-facing fields.
+  savedWindow.id = openWindow.id ?? savedWindow.id
+  savedWindow.state = State.OPEN
+  savedWindow.active = openWindow.focused
+  savedWindow.activeTabId = openTabs.find((tab) => tab.active)?.id
+  savedWindow.selected = false
+
+  // Only tabs that were open at shutdown participate in matching.
+  const usedOpenTabIds = new Set<number>()
+  const candidateTabs = savedWindow.tabs.filter(
+    (tab) => tab.state !== State.SAVED,
+  )
+  for (const savedTab of candidateTabs) {
+    // Try to pair each saved open tab with a browser tab that looks like the same tab.
+    // The match is intentionally conservative to avoid reusing the wrong tab.
+    const matchedOpenTab = findBestOpenTabMatch(
+      savedTab,
+      openTabs,
+      usedOpenTabIds,
+    )
+
+    if (!matchedOpenTab) {
+      // If no match is found, keep the saved tab in the tree but leave it saved.
+      // This means it was not restored as an open browser tab during startup.
+      savedTab.id = 0
+      savedTab.state = State.SAVED
+      savedTab.active = false
+      savedTab.selected = false
+      savedTab.windowUid = savedWindow.uid
+      continue
+    }
+
+    // Record the browser tab so we do not match it again to another saved tab.
+    if (matchedOpenTab.id !== undefined) {
+      usedOpenTabIds.add(matchedOpenTab.id)
+    }
+
+    // Rehydrate the saved tab with the live browser tab state.
+    savedTab.id = matchedOpenTab.id ?? 0
+    savedTab.state = matchedOpenTab.discarded ? State.DISCARDED : State.OPEN
+    savedTab.active = matchedOpenTab.active
+    savedTab.selected = false
+    savedTab.title = matchedOpenTab.title || savedTab.title || 'Untitled'
+    savedTab.url = matchedOpenTab.url || savedTab.url || ''
+    savedTab.pinned = matchedOpenTab.pinned || false
+    savedTab.windowUid = savedWindow.uid
+  }
+
+  // Any browser tabs that were not matched to saved tabs are treated as new open tabs.
+  for (const openTab of openTabs) {
+    if (openTab.id === undefined || usedOpenTabIds.has(openTab.id)) {
+      continue
+    }
+
+    // Create a new open session tree tab for each unmatched browser tab.
+    savedWindow.tabs.push({
+      uid: Utils.createUid(Tree.existingUidsSet),
+      active: openTab.active,
+      id: openTab.id,
+      selected: false,
+      state: openTab.discarded ? State.DISCARDED : State.OPEN,
+      title: openTab.title || 'Untitled',
+      url: openTab.url || '',
+      windowUid: savedWindow.uid,
+      indentLevel: 1,
+      pinned: openTab.pinned || false,
+    })
+  }
+}
+
+/**
+ * Finds the best matching non-saved tab for a saved tab.
+ *
+ * @param {Tab} savedTab - The saved session tree tab.
+ * @param {browser.tabs.Tab[]} openTabs - The currently open tabs in the browser window.
+ * @param {Set<number>} usedOpenTabIds - The browser tab IDs that were already matched.
+ * @returns {browser.tabs.Tab | undefined} The best matching tab, or undefined if no match is good enough.
+ */
+function findBestOpenTabMatch(
+  savedTab: Tab,
+  openTabs: browser.tabs.Tab[],
+  usedOpenTabIds: Set<number>,
+): browser.tabs.Tab | undefined {
+  let bestMatch: browser.tabs.Tab | undefined
+  let bestScore = -1
+
+  for (const openTab of openTabs) {
+    if (openTab.id === undefined || usedOpenTabIds.has(openTab.id)) {
+      continue
+    }
+    const score = scoreTabMatch(savedTab, openTab)
+    if (score > bestScore) {
+      bestScore = score
+      bestMatch = openTab
+    }
+  }
+
+  return bestScore >= 2 ? bestMatch : undefined
+}
+
+/**
+ * Scores how well a saved tab matches an open browser tab.
+ *
+ * @param {Tab} savedTab - The candidate session tree tab.
+ * @param {browser.tabs.Tab} openTab - The currently open browser tab.
+ * @returns {number} A higher score indicates a better match.
+ */
+function scoreTabMatch(savedTab: Tab, openTab: browser.tabs.Tab): number {
+  let score = 0
+  if (savedTab.url && openTab.url && savedTab.url === openTab.url) {
+    score += 3
+  }
+  if (savedTab.title && openTab.title && savedTab.title === openTab.title) {
+    score += 1
+  }
+  if ((savedTab.pinned || false) === (openTab.pinned || false)) {
+    score += 1
+  }
+  return score
 }
 
 /**
@@ -141,7 +382,6 @@ export async function loadSessionTreeFromStorage(): Promise<void> {
       )
       Tree.windowsList.forEach((window) => {
         window.id = 0
-        window.state = State.SAVED
         window.active = false
         window.activeTabId = 0
         window.selected = false
@@ -152,7 +392,6 @@ export async function loadSessionTreeFromStorage(): Promise<void> {
           tab.active = false
           tab.id = 0
           tab.selected = false
-          tab.state = State.SAVED
           if (!tab.savedTime) tab.savedTime = Date.now()
           if (!tab.uid) tab.uid = Utils.createUid(Tree.existingUidsSet)
           Tree.tabsByUid.set(tab.uid, tab)
@@ -233,6 +472,27 @@ export async function openSessionTree(): Promise<void> {
 }
 
 /**
+ * Sets the session tree window id variable to the given window id.
+ * Removes the window from the session tree if it exists there as a saved window.
+ *
+ */
+export function registerSessionTreeWindow(windowId: number): void {
+  Tree.sessionTreeWindowId = windowId
+  // remove windowId from session tree if it exists there as a saved window, since it's now the live session tree window
+  const existingWindow = Tree.windowsList.find((w) => w.id === windowId)
+  if (existingWindow) {
+    Tree.windowsList.splice(Tree.windowsList.indexOf(existingWindow), 1)
+    emitTreeDelta({
+      op: 'windowRemoved',
+      windowUid: existingWindow.uid,
+    })
+    Tree.windowsByUid.delete(existingWindow.uid)
+    Tree.existingUidsSet.delete(existingWindow.uid)
+    saveSessionTreeToStorage()
+  }
+}
+
+/**
  * Resets the session tree id variable.
  */
 export async function removeSessionWindowId(windowId: number): Promise<void> {
@@ -253,6 +513,9 @@ export function deselectAllItems(): void {
   })
 }
 
+/**
+ * Rebuilds the windowsByUid and tabsByUid maps and existingUidsSet based on the current windowsList.
+ */
 function rebuildUIDMaps(): void {
   // Rebuild lookup maps and existing UID set to match the new contents.
   Tree.windowsByUid.clear()
