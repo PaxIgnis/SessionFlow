@@ -233,44 +233,6 @@ export async function openSessionTree(): Promise<void> {
 }
 
 /**
- * Returns the session tree.
- *
- * @returns {Array<Window>} The session tree
- */
-function getSessionTree(): Array<Window> {
-  return Tree.windowsList
-}
-
-/**
- * Sets the session tree to a new tree, saving the current tree as a backup.
- *
- * @param {Array<Window>} newTree - The new session tree
- */
-function setSessionTree(newTree: Array<Window>): void {
-  Tree.windowsBackupList = Tree.windowsList
-  Tree.windowsList = newTree
-
-  rebuildUIDMaps()
-}
-
-/**
- * Resets the session tree to the backup session tree.
- */
-function resetSessionTree(): void {
-  console.log('Resetting Session Tree')
-  Tree.windowsList = Tree.windowsBackupList
-  Tree.saveSessionTreeToStorage()
-}
-
-// ==============================
-// Exposed Functions for the SessionTree Vue component
-// ==============================
-
-window.getSessionTree = getSessionTree
-window.setSessionTree = setSessionTree
-window.resetSessionTree = resetSessionTree
-
-/**
  * Resets the session tree id variable.
  */
 export async function removeSessionWindowId(windowId: number): Promise<void> {
