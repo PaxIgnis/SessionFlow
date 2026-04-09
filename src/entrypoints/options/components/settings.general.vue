@@ -29,5 +29,11 @@ import { STRINGS } from '@/types/strings'
       :options="OPTIONS.boolean"
       @update="Settings.saveSettingsToStorage()"
     />
+    <ToggleButton
+      label="Restore previous session on startup"
+      v-model="Settings.values.restorePreviousSessionOnStartup"
+      :options="OPTIONS.boolean"
+      @update="Settings.saveSettingsToStorage()"
+    />
   </section>
 </template>

@@ -3,6 +3,7 @@ export interface Settings {
   matchOpenedWindowsWithSavedWindowsOnStartup: boolean
   openSessionTreeInSameLocation: boolean
   openSessionTreeOnStartup: boolean
+  restorePreviousSessionOnStartup: boolean
 
   // Windows
   focusWindowOnOpen: boolean

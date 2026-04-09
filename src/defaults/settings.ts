@@ -5,6 +5,7 @@ export const DEFAULT_SETTINGS: Settings = {
   matchOpenedWindowsWithSavedWindowsOnStartup: true,
   openSessionTreeInSameLocation: true,
   openSessionTreeOnStartup: false,
+  restorePreviousSessionOnStartup: false,
 
   // Windows
   focusWindowOnOpen: true,

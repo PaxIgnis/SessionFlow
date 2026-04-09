@@ -19,6 +19,7 @@ export async function initializeWindows(): Promise<void> {
     const currentWindows = await browser.windows.getAll({ populate: true })
     const matchedWindowUids = new Set<UID>()
     const openWindowUIDs = new Set<UID>()
+    const tabUIDsToOpenOnStartup = new Set<UID>()
     Tree.windowsList.forEach((w) => {
       if (w.state !== State.SAVED) {
         openWindowUIDs.add(w.uid)
@@ -35,7 +36,11 @@ export async function initializeWindows(): Promise<void> {
         bestMatch
       ) {
         matchedWindowUids.add(bestMatch.uid)
-        reconcileSavedWindowWithOpenWindow(bestMatch, win)
+        const tabsToOpen = reconcileSavedWindowWithOpenWindow(bestMatch, win)
+        // track tabs to restore later if the setting is enabled, since they were not matched to open tabs
+        if (tabsToOpen) {
+          tabsToOpen.forEach((uid) => tabUIDsToOpenOnStartup.add(uid))
+        }
       } else {
         const windowUid = Utils.createUid(Tree.existingUidsSet)
         const newWindow: Window = {
@@ -62,20 +67,55 @@ export async function initializeWindows(): Promise<void> {
         Tree.windowsList.push(newWindow)
       }
     })
-    openWindowUIDs.forEach((uid) => {
-      if (!matchedWindowUids.has(uid)) {
-        const orphanedWindow = Tree.windowsByUid.get(uid)
-        if (orphanedWindow) {
-          orphanedWindow.state = State.SAVED
-          orphanedWindow.tabs.forEach((tab) => {
-            tab.state = State.SAVED
-          })
-        }
+    // collect uids for session restore and cleanup states
+    for (const uid of openWindowUIDs) {
+      if (matchedWindowUids.has(uid)) {
+        continue
       }
-    })
+
+      const orphanedWindow = Tree.windowsByUid.get(uid)
+      if (!orphanedWindow) {
+        continue
+      }
+
+      if (Settings.values.restorePreviousSessionOnStartup) {
+        const tabsToOpen = orphanedWindow.tabs.filter(
+          (tab) => tab.state !== State.SAVED,
+        )
+
+        if (tabsToOpen.length === 0) {
+          continue
+        }
+
+        orphanedWindow.state = State.SAVED
+        for (const tab of tabsToOpen) {
+          tabUIDsToOpenOnStartup.add(tab.uid)
+        }
+      } else {
+        orphanedWindow.state = State.SAVED
+        orphanedWindow.tabs.forEach((tab) => {
+          tab.state = State.SAVED
+        })
+      }
+    }
     rebuildUIDMaps()
     Tree.recomputeSessionTree()
     Tree.initialized = true
+    // Open tabs for any saved windows that were not matched to open windows, if the setting is enabled.
+    if (Settings.values.restorePreviousSessionOnStartup) {
+      for (const tabUid of tabUIDsToOpenOnStartup) {
+        const tab = Tree.tabsByUid.get(tabUid)
+        if (!tab) {
+          continue
+        }
+        Tree.openTab({
+          tabUid: tab.uid,
+          windowUid: tab.windowUid,
+          discarded: Settings.values.openWindowWithTabsDiscarded,
+          url: tab.url,
+        })
+      }
+    }
     if (Settings.values.fetchMissingFaviconsOnStartup) {
       await Favicons.init()
       const hasPermissions = await Favicons.hasFetchPermissions()
@@ -184,7 +224,7 @@ function scoreWindowMatch(
 function reconcileSavedWindowWithOpenWindow(
   savedWindow: Window,
   openWindow: browser.windows.Window,
-): void {
+): UID[] | void {
   const openTabs = openWindow.tabs ?? []
 
   // Mark the saved window as currently open and refresh the browser-facing fields.
@@ -196,6 +236,7 @@ function reconcileSavedWindowWithOpenWindow(
 
   // Only tabs that were open at shutdown participate in matching.
   const usedOpenTabIds = new Set<number>()
+  const tabsToOpen: UID[] = []
   const candidateTabs = savedWindow.tabs.filter(
     (tab) => tab.state !== State.SAVED,
   )
@@ -216,6 +257,11 @@ function reconcileSavedWindowWithOpenWindow(
       savedTab.active = false
       savedTab.selected = false
       savedTab.windowUid = savedWindow.uid
+
+      // track uid to open it later if the setting is enabled, since it was not matched to an open tab
+      if (Settings.values.restorePreviousSessionOnStartup) {
+        tabsToOpen.push(savedTab.uid)
+      }
       continue
     }
 
@@ -254,6 +300,9 @@ function reconcileSavedWindowWithOpenWindow(
       indentLevel: 1,
       pinned: openTab.pinned || false,
     })
+  }
+  if (tabsToOpen.length > 0) {
+    return tabsToOpen
   }
 }
 
