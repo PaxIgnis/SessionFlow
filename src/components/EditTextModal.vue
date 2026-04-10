@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { ref } from 'vue'
+import { nextTick, onMounted, ref } from 'vue'
 
 const props = defineProps<{
   title?: string
@@ -13,6 +13,7 @@ const emit = defineEmits<{
 }>()
 
 const inputValue = ref(props.initialValue)
+const inputRef = ref<HTMLInputElement | null>(null)
 
 const dialogTitle = props.title || 'Edit Text'
 const inputPlaceholder = props.placeholder || 'Enter text'
@@ -38,6 +39,15 @@ function handleBackdropClick(e: MouseEvent) {
     handleCancel()
   }
 }
+
+onMounted(async () => {
+  await nextTick()
+  // setTimeout helps when opening from browser context menu, where focus can lag.
+  setTimeout(() => {
+    inputRef.value?.focus()
+    inputRef.value?.select()
+  }, 0)
+})
 </script>
 
 <template>
@@ -48,6 +58,7 @@ function handleBackdropClick(e: MouseEvent) {
     <div class="modal-container">
       <h2>{{ dialogTitle }}</h2>
       <input
+        ref="inputRef"
         v-model="inputValue"
         type="text"
         class="modal-input"

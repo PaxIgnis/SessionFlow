@@ -161,6 +161,21 @@ function handleEditWindowTitleConfirm(newTitle: string) {
 function handleEditWindowTitleCancel() {
   closeModal()
 }
+
+function handleEditCustomLabelConfirm(label: string) {
+  if (ModalState.active?.kind === 'editCustomLabel') {
+    const sanitized = label.slice(0, 150).trim()
+    Messages.updateCustomLabel(
+      ModalState.active.uid,
+      sanitized.length > 0 ? sanitized : undefined,
+    )
+  }
+  closeModal()
+}
+
+function handleEditCustomLabelCancel() {
+  closeModal()
+}
 </script>
 
 <template>
@@ -214,6 +229,15 @@ function handleEditWindowTitleCancel() {
       placeholder="Enter window title"
       @confirm="handleEditWindowTitleConfirm"
       @cancel="handleEditWindowTitleCancel"
+    />
+
+    <EditTextModal
+      v-if="ModalState.active?.kind === 'editCustomLabel'"
+      title="Edit Custom Label"
+      :initial-value="ModalState.active.customLabel || ''"
+      placeholder="Enter custom label"
+      @confirm="handleEditCustomLabelConfirm"
+      @cancel="handleEditCustomLabelCancel"
     />
   </div>
 </template>

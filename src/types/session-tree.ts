@@ -30,6 +30,7 @@ export interface Tab {
   isParent?: boolean
   parentUid?: UID
   isVisible?: boolean
+  customLabel?: string
 }
 
 export interface VisibleWindow {

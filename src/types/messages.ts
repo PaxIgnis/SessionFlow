@@ -78,6 +78,12 @@ export interface UnpinTabMessage {
   tabUid: UID
 }
 
+export interface UpdateCustomLabelMessage {
+  action: 'updateCustomLabel'
+  uid: UID
+  customLabel?: string
+}
+
 // ==============================
 // Window Messages
 // ==============================
@@ -170,4 +176,5 @@ export type SessionTreeMessage =
   | ToggleCollapseTabMessage
   | ToggleCollapseWindowMessage
   | UnpinTabMessage
+  | UpdateCustomLabelMessage
   | UpdateWindowTitleMessage

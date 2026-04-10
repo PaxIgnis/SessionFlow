@@ -182,6 +182,16 @@ export function unpinTabs(tabs: Array<Tab>) {
     })
 }
 
+export function updateCustomLabel(uid: UID, customLabel?: string) {
+  void sendTreeCommand({
+    action: 'updateCustomLabel',
+    uid: uid,
+    customLabel,
+  } as Messages.UpdateCustomLabelMessage).catch((error) => {
+    console.error('Failed to update custom label:', error)
+  })
+}
+
 // ==============================
 // Window Messages
 // ==============================

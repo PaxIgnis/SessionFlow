@@ -509,6 +509,14 @@ function dispatchCommand(message: Messages.SessionTreeMessage): void {
     if (window) {
       Tree.updateWindow(message.windowUid, { title: message.newTitle })
     }
+  } else if (message.action === 'updateCustomLabel') {
+    const tab = Tree.tabsByUid.get(message.uid)
+    if (tab) {
+      Tree.updateTab(
+        { tabUid: message.uid },
+        { customLabel: message.customLabel?.trim() || undefined },
+      )
+    }
   } else if (message.action === 'deselectAllItems') {
     Tree.deselectAllItems()
   } else if (message.action === 'tabIndentIncrease') {

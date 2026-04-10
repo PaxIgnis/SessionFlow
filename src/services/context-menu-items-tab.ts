@@ -1,4 +1,5 @@
 import * as Messages from '@/services/foreground-messages'
+import { openModal } from '@/services/modal-state'
 import { Selection } from '@/services/selection'
 import { ContextMenuItem } from '@/types/context-menu'
 import { State } from '@/types/session-tree'
@@ -93,6 +94,25 @@ export const contextMenuItemsTab: Record<string, () => ContextMenuItem> = {
       action: () => Messages.tabIndentDecrease(Selection.getSelectedTabs()),
     }
   },
+
+  editLabel: () => {
+    return {
+      id: 'editLabel',
+      label: 'Edit Label',
+      icon: 'edit',
+      enabled: onlySingleTabSelected(),
+      action: () => {
+        const selectedTabs = Selection.getSelectedTabs()
+        if (selectedTabs.length === 1) {
+          openModal({
+            kind: 'editCustomLabel',
+            uid: selectedTabs[0].uid,
+            customLabel: selectedTabs[0].customLabel,
+          })
+        }
+      },
+    }
+  },
 }
 
 function atLeastOneSelectedTabOpen(): boolean {
@@ -133,4 +153,9 @@ function atLeastOneSelectedTabUnpinned(): boolean {
     }
   }
   return false
+}
+
+function onlySingleTabSelected(): boolean {
+  const selectedTabs = Selection.getSelectedTabs()
+  return selectedTabs.length === 1
 }

@@ -503,7 +503,13 @@ const childrenOpen = computed(() => {
             'tree-item-text-active': props.item.active === true,
           }"
         >
-          {{ props.item.title }}
+          <template v-if="props.item.customLabel">
+            <span class="tree-item-custom-label">{{
+              props.item.customLabel
+            }}</span>
+            <span class="tree-item-custom-label-separator"> ~ </span>
+          </template>
+          <span>{{ props.item.title }}</span>
         </div>
       </template>
     </div>
@@ -763,6 +769,14 @@ const childrenOpen = computed(() => {
   font-family: var(--font-family-session-tree);
   position: relative;
   z-index: 0;
+}
+
+.tree-item-custom-label {
+  color: var(--list-item-custom-label-foreground);
+}
+
+.tree-item-custom-label-separator {
+  color: var(--list-item-custom-label-foreground);
 }
 
 .tree-item-text-open {
