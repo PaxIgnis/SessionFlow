@@ -4,6 +4,7 @@ export const WINDOW_MENU: ContextMenuConfig = [
   // 'newTab',
   { type: ContextMenuItemType.Action, id: 'saveWindow' },
   { type: ContextMenuItemType.Action, id: 'closeWindow' },
+  { type: ContextMenuItemType.Action, id: 'editWindowTitle' },
   // 'minimizeWindow',
   // 'maximizeWindow',
   // 'unloadWindow',

@@ -504,6 +504,11 @@ function dispatchCommand(message: Messages.SessionTreeMessage): void {
     Tree.toggleCollapseTab(message.tabUid)
   } else if (message.action === 'toggleCollapseWindow') {
     Tree.toggleCollapseWindow(message.windowUid)
+  } else if (message.action === 'updateWindowTitle') {
+    const window = Tree.windowsByUid.get(message.windowUid)
+    if (window) {
+      Tree.updateWindow(message.windowUid, { title: message.newTitle })
+    }
   } else if (message.action === 'deselectAllItems') {
     Tree.deselectAllItems()
   } else if (message.action === 'tabIndentIncrease') {

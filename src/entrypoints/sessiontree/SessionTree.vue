@@ -1,11 +1,13 @@
 <script lang="ts" setup>
 import IconChevronRight from '@/assets/chevron-right.svg'
 import IconPinned from '@/assets/pinned.svg'
+import EditTextModal from '@/components/EditTextModal.vue'
 import TreeItem from '@/components/TreeItem.vue'
 import { DragAndDrop } from '@/services/drag-and-drop'
 import { Favicons } from '@/services/favicons'
 import * as Messages from '@/services/foreground-messages'
 import { SessionTree } from '@/services/foreground-tree'
+import { closeModal, ModalState } from '@/services/modal-state'
 import {
   disconnectTreePort,
   onTreeDeltaPort,
@@ -145,6 +147,20 @@ const getTabTree = () => {
 function onClick() {
   Selection.clearSelection()
 }
+
+function handleEditWindowTitleConfirm(newTitle: string) {
+  if (ModalState.active?.kind === 'editWindowTitle') {
+    Messages.updateWindowTitle(
+      ModalState.active.window.uid,
+      newTitle.slice(0, 150),
+    )
+  }
+  closeModal()
+}
+
+function handleEditWindowTitleCancel() {
+  closeModal()
+}
 </script>
 
 <template>
@@ -190,6 +206,15 @@ function onClick() {
     </template>
 
     <div style="margin-bottom: 95vh"></div>
+
+    <EditTextModal
+      v-if="ModalState.active?.kind === 'editWindowTitle'"
+      title="Edit Window Title"
+      :initial-value="ModalState.active.window.title || ''"
+      placeholder="Enter window title"
+      @confirm="handleEditWindowTitleConfirm"
+      @cancel="handleEditWindowTitleCancel"
+    />
   </div>
 </template>
 

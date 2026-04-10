@@ -269,6 +269,14 @@ export function registerSessionTreeWindow(windowId: number) {
   })
 }
 
+export function updateWindowTitle(windowUid: UID, newTitle: string) {
+  void sendTreeCommand({
+    action: 'updateWindowTitle',
+    windowUid,
+    newTitle,
+  } as Messages.UpdateWindowTitleMessage)
+}
+
 // ==============================
 // Debug Messages
 // ==============================

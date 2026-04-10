@@ -490,8 +490,7 @@ const childrenOpen = computed(() => {
             'tree-item-text-active': props.item.active === true,
           }"
         >
-          Window id {{ props.item.id }} Window UID
-          {{ props.item.uid }}
+          {{ props.item.title || 'Window' }}
         </div>
       </template>
       <template v-else-if="isTab(props.item)">
@@ -644,6 +643,7 @@ const childrenOpen = computed(() => {
   grid-area: content;
   overflow: hidden;
   min-width: 40px;
+  max-height: 18px;
 }
 
 .tree-item-prepend {

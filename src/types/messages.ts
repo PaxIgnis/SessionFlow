@@ -125,6 +125,12 @@ export interface ToggleCollapseWindowMessage {
   windowUid: UID
 }
 
+export interface UpdateWindowTitleMessage {
+  action: 'updateWindowTitle'
+  windowUid: UID
+  newTitle: string
+}
+
 // ==============================
 // Debug Messages
 // ==============================
@@ -164,3 +170,4 @@ export type SessionTreeMessage =
   | ToggleCollapseTabMessage
   | ToggleCollapseWindowMessage
   | UnpinTabMessage
+  | UpdateWindowTitleMessage

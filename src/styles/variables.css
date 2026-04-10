@@ -38,6 +38,7 @@
   --nav-panel-focused-active-background: rgb(55, 55, 61);
   --nav-panel-hover-color: rgb(42, 45, 46);
   --text-color-primary: rgb(204, 204, 204);
+  --text-color-secondary: rgb(0, 0, 0);
   --header-text-color: rgb(255, 255, 255);
   --button-active-background: rgb(100, 140, 89);
   --button-active-background-hover: rgb(127, 151, 121);
