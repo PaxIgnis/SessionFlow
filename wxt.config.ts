@@ -5,7 +5,6 @@ import { defineConfig } from 'wxt'
 export default defineConfig({
   manifest: {
     action: {
-      default_area: 'navbar',
       default_icon: {
         '16': 'icon/16.png',
         '32': 'icon/32.png',
