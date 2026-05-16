@@ -12,6 +12,8 @@
     "zip": "wxt zip",
     "zip:firefox": "wxt zip -b firefox",
     "compile": "vue-tsc --noEmit",
+    "lint": "eslint .",
+    "check": "pnpm run compile && pnpm run lint",
     "postinstall": "wxt prepare",
     "format": "prettier . --write"
   },

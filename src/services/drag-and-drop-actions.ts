@@ -71,6 +71,7 @@ export function onDragEnter(e: DragEvent): void {
 }
 
 export function onDragLeave(e: DragEvent): void {
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'none'
   DragAndDrop.dragState.destinationId = null
   DragAndDrop.dragState.isValidDropTarget = false
 }

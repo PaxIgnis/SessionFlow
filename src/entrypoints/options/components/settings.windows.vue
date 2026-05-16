@@ -4,7 +4,7 @@ import ToggleButton from '@/components/ToggleButton.vue'
 import { OPTIONS } from '@/types/settings'
 import { STRINGS } from '@/types/strings'
 import NumberInput from '@/components/NumberInput.vue'
-declare const browser: any
+
 function updateLocation() {
   Settings.saveSettingsToStorage()
   setTimeout(() => {

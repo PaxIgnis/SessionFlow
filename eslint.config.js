@@ -6,8 +6,9 @@ import eslintConfigPrettier from 'eslint-config-prettier/flat'
 
 /** @type {import('eslint').Linter.Config[]} */
 export default [
+  { ignores: ['.output/**', '.wxt/**', 'node_modules/**'] },
   { files: ['**/*.{js,mjs,cjs,ts,vue}'] },
-  { languageOptions: { globals: globals.browser } },
+  { languageOptions: { globals: { ...globals.browser, browser: 'readonly' } } },
   pluginJs.configs.recommended,
   ...tseslint.configs.recommended,
   ...pluginVue.configs['flat/essential'],
