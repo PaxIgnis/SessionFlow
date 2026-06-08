@@ -1,5 +1,5 @@
 import { SessionTreeMessage } from '@/types/messages'
-import { Tab, Window } from '@/types/session-tree'
+import { Note, Tab, TopLevelTreeItem, Window } from '@/types/session-tree'
 
 export const SESSION_TREE_PORT_NAME = 'sessiontree-rpc'
 
@@ -23,18 +23,21 @@ export interface SessionTreePortResponse {
   requestId: string
   ok: boolean
   version: number
-  windows?: Window[]
+  treeItems?: TopLevelTreeItem[]
   error?: string
 }
 
 export type SessionTreeDelta =
-  | { op: 'treeReplaced'; windows: Window[] }
+  | { op: 'treeReplaced'; treeItems: TopLevelTreeItem[] }
   | { op: 'windowCreated'; window: Window; index: number }
   | { op: 'windowRemoved'; windowUid: UID }
   | { op: 'windowUpdated'; window: Window }
   | { op: 'tabCreated'; windowUid: UID; tab: Tab; index: number }
   | { op: 'tabRemoved'; windowUid: UID; tabUid: UID }
   | { op: 'tabUpdated'; tab: Tab }
+  | { op: 'noteCreated'; parentUid?: UID; note: Note; index: number }
+  | { op: 'noteRemoved'; noteUid: UID }
+  | { op: 'noteUpdated'; note: Note }
 
 export interface SessionTreePortDeltaMessage {
   type: 'delta'

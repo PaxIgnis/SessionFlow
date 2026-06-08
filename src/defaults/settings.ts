@@ -16,6 +16,7 @@ export const DEFAULT_SETTINGS: Settings = {
   saveWindowOnClose: false,
   saveWindowOnCloseIfContainsSavedTabs: true,
   saveWindowOnCloseIfPreviouslySaved: true,
+  saveWindowOnCloseIfContainsNotes: true,
 
   // Tabs
   focusTabOnOpen: true,

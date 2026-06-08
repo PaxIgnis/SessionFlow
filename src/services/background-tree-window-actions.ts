@@ -2,12 +2,10 @@ import { Browser } from '@/services/background-browser'
 import { DeferredEventsQueue } from '@/services/background-deferred-events-queue'
 import { OnCreatedQueue } from '@/services/background-on-created-queue'
 import { Tree } from '@/services/background-tree'
-import { setTabVisibilityRecursively } from '@/services/background-tree-tab-actions'
 import { emitTreeDelta } from '@/services/runtime-port-service'
 import { Settings } from '@/services/settings'
-import * as TreeUtils from '@/services/tree-utils'
 import * as Utils from '@/services/utils'
-import { State, Window, WindowPosition } from '@/types/session-tree'
+import { State, TreeItemType, Window, WindowPosition } from '@/types/session-tree'
 
 /**
  * Sets the state of the window and all tabs to SAVED and resets the IDs.
@@ -21,7 +19,8 @@ export function saveWindow(windowUid: UID): void {
     window.id = -1
     window.savedTime = Date.now()
     window.active = false
-    window.tabs.forEach((tab) => {
+    window.activeTabId = undefined
+    Tree.getTabs(window.children).forEach((tab) => {
       tab.state = State.SAVED
       tab.id = -1
       tab.savedTime = Date.now()
@@ -42,33 +41,34 @@ export function saveWindow(windowUid: UID): void {
  */
 export async function addWindow(windowId: number): Promise<void> {
   console.log('Adding Window', windowId)
-  if (!Tree.windowsList.some((w) => w.id === windowId)) {
+  if (!Tree.Items.filter(Tree.isWindow).some((w) => w.id === windowId)) {
     const win = await browser.windows.get(windowId, { populate: true })
     if (!win) {
       console.error('Window not found:', windowId)
       return
     }
-    const newWindow = {
+    const newWindow: Window = {
+      type: TreeItemType.WINDOW,
       uid: Utils.createUid(Tree.existingUidsSet),
       active: win.focused,
       activeTabId: win.tabs?.find((tab) => tab.active)?.id,
       id: windowId,
       selected: false,
       state: State.OPEN,
-      tabs: [],
+      children: [],
       collapsed: false,
       indentLevel: 0,
     }
-    Tree.windowsList.push(newWindow)
+    Tree.Items.push(newWindow)
     // TODO: use newWindow variable instead after foreground context independent data source is implemented
     Tree.windowsByUid.set(
       newWindow.uid,
-      Tree.windowsList[Tree.windowsList.length - 1],
+      Tree.Items[Tree.Items.length - 1] as Window,
     )
     emitTreeDelta({
       op: 'windowCreated',
       window: structuredClone(newWindow),
-      index: Tree.windowsList.length - 1,
+      index: Tree.Items.length - 1,
     })
     Tree.recomputeSessionTree()
     Tree.updateWindowTabs(windowId)
@@ -85,10 +85,13 @@ export async function addWindow(windowId: number): Promise<void> {
 export async function updateWindowTabs(windowId: number): Promise<void> {
   try {
     const win = await browser.windows.get(windowId, { populate: true })
-    const window = Tree.windowsList.find((w) => w.id === windowId)
+    const window = Tree.Items.filter(Tree.isWindow).find(
+      (w) => w.id === windowId,
+    )
     if (window) {
       // TODO: convert this to use addTab() in the future
-      window.tabs = win.tabs!.map((tab) => ({
+      window.children = win.tabs!.map((tab) => ({
+        type: TreeItemType.TAB,
         uid: Utils.createUid(Tree.existingUidsSet),
         active: tab.active,
         id: tab.id!,
@@ -100,7 +103,7 @@ export async function updateWindowTabs(windowId: number): Promise<void> {
         pinned: tab.pinned || false,
         indentLevel: 1,
       }))
-      for (const tab of window.tabs) {
+      for (const tab of Tree.getTabs(window.children)) {
         Tree.tabsByUid.set(tab.uid, tab)
       }
       Tree.recomputeSessionTree()
@@ -120,18 +123,22 @@ export async function updateWindowTabs(windowId: number): Promise<void> {
  * @param {UID} windowUid - The UID of the window to remove.
  */
 export function removeWindow(windowUid: UID): void {
-  const index = Tree.windowsList.findIndex((w) => w.uid === windowUid)
+  const index = Tree.Items.findIndex((w) => w.uid === windowUid)
   const window = Tree.windowsByUid.get(windowUid)
   if (window && index !== -1) {
-    // remove uids of tabs and window from set and maps
-    for (const tab of window.tabs) {
-      Tree.existingUidsSet.delete(tab.uid)
-      Tree.tabsByUid.delete(tab.uid)
+    // remove uids of children and window from set and maps
+    for (const child of window.children) {
+      Tree.existingUidsSet.delete(child.uid)
+      if (child.type === TreeItemType.TAB) {
+        Tree.tabsByUid.delete(child.uid)
+      } else {
+        Tree.notesByUid.delete(child.uid)
+      }
     }
     Tree.existingUidsSet.delete(window.uid)
     Tree.windowsByUid.delete(window.uid)
 
-    Tree.windowsList.splice(index, 1)
+    Tree.Items.splice(index, 1)
     Tree.recomputeSessionTree()
     emitTreeDelta({
       op: 'windowRemoved',
@@ -154,6 +161,8 @@ export function updateWindowState(windowUid: UID, state: State): void {
     window.state = state
     if (state === State.SAVED) {
       window.savedTime = Date.now()
+      window.active = false
+      window.activeTabId = undefined
     }
     emitTreeDelta({
       op: 'windowUpdated',
@@ -213,7 +222,7 @@ export function updateWindowPosition(
   windowId: number,
   position: WindowPosition,
 ): void {
-  const window = Tree.windowsList.find((w) => w.id === windowId)
+  const window = Tree.Items.filter(Tree.isWindow).find((w) => w.id === windowId)
   if (window) {
     window.windowPosition = position
   }
@@ -280,12 +289,16 @@ export function setActiveWindow(windowId: number, tries: number = 0): void {
     return
   }
 
-  const previousActiveWindow = Tree.windowsList.find((w) => w.active)
+  const previousActiveWindow = Tree.Items.filter(Tree.isWindow).find(
+    (w) => w.active,
+  )
   if (previousActiveWindow) {
     Tree.updateWindow(previousActiveWindow.uid, { active: false })
   }
 
-  const activeWindow = Tree.windowsList.find((w) => w.id === windowId)
+  const activeWindow = Tree.Items.filter(Tree.isWindow).find(
+    (w) => w.id === windowId,
+  )
   // if activeWindow is undefined, wait and try again
   if (activeWindow) {
     Tree.updateWindow(activeWindow.uid, { active: true })
@@ -345,7 +358,7 @@ export async function openWindow(message: { windowUid: UID }): Promise<void> {
     }
     const urls: string[] = []
     const pinnedTabs: UID[] = []
-    for (const tab of sessionTreeWindow.tabs) {
+    for (const tab of Tree.getTabs(sessionTreeWindow.children)) {
       let url = String(tab.url)
       // if the URL is a privileged URL, open a redirect page instead
       if (Utils.isPrivilegedUrl(url)) {
@@ -388,14 +401,14 @@ export async function openWindow(message: { windowUid: UID }): Promise<void> {
     // then update the saved window object id to represent the newly opened window
     Tree.updateWindowId(message.windowUid, window.id)
     window.tabs.forEach((tab, index) => {
-      Tree.updateTabId(sessionTreeWindow?.tabs[index].uid, tab.id!)
-      Tree.updateTabState(sessionTreeWindow?.tabs[index].uid, State.OPEN)
+      Tree.updateTabId(sessionTreeWindow?.children[index].uid, tab.id!)
+      Tree.updateTabState(sessionTreeWindow?.children[index].uid, State.OPEN)
       // need to manually pin tab because pinned state is not preserved when creating window with URLs
-      if (pinnedTabs.includes(sessionTreeWindow?.tabs[index].uid))
+      if (pinnedTabs.includes(sessionTreeWindow?.children[index].uid))
         Browser.pinTab(tab.id!)
     })
     if (Settings.values.openWindowWithTabsDiscarded && urls.length > 1) {
-      for (const tab of sessionTreeWindow.tabs) {
+      for (const tab of Tree.getTabs(sessionTreeWindow.children)) {
         if (tab.state === State.SAVED) {
           Tree.openTab({
             tabUid: tab.uid,
@@ -429,8 +442,8 @@ export function saveAndRemoveWindow(message: {
 
 /**
  * Toggles the collapsed state of a window.
- * When collapsing, all tabs are hidden.
- * When expanding, root tabs are shown and child tab visibility respects their own collapsed states.
+ * When collapsing, all children are hidden.
+ * When expanding, root children are shown and child item visibility respects their own collapsed states.
  *
  * @param {UID} windowUid - The UID of the window to toggle.
  */
@@ -443,18 +456,12 @@ export function toggleCollapseWindow(windowUid: UID): void {
 
   win.collapsed = !win.collapsed
 
-  // build parent -> children map for tabs in this window
-  const childrenMap = TreeUtils.buildChildrenMap(win.tabs)
-
-  // root tabs are those without a parentUid
-  const roots = win.tabs.filter((t) => t.parentUid === undefined)
-
-  // if window is collapsed, hide all tabs; otherwise show roots and
-  // let recursion respect per-tab collapsed flags
+  // if window is collapsed, hide all children; otherwise show roots and
+  // let recursion respect per-item collapsed flags
   if (win.collapsed) {
-    setTabVisibilityRecursively(roots, childrenMap, false)
+    Tree.setItemVisibilityInList(win.children, false, false)
   } else {
-    setTabVisibilityRecursively(roots, childrenMap, true)
+    Tree.setItemVisibilityInList(win.children, true, false)
   }
   emitTreeDelta({
     op: 'windowUpdated',
@@ -486,22 +493,22 @@ export function moveWindows(
 
   // first sort windows in order they appear in session tree
   windows.sort((a, b) => {
-    const indexA = Tree.windowsList.indexOf(a)
-    const indexB = Tree.windowsList.indexOf(b)
+    const indexA = Tree.Items.indexOf(a)
+    const indexB = Tree.Items.indexOf(b)
     return indexA - indexB
   })
 
   // check if targetIndex is valid
-  if (targetIndex < 0 || targetIndex > Tree.windowsList.length) {
+  if (targetIndex < 0 || targetIndex > Tree.Items.length) {
     console.error(`Invalid target index: ${targetIndex}`)
-    targetIndex = Tree.windowsList.length
+    targetIndex = Tree.Items.length
   }
 
   // move each window
   for (const window of windows) {
-    const currentIndex = Tree.windowsList.indexOf(window)
+    const currentIndex = Tree.Items.indexOf(window)
     if (currentIndex === -1) {
-      console.error(`Window with UID ${window.uid} not found in windowsList`)
+      console.error(`Window with UID ${window.uid} not found in TreeItems`)
       continue
     }
 
@@ -512,7 +519,7 @@ export function moveWindows(
 
     // remove window from current position
     if (!copy) {
-      Tree.windowsList.splice(currentIndex, 1)
+      Tree.Items.splice(currentIndex, 1)
       emitTreeDelta({
         op: 'windowRemoved',
         windowUid: window.uid,
@@ -520,7 +527,7 @@ export function moveWindows(
     }
 
     // insert window at target position
-    Tree.windowsList.splice(targetIndex, 0, window)
+    Tree.Items.splice(targetIndex, 0, window)
     emitTreeDelta({
       op: 'windowCreated',
       window: structuredClone(window),

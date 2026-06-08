@@ -1,4 +1,4 @@
-import { Window } from '@/types/session-tree'
+import { Note, Window } from '@/types/session-tree'
 import { reactive } from 'vue'
 
 export type ActiveModal =
@@ -10,6 +10,10 @@ export type ActiveModal =
       kind: 'editCustomLabel'
       uid: UID
       customLabel?: string
+    }
+  | {
+      kind: 'editNote'
+      note: Note
     }
   | null
 
@@ -37,4 +41,8 @@ export function closeEditWindowTitleModal() {
 
 export function openEditCustomLabelModal(uid: UID, customLabel?: string) {
   openModal({ kind: 'editCustomLabel', uid, customLabel })
+}
+
+export function openEditNoteModal(note: Note) {
+  openModal({ kind: 'editNote', note })
 }

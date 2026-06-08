@@ -7,7 +7,7 @@ import {
 } from '@/types/context-menu'
 // import { Settings } from '@/services/settings'
 import { Selection } from '@/services/selection'
-import { SelectionType, Tab, Window } from '@/types/session-tree'
+import { Note, SelectionType, Tab, Window } from '@/types/session-tree'
 
 /**
  * Controls logic opening of context menu based on selected type.
@@ -27,6 +27,8 @@ export function open(type: ContextMenuType): void {
     items = createContextMenuItems(ContextMenu.windowConfig)
   } else if (type === ContextMenuType.Tab) {
     items = createContextMenuItems(ContextMenu.tabConfig)
+  } else if (type === ContextMenuType.Note) {
+    items = createContextMenuItems(ContextMenu.noteConfig)
   } else if (type === ContextMenuType.Panel) {
     // TODO: Implement panel context menu
     items = createContextMenuItems(ContextMenu.panelConfig)
@@ -110,6 +112,7 @@ export function handleContextMenuClick(
   e: MouseEvent,
   window?: Window,
   tab?: Tab,
+  note?: Note,
   selectionType?: SelectionType,
 ): void {
   if (type === ContextMenuType.Window && window) {
@@ -122,6 +125,12 @@ export function handleContextMenuClick(
     Selection.selectItemForContextMenu(
       tab,
       selectionType || SelectionType.TAB,
+      e,
+    )
+  } else if (type === ContextMenuType.Note && note) {
+    Selection.selectItemForContextMenu(
+      note,
+      selectionType || SelectionType.NOTE,
       e,
     )
   }

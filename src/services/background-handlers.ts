@@ -7,7 +7,7 @@ import { initializeSessionTreePort } from '@/services/runtime-port-service'
 import { Selection } from '@/services/selection'
 import { Settings } from '@/services/settings'
 import * as Messages from '@/types/messages'
-import { LoadingStatus, State, Tab } from '@/types/session-tree'
+import { LoadingStatus, State, Tab, TreeItemType } from '@/types/session-tree'
 
 // ==============================
 // Event Listeners
@@ -15,7 +15,7 @@ import { LoadingStatus, State, Tab } from '@/types/session-tree'
 export function initializeListeners() {
   initializeSessionTreePort({
     dispatchCommand,
-    getSnapshot: () => Tree.windowsList,
+    getSnapshot: () => Tree.Items,
   })
 
   browser.browserAction.onClicked.addListener(browserActionOnClicked)
@@ -91,7 +91,7 @@ async function windowsOnCreated(window: browser.windows.Window): Promise<void> {
  */
 function windowsOnRemoved(windowId: number): void {
   Tree.removeSessionWindowId(windowId)
-  const window = Tree.windowsList.find((w) => w.id === windowId)
+  const window = Tree.Items.filter(Tree.isWindow).find((w) => w.id === windowId)
   if (!window) {
     return
   }
@@ -99,8 +99,9 @@ function windowsOnRemoved(windowId: number): void {
     return
   }
   // if window has saved tabs, save the window instead of removing
-  const savedTabs = window.tabs.filter((tab) => tab.state === State.SAVED)
-  const tabCount = window.tabs.length
+  const windowTabs = Tree.getTabs(window.children)
+  const savedTabs = windowTabs.filter((tab) => tab.state === State.SAVED)
+  const tabCount = windowTabs.length
   if (
     tabCount > 0 &&
     (Settings.values.saveWindowOnClose ||
@@ -113,11 +114,22 @@ function windowsOnRemoved(windowId: number): void {
     return
   }
 
+  // if windows has existing notes, save window instead of removing
+  const windowNotes = window.children.filter(Tree.isNote)
+  if (
+    windowNotes.length > 0 &&
+    Settings.values.saveWindowOnCloseIfContainsNotes
+  ) {
+    Tree.saveWindow(window.uid)
+    return
+  }
+
   // if this window only has 1 tab, then save the window instead of removing
   if (tabCount === 1) {
-    const openTab = window.tabs.filter((tab) => tab.state === State.OPEN)[0]
+    const openTab = windowTabs.filter((tab) => tab.state === State.OPEN)[0]
     if (!openTab) {
       Tree.removeWindow(window.uid)
+      return
     }
     // if settings set to save tab on close
     if (
@@ -126,6 +138,7 @@ function windowsOnRemoved(windowId: number): void {
         openTab.savedTime! > 0)
     ) {
       Tree.saveWindow(window.uid)
+      return
     }
   }
   Tree.removeWindow(window.uid)
@@ -143,19 +156,21 @@ async function tabsOnCreated(tab: browser.tabs.Tab): Promise<void> {
   }
   const extensionTab = await OnCreatedQueue.isNewTabExtensionGenerated(tab.id)
   if (!extensionTab) {
-    const window = Tree.windowsList.find((w) => w.id === tab.windowId)
+    const window = Tree.Items.filter(Tree.isWindow).find(
+      (w) => w.id === tab.windowId,
+    )
     // if Window ID is not in session tree, then the window was just opened,
     // so window listener will handle adding the tab to the session tree.
     if (!window) {
       return
     }
     // translate index from browser to session tree, as browser index includes all tabs, but session tree index only includes open and discarded tabs
-    const openSessionTreeTabs = window.tabs.filter(
+    const openSessionTreeTabs = Tree.getTabs(window.children).filter(
       (tab) => tab.state === State.OPEN || tab.state === State.DISCARDED,
     )
     const tabToLeft = openSessionTreeTabs[Math.max(tab.index - 1, 0)]
     const tabToLeftIndex = tabToLeft
-      ? window.tabs.findIndex((t) => t.uid === tabToLeft.uid)
+      ? window.children.findIndex((t) => t.uid === tabToLeft.uid)
       : 0
     Tree.addTab(
       tab.active,
@@ -185,15 +200,18 @@ function tabsOnRemoved(
     console.error('Window ID is undefined')
     return
   }
-  const window = Tree.windowsList.find((w) => w.id === removeInfo.windowId)
+  const window = Tree.Items.filter(Tree.isWindow).find(
+    (w) => w.id === removeInfo.windowId,
+  )
   if (!window) {
     return
   }
-  const index = window.tabs.findIndex((tab) => tab.id === tabId)
+  const tabs = Tree.getTabs(window.children)
+  const index = tabs.findIndex((tab) => tab.id === tabId)
   if (index === -1) {
     return
   }
-  if (window.tabs[index].state === State.SAVED) {
+  if (tabs[index].state === State.SAVED) {
     return
   }
   if (removeInfo.isWindowClosing) {
@@ -202,12 +220,12 @@ function tabsOnRemoved(
   if (
     Settings.values.saveTabOnClose ||
     (Settings.values.saveTabOnCloseIfPreviouslySaved &&
-      window.tabs[index].savedTime! > 0)
+      tabs[index].savedTime! > 0)
   ) {
-    Tree.setTabSaved(window.tabs[index].uid)
+    Tree.setTabSaved(tabs[index].uid)
     return
   }
-  Tree.removeTab(window.tabs[index].uid)
+  Tree.removeTab(tabs[index].uid)
 }
 
 /**
@@ -234,9 +252,11 @@ function tabsOnUpdated(
   }
   if (changeInfo.pinned !== undefined) {
     tabContents.pinned = tab.pinned
-    const t = Tree.windowsList
+    const t = Tree.Items.filter(Tree.isWindow)
       .find((t) => t.id === tab.windowId)
-      ?.tabs.find((t) => t.id === tab.id)
+      ?.children.find(
+        (t): t is Tab => t.type === TreeItemType.TAB && t.id === tab.id,
+      )
     if (!t) {
       console.error(
         'Error updating pinned state, could not find tab in tree:',
@@ -271,12 +291,14 @@ async function tabsOnMoved(
     console.error('Tab or Window ID is undefined')
     return
   }
-  const window = Tree.windowsList.find((w) => w.id === moveInfo.windowId)
+  const window = Tree.Items.filter(Tree.isWindow).find(
+    (w) => w.id === moveInfo.windowId,
+  )
   if (!window) {
     console.error('Window not found in session tree')
     return
   }
-  const openSessionTreeTabs = window.tabs.filter(
+  const openSessionTreeTabs = Tree.getTabs(window.children).filter(
     (tab) => tab.state === State.OPEN || tab.state === State.DISCARDED,
   )
   const openBrowserTabs = await browser.tabs.query({
@@ -295,12 +317,17 @@ async function tabsOnMoved(
     return
   }
   // if order doesn't match, update the sessionTree order to match the browser order
-  const movedTabIndex = window.tabs.findIndex((tab) => tab.id === tabId)
-  const tab = window.tabs[movedTabIndex]
+  const movedTabIndex = window.children.findIndex(
+    (tab) => tab.type === TreeItemType.TAB && tab.id === tabId,
+  )
+  const tab = window.children[movedTabIndex] as Tab
   Tree.removeTab(tab.uid)
   if (moveInfo.toIndex + 1 >= openSessionTreeTabs.length) {
     // place in last position, or if pinned, at end of pinned tabs
-    const targetTabIndex = window.tabs.findLastIndex((t) => t.pinned) + 1
+    const targetTabIndex =
+      window.children.findLastIndex(
+        (t) => t.type === TreeItemType.TAB && t.pinned,
+      ) + 1
     Tree.addTab(
       tab.active ?? false,
       window.uid,
@@ -317,10 +344,15 @@ async function tabsOnMoved(
   } else {
     // move to the position immediately before the tab to the right in the browser
     const rightTabId = openBrowserTabs[moveInfo.toIndex + 1].id
-    let targetTabIndex = window.tabs.findIndex((tab) => tab.id === rightTabId)
+    let targetTabIndex = window.children.findIndex(
+      (tab) => tab.type === TreeItemType.TAB && tab.id === rightTabId,
+    )
     // if tab is pinned and the tab to the right is not pinned, adjust to place at end of pinned tabs
     if (tab.pinned && !openBrowserTabs[moveInfo.toIndex + 1].pinned) {
-      targetTabIndex = window.tabs.findLastIndex((t) => t.pinned) + 1
+      targetTabIndex =
+        window.children.findLastIndex(
+          (t) => t.type === TreeItemType.TAB && t.pinned,
+        ) + 1
     }
 
     Tree.addTab(
@@ -352,15 +384,19 @@ function tabsOnDetached(
     console.error('Tab or Window ID is undefined')
     return
   }
-  const window = Tree.windowsList.find((w) => w.id === detachInfo.oldWindowId)
+  const window = Tree.Items.filter(Tree.isWindow).find(
+    (w) => w.id === detachInfo.oldWindowId,
+  )
   if (!window) {
     return
   }
-  const index = window.tabs.findIndex((tab) => tab.id === tabId)
+  const index = window.children.findIndex(
+    (tab) => tab.type === TreeItemType.TAB && tab.id === tabId,
+  )
   if (index === -1) {
     return
   }
-  Tree.removeTab(window.tabs[index].uid)
+  Tree.removeTab(window.children[index].uid)
 }
 
 /**
@@ -382,7 +418,9 @@ async function tabsOnAttached(
     console.error('Tab or Window ID is undefined')
     return
   }
-  const window = Tree.windowsList.find((w) => w.id === attachInfo.newWindowId)
+  const window = Tree.Items.filter(Tree.isWindow).find(
+    (w) => w.id === attachInfo.newWindowId,
+  )
   if (!window) {
     console.error('Window not found in session tree')
     return
@@ -394,7 +432,9 @@ async function tabsOnAttached(
   }
 
   // if tab is already added to tree, return
-  const existingTab = window.tabs.find((t) => t.id === tabId)
+  const existingTab = window.children.find(
+    (t) => t.type === TreeItemType.TAB && t.id === tabId,
+  )
   if (existingTab) return
 
   // get the id of the tab to the right in the browser
@@ -406,7 +446,9 @@ async function tabsOnAttached(
   // if there is no tab to the right, add the tab to the end, if pinned, at end of pinned tabs
   if (tabToRightId === undefined) {
     const targetTabIndex = tab.pinned
-      ? window.tabs.findLastIndex((t) => t.pinned) + 1
+      ? window.children.findLastIndex(
+          (t) => t.type === TreeItemType.TAB && t.pinned,
+        ) + 1
       : undefined
     Tree.addTab(
       tab.active,
@@ -422,10 +464,13 @@ async function tabsOnAttached(
     return
   } else {
     // if there is a tab to the right, insert it to the left of that tab
-    const tabToRightIndex = window.tabs.findIndex(
-      (tab) => tab.id === tabToRightId,
+    const tabToRightIndex = window.children.findIndex(
+      (tab) => tab.type === TreeItemType.TAB && tab.id === tabToRightId,
     )
-    const lastPinnedIndex = window.tabs.findLastIndex((t) => t.pinned) + 1
+    const lastPinnedIndex =
+      window.children.findLastIndex(
+        (t) => t.type === TreeItemType.TAB && t.pinned,
+      ) + 1
     Tree.addTab(
       tab.active,
       window.uid,
@@ -517,6 +562,14 @@ function dispatchCommand(message: Messages.SessionTreeMessage): void {
         { customLabel: message.customLabel?.trim() || undefined },
       )
     }
+  } else if (message.action === 'createNote') {
+    Tree.createNote(message.parentUid, message.index, message.text)
+  } else if (message.action === 'updateNoteText') {
+    Tree.updateNoteText(message.noteUid, message.text)
+  } else if (message.action === 'toggleCollapseNote') {
+    Tree.toggleCollapseNote(message.noteUid)
+  } else if (message.action === 'removeNote') {
+    Tree.removeNote(message.noteUid)
   } else if (message.action === 'deselectAllItems') {
     Tree.deselectAllItems()
   } else if (message.action === 'tabIndentIncrease') {
@@ -530,6 +583,15 @@ function dispatchCommand(message: Messages.SessionTreeMessage): void {
       message.targetIndex,
       message.parentUid,
       message.copy,
+    )
+  } else if (message.action === 'moveTreeItems') {
+    Tree.moveTreeItems(
+      message.itemUIDs,
+      message.targetIndex,
+      message.parentUid,
+      message.targetWindowUid,
+      message.copy,
+      message.includeDescendants,
     )
   } else if (message.action === 'moveWindows') {
     Tree.moveWindows(message.windowUIDs, message.targetIndex, message.copy)

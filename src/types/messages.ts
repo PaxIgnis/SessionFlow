@@ -106,6 +106,16 @@ export interface MoveWindowsMessage {
   copy: boolean
 }
 
+export interface MoveTreeItemsMessage {
+  action: 'moveTreeItems'
+  itemUIDs: UID[]
+  targetIndex: number
+  parentUid?: UID
+  targetWindowUid?: UID
+  copy: boolean
+  includeDescendants?: boolean
+}
+
 export interface OpenWindowMessage {
   action: 'openWindow'
   windowUid: UID
@@ -138,6 +148,33 @@ export interface UpdateWindowTitleMessage {
 }
 
 // ==============================
+// Note Messages
+// ==============================
+
+export interface CreateNoteMessage {
+  action: 'createNote'
+  parentUid?: UID
+  index?: number
+  text?: string
+}
+
+export interface RemoveNoteMessage {
+  action: 'removeNote'
+  noteUid: UID
+}
+
+export interface ToggleCollapseNoteMessage {
+  action: 'toggleCollapseNote'
+  noteUid: UID
+}
+
+export interface UpdateNoteTextMessage {
+  action: 'updateNoteText'
+  noteUid: UID
+  text: string
+}
+
+// ==============================
 // Debug Messages
 // ==============================
 
@@ -156,11 +193,13 @@ export interface DeselectAllItemsMessage {
 export type SessionTreeMessage =
   | CloseTabMessage
   | CloseWindowMessage
+  | CreateNoteMessage
   | DeselectAllItemsMessage
   | DuplicateTabMessage
   | FocusTabMessage
   | FocusWindowMessage
   | MoveTabsMessage
+  | MoveTreeItemsMessage
   | MoveWindowsMessage
   | OpenTabMessage
   | OpenWindowMessage
@@ -169,12 +208,15 @@ export type SessionTreeMessage =
   | PinTabMessage
   | PrintSessionTreeMessage
   | ReloadTabMessage
+  | RemoveNoteMessage
   | SaveAndRemoveWindowMessage
   | SaveTabMessage
   | TabIndentDecreaseMessage
   | TabIndentIncreaseMessage
   | ToggleCollapseTabMessage
+  | ToggleCollapseNoteMessage
   | ToggleCollapseWindowMessage
   | UnpinTabMessage
   | UpdateCustomLabelMessage
+  | UpdateNoteTextMessage
   | UpdateWindowTitleMessage

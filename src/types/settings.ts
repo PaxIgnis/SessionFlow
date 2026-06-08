@@ -14,6 +14,7 @@ export interface Settings {
   saveWindowOnClose: boolean
   saveWindowOnCloseIfContainsSavedTabs: boolean
   saveWindowOnCloseIfPreviouslySaved: boolean
+  saveWindowOnCloseIfContainsNotes: boolean
 
   // Tabs
   focusTabOnOpen: boolean

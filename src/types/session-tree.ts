@@ -1,4 +1,5 @@
 export interface Window {
+  type: TreeItemType.WINDOW
   uid: UID
   active?: boolean
   activeTabId?: number
@@ -8,12 +9,16 @@ export interface Window {
   state: State
   collapsed?: boolean
   windowPosition?: WindowPosition
-  tabs: Array<Tab>
+  children: Array<WindowChild>
   indentLevel: number
   title?: string
+  isParent?: boolean
+  parentUid?: UID
+  isVisible?: boolean
 }
 
 export interface Tab {
+  type: TreeItemType.TAB
   uid: UID
   active?: boolean
   id: number
@@ -33,9 +38,32 @@ export interface Tab {
   customLabel?: string
 }
 
+export interface Note {
+  type: TreeItemType.NOTE
+  uid: UID
+  text: string
+  selected: boolean
+  windowUid?: UID
+  collapsed?: boolean
+  indentLevel: number
+  isParent?: boolean
+  parentUid?: UID
+  isVisible?: boolean
+}
+
+export type TreeItem = Window | Tab | Note
+export type TopLevelTreeItem = Window | Note
+export type WindowChild = Tab | Note
+
+export const enum TreeItemType {
+  WINDOW = 0,
+  TAB = 1,
+  NOTE = 2,
+}
+
 export interface VisibleWindow {
   window: Window
-  visibleTabs: Tab[]
+  visibleChildren: WindowChild[]
 }
 
 export enum State {
@@ -67,22 +95,25 @@ export enum LoadingStatus {
 export const enum SelectionType {
   WINDOW = 0,
   TAB = 1,
+  NOTE = 2,
 }
 
 export interface SelectedItem {
-  item: Window | Tab
+  item: TreeItem
   type: SelectionType
 }
 
 export const enum DragType {
   TAB = 0,
   WINDOW = 1,
+  NOTE = 2,
 }
 
 export const enum DropType {
   TAB = 0,
   WINDOW = 1,
   OTHER = 2,
+  NOTE = 3,
 }
 
 export const enum DropPosition {
@@ -94,7 +125,7 @@ export const enum DropPosition {
 
 export interface DragInfo {
   dragType: DragType
-  items: Array<Tab | Window>
+  items: TreeItem[]
 }
 
 export interface DragState {

@@ -4,7 +4,14 @@ import { Tree } from '@/services/background-tree'
 import { Favicons } from '@/services/favicons'
 import { Settings } from '@/services/settings'
 import * as Utils from '@/services/utils'
-import { State, Tab, Window } from '@/types/session-tree'
+import {
+  Note,
+  State,
+  Tab,
+  TreeItem,
+  TreeItemType,
+  Window,
+} from '@/types/session-tree'
 import { emitTreeDelta } from './runtime-port-service'
 
 /**
@@ -20,7 +27,7 @@ export async function initializeWindows(): Promise<void> {
     const matchedWindowUids = new Set<UID>()
     const openWindowUIDs = new Set<UID>()
     const tabUIDsToOpenOnStartup = new Set<UID>()
-    Tree.windowsList.forEach((w) => {
+    Tree.Items.filter(Tree.isWindow).forEach((w) => {
       if (w.state !== State.SAVED) {
         openWindowUIDs.add(w.uid)
       }
@@ -51,7 +58,9 @@ export async function initializeWindows(): Promise<void> {
           active: win.focused,
           activeTabId: win.tabs?.find((tab) => tab.active)?.id,
           indentLevel: 0,
-          tabs: win.tabs!.map((tab) => ({
+          type: TreeItemType.WINDOW,
+          children: win.tabs!.map((tab) => ({
+            type: TreeItemType.TAB,
             uid: Utils.createUid(Tree.existingUidsSet),
             active: tab.active,
             id: tab.id!,
@@ -64,7 +73,7 @@ export async function initializeWindows(): Promise<void> {
             pinned: tab.pinned || false,
           })),
         }
-        Tree.windowsList.push(newWindow)
+        Tree.Items.push(newWindow)
       }
     })
     // collect uids for session restore and cleanup states
@@ -79,23 +88,21 @@ export async function initializeWindows(): Promise<void> {
       }
 
       if (Settings.values.restorePreviousSessionOnStartup) {
-        const tabsToOpen = orphanedWindow.tabs.filter(
+        const tabsToOpen = Tree.getTabs(orphanedWindow.children).filter(
           (tab) => tab.state !== State.SAVED,
         )
 
         if (tabsToOpen.length === 0) {
+          markWindowSavedAfterStartup(orphanedWindow)
           continue
         }
 
-        orphanedWindow.state = State.SAVED
+        markWindowSavedAfterStartup(orphanedWindow)
         for (const tab of tabsToOpen) {
           tabUIDsToOpenOnStartup.add(tab.uid)
         }
       } else {
-        orphanedWindow.state = State.SAVED
-        orphanedWindow.tabs.forEach((tab) => {
-          tab.state = State.SAVED
-        })
+        markWindowSavedAfterStartup(orphanedWindow)
       }
     }
     rebuildUIDMaps()
@@ -149,7 +156,7 @@ function findBestSavedWindowMatch(
   let bestMatch: Window | undefined
   let bestScore = -1
 
-  for (const savedWindow of Tree.windowsList) {
+  for (const savedWindow of Tree.Items.filter(Tree.isWindow)) {
     if (matchedWindowUids.has(savedWindow.uid)) {
       continue
     }
@@ -182,7 +189,7 @@ function scoreWindowMatch(
   openWindow: browser.windows.Window,
 ): number {
   const openTabs = openWindow.tabs ?? []
-  const candidateTabs = savedWindow.tabs.filter(
+  const candidateTabs = Tree.getTabs(savedWindow.children).filter(
     (tab) => tab.state !== State.SAVED,
   )
   if (candidateTabs.length === 0) {
@@ -237,7 +244,7 @@ function reconcileSavedWindowWithOpenWindow(
   // Only tabs that were open at shutdown participate in matching.
   const usedOpenTabIds = new Set<number>()
   const tabsToOpen: UID[] = []
-  const candidateTabs = savedWindow.tabs.filter(
+  const candidateTabs = Tree.getTabs(savedWindow.children).filter(
     (tab) => tab.state !== State.SAVED,
   )
   for (const savedTab of candidateTabs) {
@@ -288,7 +295,8 @@ function reconcileSavedWindowWithOpenWindow(
     }
 
     // Create a new open session tree tab for each unmatched browser tab.
-    savedWindow.tabs.push({
+    savedWindow.children.push({
+      type: TreeItemType.TAB,
       uid: Utils.createUid(Tree.existingUidsSet),
       active: openTab.active,
       id: openTab.id,
@@ -373,27 +381,86 @@ export function recomputeSessionTree(emitDelta: boolean = true): void {
  * @param {boolean = true} emitDelta - Whether to emit tree delta events for each tab updated.
  */
 function computeVisibility(emitDelta: boolean = true): void {
-  Tree.windowsList.forEach((win) => {
-    if (win.collapsed) {
-      win.tabs.forEach((tab) => {
-        if (tab.isVisible) {
-          Tree.updateTab({ tabUid: tab.uid }, { isVisible: false }, emitDelta)
-        }
-      })
-    } else {
-      const childrenMap = new Map<UID, Tab[]>()
-      win.tabs.forEach((tab) => {
-        if (tab.parentUid !== undefined) {
-          if (!childrenMap.has(tab.parentUid)) {
-            childrenMap.set(tab.parentUid, [])
-          }
-          childrenMap.get(tab.parentUid)!.push(tab)
-        }
-      })
-      const roots = win.tabs.filter((t) => t.parentUid === undefined)
-      Tree.setTabVisibilityRecursively(roots, childrenMap, true, emitDelta)
-    }
-  })
+  setItemVisibilityInList(Tree.Items as TreeItem[], true, emitDelta)
+}
+
+/**
+ * Sets the visibility of a tree item's children.
+ *
+ * @param itemUid - The UID of the parent tree item.
+ * @param items - The list of all tree items.
+ * @param visible - Whether the children should be visible.
+ * @param emitDelta - Whether to emit tree delta events for each item updated.
+ */
+export function setItemChildrenVisibility(
+  itemUid: UID,
+  items: TreeItem[],
+  visible: boolean,
+  emitDelta: boolean,
+): void {
+  const childrenMap = Tree.buildChildrenMap(items)
+  const roots = items.filter((item) => item.parentUid === itemUid)
+  for (const item of roots) {
+    setItemVisibilityRecursively(item, childrenMap, visible, emitDelta)
+  }
+}
+
+/**
+ * Sets the visibility of tree items in a list starting from the root items.
+ *
+ * @param items - The list of tree items.
+ * @param parentVisible - Whether the parent items should be visible.
+ * @param emitDelta - Whether to emit tree delta events for each item updated.
+ */
+export function setItemVisibilityInList(
+  items: TreeItem[],
+  parentVisible: boolean,
+  emitDelta: boolean,
+): void {
+  const childrenMap = Tree.buildChildrenMap(items)
+  const roots = items.filter((item) => item.parentUid === undefined)
+  for (const item of roots) {
+    setItemVisibilityRecursively(item, childrenMap, parentVisible, emitDelta)
+  }
+}
+
+function setItemVisibilityRecursively(
+  item: TreeItem,
+  childrenMap: Map<UID, TreeItem[]>,
+  parentVisible: boolean,
+  emitDelta: boolean,
+): void {
+  const visible = parentVisible
+  updateItemVisibility(item, visible, emitDelta)
+
+  const childrenVisible = visible && !item.collapsed
+  if (item.type === TreeItemType.WINDOW) {
+    setItemVisibilityInList(
+      item.children as TreeItem[],
+      childrenVisible,
+      emitDelta,
+    )
+  }
+
+  const children = childrenMap.get(item.uid) || []
+  for (const child of children) {
+    setItemVisibilityRecursively(child, childrenMap, childrenVisible, emitDelta)
+  }
+}
+
+function updateItemVisibility(
+  item: TreeItem,
+  isVisible: boolean,
+  emitDelta: boolean,
+): void {
+  if (item.isVisible === isVisible) return
+  if (item.type === TreeItemType.TAB) {
+    Tree.updateTab({ tabUid: item.uid }, { isVisible }, emitDelta)
+  } else if (item.type === TreeItemType.NOTE) {
+    Tree.updateNote(item.uid, { isVisible }, emitDelta)
+  } else if (item.type === TreeItemType.WINDOW) {
+    Tree.updateWindow(item.uid, { isVisible }, emitDelta)
+  }
 }
 
 /**
@@ -402,15 +469,39 @@ function computeVisibility(emitDelta: boolean = true): void {
  * @param {boolean = true} emitDelta - Whether to emit tree delta events for each tab updated.
  */
 function setIndentLevel(emitDelta: boolean = true): void {
-  for (const w of Tree.windowsList) {
-    if (w.indentLevel === undefined) {
-      Tree.updateWindow(w.uid, { indentLevel: 0 }, emitDelta)
+  setIndentLevelsInList(Tree.Items as TreeItem[], undefined, emitDelta)
+}
+
+function setIndentLevelsInList(
+  items: TreeItem[],
+  containerParent: TreeItem | undefined,
+  emitDelta: boolean,
+): void {
+  const byUid = new Map(items.map((item) => [item.uid, item] as const))
+  for (const item of items) {
+    const parent = item.parentUid ? byUid.get(item.parentUid) : containerParent
+    const indentLevel = parent ? (parent.indentLevel ?? 0) + 1 : 0
+    if (item.indentLevel !== indentLevel) {
+      updateItemIndentLevel(item, indentLevel, emitDelta)
     }
-    for (const tab of w.tabs) {
-      if (tab.indentLevel === undefined) {
-        Tree.updateTab({ tabUid: tab.uid }, { indentLevel: 1 }, emitDelta)
-      }
+
+    if (item.type === TreeItemType.WINDOW) {
+      setIndentLevelsInList(item.children as TreeItem[], item, emitDelta)
     }
+  }
+}
+
+function updateItemIndentLevel(
+  item: TreeItem,
+  indentLevel: number,
+  emitDelta: boolean,
+): void {
+  if (item.type === TreeItemType.TAB) {
+    Tree.updateTab({ tabUid: item.uid }, { indentLevel }, emitDelta)
+  } else if (item.type === TreeItemType.NOTE) {
+    Tree.updateNote(item.uid, { indentLevel }, emitDelta)
+  } else {
+    Tree.updateWindow(item.uid, { indentLevel }, emitDelta)
   }
 }
 
@@ -424,30 +515,22 @@ export async function loadSessionTreeFromStorage(): Promise<void> {
     const sessionTree = await browser.storage.local.get(STORAGE_KEY)
     console.debug('Session Tree from storage:', sessionTree)
     if (sessionTree[STORAGE_KEY]) {
-      Tree.windowsList.splice(
-        0,
-        Tree.windowsList.length,
-        ...sessionTree[STORAGE_KEY],
-      )
-      Tree.windowsList.forEach((window) => {
+      Tree.Items.splice(0, Tree.Items.length, ...sessionTree[STORAGE_KEY])
+      Tree.Items.forEach((window) => {
+        if (window.type === TreeItemType.NOTE) {
+          normalizeNote(window, undefined)
+          return
+        }
         window.id = 0
         window.active = false
-        window.activeTabId = 0
+        window.activeTabId = undefined
         window.selected = false
         if (!window.savedTime) window.savedTime = Date.now()
         if (!window.uid) window.uid = Utils.createUid(Tree.existingUidsSet)
         Tree.windowsByUid.set(window.uid, window)
-        window.tabs.forEach((tab) => {
-          tab.active = false
-          tab.id = 0
-          tab.selected = false
-          if (!tab.savedTime) tab.savedTime = Date.now()
-          if (!tab.uid) tab.uid = Utils.createUid(Tree.existingUidsSet)
-          Tree.tabsByUid.set(tab.uid, tab)
-          tab.windowUid = window.uid
-          if (!tab.pinned) tab.pinned = false
-        })
+        normalizeWindowChildren(window)
       })
+      rebuildUIDMaps()
     }
   } catch (error) {
     console.error('Error loading session tree from storage:', error)
@@ -462,7 +545,7 @@ export async function loadSessionTreeFromStorage(): Promise<void> {
 export async function saveSessionTreeToStorage(): Promise<void> {
   try {
     await browser.storage.local.set({
-      [STORAGE_KEY]: structuredClone(Tree.windowsList),
+      [STORAGE_KEY]: structuredClone(Tree.Items),
     })
   } catch (error) {
     console.error('Error saving session tree to storage:', error)
@@ -528,9 +611,11 @@ export async function openSessionTree(): Promise<void> {
 export function registerSessionTreeWindow(windowId: number): void {
   Tree.sessionTreeWindowId = windowId
   // remove windowId from session tree if it exists there as a saved window, since it's now the live session tree window
-  const existingWindow = Tree.windowsList.find((w) => w.id === windowId)
+  const existingWindow = Tree.Items.find(
+    (w) => w.type === TreeItemType.WINDOW && w.id === windowId,
+  ) as Window | undefined
   if (existingWindow) {
-    Tree.windowsList.splice(Tree.windowsList.indexOf(existingWindow), 1)
+    Tree.Items.splice(Tree.Items.indexOf(existingWindow), 1)
     emitTreeDelta({
       op: 'windowRemoved',
       windowUid: existingWindow.uid,
@@ -554,36 +639,489 @@ export async function removeSessionWindowId(windowId: number): Promise<void> {
  * Deselects all windows and tabs in the session tree.
  */
 export function deselectAllItems(): void {
-  Tree.windowsList.forEach((window) => {
-    window.tabs.forEach((tab) => {
-      tab.selected = false
-    })
-    window.selected = false
+  Tree.walkTreeItems(Tree.Items, (item) => {
+    item.selected = false
   })
 }
 
 /**
- * Rebuilds the windowsByUid and tabsByUid maps and existingUidsSet based on the current windowsList.
+ * Rebuilds the windowsByUid and tabsByUid maps and existingUidsSet based on the current TreeItems.
  */
 function rebuildUIDMaps(): void {
   // Rebuild lookup maps and existing UID set to match the new contents.
   Tree.windowsByUid.clear()
   Tree.tabsByUid.clear()
+  Tree.notesByUid.clear()
   Tree.existingUidsSet.clear()
-  for (const win of Tree.windowsList) {
-    if (win.uid) {
-      Tree.windowsByUid.set(win.uid, win)
-      Tree.existingUidsSet.add(win.uid)
+  Tree.walkTreeItems(Tree.Items, (item) => indexTreeItem(item))
+}
+
+function markWindowSavedAfterStartup(window: Window): void {
+  window.state = State.SAVED
+  window.active = false
+  window.activeTabId = undefined
+  Tree.getTabs(window.children).forEach((tab) => {
+    tab.state = State.SAVED
+    tab.active = false
+    tab.selected = false
+    tab.id = 0
+  })
+}
+
+function normalizeWindowChildren(window: Window): void {
+  Tree.windowsByUid.set(window.uid, window)
+  window.children ??= []
+  window.children.forEach((child) => {
+    if (child.type === TreeItemType.NOTE) {
+      child.windowUid = window.uid
+      normalizeNote(child, window.uid)
+      return
     }
-    for (const tab of win.tabs) {
-      if (tab.uid) {
-        Tree.tabsByUid.set(tab.uid, tab)
-        Tree.existingUidsSet.add(tab.uid)
-      }
-    }
-  }
+    child.type = TreeItemType.TAB
+    child.active = false
+    child.id = 0
+    child.selected = false
+    child.state = State.SAVED
+    if (!child.savedTime) child.savedTime = Date.now()
+    if (!child.uid) child.uid = Utils.createUid(Tree.existingUidsSet)
+    Tree.tabsByUid.set(child.uid, child)
+    child.windowUid = window.uid
+    if (!child.pinned) child.pinned = false
+  })
+}
+
+function normalizeNote(note: Note, windowUid: UID | undefined): void {
+  note.type = TreeItemType.NOTE
+  note.selected = false
+  note.windowUid = windowUid
+  if (!note.uid) note.uid = Utils.createUid(Tree.existingUidsSet)
+  Tree.notesByUid.set(note.uid, note)
+}
+
+function indexTreeItem(item: TreeItem): void {
+  Tree.existingUidsSet.add(item.uid)
+  if (item.type === TreeItemType.WINDOW) Tree.windowsByUid.set(item.uid, item)
+  else if (item.type === TreeItemType.NOTE) Tree.notesByUid.set(item.uid, item)
+  else Tree.tabsByUid.set(item.uid, item)
 }
 
 export function printSessionTree(): void {
-  console.log('Background Session Tree:', Tree.windowsList)
+  console.log('Background Session Tree:', Tree.Items)
+}
+
+interface ItemLocation {
+  item: TreeItem
+  children: TreeItem[]
+  index: number
+}
+
+interface MoveBlock {
+  root: TreeItem
+  children: TreeItem[]
+  startIndex: number
+  items: TreeItem[]
+}
+
+/**
+ * Gets the item list that should contain new or moved items for a target parent.
+ * Handles top-level items, window children, and nested tab or note parents.
+ *
+ * @param {UID} [parentUid] - Optional UID of the parent window, tab, or note.
+ * @param {UID} [targetWindowUid] - Optional UID of the target window when inserting at the window root.
+ * @returns {{ children: TreeItem[]; parent?: TreeItem }} The containing item list and resolved parent item.
+ */
+export function getContainerForParent(
+  parentUid?: UID,
+  targetWindowUid?: UID,
+): {
+  children: TreeItem[]
+  parent?: TreeItem
+} {
+  if (!parentUid && targetWindowUid) {
+    const window = Tree.windowsByUid.get(targetWindowUid)
+    if (window) {
+      return { children: window.children as TreeItem[], parent: window }
+    }
+  }
+
+  if (!parentUid) return { children: Tree.Items as TreeItem[] }
+
+  const parent = getItemByUid(parentUid)
+  if (!parent) return { children: Tree.Items as TreeItem[] }
+
+  if (parent.type === TreeItemType.WINDOW) {
+    return { children: parent.children as TreeItem[], parent }
+  }
+
+  if (parent.type === TreeItemType.TAB) {
+    const window = Tree.windowsByUid.get(parent.windowUid)
+    return { children: (window?.children ?? []) as TreeItem[], parent }
+  }
+
+  if (parent.windowUid) {
+    const window = Tree.windowsByUid.get(parent.windowUid)
+    return { children: (window?.children ?? []) as TreeItem[], parent }
+  }
+
+  return { children: Tree.Items as TreeItem[], parent }
+}
+
+/**
+ * Finds a tree item by UID across all background lookup maps.
+ *
+ * @param {UID} uid - The UID of the window, tab, or note to find.
+ * @returns {TreeItem | undefined} The matching tree item, or undefined when no item exists.
+ */
+export function getItemByUid(uid: UID): TreeItem | undefined {
+  return (
+    Tree.windowsByUid.get(uid) ??
+    Tree.tabsByUid.get(uid) ??
+    Tree.notesByUid.get(uid)
+  )
+}
+
+/**
+ * Gets the window UID that should be assigned to a child under the given parent.
+ *
+ * @param {TreeItem} [parent] - Optional parent window, tab, or note.
+ * @returns {UID | undefined} The containing window UID, or undefined for top-level items.
+ */
+export function getWindowUidForParent(parent?: TreeItem): UID | undefined {
+  if (!parent) return undefined
+  if (parent.type === TreeItemType.WINDOW) return parent.uid
+  if (parent.type === TreeItemType.TAB) return parent.windowUid
+  return parent.windowUid
+}
+
+/**
+ * Calculates the insertion index for a new or moved item in a containing list.
+ * If no explicit index is provided, inserts after the parent's full descendant subtree.
+ *
+ * @param {TreeItem[]} children - The containing item list.
+ * @param {TreeItem | undefined} parent - Optional parent item for the insertion.
+ * @param {number} [index] - Optional requested insertion index.
+ * @returns {number} The clamped insertion index in the containing list.
+ */
+export function getTargetIndex(
+  children: TreeItem[],
+  parent: TreeItem | undefined,
+  index: number | undefined,
+): number {
+  if (index !== undefined) return Math.max(0, Math.min(index, children.length))
+  if (!parent) return children.length
+
+  const parentIndex = children.findIndex((item) => item.uid === parent.uid)
+  if (parentIndex === -1) return children.length
+  return getSubtreeEndIndex(children, parentIndex)
+}
+
+function getSubtreeEndIndex(children: TreeItem[], parentIndex: number): number {
+  const parent = children[parentIndex]
+  const byUid = new Map(children.map((item) => [item.uid, item] as const))
+  let index = parentIndex + 1
+  while (
+    index < children.length &&
+    isDescendantOf(children[index], parent.uid, byUid)
+  ) {
+    index++
+  }
+  return index
+}
+
+function isDescendantOf(
+  item: TreeItem,
+  ancestorUid: UID,
+  byUid: Map<UID, TreeItem>,
+): boolean {
+  let parentUid = item.parentUid
+  while (parentUid !== undefined) {
+    if (parentUid === ancestorUid) return true
+    parentUid = byUid.get(parentUid)?.parentUid
+  }
+  return false
+}
+
+/**
+ * Checks whether an item has children in the provided containing list.
+ *
+ * @param {TreeItem} parent - The window, tab, or note to check.
+ * @param {TreeItem[]} children - The containing item list to inspect.
+ * @returns {boolean} Whether the item currently has child items.
+ */
+export function hasChildrenInContainer(
+  parent: TreeItem,
+  children: TreeItem[],
+): boolean {
+  if (parent.type === TreeItemType.WINDOW) return children.length > 0
+  return children.some((item) => item.parentUid === parent.uid)
+}
+
+/**
+ * Moves one or more tree items to a target list position.
+ * Handles windows, tabs, notes, mixed descendants, top-level moves, and window child moves.
+ *
+ * @param {UID[]} itemUIDs - UIDs of the items to move.
+ * @param {number} targetIndex - Index in the target containing list where the items will be inserted.
+ * @param {UID} [parentUid] - Optional UID of the parent window, tab, or note.
+ * @param {UID} [targetWindowUid] - Optional UID of the target window when moving to the window root.
+ * @param {boolean} [copy=false] - Whether to copy the items instead of moving.
+ * @param {boolean} [includeDescendants=true] - Whether to move selected items with their descendants.
+ */
+export function moveTreeItems(
+  itemUIDs: UID[],
+  targetIndex: number,
+  parentUid?: UID,
+  targetWindowUid?: UID,
+  copy: boolean = false,
+  includeDescendants: boolean = true,
+): void {
+  if (copy) {
+    console.warn('moveTreeItems: copy is not implemented')
+    return
+  }
+
+  const destination = getContainerForParent(parentUid, targetWindowUid)
+  const moveBlocks = buildMoveBlocks(itemUIDs)
+  if (moveBlocks.length === 0) return
+  const movingToTopLevel = !destination.parent && !targetWindowUid
+
+  if (!includeDescendants) {
+    for (const block of moveBlocks) {
+      prepareBlockForMoveWithoutDescendants(block)
+    }
+  } else if (movingToTopLevel) {
+    for (const block of moveBlocks) {
+      if (blockHasInvalidTopLevelDescendants(block)) {
+        prepareBlockForMoveWithoutDescendants(block)
+      }
+    }
+  }
+  if (!isValidDestination(destination.parent, moveBlocks)) return
+
+  let adjustedTargetIndex = Math.max(
+    0,
+    Math.min(targetIndex, destination.children.length),
+  )
+
+  const removalBlocks = [...moveBlocks].sort((a, b) => {
+    if (a.children === b.children) return b.startIndex - a.startIndex
+    return 0
+  })
+  const emptiedSourceWindows = new Set<Window>()
+
+  for (const block of removalBlocks) {
+    const sourceWindow =
+      block.root.type !== TreeItemType.WINDOW && block.root.windowUid
+        ? Tree.windowsByUid.get(block.root.windowUid)
+        : undefined
+    if (
+      block.children === destination.children &&
+      block.startIndex < adjustedTargetIndex
+    ) {
+      adjustedTargetIndex -= block.items.length
+    }
+    block.children.splice(block.startIndex, block.items.length)
+    const oldParent = block.root.parentUid
+      ? getItemByUid(block.root.parentUid)
+      : undefined
+    if (oldParent)
+      oldParent.isParent = hasChildrenInContainer(oldParent, block.children)
+    if (
+      sourceWindow &&
+      sourceWindow.children !== destination.children &&
+      sourceWindow.children.length === 0
+    ) {
+      emptiedSourceWindows.add(sourceWindow)
+    }
+  }
+
+  const movingItems = moveBlocks.flatMap((block) => block.items)
+  destination.children.splice(adjustedTargetIndex, 0, ...movingItems)
+
+  for (const block of moveBlocks) {
+    updateMovedBlockHierarchy(block.items, destination.parent, targetWindowUid)
+  }
+  if (destination.parent) destination.parent.isParent = true
+  for (const window of emptiedSourceWindows) {
+    Tree.removeWindow(window.uid)
+  }
+
+  Tree.recomputeSessionTree(false)
+  emitTreeDelta({
+    op: 'treeReplaced',
+    treeItems: structuredClone(Tree.Items),
+  })
+}
+
+function buildMoveBlocks(itemUIDs: UID[]): MoveBlock[] {
+  const selected = new Set(itemUIDs)
+  const locations = itemUIDs
+    .map((uid) => findItemLocation(uid))
+    .filter((location): location is ItemLocation => Boolean(location))
+    .filter((location) => !hasSelectedAncestor(location.item, selected))
+
+  locations.sort((a, b) => {
+    if (a.children === b.children) return a.index - b.index
+    return 0
+  })
+
+  return locations.map((location) => {
+    const endIndex = getSubtreeEndIndex(location.children, location.index)
+    return {
+      root: location.item,
+      children: location.children,
+      startIndex: location.index,
+      items: location.children.slice(location.index, endIndex),
+    }
+  })
+}
+
+function prepareBlockForMoveWithoutDescendants(block: MoveBlock): void {
+  if (block.root.type !== TreeItemType.NOTE || block.items.length <= 1) {
+    return
+  }
+
+  const oldParentUid = block.root.parentUid
+  for (const item of block.items.slice(1)) {
+    if (item.parentUid === block.root.uid) {
+      item.parentUid = oldParentUid
+    }
+  }
+  block.root.isParent = false
+  block.root.collapsed = false
+  block.items = [block.root]
+}
+
+function blockHasInvalidTopLevelDescendants(block: MoveBlock): boolean {
+  return block.items
+    .slice(1)
+    .some(
+      (item) =>
+        item.type !== TreeItemType.WINDOW && item.type !== TreeItemType.NOTE,
+    )
+}
+
+function hasSelectedAncestor(item: TreeItem, selected: Set<UID>): boolean {
+  let parentUid = item.parentUid
+  while (parentUid !== undefined) {
+    if (selected.has(parentUid)) return true
+    parentUid = getItemByUid(parentUid)?.parentUid
+  }
+  return false
+}
+
+/**
+ * Finds the containing list and index for an item in the background session tree.
+ * Searches top-level items first, then each window's child item list.
+ *
+ * @param {UID} uid - The UID of the item to locate.
+ * @returns {ItemLocation | undefined} The item location, or undefined when the item is not found.
+ */
+export function findItemLocation(uid: UID): ItemLocation | undefined {
+  const topLevelItems = Tree.Items as TreeItem[]
+  const topLevelIndex = topLevelItems.findIndex((item) => item.uid === uid)
+  if (topLevelIndex !== -1) {
+    return {
+      item: topLevelItems[topLevelIndex],
+      children: topLevelItems,
+      index: topLevelIndex,
+    }
+  }
+
+  for (const window of Tree.windowsByUid.values()) {
+    const children = window.children as TreeItem[]
+    const index = children.findIndex((item) => item.uid === uid)
+    if (index !== -1) return { item: children[index], children, index }
+  }
+  return undefined
+}
+
+function isValidDestination(
+  parent: TreeItem | undefined,
+  moveBlocks: MoveBlock[],
+) {
+  const movingItems = moveBlocks.flatMap((block) => block.items)
+
+  if (!parent) {
+    return movingItems.every(
+      (item) =>
+        item.type === TreeItemType.WINDOW || item.type === TreeItemType.NOTE,
+    )
+  }
+
+  if (
+    moveBlocks.some((block) => {
+      if (parent.uid === block.root.uid) return true
+      const location = findItemLocation(parent.uid)
+      if (!location) return false
+      const byUid = new Map(
+        location.children.map((child) => [child.uid, child] as const),
+      )
+      return isDescendantOf(parent, block.root.uid, byUid)
+    })
+  ) {
+    return false
+  }
+
+  if (parent.type === TreeItemType.WINDOW) {
+    return movingItems.every(
+      (item) =>
+        item.type === TreeItemType.TAB || item.type === TreeItemType.NOTE,
+    )
+  }
+
+  if (parent.type === TreeItemType.NOTE && !parent.windowUid) {
+    return movingItems.every(
+      (item) =>
+        item.type === TreeItemType.WINDOW || item.type === TreeItemType.NOTE,
+    )
+  }
+
+  return movingItems.every(
+    (item) => item.type === TreeItemType.TAB || item.type === TreeItemType.NOTE,
+  )
+}
+
+function updateMovedBlockHierarchy(
+  items: TreeItem[],
+  parent: TreeItem | undefined,
+  targetWindowUid: UID | undefined,
+): void {
+  const root = items[0]
+  const oldRootIndent = root.indentLevel ?? 0
+  const newRootIndent = parent ? (parent.indentLevel ?? 0) + 1 : 0
+  const indentDelta = newRootIndent - oldRootIndent
+  const windowUid = getMovedItemWindowUid(parent, targetWindowUid)
+
+  root.parentUid =
+    parent?.type === TreeItemType.WINDOW ? undefined : parent?.uid
+  for (const item of items) {
+    item.indentLevel = (item.indentLevel ?? 0) + indentDelta
+    updateItemWindowUid(item, windowUid)
+  }
+}
+
+function getMovedItemWindowUid(
+  parent: TreeItem | undefined,
+  targetWindowUid: UID | undefined,
+): UID | undefined {
+  if (parent?.type === TreeItemType.WINDOW) return parent.uid
+  if (parent?.type === TreeItemType.TAB) return parent.windowUid
+  if (targetWindowUid) return targetWindowUid
+  if (parent?.type === TreeItemType.NOTE) return parent.windowUid
+  return undefined
+}
+
+function updateItemWindowUid(item: TreeItem, windowUid: UID | undefined): void {
+  if (item.type === TreeItemType.TAB || item.type === TreeItemType.NOTE) {
+    item.windowUid = windowUid as UID
+  } else {
+    updateNestedWindowChildren(item, item.uid)
+  }
+}
+
+function updateNestedWindowChildren(window: Window, windowUid: UID): void {
+  for (const child of window.children) {
+    child.windowUid = windowUid
+  }
 }

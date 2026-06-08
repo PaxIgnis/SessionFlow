@@ -3,23 +3,75 @@ import * as Messages from '@/services/foreground-messages'
 import { SessionTree } from '@/services/foreground-tree'
 import { Selection } from '@/services/selection'
 import { Settings } from '@/services/settings'
+import { Settings as SettingsType } from '@/types/settings'
 import {
   DragInfo,
   DragType,
   DropPosition,
   DropType,
+  SelectionType,
+  TreeItem,
+  TreeItemType,
+  Window,
 } from '@/types/session-tree'
+
+export function collectDraggedItemsWithIncludedChildren(
+  items: TreeItem[],
+  originType: SelectionType,
+  includeChildrenOfSelectedItems: SettingsType['includeChildrenOfSelectedItems'],
+  windowsByUid: Map<UID, Window>,
+): TreeItem[] {
+  if (
+    originType !== SelectionType.TAB ||
+    includeChildrenOfSelectedItems === 'never'
+  ) {
+    return items
+  }
+
+  const additionalItems: TreeItem[] = []
+  for (const item of items) {
+    if (item.type !== TreeItemType.TAB) continue
+    const shouldInclude =
+      item.isParent &&
+      (includeChildrenOfSelectedItems === 'always' ||
+        (item.collapsed && includeChildrenOfSelectedItems === 'collapsed'))
+    if (!shouldInclude) continue
+
+    const window = windowsByUid.get(item.windowUid)
+    if (!window) continue
+
+    const parentIndex = window.children.findIndex(
+      (child) => child.uid === item.uid,
+    )
+    if (parentIndex === -1) continue
+
+    const parentIndent = item.indentLevel ?? 1
+    for (let i = parentIndex + 1; i < window.children.length; i++) {
+      const child = window.children[i]
+      const indent = child.indentLevel ?? 0
+      if (indent <= parentIndent) break
+      if (
+        !items.some((existing) => existing.uid === child.uid) &&
+        !additionalItems.some((existing) => existing.uid === child.uid)
+      ) {
+        additionalItems.push(child)
+      }
+    }
+  }
+
+  return items.concat(additionalItems)
+}
 
 export function start(dragInfo: DragInfo): void {
   reset()
   console.debug('drag-and-drop-actions.start: Drag started:', dragInfo)
   DragAndDrop.dragState.dragEventStarted = true
-  DragAndDrop.dragState.sourceType = dragInfo.dragType
+  DragAndDrop.dragState.sourceType = getEffectiveDragType(dragInfo.items)
   DragAndDrop.dragInfo = dragInfo
 }
 
 export function onDragEnd(e: DragEvent): void {
-  reset()
+  // reset()
   if (!Settings.values.enableDragAndDrop) return
   console.debug('drag-and-drop-actions.onDragEnd: Drag ended:', e)
 }
@@ -61,11 +113,12 @@ export function onDragEnter(e: DragEvent): void {
     // if (!tab) return
     DragAndDrop.dragState.destinationId = id
   } else if (type === 'window') {
-    // TODO: Switch to windowsByUid when implemented in foreground tree
-    const window = SessionTree.reactiveWindowsList.value.find(
-      (win) => win.uid === id,
-    )
+    const window = SessionTree.windowsByUid.get(id)
     if (!window) return
+    DragAndDrop.dragState.destinationId = id
+  } else if (type === 'note') {
+    const note = SessionTree.notesByUid.get(id)
+    if (!note) return
     DragAndDrop.dragState.destinationId = id
   }
 }
@@ -123,6 +176,7 @@ export function onDragMove(e: DragEvent): void {
 }
 
 export function onDrop(e: DragEvent): void {
+  console.log(DragAndDrop.dragState)
   if (!Settings.values.enableDragAndDrop) return
   updateDropTarget(e)
 
@@ -142,18 +196,27 @@ export function onDrop(e: DragEvent): void {
   let dropParentUid: UID | undefined = undefined
   let targetWindowUid: UID | undefined = undefined
   const id = DragAndDrop.dragState.destinationId
+  const draggedItems = DragAndDrop.dragInfo!.items
+  const effectiveSourceType = getEffectiveDragType(draggedItems)
+  const includeDescendantsForDraggedItems =
+    effectiveSourceType === DragType.NOTE
+      ? shouldIncludeDescendantsForDraggedItems(draggedItems)
+      : true
+
   // if src and drop target is type tab
   if (
     DragAndDrop.dragState.destinationType === DropType.TAB &&
-    DragAndDrop.dragState.sourceType === DragType.TAB
+    (effectiveSourceType === DragType.TAB ||
+      effectiveSourceType === DragType.NOTE)
   ) {
-    const destinationWindow = SessionTree.reactiveWindowsList.value.find(
-      (win) => win.tabs.find((tab) => tab.uid === id),
-    )
+    const destinationTab = SessionTree.tabsByUid.get(id as UID)
+    const destinationWindow = destinationTab
+      ? SessionTree.windowsByUid.get(destinationTab.windowUid)
+      : undefined
     targetWindowUid = destinationWindow?.uid
     if (!destinationWindow) return
-    const destTab = destinationWindow.tabs.find((tab) => tab.uid === id)
-    const destTabIndex = destinationWindow.tabs.findIndex(
+    const destTab = destinationWindow.children.find((tab) => tab.uid === id)
+    const destTabIndex = destinationWindow.children.findIndex(
       (tab) => tab.uid === id,
     )
     if (destTabIndex === -1 || !destTab) return
@@ -167,14 +230,18 @@ export function onDrop(e: DragEvent): void {
     else if (DragAndDrop.dragState.dropPosition === DropPosition.BELOW) {
       // Scan forward to find the next tab with same or lower indent level
       const targetIndent = destTab.indentLevel ?? 1
-      for (let i = destTabIndex + 1; i < destinationWindow.tabs.length; i++) {
-        const candidate = destinationWindow.tabs[i]
+      for (
+        let i = destTabIndex + 1;
+        i < destinationWindow.children.length;
+        i++
+      ) {
+        const candidate = destinationWindow.children[i]
         if ((candidate.indentLevel ?? 1) <= targetIndent) {
           dropIndex = i
           break
         }
       }
-      if (dropIndex === 0) dropIndex = destinationWindow.tabs.length
+      if (dropIndex === 0) dropIndex = destinationWindow.children.length
       dropParentUid = destTab.parentUid
     }
     // dropping as child
@@ -186,65 +253,165 @@ export function onDrop(e: DragEvent): void {
   }
   // if drop target is a window
   else if (DragAndDrop.dragState.destinationType === DropType.WINDOW) {
-    const destinationWindow = SessionTree.reactiveWindowsList.value.find(
-      (win) => win.uid === id,
-    )
+    const destinationWindow = SessionTree.windowsByUid.get(id as UID)
     targetWindowUid = destinationWindow?.uid
-    const destinationWindowIndex =
-      SessionTree.reactiveWindowsList.value.findIndex((win) => win.uid === id)
+    const destinationWindowIndex = SessionTree.reactiveItems.value.findIndex(
+      (item) => item.type === TreeItemType.WINDOW && item.uid === id,
+    )
     if (destinationWindowIndex === -1 || !destinationWindow) return
     // dropping as window above (src window only)
     if (
       DragAndDrop.dragState.dropPosition === DropPosition.ABOVE &&
-      DragAndDrop.dragState.sourceType === DragType.WINDOW
+      (effectiveSourceType === DragType.WINDOW ||
+        effectiveSourceType === DragType.NOTE)
     ) {
       dropIndex = destinationWindowIndex
+      dropParentUid = destinationWindow.parentUid
+      targetWindowUid = undefined
+      if (
+        effectiveSourceType === DragType.NOTE &&
+        !includeDescendantsForDraggedItems
+      ) {
+        dropParentUid = getDropParentUidAfterMovingWithoutDescendants(
+          draggedItems,
+          dropParentUid,
+        )
+      }
     }
     // dropping as window below (src window only)
     else if (
       DragAndDrop.dragState.dropPosition === DropPosition.BELOW &&
-      DragAndDrop.dragState.sourceType === DragType.WINDOW
+      (effectiveSourceType === DragType.WINDOW ||
+        effectiveSourceType === DragType.NOTE)
     ) {
       dropIndex = destinationWindowIndex + 1
+      dropParentUid = destinationWindow.parentUid
+      targetWindowUid = undefined
+      if (
+        effectiveSourceType === DragType.NOTE &&
+        !includeDescendantsForDraggedItems
+      ) {
+        dropParentUid = getDropParentUidAfterMovingWithoutDescendants(
+          draggedItems,
+          dropParentUid,
+        )
+      }
     }
     // dropping as tab in window (mid) (src tab only)
     else if (
       DragAndDrop.dragState.dropPosition === DropPosition.MID &&
-      DragAndDrop.dragState.sourceType === DragType.TAB
+      (effectiveSourceType === DragType.TAB ||
+        effectiveSourceType === DragType.NOTE)
     ) {
       // TODO: Add setting to control whether new child tabs are added at start or end of children
       dropIndex = 0 // currently always adds as first tab
     }
   }
-  // if src is tab and dest is tab or window
-  if (
-    DragAndDrop.dragState.sourceType === DragType.TAB &&
-    (DragAndDrop.dragState.destinationType === DropType.TAB ||
-      DragAndDrop.dragState.destinationType === DropType.WINDOW)
-  ) {
-    if (
-      DragAndDrop.dragState.destinationType === DropType.TAB ||
-      DragAndDrop.dragState.destinationType === DropType.WINDOW
-    ) {
-      Messages.moveTabs(
-        DragAndDrop.dragInfo!.items.map((tab) => tab.uid),
-        targetWindowUid as UID,
-        dropIndex,
-        dropParentUid,
-        false,
-      )
+  // if drop target is a note
+  else if (DragAndDrop.dragState.destinationType === DropType.NOTE) {
+    const destinationNote = SessionTree.notesByUid.get(id as UID)
+    if (!destinationNote) return
+    const destination = findItemLocation(
+      SessionTree.reactiveItems.value as TreeItem[],
+      destinationNote.uid,
+    )
+    if (!destination) return
+    targetWindowUid = destinationNote.windowUid
+
+    if (DragAndDrop.dragState.dropPosition === DropPosition.ABOVE) {
+      dropIndex = destination.index
+      dropParentUid = destination.parent
+    } else if (DragAndDrop.dragState.dropPosition === DropPosition.BELOW) {
+      const targetIndent = destinationNote.indentLevel ?? 0
+      dropIndex = destination.children.length
+      for (
+        let i = destination.index + 1;
+        i < destination.children.length;
+        i++
+      ) {
+        const candidate = destination.children[i]
+        if ((candidate.indentLevel ?? 0) <= targetIndent) {
+          dropIndex = i
+          break
+        }
+      }
+      dropParentUid = destination.parent
+    } else if (DragAndDrop.dragState.dropPosition === DropPosition.MID) {
+      dropIndex = destination.index + 1
+      dropParentUid = destinationNote.uid
     }
   }
-  // if src is window and dest is window
-  else if (
-    DragAndDrop.dragState.sourceType === DragType.WINDOW &&
-    DragAndDrop.dragState.destinationType === DropType.WINDOW
+  // if src is tab and dest is tab or window
+  if (
+    effectiveSourceType === DragType.TAB &&
+    (DragAndDrop.dragState.destinationType === DropType.TAB ||
+      DragAndDrop.dragState.destinationType === DropType.WINDOW ||
+      DragAndDrop.dragState.destinationType === DropType.NOTE)
   ) {
-    console.log('Dropping window onto window')
-    Messages.moveWindows(
-      DragAndDrop.dragInfo!.items.map((win) => win.uid),
+    if (targetWindowUid) {
+      const tabs = draggedItems.filter((item) => item.type === TreeItemType.TAB)
+      const notes = draggedItems.filter(
+        (item) => item.type === TreeItemType.NOTE,
+      )
+      if (tabs.length > 0) {
+        Messages.moveTabs(
+          tabs.map((tab) => tab.uid),
+          targetWindowUid as UID,
+          dropIndex,
+          dropParentUid,
+          false,
+        )
+      }
+      if (notes.length > 0) {
+        Messages.moveTreeItems(
+          notes.map((note) => note.uid),
+          dropIndex + tabs.length,
+          dropParentUid,
+          targetWindowUid,
+          false,
+        )
+      }
+    }
+  }
+  // if src is window and dest is window or note
+  else if (
+    effectiveSourceType === DragType.WINDOW &&
+    (DragAndDrop.dragState.destinationType === DropType.WINDOW ||
+      DragAndDrop.dragState.destinationType === DropType.NOTE)
+  ) {
+    Messages.moveTreeItems(
+      draggedItems
+        .filter(
+          (item) =>
+            item.type === TreeItemType.WINDOW ||
+            item.type === TreeItemType.NOTE,
+        )
+        .map((item) => item.uid),
       dropIndex,
+      dropParentUid || undefined,
+      undefined,
       false,
+    )
+  }
+  // if src is note and dest is anything
+  else if (effectiveSourceType === DragType.NOTE) {
+    if (
+      targetWindowUid &&
+      includeDescendantsForDraggedItems &&
+      includedDraggedNoteDescendantsContainWindow(draggedItems)
+    ) {
+      clearDragIndicators(DragAndDrop.dragState.prevEl)
+      reset()
+      return
+    }
+
+    Messages.moveTreeItems(
+      draggedItems.map((item) => item.uid),
+      dropIndex,
+      dropParentUid,
+      targetWindowUid,
+      false,
+      includeDescendantsForDraggedItems,
     )
   }
   clearDragIndicators(DragAndDrop.dragState.prevEl)
@@ -316,6 +483,8 @@ function updateDropTarget(e: DragEvent): void {
     destType = DropType.TAB
   } else if (type === 'window') {
     destType = DropType.WINDOW
+  } else if (type === 'note') {
+    destType = DropType.NOTE
   }
   DragAndDrop.dragState.destinationType = destType
 
@@ -323,51 +492,280 @@ function updateDropTarget(e: DragEvent): void {
   if (DragAndDrop.dragInfo?.items.find((item) => item.uid === id)) return
 
   // check if this is a valid drop target
-  if (DragAndDrop.dragState.sourceType === DragType.TAB) {
-    if (
-      DragAndDrop.dragState.destinationType !== DropType.WINDOW &&
-      DragAndDrop.dragState.destinationType !== DropType.TAB
-    )
-      return
-  } else if (DragAndDrop.dragState.sourceType === DragType.WINDOW) {
-    if (DragAndDrop.dragState.destinationType !== DropType.WINDOW) return
+  const sourceType = getEffectiveDragType(DragAndDrop.dragInfo?.items ?? [])
+  // don't allow dropping tabs onto notes that are not in a window
+  if (
+    sourceType === DragType.TAB &&
+    DragAndDrop.dragState.destinationType === DropType.NOTE
+  ) {
+    const destinationNote = SessionTree.notesByUid.get(id as UID)
+    if (!destinationNote?.windowUid) return
   }
 
-  // used to calculate drop position
+  // don't allow dropping windows onto notes that are in a window
+  if (
+    sourceType === DragType.WINDOW &&
+    DragAndDrop.dragState.destinationType === DropType.NOTE
+  ) {
+    const destinationNote = SessionTree.notesByUid.get(id as UID)
+    if (destinationNote?.windowUid) return
+  }
+
+  if (sourceType === DragType.TAB) {
+    if (
+      DragAndDrop.dragState.destinationType !== DropType.WINDOW &&
+      DragAndDrop.dragState.destinationType !== DropType.TAB &&
+      DragAndDrop.dragState.destinationType !== DropType.NOTE
+    )
+      return
+  } else if (sourceType === DragType.WINDOW) {
+    if (
+      DragAndDrop.dragState.destinationType !== DropType.WINDOW &&
+      DragAndDrop.dragState.destinationType !== DropType.NOTE
+    )
+      return
+  } else if (sourceType === DragType.NOTE) {
+    if (
+      DragAndDrop.dragState.destinationType !== DropType.WINDOW &&
+      DragAndDrop.dragState.destinationType !== DropType.TAB &&
+      DragAndDrop.dragState.destinationType !== DropType.NOTE
+    )
+      return
+  }
+
   const rect = el.getBoundingClientRect()
   const y = e.clientY - rect.top
   const h = rect.height || 1
+  const dropPosition = getDropPositionForTarget(
+    sourceType,
+    DragAndDrop.dragState.destinationType,
+    y,
+    h,
+  )
+  const draggedItems = DragAndDrop.dragInfo?.items ?? []
+  const includeDescendants =
+    sourceType === DragType.NOTE
+      ? shouldIncludeDescendantsForDraggedItems(draggedItems)
+      : true
 
-  // special case: tab being dragged over window -> always mid
   if (
-    DragAndDrop.dragState.sourceType === DragType.TAB &&
-    DragAndDrop.dragState.destinationType === DropType.WINDOW
+    sourceType === DragType.NOTE &&
+    isSelfOrDescendantParentDrop(
+      draggedItems,
+      DragAndDrop.dragState.destinationType,
+      id as UID,
+      dropPosition,
+      includeDescendants,
+    )
   ) {
-    DragAndDrop.dragState.dropPosition = DropPosition.MID
+    return
   }
-  // special case: window being dragged over window -> never mid
-  else if (
-    DragAndDrop.dragState.sourceType === DragType.WINDOW &&
-    DragAndDrop.dragState.destinationType === DropType.WINDOW
+
+  if (
+    sourceType === DragType.NOTE &&
+    includeDescendants &&
+    includedDraggedNoteDescendantsContainWindow(draggedItems) &&
+    isWindowBackedDropTarget(
+      DragAndDrop.dragState.destinationType,
+      id as UID,
+      dropPosition,
+    )
   ) {
-    if (y < h / 2) {
-      DragAndDrop.dragState.dropPosition = DropPosition.ABOVE
-    } else {
-      DragAndDrop.dragState.dropPosition = DropPosition.BELOW
-    }
+    return
   }
-  // normal case: tab being dragged over tab
-  else {
-    // decide drop region: top 33% -> above, bottom 33% -> below, else mid
-    if (y < h * 0.33) {
-      DragAndDrop.dragState.dropPosition = DropPosition.ABOVE
-    } else if (y > h * 0.66) {
-      DragAndDrop.dragState.dropPosition = DropPosition.BELOW
-    } else {
-      DragAndDrop.dragState.dropPosition = DropPosition.MID
-    }
-  }
+
+  DragAndDrop.dragState.dropPosition = dropPosition
   DragAndDrop.dragState.isValidDropTarget = true
+}
+
+function getDropPositionForTarget(
+  sourceType: DragType,
+  destinationType: DropType,
+  y: number,
+  h: number,
+): DropPosition {
+  if (sourceType === DragType.TAB && destinationType === DropType.WINDOW) {
+    return DropPosition.MID
+  }
+
+  if (
+    sourceType === DragType.WINDOW &&
+    destinationType === DropType.WINDOW
+  ) {
+    return y < h / 2 ? DropPosition.ABOVE : DropPosition.BELOW
+  }
+
+  if (y < h * 0.33) {
+    return DropPosition.ABOVE
+  }
+  if (y > h * 0.66) {
+    return DropPosition.BELOW
+  }
+  return DropPosition.MID
+}
+
+function isWindowBackedDropTarget(
+  destinationType: DropType,
+  destinationId: UID,
+  dropPosition: DropPosition,
+): boolean {
+  if (destinationType === DropType.WINDOW) {
+    return dropPosition === DropPosition.MID
+  }
+  if (destinationType === DropType.TAB) return true
+  if (destinationType === DropType.NOTE) {
+    return Boolean(SessionTree.notesByUid.get(destinationId)?.windowUid)
+  }
+  return false
+}
+
+function isSelfOrDescendantParentDrop(
+  draggedItems: TreeItem[],
+  destinationType: DropType,
+  destinationId: UID,
+  dropPosition: DropPosition,
+  includeDescendants: boolean,
+): boolean {
+  const dropParentUid = getDropParentUidForValidation(
+    destinationType,
+    destinationId,
+    dropPosition,
+  )
+  const effectiveDropParentUid = includeDescendants
+    ? dropParentUid
+    : getDropParentUidAfterMovingWithoutDescendants(
+        draggedItems,
+        dropParentUid,
+      )
+  if (!effectiveDropParentUid) return false
+
+  return draggedItems
+    .filter((item) => item.type === TreeItemType.NOTE)
+    .some(
+      (item) =>
+        effectiveDropParentUid === item.uid ||
+        noteDescendantUids(item).has(effectiveDropParentUid),
+    )
+}
+
+function getDropParentUidAfterMovingWithoutDescendants(
+  draggedItems: TreeItem[],
+  dropParentUid: UID | undefined,
+): UID | undefined {
+  if (!dropParentUid) return undefined
+  const draggedParent = draggedItems.find(
+    (item) => item.type === TreeItemType.NOTE && item.uid === dropParentUid,
+  )
+  return draggedParent ? draggedParent.parentUid : dropParentUid
+}
+
+function getDropParentUidForValidation(
+  destinationType: DropType,
+  destinationId: UID,
+  dropPosition: DropPosition,
+): UID | undefined {
+  if (destinationType === DropType.WINDOW) {
+    return dropPosition === DropPosition.MID
+      ? undefined
+      : SessionTree.windowsByUid.get(destinationId)?.parentUid
+  }
+  if (destinationType === DropType.TAB) {
+    const tab = SessionTree.tabsByUid.get(destinationId)
+    return dropPosition === DropPosition.MID ? tab?.uid : tab?.parentUid
+  }
+  if (destinationType === DropType.NOTE) {
+    const note = SessionTree.notesByUid.get(destinationId)
+    return dropPosition === DropPosition.MID ? note?.uid : note?.parentUid
+  }
+  return undefined
+}
+
+function getEffectiveDragType(items: TreeItem[]): DragType {
+  if (items.some((item) => item.type === TreeItemType.WINDOW)) {
+    return DragType.WINDOW
+  }
+  if (items.some((item) => item.type === TreeItemType.TAB)) {
+    return DragType.TAB
+  }
+  return DragType.NOTE
+}
+
+function shouldIncludeDescendantsForDraggedItems(items: TreeItem[]): boolean {
+  if (Settings.values.includeChildrenOfSelectedItems === 'always') return true
+  if (Settings.values.includeChildrenOfSelectedItems === 'never') return false
+
+  return items
+    .filter((item) => item.type === TreeItemType.NOTE)
+    .some((item) => item.isParent && item.collapsed)
+}
+
+function includedDraggedNoteDescendantsContainWindow(items: TreeItem[]): boolean {
+  return items
+    .filter((item) => item.type === TreeItemType.NOTE)
+    .some((item) => noteDescendantsContainWindow(item))
+}
+
+function noteDescendantsContainWindow(note: TreeItem): boolean {
+  const location = findItemLocation(
+    SessionTree.reactiveItems.value as TreeItem[],
+    note.uid,
+  )
+  if (!location) return false
+
+  const noteIndent = note.indentLevel ?? 0
+  for (let i = location.index + 1; i < location.children.length; i++) {
+    const candidate = location.children[i]
+    if ((candidate.indentLevel ?? 0) <= noteIndent) break
+    if (candidate.type === TreeItemType.WINDOW) return true
+  }
+  return false
+}
+
+function noteDescendantUids(note: TreeItem): Set<UID> {
+  const descendantUids = new Set<UID>()
+  const location = findItemLocation(
+    SessionTree.reactiveItems.value as TreeItem[],
+    note.uid,
+  )
+  if (!location) return descendantUids
+
+  const noteIndent = note.indentLevel ?? 0
+  for (let i = location.index + 1; i < location.children.length; i++) {
+    const candidate = location.children[i]
+    if ((candidate.indentLevel ?? 0) <= noteIndent) break
+    descendantUids.add(candidate.uid)
+  }
+  return descendantUids
+}
+
+interface ItemLocation {
+  item: TreeItem
+  children: TreeItem[]
+  index: number
+  parent?: UID
+}
+
+function findItemLocation(
+  children: TreeItem[],
+  uid: UID,
+): ItemLocation | undefined {
+  const index = children.findIndex((item) => item.uid === uid)
+  if (index !== -1) {
+    return {
+      item: children[index],
+      children,
+      index,
+      parent: children[index].parentUid,
+    }
+  }
+
+  for (const item of children) {
+    const nestedChildren =
+      item.type === TreeItemType.WINDOW ? (item.children as TreeItem[]) : []
+    const location = findItemLocation(nestedChildren, uid)
+    if (location) return location
+  }
+  return undefined
 }
 
 /**

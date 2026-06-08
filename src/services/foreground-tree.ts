@@ -1,6 +1,12 @@
-// import * as Actions from '@/services/foreground-tree-actions'
 import { SessionTreeDelta } from '@/types/runtime-port-service'
-import { Tab, Window } from '@/types/session-tree'
+import {
+  Note,
+  Tab,
+  TopLevelTreeItem,
+  TreeItem,
+  TreeItemType,
+  Window,
+} from '@/types/session-tree'
 import { ref } from 'vue'
 
 function updateObjectProperties<T extends object>(
@@ -14,210 +20,140 @@ function updateObjectProperties<T extends object>(
   })
 }
 
-function indexWindow(window: Window): void {
-  SessionTree.windowsByUid.set(window.uid, window)
-  window.tabs.forEach((tab) => {
-    SessionTree.tabsByUid.set(tab.uid, tab)
-  })
+function updateTreeItemInPlace(target: TreeItem, source: TreeItem): void {
+  if (target.type !== source.type) return
+
+  if (target.type === TreeItemType.WINDOW && source.type === TreeItemType.WINDOW) {
+    const { children, ...windowProps } = source
+    updateObjectProperties(target, windowProps)
+    reconcileChildren(target.children as TreeItem[], children as TreeItem[])
+    return
+  }
+
+  if (target.type === TreeItemType.NOTE && source.type === TreeItemType.NOTE) {
+    updateObjectProperties(target, source)
+    return
+  }
+
+  updateObjectProperties(target, source)
 }
 
-function unindexWindow(window: Window): void {
-  SessionTree.windowsByUid.delete(window.uid)
-  window.tabs.forEach((tab) => {
-    SessionTree.tabsByUid.delete(tab.uid)
+function reconcileChildren(
+  targetChildren: TreeItem[],
+  sourceChildren: TreeItem[],
+): void {
+  const existingByUid = new Map(
+    targetChildren.map((child) => [child.uid, child] as const),
+  )
+  const nextChildren = sourceChildren.map((sourceChild) => {
+    const existingChild = existingByUid.get(sourceChild.uid)
+    if (existingChild && existingChild.type === sourceChild.type) {
+      updateTreeItemInPlace(existingChild, sourceChild)
+      return existingChild
+    }
+    return structuredClone(sourceChild)
   })
+
+  targetChildren.splice(0, targetChildren.length, ...nextChildren)
+}
+
+function getChildren(item: TreeItem): TreeItem[] {
+  if (item.type === TreeItemType.WINDOW) return item.children
+  return []
+}
+
+function walk(items: TreeItem[], callback: (item: TreeItem) => void): void {
+  for (const item of items) {
+    callback(item)
+    walk(getChildren(item), callback)
+  }
+}
+
+function findWindow(uid: UID): Window | undefined {
+  return SessionTree.windowsByUid.get(uid)
 }
 
 function reindexTree(): void {
   SessionTree.windowsByUid.clear()
   SessionTree.tabsByUid.clear()
+  SessionTree.notesByUid.clear()
 
-  SessionTree.reactiveWindowsList.value.forEach((window) => {
-    indexWindow(window)
+  walk(SessionTree.reactiveItems.value, (item) => {
+    if (item.type === TreeItemType.WINDOW) SessionTree.windowsByUid.set(item.uid, item)
+    else if (item.type === TreeItemType.TAB) SessionTree.tabsByUid.set(item.uid, item)
+    else SessionTree.notesByUid.set(item.uid, item)
   })
 }
 
-function replaceSessionTree(newWindows: Array<Window>): void {
-  SessionTree.reactiveWindowsList.value = structuredClone(newWindows)
+function replaceSessionTree(newItems: Array<TopLevelTreeItem>): void {
+  SessionTree.reactiveItems.value = structuredClone(newItems)
   reindexTree()
 }
 
 function applyDelta(delta: SessionTreeDelta): void {
   switch (delta.op) {
     case 'treeReplaced':
-      console.debug('Applying treeReplaced delta: ', delta)
-      replaceSessionTree(delta.windows)
+      replaceSessionTree(delta.treeItems)
       return
     case 'windowCreated': {
-      console.debug('Applying windowCreated delta: ', delta)
       const window = structuredClone(delta.window)
-      SessionTree.reactiveWindowsList.value.splice(delta.index, 0, window)
-
-      const insertedWindow =
-        SessionTree.reactiveWindowsList.value[delta.index] ??
-        SessionTree.reactiveWindowsList.value.find((w) => w.uid === window.uid)
-      if (insertedWindow) {
-        indexWindow(insertedWindow)
-      }
+      SessionTree.reactiveItems.value.splice(delta.index, 0, window)
+      reindexTree()
       return
     }
     case 'windowRemoved': {
-      console.debug('Applying windowRemoved delta: ', delta)
-      const existingWindow = SessionTree.windowsByUid.get(delta.windowUid)
-      if (existingWindow) {
-        unindexWindow(existingWindow)
-      }
-
-      const index = SessionTree.reactiveWindowsList.value.findIndex(
+      const index = SessionTree.reactiveItems.value.findIndex(
         (w) => w.uid === delta.windowUid,
       )
       if (index !== -1) {
-        SessionTree.reactiveWindowsList.value.splice(index, 1)
+        SessionTree.reactiveItems.value.splice(index, 1)
+        reindexTree()
       }
       return
     }
     case 'windowUpdated': {
-      console.debug('Applying windowUpdated delta: ', delta)
-      const updatedWindow = delta.window
-      const index = SessionTree.reactiveWindowsList.value.findIndex(
-        (w) => w.uid === updatedWindow.uid,
-      )
-      if (index !== -1) {
-        const existingWindow = SessionTree.reactiveWindowsList.value[index]
-
-        const { tabs: updatedTabs, ...windowProps } = updatedWindow
-        updateObjectProperties(existingWindow, windowProps)
-
-        const existingTabsMap = new Map(
-          existingWindow.tabs.map((t) => [t.uid, t]),
-        )
-        const nextTabs: Tab[] = []
-        updatedTabs.forEach((updatedTab) => {
-          const existingTab = existingTabsMap.get(updatedTab.uid)
-          if (existingTab) {
-            updateObjectProperties(existingTab, updatedTab)
-            nextTabs.push(existingTab)
-          } else {
-            nextTabs.push(structuredClone(updatedTab))
-          }
-        })
-
-        existingWindow.tabs.splice(0, existingWindow.tabs.length, ...nextTabs)
-        indexWindow(existingWindow)
-      } else {
-        console.warn(
-          'Received windowUpdated delta for non-existing window. This may indicate a synchronization issue.',
-          delta,
-        )
-        // Window doesn't exist, insert it
-        // SessionTree.reactiveWindowsList.value.push(
-        //   structuredClone(updatedWindow),
-        // )
-        // const insertedWindow =
-        //   SessionTree.reactiveWindowsList.value[
-        //     SessionTree.reactiveWindowsList.value.length - 1
-        //   ]
-        // if (insertedWindow) {
-        //   indexWindow(insertedWindow)
-        // }
+      const existingWindow = SessionTree.windowsByUid.get(delta.window.uid)
+      if (existingWindow) {
+        updateTreeItemInPlace(existingWindow, delta.window)
       }
+      reindexTree()
       return
     }
     case 'tabCreated': {
-      console.debug('Applying tabCreated delta: ', delta)
-      console.debug(
-        'Tree before applying tabCreated delta: ',
-        SessionTree.reactiveWindowsList.value,
-      )
-      const window = SessionTree.windowsByUid.get(delta.windowUid)
+      const window = findWindow(delta.windowUid)
       if (!window) return
-      const incomingTab = delta.tab
-      const existingIndex = window.tabs.findIndex(
-        (t) => t.uid === incomingTab.uid,
+      const existingIndex = window.children.findIndex(
+        (t) => t.uid === delta.tab.uid,
       )
-      console.debug('Existing index for new tab: ', existingIndex)
-
       if (existingIndex === -1) {
-        const tab = structuredClone(incomingTab)
-        window.tabs.splice(delta.index, 0, tab)
-
-        const insertedTab =
-          window.tabs[delta.index] ??
-          window.tabs.find((t) => t.uid === incomingTab.uid)
-        console.debug('insertedTab: ', insertedTab)
-        if (insertedTab) {
-          SessionTree.tabsByUid.set(insertedTab.uid, insertedTab)
-        }
-      } else {
-        console.warn(
-          'Received tabCreated delta for existing tab. This may indicate a synchronization issue.',
-          delta,
-        )
-        // const existingTab = window.tabs[existingIndex]
-        // updateObjectProperties(existingTab, incomingTab)
-
-        // if (existingIndex !== delta.index) {
-        //   const [movedTab] = window.tabs.splice(existingIndex, 1)
-        //   const targetIndex = Math.min(delta.index, window.tabs.length)
-        //   window.tabs.splice(targetIndex, 0, movedTab)
-        // }
-
-        // tabsByUid.set(existingTab.uid, existingTab)
+        window.children.splice(delta.index, 0, structuredClone(delta.tab))
       }
+      reindexTree()
       return
     }
     case 'tabRemoved': {
-      console.debug('Applying tabRemoved delta: ', delta)
-      const window = SessionTree.windowsByUid.get(delta.windowUid)
+      const window = findWindow(delta.windowUid)
       if (!window) return
-
-      const index = window.tabs.findIndex((t) => t.uid === delta.tabUid)
-      if (index !== -1) {
-        window.tabs.splice(index, 1)
-      }
-
-      SessionTree.tabsByUid.delete(delta.tabUid)
+      const index = window.children.findIndex((t) => t.uid === delta.tabUid)
+      if (index !== -1) window.children.splice(index, 1)
+      reindexTree()
       return
     }
     case 'tabUpdated': {
-      console.debug('Applying tabUpdated delta: ', delta)
-      const updatedTab = delta.tab
-      const existingTab = SessionTree.tabsByUid.get(updatedTab.uid)
-
-      if (!existingTab) {
-        console.warn(
-          'Received tabUpdated delta for non-existing tab. This may indicate a synchronization issue.',
-          delta,
-        )
-        return
+      const existingTab = SessionTree.tabsByUid.get(delta.tab.uid)
+      if (existingTab) {
+        updateObjectProperties(existingTab, delta.tab)
       }
-
-      if (existingTab && existingTab.windowUid !== updatedTab.windowUid) {
-        const previousWindow = SessionTree.windowsByUid.get(
-          existingTab.windowUid,
-        )
-        if (previousWindow) {
-          const previousIndex = previousWindow.tabs.findIndex(
-            (t) => t.uid === updatedTab.uid,
-          )
-          if (previousIndex !== -1) {
-            previousWindow.tabs.splice(previousIndex, 1)
-          }
-        }
-      }
-
-      const window = SessionTree.windowsByUid.get(updatedTab.windowUid)
-      if (!window) return
-
-      let targetTab = window.tabs.find((t) => t.uid === updatedTab.uid)
-      if (!targetTab) {
-        window.tabs.push(existingTab)
-        targetTab = existingTab
-      }
-
-      updateObjectProperties(targetTab, updatedTab)
-
-      SessionTree.tabsByUid.set(targetTab.uid, targetTab)
+      reindexTree()
+      return
+    }
+    case 'noteCreated':
+    case 'noteRemoved':
+      return
+    case 'noteUpdated': {
+      const existingNote = SessionTree.notesByUid.get(delta.note.uid)
+      if (existingNote) updateTreeItemInPlace(existingNote, delta.note)
+      reindexTree()
       return
     }
     default:
@@ -226,10 +162,15 @@ function applyDelta(delta: SessionTreeDelta): void {
 }
 
 export const SessionTree = {
-  reactiveWindowsList: ref<Window[]>([]),
+  reactiveItems: ref<TopLevelTreeItem[]>([]),
   windowsByUid: new Map<UID, Window>(),
   tabsByUid: new Map<UID, Tab>(),
+  notesByUid: new Map<UID, Note>(),
 
-  replaceSessionTree,
-  applyDelta,
+  replaceSessionTree(items: TopLevelTreeItem[]) {
+    replaceSessionTree(items)
+  },
+  applyDelta(delta: SessionTreeDelta) {
+    applyDelta(delta)
+  },
 }

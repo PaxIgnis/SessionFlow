@@ -1,7 +1,7 @@
 import { sendTreeCommand } from '@/services/runtime-port-service'
 import { Settings } from '@/services/settings'
 import * as Messages from '@/types/messages'
-import { State, Tab, Window } from '@/types/session-tree'
+import { Note, State, Tab, Window } from '@/types/session-tree'
 
 // ==============================
 // Tab Messages
@@ -263,6 +263,25 @@ export function moveWindows(
   })
 }
 
+export function moveTreeItems(
+  itemUIDs: Array<UID>,
+  targetIndex: number,
+  parentUid?: UID,
+  targetWindowUid?: UID,
+  copy: boolean = false,
+  includeDescendants?: boolean,
+) {
+  void sendTreeCommand({
+    action: 'moveTreeItems',
+    itemUIDs,
+    targetIndex,
+    parentUid,
+    targetWindowUid,
+    copy,
+    includeDescendants,
+  } as Messages.MoveTreeItemsMessage)
+}
+
 // ==============================
 // Tree Messages
 // ==============================
@@ -285,6 +304,41 @@ export function updateWindowTitle(windowUid: UID, newTitle: string) {
     windowUid,
     newTitle,
   } as Messages.UpdateWindowTitleMessage)
+}
+
+// ==============================
+// Note Messages
+// ==============================
+
+export function createNote(parentUid?: UID, index?: number, text?: string) {
+  void sendTreeCommand({
+    action: 'createNote',
+    parentUid,
+    index,
+    text,
+  } as Messages.CreateNoteMessage)
+}
+
+export function removeNote(noteUid: UID) {
+  void sendTreeCommand({
+    action: 'removeNote',
+    noteUid,
+  } as Messages.RemoveNoteMessage)
+}
+
+export function toggleCollapseNote(noteUid: UID) {
+  void sendTreeCommand({
+    action: 'toggleCollapseNote',
+    noteUid,
+  } as Messages.ToggleCollapseNoteMessage)
+}
+
+export function updateNoteText(noteUid: UID, text: string) {
+  void sendTreeCommand({
+    action: 'updateNoteText',
+    noteUid,
+    text,
+  } as Messages.UpdateNoteTextMessage)
 }
 
 // ==============================

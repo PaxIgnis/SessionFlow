@@ -1,9 +1,9 @@
 <script lang="ts" setup>
-import { Settings } from '@/services/settings'
+import NumberInput from '@/components/NumberInput.vue'
 import ToggleButton from '@/components/ToggleButton.vue'
+import { Settings } from '@/services/settings'
 import { OPTIONS } from '@/types/settings'
 import { STRINGS } from '@/types/strings'
-import NumberInput from '@/components/NumberInput.vue'
 
 function updateLocation() {
   Settings.saveSettingsToStorage()
@@ -70,6 +70,14 @@ function updateLocation() {
       class="child-setting"
       label="Save Window When Closed: If It Was Previously Saved"
       v-model="Settings.values.saveWindowOnCloseIfPreviouslySaved"
+      :options="OPTIONS.boolean"
+      :disabled="Settings.values.saveWindowOnClose"
+      @update="Settings.saveSettingsToStorage()"
+    />
+    <ToggleButton
+      class="child-setting"
+      label="Save Window When Closed: If It Has Existing Notes"
+      v-model="Settings.values.saveWindowOnCloseIfContainsNotes"
       :options="OPTIONS.boolean"
       :disabled="Settings.values.saveWindowOnClose"
       @update="Settings.saveSettingsToStorage()"

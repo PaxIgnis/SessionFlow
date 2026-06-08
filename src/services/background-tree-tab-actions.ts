@@ -4,9 +4,8 @@ import { OnCreatedQueue } from '@/services/background-on-created-queue'
 import { Tree } from '@/services/background-tree'
 import { emitTreeDelta } from '@/services/runtime-port-service'
 import { Settings } from '@/services/settings'
-import * as TreeUtils from '@/services/tree-utils'
 import * as Utils from '@/services/utils'
-import { State, Tab } from '@/types/session-tree'
+import { State, Tab, TreeItemType, WindowChild } from '@/types/session-tree'
 
 /**
  * Adds a tab to the session tree.
@@ -52,6 +51,7 @@ export function addTab(
     return
   }
   const tab: Tab = {
+    type: TreeItemType.TAB,
     uid: tabUid ?? Utils.createUid(Tree.existingUidsSet),
     active: active,
     id: tabId,
@@ -68,9 +68,11 @@ export function addTab(
     // if not pinned but index before last pinned tab, change index to
     // after last pinned tab
     if (!tab.pinned) {
-      const lastPinnedIndex = window.tabs.reduce(
+      const lastPinnedIndex = window.children.reduce(
         (maxIndex, currentTab, currentIndex) => {
-          return currentTab.pinned && currentIndex > maxIndex
+          return currentTab.type === TreeItemType.TAB &&
+            currentTab.pinned &&
+            currentIndex > maxIndex
             ? currentIndex
             : maxIndex
         },
@@ -82,43 +84,53 @@ export function addTab(
         parentUid = undefined
       }
     }
-    // if parentUid is provided, insert as child tab
+    // if parentUid is provided, insert as child item
     if (parentUid) {
-      const parent = Tree.tabsByUid.get(parentUid)
-      const siblingTabCount = window.tabs.filter(
-        (tab) => tab.parentUid === parentUid,
+      const parent =
+        Tree.tabsByUid.get(parentUid) ?? Tree.notesByUid.get(parentUid)
+      const siblingItemCount = window.children.filter(
+        (item) => item.parentUid === parentUid,
       ).length
 
-      // if this is the first child tab, set parent tab's isParent to true
-      if (siblingTabCount === 0 && parent)
-        Tree.updateTab({ tabUid: parentUid }, { isParent: true }, emitDelta)
+      // if this is the first child item, set parent's isParent to true
+      if (siblingItemCount === 0 && parent) {
+        if (parent.type === TreeItemType.TAB) {
+          Tree.updateTab({ tabUid: parentUid }, { isParent: true }, emitDelta)
+        } else {
+          Tree.updateNote(parentUid, { isParent: true }, emitDelta)
+        }
+      }
 
       tab.parentUid = parent?.uid
       // set indent level one more than parent, or default to 1
       tab.indentLevel = parent?.indentLevel ? parent?.indentLevel + 1 : 1
     } else {
-      // else match indent level and parentUid of the tab to the right
-      const tabToRight = window.tabs[index]
+      // else match indent level and parentUid of the item to the right
+      const itemToRight = window.children[index]
 
-      tab.parentUid = tabToRight?.parentUid
-      tab.indentLevel = tabToRight?.indentLevel ?? 1
+      tab.parentUid = itemToRight?.parentUid
+      tab.indentLevel = itemToRight?.indentLevel ?? 1
     }
 
-    window.tabs.splice(index, 0, tab)
+    window.children.splice(index, 0, tab)
   } else {
     // add to end of tree
     tab.indentLevel = 1
-    window.tabs.push(tab)
+    window.children.push(tab)
   }
-  // TODO: can use tab object instead when independent data source for foreground context implemented (i.e. use 'tab' instead of windws.tabs... lookup)
-  Tree.tabsByUid.set(tab.uid, window.tabs[window.tabs.indexOf(tab)])
+  // TODO: can use tab object instead when independent data source for foreground context implemented (i.e. use 'tab' instead of windws.children... lookup)
+  Tree.tabsByUid.set(
+    tab.uid,
+    window.children[window.children.indexOf(tab)] as Tab,
+  )
+  Tree.existingUidsSet.add(tab.uid)
   Tree.recomputeSessionTree(emitDelta)
   if (emitDelta) {
     emitTreeDelta({
       op: 'tabCreated',
       windowUid: window.uid,
       tab: structuredClone(tab),
-      index: window.tabs.indexOf(tab),
+      index: window.children.indexOf(tab),
     })
   }
   DeferredEventsQueue.processDeferredTabEvents(tabId)
@@ -142,7 +154,7 @@ export function removeTab(tabUid: UID, emitDelta: boolean = true): void {
     console.error('Error removing tab, could not find window:', tab.windowUid)
     return
   }
-  const index = window.tabs.findIndex((tab) => tab.uid === tabUid)
+  const index = window.children.findIndex((tab) => tab.uid === tabUid)
   if (index === -1) {
     console.error('Error removing tab, could not find tab:', tabUid)
     return
@@ -150,30 +162,37 @@ export function removeTab(tabUid: UID, emitDelta: boolean = true): void {
 
   // before removing the tab, adjust the indent levels and parentUid of its children
 
-  const parentTab = tab.parentUid
-    ? Tree.tabsByUid.get(tab.parentUid)
+  const parentItem = tab.parentUid
+    ? (Tree.tabsByUid.get(tab.parentUid) ?? Tree.notesByUid.get(tab.parentUid))
     : undefined
-  const childrenMap = TreeUtils.buildChildrenMap(window.tabs)
+  const childrenMap = Tree.buildChildrenMap(window.children)
   const directChildren = childrenMap.get(tab.uid) || []
   const siblings = childrenMap.get(tab.parentUid as UID) || []
 
-  if (directChildren.length === 0 && siblings.length === 1 && parentTab) {
-    // if no children and no siblings, remove parent status from parent tab
-    Tree.updateTab({ tabUid: parentTab.uid }, { isParent: false }, emitDelta)
+  if (directChildren.length === 0 && siblings.length === 1 && parentItem) {
+    // if no children and no siblings, remove parent status from parent item
+    if (parentItem.type === TreeItemType.TAB) {
+      Tree.updateTab({ tabUid: parentItem.uid }, { isParent: false }, emitDelta)
+    } else {
+      Tree.updateNote(parentItem.uid, { isParent: false }, emitDelta)
+    }
   } else if (directChildren.length > 0) {
     for (const child of directChildren) {
-      Tree.updateTab(
-        { tabUid: child.uid },
-        { parentUid: tab.parentUid },
-        emitDelta,
-      )
+      if (child.type === TreeItemType.TAB) {
+        Tree.updateTab(
+          { tabUid: child.uid },
+          { parentUid: tab.parentUid },
+          emitDelta,
+        )
+      } else {
+        Tree.updateNote(child.uid, { parentUid: tab.parentUid }, emitDelta)
+      }
     }
-    decreaseIndentRecursively(directChildren, childrenMap, emitDelta)
   }
 
   Tree.existingUidsSet.delete(tab.uid)
   Tree.tabsByUid.delete(tab.uid)
-  window.tabs.splice(index, 1)
+  window.children.splice(index, 1)
   if (emitDelta) {
     emitTreeDelta({
       op: 'tabRemoved',
@@ -182,7 +201,7 @@ export function removeTab(tabUid: UID, emitDelta: boolean = true): void {
     })
   }
   // if this was the last tab in the window, remove the window
-  if (window.tabs.length === 0) {
+  if (window.children.length === 0) {
     Tree.removeWindow(window.uid)
   }
   Tree.recomputeSessionTree(emitDelta)
@@ -211,14 +230,18 @@ export function updateTab(
       return
     }
 
-    const window = Tree.windowsList.find((w) => w.id === id.windowId)
+    const window = Tree.Items.filter(Tree.isWindow).find(
+      (w) => w.id === id.windowId,
+    )
     if (!window) {
       DeferredEventsQueue.addDeferredWindowEvent(id.windowId, () =>
         Tree.updateTab(id, tabContents, emitDelta),
       )
       return
     }
-    tab = window.tabs.find((t) => t.id === id.tabId) as Tab
+    tab = window.children.find(
+      (t): t is Tab => t.type === TreeItemType.TAB && t.id === id.tabId,
+    )
     if (!tab) {
       DeferredEventsQueue.addDeferredTabEvent(id.tabId, () =>
         Tree.updateTab(id, tabContents, emitDelta),
@@ -292,13 +315,20 @@ export function tabOnActivated(
   activeInfo: browser.tabs._OnActivatedActiveInfo,
   tries: number = 0,
 ): void {
-  const window = Tree.windowsList.find((w) => w.id === activeInfo.windowId)
-  const activeTab = Tree.windowsList
+  const window = Tree.Items.filter(Tree.isWindow).find(
+    (w) => w.id === activeInfo.windowId,
+  )
+  const activeTab = Tree.Items.filter(Tree.isWindow)
     .find((w) => w.id === activeInfo.windowId)
-    ?.tabs.find((t) => t.id === activeInfo.tabId)
-  const previousActiveTab = Tree.windowsList
+    ?.children.find(
+      (t): t is Tab => t.type === TreeItemType.TAB && t.id === activeInfo.tabId,
+    )
+  const previousActiveTab = Tree.Items.filter(Tree.isWindow)
     .find((w) => w.id === activeInfo.windowId)
-    ?.tabs.find((t) => t.id === activeInfo.previousTabId)
+    ?.children.find(
+      (t): t is Tab =>
+        t.type === TreeItemType.TAB && t.id === activeInfo.previousTabId,
+    )
   // remove active status from previous active tab (not when detached/attached)
   if (activeInfo.previousTabId !== activeInfo.tabId && previousActiveTab) {
     Tree.updateTab({ tabUid: previousActiveTab.uid }, { active: false })
@@ -358,20 +388,18 @@ export function closeTab(message: { tabId: number; tabUid: UID }): void {
       console.error('Error closing tab, could not find tab:', message.tabUid)
       return
     }
-    const window = Tree.windowsByUid.get(tab.windowUid)
+    const windowUid = tab.windowUid
     Tree.removeTab(message.tabUid)
     // if this is the last open tab in the window but there are other saved tabs then
     // update the window state to SAVED and reset id
+    const window = Tree.windowsByUid.get(windowUid)
     if (window) {
-      const openTabs = window.tabs.filter(
+      const openTabs = Tree.getTabs(window.children).filter(
         (tab) => tab.state === State.OPEN || tab.state === State.DISCARDED,
       )
-      if (window.tabs.length > 0 && openTabs.length === 0) {
+      if (window.children.length > 0 && openTabs.length === 0) {
         Tree.updateWindowState(window.uid, State.SAVED)
         Tree.updateWindowId(window.uid, -1)
-      } else if (window.tabs.length === 0) {
-        // if there are no tabs left in the window, remove the window
-        Tree.removeWindow(window.uid)
       }
     }
   }
@@ -418,12 +446,12 @@ export function duplicateTab(message: { tabId: number; tabUid: UID }): void {
       )
       return
     }
-    const index = window.tabs.indexOf(tab)
-    const nextBoundaryIndex = window.tabs.findIndex(
+    const index = window.children.indexOf(tab)
+    const nextBoundaryIndex = window.children.findIndex(
       (t, i) => i > index && t.indentLevel <= tab.indentLevel,
     )
     const newIndex =
-      nextBoundaryIndex === -1 ? window.tabs.length : nextBoundaryIndex
+      nextBoundaryIndex === -1 ? window.children.length : nextBoundaryIndex
     addTab(
       false,
       tab.windowUid,
@@ -547,7 +575,7 @@ export async function openTab(message: {
     if (sessionTreeTab.pinned) properties.pinned = true
 
     // find id of first open tab to the right
-    const tabToRightIndex = sessionTreeWindow.tabs
+    const tabToRightIndex = Tree.getTabs(sessionTreeWindow.children)
       .filter(
         (tab) => tab.state === State.OPEN || tab.state === State.DISCARDED,
       )
@@ -604,7 +632,7 @@ export function saveTab(message: { tabId: number; tabUid: UID }): void {
     // if this is the last open tab in the window, update the window state to SAVED and reset id
     const window = Tree.windowsByUid.get(tab.windowUid)
     if (window) {
-      const openTabs = window.tabs.filter(
+      const openTabs = Tree.getTabs(window.children).filter(
         (tab) => tab.state === State.OPEN || tab.state === State.DISCARDED,
       )
       if (openTabs.length === 1) {
@@ -659,8 +687,10 @@ export function pinTabInTree(tabUid: UID, emitDelta: boolean = true): void {
     return
   }
   // find index of last pinned tab
-  const lastPinnedIndex = window.tabs.findLastIndex((t) => t.pinned)
-  const index = window.tabs.indexOf(tab)
+  const lastPinnedIndex = window.children.findLastIndex(
+    (t) => t.type === TreeItemType.TAB && t.pinned,
+  )
+  const index = window.children.indexOf(tab)
   Tree.updateTab({ tabUid: tab.uid }, { pinned: true }, emitDelta)
   Tree.moveTab(
     tab.uid,
@@ -710,8 +740,10 @@ export function unpinTabInTree(tabUid: UID, emitDelta: boolean = true): void {
     console.error('Error unpinning tab, could not find window:', tab.windowUid)
     return
   }
-  const lastPinnedIndex = window.tabs.findLastIndex((t) => t.pinned)
-  const index = window.tabs.indexOf(tab)
+  const lastPinnedIndex = window.children.findLastIndex(
+    (t) => t.type === TreeItemType.TAB && t.pinned,
+  )
+  const index = window.children.indexOf(tab)
   Tree.updateTab({ tabUid: tab.uid }, { pinned: false }, emitDelta)
   Tree.moveTab(
     tab.uid,
@@ -748,18 +780,19 @@ export function toggleCollapseTab(
   }
 
   Tree.updateTab({ tabUid: tab.uid }, { collapsed: !tab.collapsed }, emitDelta)
-  const childrenMap = TreeUtils.buildChildrenMap(window.tabs)
-  const children = childrenMap.get(tab.uid) || []
 
   if (tab.collapsed) {
     // hiding this tab's subtree
-    setTabVisibilityRecursively(children, childrenMap, false, emitDelta)
+    Tree.setItemChildrenVisibility(tab.uid, window.children, false, emitDelta)
   } else {
     // before showing children, ensure no ancestor is collapsed
     let ancestorCollapsed = false
     let currentParentUid = tab.parentUid
     while (currentParentUid !== undefined) {
-      const parent = Tree.tabsByUid.get(currentParentUid)
+      const parent =
+        Tree.tabsByUid.get(currentParentUid) ??
+        Tree.notesByUid.get(currentParentUid) ??
+        Tree.windowsByUid.get(currentParentUid)
       if (!parent) break
       if (parent.collapsed) {
         ancestorCollapsed = true
@@ -769,38 +802,7 @@ export function toggleCollapseTab(
     }
 
     if (!ancestorCollapsed) {
-      setTabVisibilityRecursively(children, childrenMap, true, emitDelta)
-    }
-  }
-}
-
-/**
- * Recursively sets isVisible property for tabs and their children.
- *
- * @param {Tab[]} tabs - The list of tabs to set visibility for.
- * @param {Map<UID, Tab[]>} childrenMap - A map of parent UIDs to their child tabs.
- * @param {boolean} isVisible - The visibility state to set.
- * @param {boolean = true} emitDelta - Whether to emit tree delta events for each tab updated.
- */
-export function setTabVisibilityRecursively(
-  tabs: Tab[],
-  childrenMap: Map<UID, Tab[]>,
-  isVisible: boolean,
-  emitDelta: boolean = true,
-): void {
-  for (const tab of tabs) {
-    const t = Tree.tabsByUid.get(tab.uid)
-    if (t && t.isVisible !== isVisible)
-      Tree.updateTab({ tabUid: tab.uid }, { isVisible: isVisible }, emitDelta)
-    const children = childrenMap.get(tab.uid) || []
-    if (children.length > 0) {
-      const childVisibility = isVisible && !tab.collapsed
-      setTabVisibilityRecursively(
-        children,
-        childrenMap,
-        childVisibility,
-        emitDelta,
-      )
+      Tree.setItemChildrenVisibility(tab.uid, window.children, true, emitDelta)
     }
   }
 }
@@ -827,16 +829,17 @@ export function tabIndentIncrease(tabUids: UID[]): void {
     return
   }
 
-  const childrenMap = TreeUtils.buildChildrenMap(win.tabs)
+  // repairInvalidTabParentUids(win, false)
+  const childrenMap = Tree.buildChildrenMap(Tree.getTabs(win.children))
 
   // remove any tabs from the selection that are descendants of other selected tabs
   const filteredTabs = removeDescendantTabs(tabs, childrenMap)
 
   for (const tab of filteredTabs) {
     if (tab.uid === undefined) continue
-    const tabIndex = win.tabs.findIndex((t) => t.uid === tab.uid)
+    const tabIndex = win.children.findIndex((t) => t.uid === tab.uid)
     if (tabIndex === 0) continue // skip root tabs
-    const parentIndex = win.tabs.findIndex((t) => t.uid === tab.parentUid)
+    const parentIndex = win.children.findIndex((t) => t.uid === tab.parentUid)
     if (parentIndex === tabIndex - 1) continue // already indented under immediate previous tab
     // if tab has a sibling tab with same indent level above it, indent is possible
     if (tabHasSiblingsAbove(tab) === false) continue
@@ -844,7 +847,7 @@ export function tabIndentIncrease(tabUids: UID[]): void {
     Tree.updateTab({ tabUid: tab.uid }, { indentLevel: newIndent })
 
     // find new parent tab (nearest preceding sibling with indentLevel one less than this tab)
-    const newParent = findParentTab(tab)
+    const newParent = findParent(tab)
     if (!newParent) {
       console.error(
         `Failed to find new parent for tab ${tab.uid} during indent increase`,
@@ -853,7 +856,7 @@ export function tabIndentIncrease(tabUids: UID[]): void {
     }
 
     Tree.updateTab({ tabUid: tab.uid }, { parentUid: newParent.uid })
-    Tree.updateTab({ tabUid: newParent.uid }, { isParent: true })
+    updateParentItemFlag(newParent.uid, true)
 
     // increase indent level for all descendants of this tab
     const children = childrenMap.get(tab.uid) || []
@@ -865,10 +868,11 @@ export function tabIndentIncrease(tabUids: UID[]): void {
         { isVisible: newParent.collapsed ? false : true },
       )
 
-      setTabVisibilityRecursively(
+      Tree.setItemChildrenVisibility(
+        tab.uid,
         children,
-        childrenMap,
         tab.isVisible ? true : false,
+        true,
       )
     }
 
@@ -896,35 +900,39 @@ export function tabIndentDecrease(tabUids: UID[]): void {
     return
   }
 
-  const childrenMap = TreeUtils.buildChildrenMap(win.tabs)
+  // repairInvalidTabParentUids(win, false)
+  const childrenMap = Tree.buildChildrenMap(Tree.getTabs(win.children))
 
   // remove any tabs from the selection that are descendants of other selected tabs
   const filteredTabs = removeDescendantTabs(tabs, childrenMap)
 
   for (const tab of filteredTabs) {
     if (tab.uid === undefined) continue
-    const tabIndex = win.tabs.findIndex((t) => t.uid === tab.uid)
+    const tabIndex = win.children.findIndex((t) => t.uid === tab.uid)
     if (tabIndex === 0) continue // skip root tabs
-    if (tab.indentLevel <= 1) continue // already at root level
+    const minimumIndent = (win.indentLevel ?? 0) + 1
+    if (tab.indentLevel <= minimumIndent) continue // already at root level
     const newIndent = tab.indentLevel - 1
     Tree.updateTab({ tabUid: tab.uid }, { indentLevel: newIndent })
 
-    const oldParent = Tree.tabsByUid.get(tab.parentUid as UID)
-    const oldParentIndex = win.tabs.findIndex((t) => t.uid === tab.parentUid)
+    const oldParent = getParentItem(tab.parentUid)
+    const oldParentIndex = win.children.findIndex(
+      (t) => t.uid === tab.parentUid,
+    )
     // if this was the only child or first child, clear isParent flag on old parent
     if (
       tab.parentUid &&
-      oldParentIndex &&
+      oldParentIndex !== -1 &&
       oldParent &&
       (childrenMap.get(tab.parentUid)?.length === 1 ||
         oldParentIndex === tabIndex - 1)
     )
-      Tree.updateTab({ tabUid: oldParent.uid }, { isParent: false })
+      updateParentItemFlag(oldParent.uid, false)
 
     // siblings directly below the tab now become its children
     const siblings = childrenMap.get(tab.parentUid!) || []
     const lowerSiblings = siblings.filter(
-      (s) => win.tabs.findIndex((t) => t.uid === s.uid) > tabIndex,
+      (s) => win.children.findIndex((t) => t.uid === s.uid) > tabIndex,
     )
     if (lowerSiblings.length > 0) {
       Tree.updateTab({ tabUid: tab.uid }, { isParent: true }) // now a parent
@@ -932,13 +940,13 @@ export function tabIndentDecrease(tabUids: UID[]): void {
         Tree.updateTab({ tabUid: child.uid }, { parentUid: tab.uid })
       }
     }
-    if (tab.indentLevel === 1) {
+    if (tab.indentLevel === minimumIndent) {
       Tree.updateTab({ tabUid: tab.uid }, { parentUid: undefined })
     } else {
-      const newParent = findParentTab(tab)
+      const newParent = findParent(tab)
       if (newParent) {
         Tree.updateTab({ tabUid: tab.uid }, { parentUid: newParent.uid })
-        Tree.updateTab({ tabUid: newParent.uid }, { isParent: true })
+        updateParentItemFlag(newParent.uid, true)
       } else {
         console.error(
           `Failed to find new parent for tab ${tab.uid} during indent decrease`,
@@ -947,7 +955,8 @@ export function tabIndentDecrease(tabUids: UID[]): void {
     }
     // decrease indent level for all descendants of this tab
     const children = childrenMap.get(tab.uid) || []
-    if (children.length) decreaseIndentRecursively(children, childrenMap)
+    if (children.length)
+      decreaseIndentRecursively(children, childrenMap, minimumIndent)
   }
 }
 
@@ -1000,22 +1009,16 @@ function collectDescendantTabIds(
   }
 }
 
-/**
- * Checks if the given tab has siblings above it with the same indent level.
- *
- * @param {Tab} tab - The tab to check for siblings above.
- * @returns {boolean} True if there are siblings above, false otherwise.
- */
 function tabHasSiblingsAbove(tab: Tab): boolean {
   const win = Tree.windowsByUid.get(tab.windowUid)
   if (!win) return false
 
   // Find the index of the current tab in the window's tabs array and scan backwards
-  const currentIndex = win.tabs.findIndex((t) => t.uid === tab.uid)
+  const currentIndex = win.children.findIndex((t) => t.uid === tab.uid)
   if (currentIndex > 0) {
     const targetIndent = tab.indentLevel ?? 1
     for (let i = currentIndex - 1; i >= 0; i--) {
-      const candidate = win.tabs[i]
+      const candidate = win.children[i]
       if ((candidate.indentLevel ?? 1) === targetIndent) return true
       if ((candidate.indentLevel ?? 1) < targetIndent) return false
     }
@@ -1027,25 +1030,41 @@ function tabHasSiblingsAbove(tab: Tab): boolean {
 /**
  * Finds the parent tab for a given tab based on its indent level.
  *
- * @param {Tab} tab - The tab to find the parent for.
+ * @param {WindowChild} item - The tab to find the parent for.
  * @returns {Tab | undefined} The parent tab if found, otherwise undefined.
  */
-function findParentTab(tab: Tab): Tab | undefined {
-  const win = Tree.windowsByUid.get(tab.windowUid)
+function findParent(item: WindowChild): WindowChild | undefined {
+  const win = Tree.windowsByUid.get(item.windowUid ? item.windowUid : '')
   if (!win) return undefined
 
   // Find the index of the current tab in the window's tabs array and scan backwards
-  const currentIndex = win.tabs.findIndex((t) => t.uid === tab.uid)
+  const currentIndex = win.children.findIndex((t) => t.uid === item.uid)
   if (currentIndex > 0) {
-    const targetIndent = (tab.indentLevel ?? 1) - 1
+    const targetIndent = (item.indentLevel ?? 1) - 1
     for (let i = currentIndex - 1; i >= 0; i--) {
-      const candidate = win.tabs[i]
-      if ((candidate.indentLevel ?? 1) === targetIndent) {
+      const candidate = win.children[i]
+      if (
+        // candidate.type === TreeItemType.TAB &&
+        (candidate.indentLevel ?? 1) === targetIndent
+      ) {
         return candidate
       }
     }
   }
   return undefined
+}
+
+function getParentItem(parentUid: UID | undefined): WindowChild | undefined {
+  if (!parentUid) return undefined
+  return Tree.tabsByUid.get(parentUid) ?? Tree.notesByUid.get(parentUid)
+}
+
+function updateParentItemFlag(parentUid: UID, isParent: boolean): void {
+  if (Tree.tabsByUid.has(parentUid)) {
+    Tree.updateTab({ tabUid: parentUid }, { isParent })
+  } else if (Tree.notesByUid.has(parentUid)) {
+    Tree.updateNote(parentUid, { isParent })
+  }
 }
 
 /**
@@ -1058,17 +1077,18 @@ function findParentTab(tab: Tab): Tab | undefined {
 function decreaseIndentRecursively(
   nodes: Tab[],
   childrenMap: Map<UID, Tab[]>,
+  minimumIndent: number = 1,
   emitDelta: boolean = true,
 ) {
   for (const node of nodes) {
     Tree.updateTab(
       { tabUid: node.uid },
-      { indentLevel: Math.max((node.indentLevel ?? 1) - 1, 1) },
+      { indentLevel: Math.max((node.indentLevel ?? 1) - 1, minimumIndent) },
       emitDelta,
     )
     const children = childrenMap.get(node.uid) || []
     if (children.length)
-      decreaseIndentRecursively(children, childrenMap, emitDelta)
+      decreaseIndentRecursively(children, childrenMap, minimumIndent, emitDelta)
   }
 }
 
@@ -1121,15 +1141,15 @@ export async function moveTabs(
 
   // first sort tabs in descending order of how they appear in the tree
   tabs.sort((a, b) => {
-    const winIndexA = Tree.windowsList.findIndex((w) => w.uid === a.windowUid)
-    const winIndexB = Tree.windowsList.findIndex((w) => w.uid === b.windowUid)
+    const winIndexA = Tree.Items.findIndex((w) => w.uid === a.windowUid)
+    const winIndexB = Tree.Items.findIndex((w) => w.uid === b.windowUid)
     if (winIndexA === -1 || winIndexB === -1) return 0
     if (winIndexA !== winIndexB) return winIndexA - winIndexB
 
     const win = Tree.windowsByUid.get(a.windowUid)
     if (!win) return 0
-    const indexA = win.tabs.findIndex((t) => t.uid === a.uid)
-    const indexB = win.tabs.findIndex((t) => t.uid === b.uid)
+    const indexA = win.children.findIndex((t) => t.uid === a.uid)
+    const indexB = win.children.findIndex((t) => t.uid === b.uid)
     if (indexA === -1 || indexB === -1) return 0
     return indexA - indexB
   })
@@ -1140,12 +1160,12 @@ export async function moveTabs(
     console.error(`Target window with UID ${targetWindowUid} not found`)
     return
   }
-  if (targetIndex < 0 || targetIndex > targetWindow.tabs.length) {
+  if (targetIndex < 0 || targetIndex > targetWindow.children.length) {
     console.error(
       `Invalid target index ${targetIndex} for window ${targetWindowUid}`,
     )
     // if index is invalid, set to last position
-    targetIndex = targetWindow.tabs.length
+    targetIndex = targetWindow.children.length
   }
 
   const newUidMapping: Map<UID, UID> = new Map()
@@ -1161,23 +1181,27 @@ export async function moveTabs(
     let originalTargetIndex = targetIndex
     let targetIndexAdjusted = false
     if (isPinned) {
-      const lastPinnedIndex = targetWindow.tabs.findLastIndex((t) => t.pinned)
+      const lastPinnedIndex = targetWindow.children.findLastIndex(
+        (t) => t.type === TreeItemType.TAB && t.pinned,
+      )
       // if tab is pinned and target index is after last pinned tab, move it to after last pinned tab
       if (lastPinnedIndex + 1 < targetIndex) {
         targetIndex = lastPinnedIndex + 1
         targetIndexAdjusted = true
       }
     } else {
-      let firstUnpinnedIndex = targetWindow.tabs.findIndex((t) => !t.pinned)
-      if (firstUnpinnedIndex === -1)
-        firstUnpinnedIndex = targetWindow.tabs.length
-      // if tab is unpinned and target index is before first unpinned tab, move it to first unpinned tab
-      if (firstUnpinnedIndex > targetIndex) {
-        targetIndex = firstUnpinnedIndex
+      const lastPinnedIndex = targetWindow.children.findLastIndex(
+        (t) => t.type === TreeItemType.TAB && t.pinned,
+      )
+      // if tab is unpinned and target index is before pinned tabs, move it to after pinned tabs
+      if (lastPinnedIndex !== -1 && targetIndex <= lastPinnedIndex) {
+        targetIndex = lastPinnedIndex + 1
         targetIndexAdjusted = true
       }
     }
-    const sourceIndex = targetWindow.tabs.findIndex((t) => t.uid === tab.uid)
+    const sourceIndex = targetWindow.children.findIndex(
+      (t) => t.uid === tab.uid,
+    )
     // check if removing tab will affect index
     if (
       !copy &&
@@ -1254,8 +1278,8 @@ export async function moveTabs(
  *
  * @param {UID} tabUID - The UID of the tab to move.
  * @param {UID} targetWindowUid - The UID of the target window where the tab will be moved.
- * @param {number} targetIndex - The index in the target window's tab list where the tab will be inserted.
- * @param {UID} [parentUid] - Optional UID of the parent tab, used to calculate indent.
+ * @param {number} targetIndex - The index in the target window's item list where the tab will be inserted.
+ * @param {UID} [parentUid] - Optional UID of the parent tab or note, used to calculate indent.
  * @param {boolean} [copy=false] - Whether to copy the tab instead of moving.
  */
 export async function moveTab(
@@ -1279,11 +1303,28 @@ export async function moveTab(
   // check if tab and target window exists
   const tab = Tree.tabsByUid.get(tabUID)
   const targetWindow = Tree.windowsByUid.get(targetWindowUid)
+  const effectiveParentUid =
+    parentUid === targetWindowUid ? undefined : parentUid
 
   if (!tab || !targetWindow) {
     console.error(`moveTab: Tab or target window not found`)
     return
   }
+
+  const parentItem = effectiveParentUid
+    ? (Tree.tabsByUid.get(effectiveParentUid) ??
+      Tree.notesByUid.get(effectiveParentUid))
+    : undefined
+  if (
+    effectiveParentUid &&
+    (!parentItem || parentItem.windowUid !== targetWindowUid)
+  ) {
+    console.error(
+      `moveTab: Parent item ${effectiveParentUid} not found in target window`,
+    )
+    return
+  }
+
   // determine if tab should be active in new window
   const tabActive =
     targetWindow.state === State.OPEN &&
@@ -1293,16 +1334,15 @@ export async function moveTab(
       ? true
       : false
 
-  const currentIndexInBrowser = targetWindow.tabs
+  const currentIndexInBrowser = Tree.getTabs(targetWindow.children)
     .filter((t) => t.state === State.OPEN || t.state === State.DISCARDED)
     .findIndex((t) => t.uid === tab.uid)
 
   // if tab is already in correct position and indent lvl in the session tree, do nothing
   if (
     tab.windowUid === targetWindowUid &&
-    (targetWindow.tabs.length === 1 ||
-      (targetWindow.tabs.findIndex((t) => t.uid === tab.uid) === targetIndex &&
-        tab.parentUid === parentUid))
+    targetWindow.children.findIndex((t) => t.uid === tab.uid) === targetIndex &&
+    tab.parentUid === effectiveParentUid
   ) {
     return tab.uid
   }
@@ -1320,14 +1360,15 @@ export async function moveTab(
     tab.url,
     tab.pinned || false,
     targetIndex,
-    parentUid,
+    effectiveParentUid,
     tab.uid,
     emitDelta,
   )
 
-  const targetIndexInBrowser = targetWindow.tabs.filter(
+  const targetIndexInBrowser = targetWindow.children.filter(
     (t, index) =>
       index < targetIndex &&
+      t.type === TreeItemType.TAB &&
       // t.uid !== tab.uid && // removed this line to allow moving within same window
       (t.state === State.OPEN || t.state === State.DISCARDED),
   ).length
@@ -1403,7 +1444,9 @@ export async function moveTab(
       .then((moved) => {
         const movedTab = Array.isArray(moved) ? moved[0] : moved
         // tab moved successfully in browser, now verify tab id in session tree matches
-        const newTab = targetWindow.tabs.find((t) => t.id === movedTab?.id)
+        const newTab = targetWindow.children.find(
+          (t): t is Tab => t.type === TreeItemType.TAB && t.id === movedTab?.id,
+        )
         if (!newTab) console.error('Moved tab not found in session tree')
         if (newTab && newTab.id !== tab.id)
           console.error(

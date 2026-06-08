@@ -10,6 +10,7 @@ export const enum ContextMenuType {
   Window = 1,
   Tab = 2,
   Panel = 3,
+  Note = 4,
 }
 
 export const enum ContextMenuItemType {

@@ -1,6 +1,7 @@
 import { ContextMenuConfig, ContextMenuItemType } from '@/types/context-menu'
 
 export const WINDOW_MENU: ContextMenuConfig = [
+  { type: ContextMenuItemType.Action, id: 'createNote' },
   // 'newTab',
   { type: ContextMenuItemType.Action, id: 'saveWindow' },
   { type: ContextMenuItemType.Action, id: 'closeWindow' },
@@ -11,6 +12,7 @@ export const WINDOW_MENU: ContextMenuConfig = [
 ]
 
 export const TAB_MENU: ContextMenuConfig = [
+  { type: ContextMenuItemType.Action, id: 'createNote' },
   { type: ContextMenuItemType.Action, id: 'openTab' },
   { type: ContextMenuItemType.Action, id: 'reloadTab' },
   { type: ContextMenuItemType.Action, id: 'saveTab' },
@@ -24,7 +26,14 @@ export const TAB_MENU: ContextMenuConfig = [
   // 'unloadTab',
 ]
 
+export const NOTE_MENU: ContextMenuConfig = [
+  { type: ContextMenuItemType.Action, id: 'createNote' },
+  { type: ContextMenuItemType.Action, id: 'editNote' },
+  { type: ContextMenuItemType.Action, id: 'removeNote' },
+]
+
 export const PANEL_MENU: ContextMenuConfig = [
+  { type: ContextMenuItemType.Action, id: 'createNote' },
   { type: ContextMenuItemType.Action, id: 'newWindow' },
   // 'collapseAllWindows',
   // 'expandAllWindows',

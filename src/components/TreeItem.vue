@@ -2,35 +2,42 @@
 import { TAB_LOADING } from '@/defaults/favicons'
 import { ContextMenu } from '@/services/context-menu'
 import { DragAndDrop } from '@/services/drag-and-drop'
+import { collectDraggedItemsWithIncludedChildren } from '@/services/drag-and-drop-actions'
 import { FaviconService } from '@/services/favicons'
 import * as Messages from '@/services/foreground-messages'
 import { SessionTree } from '@/services/foreground-tree'
 import { Selection } from '@/services/selection'
 import { Settings } from '@/services/settings'
+import { countTreeItemDescendants } from '@/services/tree-utils'
 import { ContextMenuType } from '@/types/context-menu'
 import {
   DragInfo,
   DragType,
+  Note,
   SelectionType,
   State,
   Tab,
+  TreeItem,
+  TreeItemType,
   Window,
 } from '@/types/session-tree'
 import { computed } from 'vue'
 
 const props = defineProps<{
-  item: Tab | Window
+  item: TreeItem
   faviconService: FaviconService
 }>()
 
 function onDragStart(e: DragEvent) {
   if (!Settings.values.enableDragAndDrop) return
-  let items: Array<Tab | Window> = []
+  let items: TreeItem[] = []
 
   // determine which items to drag based on settings
   if (Settings.values.includeSelectedItemsWithDraggedItem) {
     // collect dragged items info
-    items = Selection.getSelectedItems(getType(props.item))
+    items = props.item.selected
+      ? Selection.selectedItems.value.map((selectedItem) => selectedItem.item)
+      : Selection.getSelectedItems(getType(props.item))
     console.debug('Drag started for items:', items, 'origin item:', props.item)
 
     // if the dragged item is not in the selection, add it by simulating a ctrl+click
@@ -50,54 +57,17 @@ function onDragStart(e: DragEvent) {
     // only drag the single item
     items = [props.item]
   }
-  // include children of selected tabs if applicable
-  if (
-    getType(props.item) === SelectionType.TAB &&
-    (Settings.values.includeChildrenOfSelectedItems === 'always' ||
-      Settings.values.includeChildrenOfSelectedItems === 'collapsed')
-  ) {
-    const additionalItems: Tab[] = []
-    for (const item of items) {
-      if (!isTab(item)) continue
-      if (
-        (item.isParent &&
-          Settings.values.includeChildrenOfSelectedItems === 'always') ||
-        (item.isParent &&
-          item.collapsed &&
-          Settings.values.includeChildrenOfSelectedItems === 'collapsed')
-      ) {
-        // add all children of this parent tab
-        const window = SessionTree.reactiveWindowsList.value.find(
-          (w) => w.uid === item.windowUid,
-        )
-        if (!window) continue
-        const allTabs = window.tabs
-        const parentIndex = allTabs.findIndex((t) => t.uid === item.uid)
-        if (parentIndex === -1) continue
-        const parentIndent = item.indentLevel ?? 1
-        for (let i = parentIndex + 1; i < allTabs.length; i++) {
-          const t = allTabs[i]
-          const indent = t.indentLevel ?? 0
-          if (indent <= parentIndent) break // reached sibling/ancestor
-          if (
-            !additionalItems.find((it) => it.uid === t.uid) &&
-            !items.find((it) => it.uid === t.uid)
-          ) {
-            additionalItems.push(t)
-          }
-        }
-      }
-    }
-    items = items.concat(additionalItems)
-  }
+  items = collectDraggedItemsWithIncludedChildren(
+    items,
+    getType(props.item),
+    Settings.values.includeChildrenOfSelectedItems,
+    SessionTree.windowsByUid,
+  )
 
   console.debug('Final dragged items:', items)
 
   const dragInfo: DragInfo = {
-    dragType:
-      getType(props.item) === SelectionType.TAB
-        ? DragType.TAB
-        : DragType.WINDOW,
+    dragType: getDragType(props.item),
     items: items,
   }
 
@@ -112,16 +82,22 @@ function onDragStart(e: DragEvent) {
 
     if (isTab(props.item)) {
       for (const item of items) {
-        uris.push((item as Tab).url)
+        if (!isTab(item)) continue
+        uris.push(item.url)
         uris.push(`# ${item.title}`)
-        urls.push(`<a href="${(item as Tab).url}">${item.title}</a>`)
-        plain.push((item as Tab).url)
+        urls.push(`<a href="${item.url}">${item.title}</a>`)
+        plain.push(item.url)
       }
     } else if (isWindow(props.item)) {
       for (const item of items) {
+        if (!isWindow(item)) continue
         const title = item.title ? item.title : `Window id ${item.id}`
         urls.push(`<span>${title}</span>`)
         plain.push(title)
+      }
+    } else if (isNote(props.item)) {
+      for (const item of items) {
+        plain.push(isNote(item) ? item.text : item.uid)
       }
     }
 
@@ -155,20 +131,20 @@ function onDragStart(e: DragEvent) {
               .filter(Boolean)
               .slice(0, 15)
           }
-        } else {
+        } else if (isWindow(item)) {
           if (dragInfo.items.length === 1) {
-            title = (item as Window).title || `Window id ${(item as Window).id}`
-            body = [`Including ${(item as Window).tabs.length} tabs`]
+            title = item.title || `Window id ${item.id}`
+            body = [`Including ${item.children.length} items`]
           } else {
             title = `${dragInfo.items.length} windows`
             body = dragInfo.items
-              .map(
-                (i) =>
-                  (i as Window).title || `Window id ${(i as Window).id}` || '',
-              )
+              .map((i) => (isWindow(i) ? i.title || `Window id ${i.id}` : ''))
               .filter(Boolean)
               .slice(0, 15)
           }
+        } else {
+          title = isNote(item) ? item.text : 'Note'
+          body = []
         }
       }
 
@@ -235,16 +211,34 @@ function onDragStart(e: DragEvent) {
   }
 }
 
-function isWindow(item: Tab | Window): item is Window {
-  return (item as Window).tabs !== undefined
+function isWindow(item: TreeItem): item is Window {
+  return item.type === TreeItemType.WINDOW
 }
 
-function isTab(item: Tab | Window): item is Tab {
-  return (item as Tab).url !== undefined
+function isTab(item: TreeItem): item is Tab {
+  return item.type === TreeItemType.TAB
 }
 
-function getType(item: Tab | Window): SelectionType {
-  return isWindow(item) ? SelectionType.WINDOW : SelectionType.TAB
+function isNote(item: TreeItem): item is Note {
+  return item.type === TreeItemType.NOTE
+}
+
+function getType(item: TreeItem): SelectionType {
+  if (isWindow(item)) return SelectionType.WINDOW
+  if (isTab(item)) return SelectionType.TAB
+  return SelectionType.NOTE
+}
+
+function getDragType(item: TreeItem): DragType {
+  if (isWindow(item)) return DragType.WINDOW
+  if (isTab(item)) return DragType.TAB
+  return DragType.NOTE
+}
+
+function getDragAndDropType(item: TreeItem): string {
+  if (isWindow(item)) return 'window'
+  if (isTab(item)) return 'tab'
+  return 'note'
 }
 
 /*
@@ -255,6 +249,8 @@ function toggleCollapsedItem() {
     Messages.toggleCollapseWindow(props.item.uid)
   } else if (isTab(props.item)) {
     Messages.toggleCollapseTab(props.item.uid)
+  } else {
+    Messages.toggleCollapseNote(props.item.uid)
   }
 }
 
@@ -263,36 +259,27 @@ function toggleCollapsedItem() {
  */
 const childCount = computed(() => {
   if (isWindow(props.item)) {
-    return props.item.tabs.length
+    return countTreeItemDescendants(props.item)
+  } else if (isNote(props.item)) {
+    return countTreeItemDescendants(props.item, getContainingList(props.item))
   } else if (isTab(props.item)) {
-    const win = SessionTree.reactiveWindowsList.value.find(
-      (w) => w.uid === (props.item as Tab).windowUid,
-    )
-    if (!win) return 0
-    const allTabs = win.tabs
-    const parentIndex = allTabs.findIndex((t) => t.uid === props.item.uid)
-    if (parentIndex === -1) return 0
-
-    let count = 0
-    const parentIndent = (props.item as Tab).indentLevel ?? 1
-    for (let i = parentIndex + 1; i < allTabs.length; i++) {
-      const t = allTabs[i]
-      const indent = t.indentLevel ?? 0
-      if (indent <= parentIndent) break // reached sibling/ancestor
-      count++
-    }
-    return count
+    return countTreeItemDescendants(props.item, getContainingList(props.item))
   }
   return 0
 })
+
+function getContainingList(item: TreeItem): TreeItem[] {
+  if ((isTab(item) || isNote(item)) && item.windowUid) {
+    return SessionTree.windowsByUid.get(item.windowUid)?.children ?? []
+  }
+  return SessionTree.reactiveItems.value as TreeItem[]
+}
 
 function itemDblClickAction() {
   if (isWindow(props.item)) {
     Messages.windowDoubleClick(props.item.uid, props.item.id, props.item.state)
   } else if (isTab(props.item)) {
-    const window = SessionTree.reactiveWindowsList.value.find(
-      (w) => w.uid === (props.item as Tab).windowUid,
-    )
+    const window = SessionTree.windowsByUid.get((props.item as Tab).windowUid)
     if (!window) {
       console.warn(
         'Could not find parent window for tab double-click action',
@@ -307,6 +294,10 @@ function itemDblClickAction() {
       props.item.windowUid,
       props.item.state,
       props.item.url,
+    )
+  } else if (isNote(props.item)) {
+    import('@/services/modal-state').then(({ openEditNoteModal }) =>
+      openEditNoteModal(props.item as Note),
     )
   }
 }
@@ -324,6 +315,8 @@ function closeItemAction() {
     Messages.closeWindow(props.item.id, props.item.uid)
   } else if (isTab(props.item)) {
     Messages.closeTab(props.item.id, props.item.uid)
+  } else if (isNote(props.item)) {
+    Messages.removeNote(props.item.uid)
   }
 }
 
@@ -332,28 +325,37 @@ function closeItemAction() {
  */
 const childrenOpen = computed(() => {
   if (isWindow(props.item)) {
-    return props.item.tabs.some(
-      (tab) => tab.state === State.OPEN || tab.state === State.DISCARDED,
+    return props.item.children.some(
+      (tab) =>
+        isTab(tab) &&
+        (tab.state === State.OPEN || tab.state === State.DISCARDED),
     )
+  } else if (isNote(props.item)) {
+    return flatDescendantsHaveOpenTab(props.item)
   } else if (isTab(props.item)) {
-    const window = SessionTree.reactiveWindowsList.value.find(
-      (w) => w.uid === (props.item as Tab).windowUid,
-    )
-    if (!window) return false
-    const allTabs = window.tabs
-    const parentIndex = allTabs.findIndex((t) => t.uid === props.item.uid)
-    if (parentIndex === -1) return false
-
-    const parentIndent = props.item.indentLevel ?? 1
-    for (let i = parentIndex + 1; i < allTabs.length; i++) {
-      const tab = allTabs[i]
-      const indent = tab.indentLevel ?? 1
-      if (indent <= parentIndent) break
-      if (tab.state === State.OPEN || tab.state === State.DISCARDED) return true
-    }
+    return flatDescendantsHaveOpenTab(props.item)
   }
   return false
 })
+
+function flatDescendantsHaveOpenTab(item: TreeItem): boolean {
+  const list = getContainingList(item)
+  const parentIndex = list.findIndex((child) => child.uid === item.uid)
+  if (parentIndex === -1) return false
+
+  const parentIndent = item.indentLevel ?? 0
+  for (let i = parentIndex + 1; i < list.length; i++) {
+    const tab = list[i]
+    const indent = tab.indentLevel ?? 0
+    if (indent <= parentIndent) break
+    if (
+      isTab(tab) &&
+      (tab.state === State.OPEN || tab.state === State.DISCARDED)
+    )
+      return true
+  }
+  return false
+}
 </script>
 
 <template>
@@ -362,37 +364,37 @@ const childrenOpen = computed(() => {
     draggable="true"
     @dragstart="onDragStart"
     :drag-and-drop-id="String(item.uid)"
-    :drag-and-drop-type="getType(item) === SelectionType.TAB ? 'tab' : 'window'"
+    :drag-and-drop-type="getDragAndDropType(item)"
     :class="[
       'indentLevel-' + (item.indentLevel ?? 0),
       {
         'tree-item-selected': item.selected === true,
-        'tree-item-active': item.active === true,
+        'tree-item-active':
+          (isTab(item) || isWindow(item)) && item.active === true,
         'tree-item-active-latest-tab':
           isTab(item) &&
           item.active === true &&
-          SessionTree.reactiveWindowsList.value.find(
-            (w) => w.uid === (item as Tab).windowUid,
-          )?.active === true,
+          SessionTree.windowsByUid.get((item as Tab).windowUid)?.active ===
+            true,
+        'tree-item-note': isNote(item),
       },
     ]"
     :style="{
       '--indent-level': item.indentLevel ?? 0,
     }"
-    @click.stop="
-      Selection.selectItem(
-        item,
-        isTab(item) ? SelectionType.TAB : SelectionType.WINDOW,
-        $event,
-      )
-    "
+    @click.stop="Selection.selectItem(item, getType(item), $event)"
     @contextmenu.stop="
       ContextMenu.handleContextMenuClick(
-        isTab(item) ? ContextMenuType.Tab : ContextMenuType.Window,
+        isTab(item)
+          ? ContextMenuType.Tab
+          : isWindow(item)
+            ? ContextMenuType.Window
+            : ContextMenuType.Note,
         $event,
         isWindow(item) ? item : undefined,
         isTab(item) ? item : undefined,
-        isTab(item) ? SelectionType.TAB : SelectionType.WINDOW,
+        isNote(item) ? item : undefined,
+        getType(item),
       )
     "
     @dblclick="itemDblClickAction()"
@@ -404,7 +406,10 @@ const childrenOpen = computed(() => {
       @dblclick.stop
     >
       <span
-        v-if="item.state === State.OPEN || item.state === State.DISCARDED"
+        v-if="
+          (isTab(item) || isWindow(item)) &&
+          (item.state === State.OPEN || item.state === State.DISCARDED)
+        "
         class="tree-item-hover-menu-save"
         @click="saveItemAction()"
       ></span>
@@ -468,6 +473,7 @@ const childrenOpen = computed(() => {
         <use :xlink:href="'#pinned'" />
       </svg>
       <img
+        v-if="isTab(item) || isWindow(item)"
         class="tree-item-favicon"
         :src="
           isTab(item)
@@ -510,6 +516,11 @@ const childrenOpen = computed(() => {
             <span class="tree-item-custom-label-separator"> ~ </span>
           </template>
           <span>{{ props.item.title }}</span>
+        </div>
+      </template>
+      <template v-else-if="isNote(props.item)">
+        <div class="tree-item-title tree-item-note-text">
+          {{ props.item.text }}
         </div>
       </template>
     </div>
@@ -659,6 +670,10 @@ const childrenOpen = computed(() => {
   grid-area: prepend;
   height: 100%;
   width: 48px;
+}
+
+.tree-item-note .tree-item-prepend {
+  width: 20px;
 }
 
 .tree-item-indent-lines {
@@ -850,5 +865,9 @@ const childrenOpen = computed(() => {
 
 .tree-item.drag-over-mid {
   background: var(--drag-and-drop-background);
+}
+
+.tree-item-note-text {
+  color: var(--note-text-foreground);
 }
 </style>

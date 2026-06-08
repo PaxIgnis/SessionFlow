@@ -1,20 +1,32 @@
 import { SessionTree } from '@/services/foreground-tree'
 import { Selection } from '@/services/selection'
-import { SelectionType, Tab, Window } from '@/types/session-tree'
+import {
+  Note,
+  SelectionType,
+  Tab,
+  TreeItem,
+  TreeItemType,
+  Window,
+} from '@/types/session-tree'
 
 export function selectItem(
-  item: Window | Tab,
+  item: TreeItem,
   type: SelectionType,
   e: MouseEvent,
 ) {
   const firstItem = Selection.selectedItems.value[0]
+
+  const ctrlKey = e.ctrlKey || e.metaKey
+  const shiftKey = e.shiftKey
+  if (shiftKey && firstItem && selectItemRange(firstItem.item, item)) {
+    return
+  }
+
   // If the first item is not of the same type, clear the selection
   if (firstItem && firstItem.type !== type) {
     clearSelection()
   }
 
-  const ctrlKey = e.ctrlKey || e.metaKey
-  const shiftKey = e.shiftKey
   if (item.selected && ctrlKey) {
     // If the item is already selected and ctrl/meta key is pressed, deselect & remove from selection
     item.selected = false
@@ -30,7 +42,8 @@ export function selectItem(
   } else if (
     shiftKey &&
     firstItem &&
-    type === SelectionType.TAB &&
+    item.type === TreeItemType.TAB &&
+    firstItem.item.type === TreeItemType.TAB &&
     (firstItem.item as Tab).windowUid === (item as Tab).windowUid
   ) {
     // If multiple tabs selected in same window & shift, then select all tabs between firstItem and item
@@ -38,8 +51,8 @@ export function selectItem(
   } else if (
     shiftKey &&
     firstItem &&
-    type === SelectionType.WINDOW &&
-    firstItem.type === SelectionType.WINDOW &&
+    item.type === TreeItemType.WINDOW &&
+    firstItem.item.type === TreeItemType.WINDOW &&
     (firstItem.item as Window).uid !== (item as Window).uid
   ) {
     // If multiple windows selected & shift, then select all windows between firstItem and item
@@ -52,7 +65,82 @@ export function selectItem(
   }
 }
 
-export function removeSelectedItem(item: Window | Tab, type: SelectionType) {
+function selectItemRange(firstItem: TreeItem, lastItem: TreeItem): boolean {
+  if (selectTopLevelItemRange(firstItem, lastItem)) {
+    return true
+  }
+  return selectWindowChildItemRange(firstItem, lastItem)
+}
+
+function selectTopLevelItemRange(
+  firstItem: TreeItem,
+  lastItem: TreeItem,
+): boolean {
+  const firstIndex = SessionTree.reactiveItems.value.findIndex(
+    (item) => item.uid === firstItem.uid,
+  )
+  const lastIndex = SessionTree.reactiveItems.value.findIndex(
+    (item) => item.uid === lastItem.uid,
+  )
+  if (firstIndex === -1 || lastIndex === -1) return false
+
+  Selection.clearSelection()
+  const [minIndex, maxIndex] = [firstIndex, lastIndex].sort((a, b) => a - b)
+  for (let i = minIndex; i <= maxIndex; i++) {
+    addSelectedItem(SessionTree.reactiveItems.value[i])
+  }
+  return true
+}
+
+function selectWindowChildItemRange(
+  firstItem: TreeItem,
+  lastItem: TreeItem,
+): boolean {
+  const firstWindowUid = getWindowUid(firstItem)
+  const lastWindowUid = getWindowUid(lastItem)
+  if (!firstWindowUid || firstWindowUid !== lastWindowUid) return false
+
+  const window = SessionTree.windowsByUid.get(firstWindowUid)
+  if (!window) return false
+
+  const firstIndex = window.children.findIndex(
+    (item) => item.uid === firstItem.uid,
+  )
+  const lastIndex = window.children.findIndex(
+    (item) => item.uid === lastItem.uid,
+  )
+  if (firstIndex === -1 || lastIndex === -1) return false
+
+  Selection.clearSelection()
+  const [minIndex, maxIndex] = [firstIndex, lastIndex].sort((a, b) => a - b)
+  for (let i = minIndex; i <= maxIndex; i++) {
+    addSelectedItem(window.children[i])
+  }
+  return true
+}
+
+function getWindowUid(item: TreeItem): UID | undefined {
+  if (item.type === TreeItemType.TAB) return item.windowUid
+  if (item.type === TreeItemType.NOTE) return item.windowUid
+  return undefined
+}
+
+function addSelectedItem(item: TreeItem | undefined): void {
+  if (!item) return
+  item.selected = true
+  Selection.selectedItems.value.push({
+    item,
+    type: getSelectionType(item),
+  })
+}
+
+function getSelectionType(item: TreeItem): SelectionType {
+  if (item.type === TreeItemType.WINDOW) return SelectionType.WINDOW
+  if (item.type === TreeItemType.TAB) return SelectionType.TAB
+  return SelectionType.NOTE
+}
+
+export function removeSelectedItem(item: TreeItem, type: SelectionType) {
   const index = Selection.selectedItems.value.findIndex(
     (selectedItem) => selectedItem.item === item && selectedItem.type === type,
   )
@@ -66,15 +154,13 @@ export function removeSelectedItem(item: Window | Tab, type: SelectionType) {
 export function selectMultipleTabsInWindow(firstTab: Tab, lastTab: Tab) {
   Selection.clearSelection()
   // First find all tabs between the firstTab and lastTab
-  const window = SessionTree.reactiveWindowsList.value.find(
-    (w) => w.uid === firstTab.windowUid,
-  )
+  const window = SessionTree.windowsByUid.get(firstTab.windowUid)
   if (!window) {
     console.error('Invalid window selection')
     return
   }
 
-  const allTabs = window.tabs
+  const allTabs = window.children
   const startIndex = allTabs.indexOf(firstTab)
   const endIndex = allTabs.indexOf(lastTab)
 
@@ -83,55 +169,28 @@ export function selectMultipleTabsInWindow(firstTab: Tab, lastTab: Tab) {
     return
   }
 
-  // Push the firstTab first
-  firstTab.selected = true
-  Selection.selectedItems.value.push({
-    item: firstTab,
-    type: SelectionType.TAB,
-  })
-
-  // Then push all tabs in between
+  // Push all tabs and notes in between
   const [minIndex, maxIndex] = [startIndex, endIndex].sort((a, b) => a - b)
   for (let i = minIndex; i <= maxIndex; i++) {
-    if (i === startIndex) continue // Skip the firstTab as it's already added
-    const tab = allTabs[i]
-    if (tab) {
-      tab.selected = true
-      Selection.selectedItems.value.push({ item: tab, type: SelectionType.TAB })
-    }
+    addSelectedItem(allTabs[i])
   }
 }
 
 export function selectMultipleWindows(firstWindow: Window, lastWindow: Window) {
   Selection.clearSelection()
-  const allWindows = SessionTree.reactiveWindowsList.value
-  const startIndex = allWindows.findIndex((w) => w.uid === firstWindow.uid)
-  const endIndex = allWindows.findIndex((w) => w.uid === lastWindow.uid)
+  const allItems = SessionTree.reactiveItems.value
+  const startIndex = allItems.findIndex((item) => item.uid === firstWindow.uid)
+  const endIndex = allItems.findIndex((item) => item.uid === lastWindow.uid)
 
   if (startIndex === -1 || endIndex === -1) {
     console.error('Invalid window selection')
     return
   }
 
-  // Push the firstWindow first
-  firstWindow.selected = true
-  Selection.selectedItems.value.push({
-    item: firstWindow,
-    type: SelectionType.WINDOW,
-  })
-
-  // Then push all windows in between
+  // Push all windows and notes in between
   const [minIndex, maxIndex] = [startIndex, endIndex].sort((a, b) => a - b)
   for (let i = minIndex; i <= maxIndex; i++) {
-    if (i === startIndex) continue // Skip the firstWindow as it's already added
-    const window = allWindows[i]
-    if (window) {
-      window.selected = true
-      Selection.selectedItems.value.push({
-        item: window,
-        type: SelectionType.WINDOW,
-      })
-    }
+    addSelectedItem(allItems[i])
   }
 }
 
@@ -157,11 +216,19 @@ export function getSelectedTabs(): Array<Tab> {
     .map((selectedItem) => selectedItem.item as Tab)
 }
 
-export function getSelectedItems(type: SelectionType): Array<Window | Tab> {
+export function getSelectedNotes(): Array<Note> {
+  return Selection.selectedItems.value
+    .filter((selectedItem) => selectedItem.type === SelectionType.NOTE)
+    .map((selectedItem) => selectedItem.item as Note)
+}
+
+export function getSelectedItems(type: SelectionType): Array<TreeItem> {
   if (type === SelectionType.WINDOW) {
     return getSelectedWindows()
   } else if (type === SelectionType.TAB) {
     return getSelectedTabs()
+  } else if (type === SelectionType.NOTE) {
+    return getSelectedNotes()
   }
   return []
 }
@@ -176,7 +243,7 @@ export function getSelectedItems(type: SelectionType): Array<Window | Tab> {
  * @param e
  */
 export function selectItemForContextMenu(
-  item: Window | Tab,
+  item: TreeItem,
   type: SelectionType,
   e: MouseEvent,
 ): void {

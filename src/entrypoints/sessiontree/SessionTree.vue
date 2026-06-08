@@ -16,7 +16,10 @@ import {
 import { Selection } from '@/services/selection'
 import { Settings } from '@/services/settings'
 import '@/styles/variables.css'
-import { VisibleWindow } from '@/types/session-tree'
+import {
+  TreeItem as SessionTreeItem,
+  TreeItemType,
+} from '@/types/session-tree'
 import { computed, onBeforeUnmount, onMounted } from 'vue'
 
 let unsubscribeFromTreeDelta: (() => void) | undefined
@@ -58,14 +61,25 @@ window.onbeforeunload = () => {
 
 const faviconService = Favicons
 
-const visibleTreeItems = computed<VisibleWindow[]>(() => {
-  SessionTree.reactiveWindowsList.value.forEach((w) =>
-    w.tabs.forEach((t) => void t.isVisible),
-  )
-  return SessionTree.reactiveWindowsList.value.map((w) => ({
-    window: w,
-    visibleTabs: w.tabs.filter((t) => t.isVisible === true),
-  }))
+const visibleTreeItems = computed<SessionTreeItem[]>(() => {
+  const items: SessionTreeItem[] = []
+  const appendVisibleList = (list: SessionTreeItem[]) => {
+    list.forEach((item) => {
+      if (item.parentUid === undefined || item.isVisible !== false) {
+        appendVisible(item)
+      }
+    })
+  }
+  const appendVisible = (item: SessionTreeItem) => {
+    if (item.isVisible !== false) {
+      items.push(item)
+      if (!item.collapsed && item.type === TreeItemType.WINDOW) {
+        appendVisibleList(item.children)
+      }
+    }
+  }
+  appendVisibleList(SessionTree.reactiveItems.value as SessionTreeItem[])
+  return items
 })
 
 // On component mount
@@ -135,11 +149,11 @@ onBeforeUnmount(() => {
 const getTabTree = () => {
   console.log(
     'Session Tree has ',
-    SessionTree.reactiveWindowsList.value.length,
+    SessionTree.reactiveItems.value.length,
     ' windows',
   )
-  console.log(SessionTree.reactiveWindowsList.value)
-  console.log(SessionTree.reactiveWindowsList)
+  console.log(SessionTree.reactiveItems.value)
+  console.log(SessionTree.reactiveItems)
   console.log('Visible Tree Items:', visibleTreeItems.value)
   Messages.printSessionTree()
 }
@@ -173,6 +187,17 @@ function handleEditCustomLabelConfirm(label: string) {
   closeModal()
 }
 
+function handleEditNoteConfirm(text: string) {
+  if (ModalState.active?.kind === 'editNote') {
+    Messages.updateNoteText(ModalState.active.note.uid, text.slice(0, 500))
+  }
+  closeModal()
+}
+
+function handleEditNoteCancel() {
+  closeModal()
+}
+
 function handleEditCustomLabelCancel() {
   closeModal()
 }
@@ -202,22 +227,12 @@ function handleEditCustomLabelCancel() {
 
     <template
       v-for="item in visibleTreeItems"
-      :key="item.window.uid"
+      :key="item.uid"
     >
       <TreeItem
-        :item="item.window"
+        :item="item"
         :favicon-service="faviconService"
       />
-
-      <template
-        v-for="tab in item.visibleTabs"
-        :key="`${item.window.uid}-${tab.uid}`"
-      >
-        <TreeItem
-          :item="tab"
-          :favicon-service="faviconService"
-        />
-      </template>
     </template>
 
     <div style="margin-bottom: 95vh"></div>
@@ -238,6 +253,15 @@ function handleEditCustomLabelCancel() {
       placeholder="Enter custom label"
       @confirm="handleEditCustomLabelConfirm"
       @cancel="handleEditCustomLabelCancel"
+    />
+
+    <EditTextModal
+      v-if="ModalState.active?.kind === 'editNote'"
+      title="Edit Note"
+      :initial-value="ModalState.active.note.text"
+      placeholder="Enter note text"
+      @confirm="handleEditNoteConfirm"
+      @cancel="handleEditNoteCancel"
     />
   </div>
 </template>

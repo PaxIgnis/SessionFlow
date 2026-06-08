@@ -7,11 +7,11 @@ import {
   SessionTreePortRequest,
   SessionTreePortResponse,
 } from '@/types/runtime-port-service'
-import { Window } from '@/types/session-tree'
+import { TopLevelTreeItem } from '@/types/session-tree'
 
 type DispatchCommand = (message: Messages.SessionTreeMessage) => void
 
-type SnapshotGetter = () => Window[]
+type SnapshotGetter = () => TopLevelTreeItem[]
 
 const sessionTreePorts = new Set<browser.runtime.Port>()
 let treeVersion = 0
@@ -35,7 +35,7 @@ function nextTreeVersion(): number {
   return treeVersion
 }
 
-function getTreeSnapshot(): Window[] {
+function getTreeSnapshot(): TopLevelTreeItem[] {
   if (!getSnapshotHandler) {
     return []
   }
@@ -46,14 +46,14 @@ function sendResponse(
   port: browser.runtime.Port,
   requestId: string,
   ok: boolean,
-  payload?: { windows?: Window[]; error?: string },
+  payload?: { treeItems?: TopLevelTreeItem[]; error?: string },
 ): void {
   const response: SessionTreePortResponse = {
     type: 'response',
     requestId,
     ok,
     version: treeVersion,
-    windows: payload?.windows,
+    treeItems: payload?.treeItems,
     error: payload?.error,
   }
   port.postMessage(response as SessionTreePortMessage)
@@ -160,7 +160,7 @@ async function handleSubscribe(
   }
 
   sendResponse(port, requestId, true, {
-    windows: getTreeSnapshot(),
+    treeItems: getTreeSnapshot(),
   })
 }
 
@@ -196,7 +196,7 @@ export function emitTreeDelta(delta: SessionTreeDelta): void {
 export function emitTreeReplaced(): void {
   emitTreeDelta({
     op: 'treeReplaced',
-    windows: getTreeSnapshot(),
+    treeItems: getTreeSnapshot(),
   })
 }
 
@@ -213,7 +213,7 @@ export async function sendTreeCommand(
   }
 }
 
-export async function subscribeTreePort(): Promise<Window[]> {
+export async function subscribeTreePort(): Promise<TopLevelTreeItem[]> {
   const response = await sendRequest({
     type: 'subscribe',
     requestId: createRequestId(),
@@ -221,7 +221,7 @@ export async function subscribeTreePort(): Promise<Window[]> {
   if (!response.ok) {
     throw new Error(response.error || 'Failed to subscribe to session tree')
   }
-  return response.windows || []
+  return response.treeItems || []
 }
 
 export function onTreeDeltaPort(
