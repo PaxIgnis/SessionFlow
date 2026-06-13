@@ -30,7 +30,9 @@ export const initializeSettings = async () => {
     await Settings.loadSettingsFromStorage()
     if (Settings.values.openSessionTreeOnStartup) {
       setTimeout(() => {
-        openSessionTree()
+        openSessionTree().catch((error) => {
+          console.error('Failed to open session tree on startup:', error)
+        })
       }, 1000)
     }
     updateWindowPositionInterval()

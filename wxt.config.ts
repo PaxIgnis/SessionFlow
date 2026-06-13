@@ -1,4 +1,5 @@
 import createSvgSpritePlugin from 'vite-plugin-svg-sprite'
+import istanbul from 'vite-plugin-istanbul'
 import { defineConfig } from 'wxt'
 
 // See https://wxt.dev/api/config.html
@@ -43,13 +44,27 @@ export default defineConfig({
   // firefoxArgs: ['profile-create-if-missing'],
   // },
   srcDir: 'src',
-  vite: () => ({
-    plugins: [
+  vite: () => {
+    const plugins = [
       createSvgSpritePlugin({
         exportType: 'vanilla',
         include: ['**/assets/*.svg'],
         symbolId: '[name]',
       }),
-    ],
-  }),
+    ]
+
+    if (process.env.E2E_COVERAGE === 'true') {
+      plugins.push(
+        istanbul({
+          include: ['src/**/*'],
+          exclude: ['tests/**/*', 'node_modules/**/*'],
+          extension: ['.js', '.ts', '.vue'],
+          requireEnv: false,
+          forceBuildInstrument: true,
+        }),
+      )
+    }
+
+    return { plugins }
+  },
 })

@@ -13,6 +13,12 @@ stats.html
 stats-*.json
 .wxt
 web-ext.config.ts
+test-results
+coverage
+coverage-e2e
+coverage-all
+.cache
+.pnpm-store
 
 # Editor directories and files
 .vscode/*

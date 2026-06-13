@@ -1,7 +1,7 @@
 import { sendTreeCommand } from '@/services/runtime-port-service'
 import { Settings } from '@/services/settings'
 import * as Messages from '@/types/messages'
-import { Note, State, Tab, Window } from '@/types/session-tree'
+import { State, Tab, Window } from '@/types/session-tree'
 
 // ==============================
 // Tab Messages

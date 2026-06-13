@@ -536,6 +536,8 @@ export async function openTab(message: {
       )
       if (!window) {
         console.error('Window is undefined')
+        Tree.updateWindowState(message.windowUid, State.SAVED)
+        Tree.updateTabState(message.tabUid, State.SAVED)
         return
       }
       // because Firefox doesn't support opening unfocused windows, we send focus back
@@ -915,22 +917,11 @@ export function tabIndentDecrease(tabUids: UID[]): void {
     const newIndent = tab.indentLevel - 1
     Tree.updateTab({ tabUid: tab.uid }, { indentLevel: newIndent })
 
-    const oldParent = getParentItem(tab.parentUid)
-    const oldParentIndex = win.children.findIndex(
-      (t) => t.uid === tab.parentUid,
-    )
-    // if this was the only child or first child, clear isParent flag on old parent
-    if (
-      tab.parentUid &&
-      oldParentIndex !== -1 &&
-      oldParent &&
-      (childrenMap.get(tab.parentUid)?.length === 1 ||
-        oldParentIndex === tabIndex - 1)
-    )
-      updateParentItemFlag(oldParent.uid, false)
+    const oldParentUid = tab.parentUid
+    const oldParent = getParentItem(oldParentUid)
 
     // siblings directly below the tab now become its children
-    const siblings = childrenMap.get(tab.parentUid!) || []
+    const siblings = oldParentUid ? childrenMap.get(oldParentUid) || [] : []
     const lowerSiblings = siblings.filter(
       (s) => win.children.findIndex((t) => t.uid === s.uid) > tabIndex,
     )
@@ -957,6 +948,13 @@ export function tabIndentDecrease(tabUids: UID[]): void {
     const children = childrenMap.get(tab.uid) || []
     if (children.length)
       decreaseIndentRecursively(children, childrenMap, minimumIndent)
+
+    if (oldParent) {
+      updateParentItemFlag(
+        oldParent.uid,
+        win.children.some((child) => child.parentUid === oldParent.uid),
+      )
+    }
   }
 }
 

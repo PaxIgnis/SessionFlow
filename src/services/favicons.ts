@@ -69,14 +69,18 @@ export class FaviconService {
    * @returns {Promise<void>} - A promise that resolves when the cache has been loaded
    */
   private async loadCacheFromStorage() {
-    const cached = await browser.storage.local.get(this.config.storageKey)
-    if (!cached?.[this.config.storageKey]) return
-    const parsedCache = JSON.parse(
-      cached[this.config.storageKey],
-    ) as FaviconCacheEntry[]
-    parsedCache.forEach((entry) => {
-      this.cache.set(entry.url, entry)
-    })
+    try {
+      const cached = await browser.storage.local.get(this.config.storageKey)
+      if (!cached?.[this.config.storageKey]) return
+      const parsedCache = JSON.parse(
+        cached[this.config.storageKey],
+      ) as FaviconCacheEntry[]
+      parsedCache.forEach((entry) => {
+        this.cache.set(entry.url, entry)
+      })
+    } catch (error) {
+      console.error('Failed to load favicon cache from storage', error)
+    }
   }
 
   /**
