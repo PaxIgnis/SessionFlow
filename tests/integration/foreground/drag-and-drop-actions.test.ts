@@ -12,6 +12,7 @@ import {
 } from '../../helpers/fake-dom'
 import {
   makeForegroundNote,
+  makeForegroundSeparator,
   makeForegroundTab,
   makeForegroundWindow,
   resetForegroundTree,
@@ -340,6 +341,60 @@ describe('drag-and-drop onDrop command path', () => {
       false,
       false,
     )
+  })
+
+  it('sends moveTreeItems when dropping a separator below a tab sibling', () => {
+    const tab = makeForegroundTab('tab-1' as UID)
+    const separator = makeForegroundSeparator('separator-1' as UID)
+    const window = makeForegroundWindow('window-1' as UID, [tab, separator])
+    resetForegroundTree([window])
+    DragAndDrop.dragInfo = {
+      dragType: DragType.SEPARATOR,
+      items: [separator],
+    }
+
+    const target = createFakeDragTarget({
+      id: tab.uid,
+      type: 'tab',
+    })
+    const event = createFakeDragEvent({ target, yRatio: 0.9 })
+
+    DragAndDrop.onDrop(event)
+
+    expect(moveTreeItems).toHaveBeenCalledWith(
+      [separator.uid],
+      1,
+      undefined,
+      window.uid,
+      false,
+      false,
+    )
+  })
+
+  it('drops a tab near the middle of a separator as a sibling, not as a child', () => {
+    const separator = makeForegroundSeparator('separator-1' as UID)
+    const tab = makeForegroundTab('tab-1' as UID)
+    const window = makeForegroundWindow('window-1' as UID, [separator, tab])
+    resetForegroundTree([window])
+    DragAndDrop.dragInfo = { dragType: DragType.TAB, items: [tab] }
+
+    const target = createFakeDragTarget({
+      id: separator.uid,
+      type: 'separator',
+    })
+    const event = createFakeDragEvent({ target, yRatio: 0.5 })
+
+    DragAndDrop.onDrop(event)
+
+    expect(moveTabs).toHaveBeenCalledWith(
+      [tab.uid],
+      window.uid,
+      1,
+      undefined,
+      false,
+    )
+    expect(moveTreeItems).not.toHaveBeenCalled()
+    expect(moveWindows).not.toHaveBeenCalled()
   })
 
   it('drags an expanded note out of a window without including its tab child', () => {

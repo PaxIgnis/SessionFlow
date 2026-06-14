@@ -120,6 +120,10 @@ export function onDragEnter(e: DragEvent): void {
     const note = SessionTree.notesByUid.get(id)
     if (!note) return
     DragAndDrop.dragState.destinationId = id
+  } else if (type === 'separator') {
+    const separator = SessionTree.separatorsByUid.get(id)
+    if (!separator) return
+    DragAndDrop.dragState.destinationId = id
   }
 }
 
@@ -201,13 +205,16 @@ export function onDrop(e: DragEvent): void {
   const includeDescendantsForDraggedItems =
     effectiveSourceType === DragType.NOTE
       ? shouldIncludeDescendantsForDraggedItems(draggedItems)
+      : effectiveSourceType === DragType.SEPARATOR
+        ? false
       : true
 
   // if src and drop target is type tab
   if (
     DragAndDrop.dragState.destinationType === DropType.TAB &&
     (effectiveSourceType === DragType.TAB ||
-      effectiveSourceType === DragType.NOTE)
+      effectiveSourceType === DragType.NOTE ||
+      effectiveSourceType === DragType.SEPARATOR)
   ) {
     const destinationTab = SessionTree.tabsByUid.get(id as UID)
     const destinationWindow = destinationTab
@@ -263,7 +270,8 @@ export function onDrop(e: DragEvent): void {
     if (
       DragAndDrop.dragState.dropPosition === DropPosition.ABOVE &&
       (effectiveSourceType === DragType.WINDOW ||
-        effectiveSourceType === DragType.NOTE)
+        effectiveSourceType === DragType.NOTE ||
+        effectiveSourceType === DragType.SEPARATOR)
     ) {
       dropIndex = destinationWindowIndex
       dropParentUid = destinationWindow.parentUid
@@ -282,7 +290,8 @@ export function onDrop(e: DragEvent): void {
     else if (
       DragAndDrop.dragState.dropPosition === DropPosition.BELOW &&
       (effectiveSourceType === DragType.WINDOW ||
-        effectiveSourceType === DragType.NOTE)
+        effectiveSourceType === DragType.NOTE ||
+        effectiveSourceType === DragType.SEPARATOR)
     ) {
       dropIndex = destinationWindowIndex + 1
       dropParentUid = destinationWindow.parentUid
@@ -301,7 +310,8 @@ export function onDrop(e: DragEvent): void {
     else if (
       DragAndDrop.dragState.dropPosition === DropPosition.MID &&
       (effectiveSourceType === DragType.TAB ||
-        effectiveSourceType === DragType.NOTE)
+        effectiveSourceType === DragType.NOTE ||
+        effectiveSourceType === DragType.SEPARATOR)
     ) {
       // TODO: Add setting to control whether new child tabs are added at start or end of children
       dropIndex = 0 // currently always adds as first tab
@@ -341,17 +351,44 @@ export function onDrop(e: DragEvent): void {
       dropParentUid = destinationNote.uid
     }
   }
+  // if drop target is a separator
+  else if (DragAndDrop.dragState.destinationType === DropType.SEPARATOR) {
+    const destinationSeparator = SessionTree.separatorsByUid.get(id as UID)
+    if (!destinationSeparator) return
+    const destination = findItemLocation(
+      SessionTree.reactiveItems.value as TreeItem[],
+      destinationSeparator.uid,
+    )
+    if (!destination) return
+    targetWindowUid = destinationSeparator.windowUid
+
+    if (DragAndDrop.dragState.dropPosition === DropPosition.ABOVE) {
+      dropIndex = destination.index
+      dropParentUid = destination.parent
+    } else if (DragAndDrop.dragState.dropPosition === DropPosition.BELOW) {
+      dropIndex = destination.index + 1
+      dropParentUid = destination.parent
+    } else {
+      clearDragIndicators(DragAndDrop.dragState.prevEl)
+      reset()
+      return
+    }
+  }
   // if src is tab and dest is tab or window
   if (
     effectiveSourceType === DragType.TAB &&
     (DragAndDrop.dragState.destinationType === DropType.TAB ||
       DragAndDrop.dragState.destinationType === DropType.WINDOW ||
-      DragAndDrop.dragState.destinationType === DropType.NOTE)
+      DragAndDrop.dragState.destinationType === DropType.NOTE ||
+      DragAndDrop.dragState.destinationType === DropType.SEPARATOR)
   ) {
     if (targetWindowUid) {
       const tabs = draggedItems.filter((item) => item.type === TreeItemType.TAB)
       const notes = draggedItems.filter(
         (item) => item.type === TreeItemType.NOTE,
+      )
+      const separators = draggedItems.filter(
+        (item) => item.type === TreeItemType.SEPARATOR,
       )
       if (tabs.length > 0) {
         Messages.moveTabs(
@@ -371,20 +408,32 @@ export function onDrop(e: DragEvent): void {
           false,
         )
       }
+      if (separators.length > 0) {
+        Messages.moveTreeItems(
+          separators.map((separator) => separator.uid),
+          dropIndex + tabs.length + notes.length,
+          dropParentUid,
+          targetWindowUid,
+          false,
+          false,
+        )
+      }
     }
   }
   // if src is window and dest is window or note
   else if (
     effectiveSourceType === DragType.WINDOW &&
     (DragAndDrop.dragState.destinationType === DropType.WINDOW ||
-      DragAndDrop.dragState.destinationType === DropType.NOTE)
+      DragAndDrop.dragState.destinationType === DropType.NOTE ||
+      DragAndDrop.dragState.destinationType === DropType.SEPARATOR)
   ) {
     Messages.moveTreeItems(
       draggedItems
         .filter(
           (item) =>
             item.type === TreeItemType.WINDOW ||
-            item.type === TreeItemType.NOTE,
+            item.type === TreeItemType.NOTE ||
+            item.type === TreeItemType.SEPARATOR,
         )
         .map((item) => item.uid),
       dropIndex,
@@ -412,6 +461,17 @@ export function onDrop(e: DragEvent): void {
       targetWindowUid,
       false,
       includeDescendantsForDraggedItems,
+    )
+  }
+  // if src is separator and dest is anything
+  else if (effectiveSourceType === DragType.SEPARATOR) {
+    Messages.moveTreeItems(
+      draggedItems.map((item) => item.uid),
+      dropIndex,
+      dropParentUid,
+      targetWindowUid,
+      false,
+      false,
     )
   }
   clearDragIndicators(DragAndDrop.dragState.prevEl)
@@ -485,6 +545,8 @@ function updateDropTarget(e: DragEvent): void {
     destType = DropType.WINDOW
   } else if (type === 'note') {
     destType = DropType.NOTE
+  } else if (type === 'separator') {
+    destType = DropType.SEPARATOR
   }
   DragAndDrop.dragState.destinationType = destType
 
@@ -515,20 +577,31 @@ function updateDropTarget(e: DragEvent): void {
     if (
       DragAndDrop.dragState.destinationType !== DropType.WINDOW &&
       DragAndDrop.dragState.destinationType !== DropType.TAB &&
-      DragAndDrop.dragState.destinationType !== DropType.NOTE
+      DragAndDrop.dragState.destinationType !== DropType.NOTE &&
+      DragAndDrop.dragState.destinationType !== DropType.SEPARATOR
     )
       return
   } else if (sourceType === DragType.WINDOW) {
     if (
       DragAndDrop.dragState.destinationType !== DropType.WINDOW &&
-      DragAndDrop.dragState.destinationType !== DropType.NOTE
+      DragAndDrop.dragState.destinationType !== DropType.NOTE &&
+      DragAndDrop.dragState.destinationType !== DropType.SEPARATOR
     )
       return
   } else if (sourceType === DragType.NOTE) {
     if (
       DragAndDrop.dragState.destinationType !== DropType.WINDOW &&
       DragAndDrop.dragState.destinationType !== DropType.TAB &&
-      DragAndDrop.dragState.destinationType !== DropType.NOTE
+      DragAndDrop.dragState.destinationType !== DropType.NOTE &&
+      DragAndDrop.dragState.destinationType !== DropType.SEPARATOR
+    )
+      return
+  } else if (sourceType === DragType.SEPARATOR) {
+    if (
+      DragAndDrop.dragState.destinationType !== DropType.WINDOW &&
+      DragAndDrop.dragState.destinationType !== DropType.TAB &&
+      DragAndDrop.dragState.destinationType !== DropType.NOTE &&
+      DragAndDrop.dragState.destinationType !== DropType.SEPARATOR
     )
       return
   }
@@ -546,6 +619,8 @@ function updateDropTarget(e: DragEvent): void {
   const includeDescendants =
     sourceType === DragType.NOTE
       ? shouldIncludeDescendantsForDraggedItems(draggedItems)
+      : sourceType === DragType.SEPARATOR
+        ? false
       : true
 
   if (
@@ -588,6 +663,10 @@ function getDropPositionForTarget(
     return DropPosition.MID
   }
 
+  if (destinationType === DropType.SEPARATOR) {
+    return y < h / 2 ? DropPosition.ABOVE : DropPosition.BELOW
+  }
+
   if (
     sourceType === DragType.WINDOW &&
     destinationType === DropType.WINDOW
@@ -615,6 +694,9 @@ function isWindowBackedDropTarget(
   if (destinationType === DropType.TAB) return true
   if (destinationType === DropType.NOTE) {
     return Boolean(SessionTree.notesByUid.get(destinationId)?.windowUid)
+  }
+  if (destinationType === DropType.SEPARATOR) {
+    return Boolean(SessionTree.separatorsByUid.get(destinationId)?.windowUid)
   }
   return false
 }
@@ -677,6 +759,10 @@ function getDropParentUidForValidation(
     const note = SessionTree.notesByUid.get(destinationId)
     return dropPosition === DropPosition.MID ? note?.uid : note?.parentUid
   }
+  if (destinationType === DropType.SEPARATOR) {
+    const separator = SessionTree.separatorsByUid.get(destinationId)
+    return dropPosition === DropPosition.MID ? undefined : separator?.parentUid
+  }
   return undefined
 }
 
@@ -687,7 +773,10 @@ function getEffectiveDragType(items: TreeItem[]): DragType {
   if (items.some((item) => item.type === TreeItemType.TAB)) {
     return DragType.TAB
   }
-  return DragType.NOTE
+  if (items.some((item) => item.type === TreeItemType.NOTE)) {
+    return DragType.NOTE
+  }
+  return DragType.SEPARATOR
 }
 
 function shouldIncludeDescendantsForDraggedItems(items: TreeItem[]): boolean {

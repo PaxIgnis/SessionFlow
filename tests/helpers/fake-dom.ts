@@ -30,7 +30,7 @@ export function installFakeDocument(): () => void {
 
 export function createFakeDragTarget(options: {
   id: UID
-  type: 'tab' | 'window' | 'note'
+  type: 'tab' | 'window' | 'note' | 'separator'
   top?: number
   height?: number
 }): FakeDragTarget {

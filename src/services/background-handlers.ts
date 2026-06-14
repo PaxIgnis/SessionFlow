@@ -570,6 +570,16 @@ function dispatchCommand(message: Messages.SessionTreeMessage): void {
     Tree.toggleCollapseNote(message.noteUid)
   } else if (message.action === 'removeNote') {
     Tree.removeNote(message.noteUid)
+  } else if (message.action === 'createSeparator') {
+    Tree.createSeparator(message.parentUid, message.index)
+  } else if (message.action === 'removeSeparator') {
+    Tree.removeSeparator(message.separatorUid)
+  } else if (message.action === 'createSeparatorBelow') {
+    Tree.createSeparatorBelow(message.separatorUid)
+  } else if (message.action === 'separatorIndentIncrease') {
+    Tree.separatorIndentIncrease(message.separatorUids)
+  } else if (message.action === 'separatorIndentDecrease') {
+    Tree.separatorIndentDecrease(message.separatorUids)
   } else if (message.action === 'deselectAllItems') {
     Tree.deselectAllItems()
   } else if (message.action === 'tabIndentIncrease') {

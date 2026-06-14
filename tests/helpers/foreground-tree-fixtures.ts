@@ -1,6 +1,7 @@
 import { SessionTree } from '@/services/foreground-tree'
 import {
   Note,
+  Separator,
   State,
   Tab,
   TopLevelTreeItem,
@@ -17,6 +18,7 @@ export function resetForegroundTree(items: TopLevelTreeItem[] = []): void {
   SessionTree.windowsByUid.clear()
   SessionTree.tabsByUid.clear()
   SessionTree.notesByUid.clear()
+  SessionTree.separatorsByUid.clear()
   nextWindowId = 100
   nextTabId = 1000
   if (items.length) {
@@ -26,7 +28,7 @@ export function resetForegroundTree(items: TopLevelTreeItem[] = []): void {
 
 export function makeForegroundWindow(
   uid: UID,
-  children: Array<Tab | Note> = [],
+  children: Array<Tab | Note | Separator> = [],
   overrides: Partial<Window> = {},
 ): Window {
   const window: Window = {
@@ -76,6 +78,22 @@ export function makeForegroundNote(
     selected: false,
     collapsed: false,
     indentLevel: 1,
+    ...overrides,
+  }
+}
+
+export function makeForegroundSeparator(
+  uid: UID,
+  overrides: Partial<Separator> = {},
+): Separator {
+  return {
+    type: TreeItemType.SEPARATOR,
+    uid,
+    selected: false,
+    windowUid: undefined,
+    indentLevel: 1,
+    isParent: false,
+    collapsed: false,
     ...overrides,
   }
 }

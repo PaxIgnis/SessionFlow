@@ -51,14 +51,27 @@ export interface Note {
   isVisible?: boolean
 }
 
-export type TreeItem = Window | Tab | Note
-export type TopLevelTreeItem = Window | Note
-export type WindowChild = Tab | Note
+export interface Separator {
+  type: TreeItemType.SEPARATOR
+  uid: UID
+  selected: boolean
+  windowUid?: UID
+  indentLevel: number
+  parentUid?: UID
+  isVisible?: boolean
+  isParent?: false
+  collapsed?: false
+}
+
+export type TreeItem = Window | Tab | Note | Separator
+export type TopLevelTreeItem = Window | Note | Separator
+export type WindowChild = Tab | Note | Separator
 
 export const enum TreeItemType {
   WINDOW = 0,
   TAB = 1,
   NOTE = 2,
+  SEPARATOR = 3,
 }
 
 export interface VisibleWindow {
@@ -96,6 +109,7 @@ export const enum SelectionType {
   WINDOW = 0,
   TAB = 1,
   NOTE = 2,
+  SEPARATOR = 3,
 }
 
 export interface SelectedItem {
@@ -107,6 +121,7 @@ export const enum DragType {
   TAB = 0,
   WINDOW = 1,
   NOTE = 2,
+  SEPARATOR = 3,
 }
 
 export const enum DropType {
@@ -114,6 +129,7 @@ export const enum DropType {
   WINDOW = 1,
   OTHER = 2,
   NOTE = 3,
+  SEPARATOR = 4,
 }
 
 export const enum DropPosition {

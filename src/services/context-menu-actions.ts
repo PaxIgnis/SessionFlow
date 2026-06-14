@@ -7,7 +7,13 @@ import {
 } from '@/types/context-menu'
 // import { Settings } from '@/services/settings'
 import { Selection } from '@/services/selection'
-import { Note, SelectionType, Tab, Window } from '@/types/session-tree'
+import {
+  Note,
+  SelectionType,
+  Separator,
+  Tab,
+  Window,
+} from '@/types/session-tree'
 
 /**
  * Controls logic opening of context menu based on selected type.
@@ -29,6 +35,8 @@ export function open(type: ContextMenuType): void {
     items = createContextMenuItems(ContextMenu.tabConfig)
   } else if (type === ContextMenuType.Note) {
     items = createContextMenuItems(ContextMenu.noteConfig)
+  } else if (type === ContextMenuType.Separator) {
+    items = createContextMenuItems(ContextMenu.separatorConfig)
   } else if (type === ContextMenuType.Panel) {
     // TODO: Implement panel context menu
     items = createContextMenuItems(ContextMenu.panelConfig)
@@ -113,6 +121,7 @@ export function handleContextMenuClick(
   window?: Window,
   tab?: Tab,
   note?: Note,
+  separator?: Separator,
   selectionType?: SelectionType,
 ): void {
   if (type === ContextMenuType.Window && window) {
@@ -131,6 +140,12 @@ export function handleContextMenuClick(
     Selection.selectItemForContextMenu(
       note,
       selectionType || SelectionType.NOTE,
+      e,
+    )
+  } else if (type === ContextMenuType.Separator && separator) {
+    Selection.selectItemForContextMenu(
+      separator,
+      selectionType || SelectionType.SEPARATOR,
       e,
     )
   }

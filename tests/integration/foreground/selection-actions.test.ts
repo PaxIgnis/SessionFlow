@@ -4,6 +4,7 @@ import { Selection } from '@/services/selection'
 import { SelectionType } from '@/types/session-tree'
 import {
   makeForegroundNote,
+  makeForegroundSeparator,
   makeForegroundTab,
   makeForegroundWindow,
   resetForegroundTree,
@@ -65,7 +66,7 @@ describe('selection actions', () => {
 
   it('shift-selects a range of mixed children in the same window', () => {
     const first = makeForegroundTab('tab-1' as UID)
-    const middle = makeForegroundNote('note-1' as UID)
+    const middle = makeForegroundSeparator('separator-1' as UID)
     const last = makeForegroundTab('tab-2' as UID)
     const window = makeForegroundWindow('window-1' as UID, [
       first,
@@ -87,11 +88,14 @@ describe('selection actions', () => {
     ])
   })
 
-  it('shift-selects a top-level range containing windows and notes', () => {
+  it('shift-selects a top-level range containing windows, notes, and separators', () => {
     const first = makeForegroundWindow('window-1' as UID)
     const note = makeForegroundNote('note-1' as UID, { indentLevel: 0 })
+    const separator = makeForegroundSeparator('separator-1' as UID, {
+      indentLevel: 0,
+    })
     const last = makeForegroundWindow('window-2' as UID)
-    resetForegroundTree([first, note, last])
+    resetForegroundTree([first, note, separator, last])
     const indexedFirst = SessionTree.windowsByUid.get(first.uid)!
     const indexedLast = SessionTree.windowsByUid.get(last.uid)!
 
@@ -101,7 +105,36 @@ describe('selection actions', () => {
     expect(Selection.selectedItems.value.map((item) => item.item.uid)).toEqual([
       first.uid,
       note.uid,
+      separator.uid,
       last.uid,
+    ])
+  })
+
+  it('selects separators with their own selection type', () => {
+    const first = makeForegroundSeparator('separator-1' as UID, {
+      indentLevel: 0,
+    })
+    const second = makeForegroundSeparator('separator-2' as UID, {
+      indentLevel: 0,
+    })
+    resetForegroundTree([first, second])
+    const indexedFirst = SessionTree.separatorsByUid.get(first.uid)!
+    const indexedSecond = SessionTree.separatorsByUid.get(second.uid)!
+
+    Selection.selectItem(indexedFirst, SelectionType.SEPARATOR, mouse())
+    Selection.selectItem(
+      indexedSecond,
+      SelectionType.SEPARATOR,
+      mouse({ ctrlKey: true }),
+    )
+
+    expect(Selection.selectedItems.value.map((item) => item.type)).toEqual([
+      SelectionType.SEPARATOR,
+      SelectionType.SEPARATOR,
+    ])
+    expect(Selection.selectedItems.value.map((item) => item.item.uid)).toEqual([
+      first.uid,
+      second.uid,
     ])
   })
 

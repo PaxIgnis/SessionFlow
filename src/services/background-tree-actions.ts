@@ -6,6 +6,7 @@ import { Settings } from '@/services/settings'
 import * as Utils from '@/services/utils'
 import {
   Note,
+  Separator,
   State,
   Tab,
   TreeItem,
@@ -458,6 +459,8 @@ function updateItemVisibility(
     Tree.updateTab({ tabUid: item.uid }, { isVisible }, emitDelta)
   } else if (item.type === TreeItemType.NOTE) {
     Tree.updateNote(item.uid, { isVisible }, emitDelta)
+  } else if (item.type === TreeItemType.SEPARATOR) {
+    Tree.updateSeparator(item.uid, { isVisible }, emitDelta)
   } else if (item.type === TreeItemType.WINDOW) {
     Tree.updateWindow(item.uid, { isVisible }, emitDelta)
   }
@@ -500,6 +503,8 @@ function updateItemIndentLevel(
     Tree.updateTab({ tabUid: item.uid }, { indentLevel }, emitDelta)
   } else if (item.type === TreeItemType.NOTE) {
     Tree.updateNote(item.uid, { indentLevel }, emitDelta)
+  } else if (item.type === TreeItemType.SEPARATOR) {
+    Tree.updateSeparator(item.uid, { indentLevel }, emitDelta)
   } else {
     Tree.updateWindow(item.uid, { indentLevel }, emitDelta)
   }
@@ -519,6 +524,10 @@ export async function loadSessionTreeFromStorage(): Promise<void> {
       Tree.Items.forEach((window) => {
         if (window.type === TreeItemType.NOTE) {
           normalizeNote(window, undefined)
+          return
+        }
+        if (window.type === TreeItemType.SEPARATOR) {
+          normalizeSeparator(window, undefined)
           return
         }
         window.id = 0
@@ -652,6 +661,7 @@ function rebuildUIDMaps(): void {
   Tree.windowsByUid.clear()
   Tree.tabsByUid.clear()
   Tree.notesByUid.clear()
+  Tree.separatorsByUid.clear()
   Tree.existingUidsSet.clear()
   Tree.walkTreeItems(Tree.Items, (item) => indexTreeItem(item))
 }
@@ -677,6 +687,11 @@ function normalizeWindowChildren(window: Window): void {
       normalizeNote(child, window.uid)
       return
     }
+    if (child.type === TreeItemType.SEPARATOR) {
+      child.windowUid = window.uid
+      normalizeSeparator(child, window.uid)
+      return
+    }
     child.type = TreeItemType.TAB
     child.active = false
     child.id = 0
@@ -698,10 +713,25 @@ function normalizeNote(note: Note, windowUid: UID | undefined): void {
   Tree.notesByUid.set(note.uid, note)
 }
 
+function normalizeSeparator(
+  separator: Separator,
+  windowUid: UID | undefined,
+): void {
+  separator.type = TreeItemType.SEPARATOR
+  separator.selected = false
+  separator.windowUid = windowUid
+  separator.isParent = false
+  separator.collapsed = false
+  if (!separator.uid) separator.uid = Utils.createUid(Tree.existingUidsSet)
+  Tree.separatorsByUid.set(separator.uid, separator)
+}
+
 function indexTreeItem(item: TreeItem): void {
   Tree.existingUidsSet.add(item.uid)
   if (item.type === TreeItemType.WINDOW) Tree.windowsByUid.set(item.uid, item)
   else if (item.type === TreeItemType.NOTE) Tree.notesByUid.set(item.uid, item)
+  else if (item.type === TreeItemType.SEPARATOR)
+    Tree.separatorsByUid.set(item.uid, item)
   else Tree.tabsByUid.set(item.uid, item)
 }
 
@@ -776,7 +806,8 @@ export function getItemByUid(uid: UID): TreeItem | undefined {
   return (
     Tree.windowsByUid.get(uid) ??
     Tree.tabsByUid.get(uid) ??
-    Tree.notesByUid.get(uid)
+    Tree.notesByUid.get(uid) ??
+    Tree.separatorsByUid.get(uid)
   )
 }
 
@@ -977,7 +1008,11 @@ function buildMoveBlocks(itemUIDs: UID[]): MoveBlock[] {
 }
 
 function prepareBlockForMoveWithoutDescendants(block: MoveBlock): void {
-  if (block.root.type !== TreeItemType.NOTE || block.items.length <= 1) {
+  if (
+    (block.root.type !== TreeItemType.NOTE &&
+      block.root.type !== TreeItemType.SEPARATOR) ||
+    block.items.length <= 1
+  ) {
     return
   }
 
@@ -997,7 +1032,9 @@ function blockHasInvalidTopLevelDescendants(block: MoveBlock): boolean {
     .slice(1)
     .some(
       (item) =>
-        item.type !== TreeItemType.WINDOW && item.type !== TreeItemType.NOTE,
+        item.type !== TreeItemType.WINDOW &&
+        item.type !== TreeItemType.NOTE &&
+        item.type !== TreeItemType.SEPARATOR,
     )
 }
 
@@ -1045,7 +1082,9 @@ function isValidDestination(
   if (!parent) {
     return movingItems.every(
       (item) =>
-        item.type === TreeItemType.WINDOW || item.type === TreeItemType.NOTE,
+        item.type === TreeItemType.WINDOW ||
+        item.type === TreeItemType.NOTE ||
+        item.type === TreeItemType.SEPARATOR,
     )
   }
 
@@ -1066,19 +1105,30 @@ function isValidDestination(
   if (parent.type === TreeItemType.WINDOW) {
     return movingItems.every(
       (item) =>
-        item.type === TreeItemType.TAB || item.type === TreeItemType.NOTE,
+        item.type === TreeItemType.TAB ||
+        item.type === TreeItemType.NOTE ||
+        item.type === TreeItemType.SEPARATOR,
     )
   }
 
   if (parent.type === TreeItemType.NOTE && !parent.windowUid) {
     return movingItems.every(
       (item) =>
-        item.type === TreeItemType.WINDOW || item.type === TreeItemType.NOTE,
+        item.type === TreeItemType.WINDOW ||
+        item.type === TreeItemType.NOTE ||
+        item.type === TreeItemType.SEPARATOR,
     )
   }
 
+  if (parent.type === TreeItemType.SEPARATOR) {
+    return false
+  }
+
   return movingItems.every(
-    (item) => item.type === TreeItemType.TAB || item.type === TreeItemType.NOTE,
+    (item) =>
+      item.type === TreeItemType.TAB ||
+      item.type === TreeItemType.NOTE ||
+      item.type === TreeItemType.SEPARATOR,
   )
 }
 
@@ -1113,9 +1163,13 @@ function getMovedItemWindowUid(
 }
 
 function updateItemWindowUid(item: TreeItem, windowUid: UID | undefined): void {
-  if (item.type === TreeItemType.TAB || item.type === TreeItemType.NOTE) {
+  if (
+    item.type === TreeItemType.TAB ||
+    item.type === TreeItemType.NOTE ||
+    item.type === TreeItemType.SEPARATOR
+  ) {
     item.windowUid = windowUid as UID
-  } else {
+  } else if (item.type === TreeItemType.WINDOW) {
     updateNestedWindowChildren(item, item.uid)
   }
 }

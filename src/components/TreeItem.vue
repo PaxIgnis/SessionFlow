@@ -15,6 +15,7 @@ import {
   DragType,
   Note,
   SelectionType,
+  Separator,
   State,
   Tab,
   TreeItem,
@@ -99,6 +100,8 @@ function onDragStart(e: DragEvent) {
       for (const item of items) {
         plain.push(isNote(item) ? item.text : item.uid)
       }
+    } else if (isSeparator(props.item)) {
+      plain.push('Separator')
     }
 
     // set native drag data
@@ -142,8 +145,11 @@ function onDragStart(e: DragEvent) {
               .filter(Boolean)
               .slice(0, 15)
           }
-        } else {
+        } else if (isNote(item)) {
           title = isNote(item) ? item.text : 'Note'
+          body = []
+        } else {
+          title = 'Separator'
           body = []
         }
       }
@@ -223,22 +229,29 @@ function isNote(item: TreeItem): item is Note {
   return item.type === TreeItemType.NOTE
 }
 
+function isSeparator(item: TreeItem): item is Separator {
+  return item.type === TreeItemType.SEPARATOR
+}
+
 function getType(item: TreeItem): SelectionType {
   if (isWindow(item)) return SelectionType.WINDOW
   if (isTab(item)) return SelectionType.TAB
-  return SelectionType.NOTE
+  if (isNote(item)) return SelectionType.NOTE
+  return SelectionType.SEPARATOR
 }
 
 function getDragType(item: TreeItem): DragType {
   if (isWindow(item)) return DragType.WINDOW
   if (isTab(item)) return DragType.TAB
-  return DragType.NOTE
+  if (isNote(item)) return DragType.NOTE
+  return DragType.SEPARATOR
 }
 
 function getDragAndDropType(item: TreeItem): string {
   if (isWindow(item)) return 'window'
   if (isTab(item)) return 'tab'
-  return 'note'
+  if (isNote(item)) return 'note'
+  return 'separator'
 }
 
 /*
@@ -249,7 +262,7 @@ function toggleCollapsedItem() {
     Messages.toggleCollapseWindow(props.item.uid)
   } else if (isTab(props.item)) {
     Messages.toggleCollapseTab(props.item.uid)
-  } else {
+  } else if (isNote(props.item)) {
     Messages.toggleCollapseNote(props.item.uid)
   }
 }
@@ -269,7 +282,7 @@ const childCount = computed(() => {
 })
 
 function getContainingList(item: TreeItem): TreeItem[] {
-  if ((isTab(item) || isNote(item)) && item.windowUid) {
+  if ((isTab(item) || isNote(item) || isSeparator(item)) && item.windowUid) {
     return SessionTree.windowsByUid.get(item.windowUid)?.children ?? []
   }
   return SessionTree.reactiveItems.value as TreeItem[]
@@ -317,6 +330,8 @@ function closeItemAction() {
     Messages.closeTab(props.item.id, props.item.uid)
   } else if (isNote(props.item)) {
     Messages.removeNote(props.item.uid)
+  } else if (isSeparator(props.item)) {
+    Messages.removeSeparator(props.item.uid)
   }
 }
 
@@ -377,6 +392,7 @@ function flatDescendantsHaveOpenTab(item: TreeItem): boolean {
           SessionTree.windowsByUid.get((item as Tab).windowUid)?.active ===
             true,
         'tree-item-note': isNote(item),
+        'tree-item-separator': isSeparator(item),
       },
     ]"
     :style="{
@@ -389,11 +405,14 @@ function flatDescendantsHaveOpenTab(item: TreeItem): boolean {
           ? ContextMenuType.Tab
           : isWindow(item)
             ? ContextMenuType.Window
-            : ContextMenuType.Note,
+            : isNote(item)
+              ? ContextMenuType.Note
+              : ContextMenuType.Separator,
         $event,
         isWindow(item) ? item : undefined,
         isTab(item) ? item : undefined,
         isNote(item) ? item : undefined,
+        isSeparator(item) ? item : undefined,
         getType(item),
       )
     "
@@ -522,6 +541,12 @@ function flatDescendantsHaveOpenTab(item: TreeItem): boolean {
         <div class="tree-item-title tree-item-note-text">
           {{ props.item.text }}
         </div>
+      </template>
+      <template v-else-if="isSeparator(props.item)">
+        <div
+          class="tree-item-separator-line"
+          aria-label="Separator"
+        ></div>
       </template>
     </div>
   </div>
@@ -869,5 +894,35 @@ function flatDescendantsHaveOpenTab(item: TreeItem): boolean {
 
 .tree-item-note-text {
   color: var(--note-text-foreground);
+}
+
+.tree-item-separator.indentLevel-0 {
+  padding-inline: 0 !important;
+}
+
+.tree-item-separator .tree-item-prepend {
+  min-width: 0;
+  overflow: visible;
+  width: 0;
+}
+
+.tree-item-separator .tree-item-action,
+.tree-item-separator .tree-item-spacer {
+  display: none;
+}
+
+.tree-item-separator .tree-item-content {
+  align-self: stretch;
+  max-height: none;
+}
+
+.tree-item-separator-line {
+  border: 0px solid var(--list-indent-guide-stroke);
+  border-bottom-width: 1px;
+  height: calc(50% + 1px);
+  opacity: 0.4;
+  position: relative;
+  z-index: 1;
+  width: 100%;
 }
 </style>

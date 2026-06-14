@@ -3,6 +3,7 @@ import { SessionTree } from '@/services/foreground-tree'
 import { TreeItemType } from '@/types/session-tree'
 import {
   makeForegroundNote,
+  makeForegroundSeparator,
   makeForegroundTab,
   makeForegroundWindow,
   resetForegroundTree,
@@ -17,7 +18,12 @@ describe('foreground SessionTree deltas', () => {
   it('replaces the tree and rebuilds foreground maps', () => {
     const tab = makeForegroundTab('tab-1' as UID)
     const note = makeForegroundNote('note-1' as UID)
-    const window = makeForegroundWindow('window-1' as UID, [tab, note])
+    const separator = makeForegroundSeparator('separator-1' as UID)
+    const window = makeForegroundWindow('window-1' as UID, [
+      tab,
+      separator,
+      note,
+    ])
 
     SessionTree.applyDelta({
       op: 'treeReplaced',
@@ -29,6 +35,9 @@ describe('foreground SessionTree deltas', () => {
     ])
     expect(SessionTree.windowsByUid.get(window.uid)?.uid).toBe(window.uid)
     expect(SessionTree.tabsByUid.get(tab.uid)?.uid).toBe(tab.uid)
+    expect(SessionTree.separatorsByUid.get(separator.uid)?.uid).toBe(
+      separator.uid,
+    )
     expect(SessionTree.notesByUid.get(note.uid)?.uid).toBe(note.uid)
     expectForegroundIndexes()
   })
@@ -218,6 +227,24 @@ describe('foreground SessionTree deltas', () => {
 
     expect(SessionTree.reactiveItems.value).toEqual([])
     expect(SessionTree.notesByUid.has(note.uid)).toBe(false)
+  })
+
+  it('leaves separator create/remove deltas as no-ops because separator mutations emit treeReplaced', () => {
+    const separator = makeForegroundSeparator('separator-1' as UID)
+
+    SessionTree.applyDelta({
+      op: 'separatorCreated',
+      separator,
+      index: 0,
+      parentUid: undefined,
+    })
+    SessionTree.applyDelta({
+      op: 'separatorRemoved',
+      separatorUid: separator.uid,
+    })
+
+    expect(SessionTree.reactiveItems.value).toEqual([])
+    expect(SessionTree.separatorsByUid.has(separator.uid)).toBe(false)
   })
 
   it('does not duplicate existing tabs when a repeated tabCreated delta arrives', () => {

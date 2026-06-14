@@ -15,7 +15,13 @@ import {
 } from '@/types/context-menu'
 import { SelectionType, State } from '@/types/session-tree'
 import { installFakeBrowser } from '../../helpers/fake-browser'
-import { makeForegroundTab } from '../../helpers/foreground-tree-fixtures'
+import {
+  makeForegroundNote,
+  makeForegroundSeparator,
+  makeForegroundTab,
+  makeForegroundWindow,
+  resetForegroundTree,
+} from '../../helpers/foreground-tree-fixtures'
 
 const openTabs = vi.hoisted(() => vi.fn())
 const reloadTabs = vi.hoisted(() => vi.fn())
@@ -27,6 +33,11 @@ const unpinTabs = vi.hoisted(() => vi.fn())
 const tabIndentIncrease = vi.hoisted(() => vi.fn())
 const tabIndentDecrease = vi.hoisted(() => vi.fn())
 const createNote = vi.hoisted(() => vi.fn())
+const createSeparator = vi.hoisted(() => vi.fn())
+const createSeparatorBelow = vi.hoisted(() => vi.fn())
+const removeSeparator = vi.hoisted(() => vi.fn())
+const separatorIndentDecrease = vi.hoisted(() => vi.fn())
+const separatorIndentIncrease = vi.hoisted(() => vi.fn())
 const openModal = vi.hoisted(() => vi.fn())
 
 vi.mock('@/services/foreground-messages', () => ({
@@ -40,6 +51,11 @@ vi.mock('@/services/foreground-messages', () => ({
   tabIndentIncrease,
   tabIndentDecrease,
   createNote,
+  createSeparator,
+  createSeparatorBelow,
+  removeSeparator,
+  separatorIndentDecrease,
+  separatorIndentIncrease,
 }))
 
 vi.mock('@/services/modal-state', () => ({
@@ -51,6 +67,7 @@ describe('context menu actions', () => {
     vi.clearAllMocks()
     installFakeBrowser()
     Selection.selectedItems.value = []
+    resetForegroundTree()
   })
 
   it('maps action config entries and skips missing or unsupported entries', () => {
@@ -149,6 +166,101 @@ describe('context menu actions', () => {
         enabled: false,
       }),
     )
+  })
+
+  it.each([
+    {
+      label: 'window',
+      configName: 'windowConfig',
+      selectionType: SelectionType.WINDOW,
+      makeSelection: () => makeForegroundWindow('window-parent' as UID),
+    },
+    {
+      label: 'tab',
+      configName: 'tabConfig',
+      selectionType: SelectionType.TAB,
+      makeSelection: () => makeForegroundTab('tab-parent' as UID),
+    },
+    {
+      label: 'note',
+      configName: 'noteConfig',
+      selectionType: SelectionType.NOTE,
+      makeSelection: () => makeForegroundNote('note-parent' as UID),
+    },
+  ] as const)(
+    'creates a note under the selected $label through the merged context menu registry',
+    ({ configName, selectionType, makeSelection }) => {
+      const selected = makeSelection()
+      Selection.selectedItems.value = [{ item: selected, type: selectionType }]
+
+      const items = createContextMenuItems(ContextMenu[configName])
+      const createNoteItem = items.find((item) => item.id === 'createNote')
+
+      expect(createNoteItem).toMatchObject({
+        label: 'Add Note',
+        enabled: true,
+      })
+
+      createNoteItem?.action?.()
+
+      expect(createNote).toHaveBeenCalledWith(selected.uid)
+    },
+  )
+
+  it('creates separator menu actions for note insert, separator insert, indent, and removal', () => {
+    const separator = makeForegroundSeparator('separator-1' as UID)
+    const window = makeForegroundWindow('window-1' as UID, [separator])
+    resetForegroundTree([window])
+    separator.selected = true
+    Selection.selectedItems.value = [
+      { item: separator, type: SelectionType.SEPARATOR },
+    ]
+
+    const items = createContextMenuItems(ContextMenu.separatorConfig)
+    const createNoteItem = items.find((item) => item.id === 'createNote')
+    const createBelowItem = items.find(
+      (item) => item.id === 'createSeparatorBelow',
+    )
+    const increaseItem = items.find(
+      (item) => item.id === 'separatorIndentIncrease',
+    )
+    const decreaseItem = items.find(
+      (item) => item.id === 'separatorIndentDecrease',
+    )
+    const removeItem = items.find((item) => item.id === 'removeSeparator')
+
+    expect(createNoteItem).toMatchObject({
+      label: 'Add Note',
+      enabled: true,
+    })
+    expect(createBelowItem).toMatchObject({
+      label: 'Add Separator',
+      enabled: true,
+    })
+    expect(increaseItem).toMatchObject({
+      label: 'Increase Indent',
+      enabled: true,
+    })
+    expect(decreaseItem).toMatchObject({
+      label: 'Decrease Indent',
+      enabled: true,
+    })
+    expect(removeItem).toMatchObject({
+      label: 'Remove Separator',
+      enabled: true,
+    })
+
+    createNoteItem?.action?.()
+    createBelowItem?.action?.()
+    increaseItem?.action?.()
+    decreaseItem?.action?.()
+    removeItem?.action?.()
+
+    expect(createNote).toHaveBeenCalledWith(window.uid, 1)
+    expect(createSeparatorBelow).toHaveBeenCalledWith(separator.uid)
+    expect(separatorIndentIncrease).toHaveBeenCalledWith([separator.uid])
+    expect(separatorIndentDecrease).toHaveBeenCalledWith([separator.uid])
+    expect(removeSeparator).toHaveBeenCalledWith(separator.uid)
   })
 
   it('selects the right-clicked tab and opens its browser menu', () => {

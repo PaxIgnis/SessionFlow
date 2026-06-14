@@ -5,7 +5,13 @@ import { Tree } from '@/services/background-tree'
 import { emitTreeDelta } from '@/services/runtime-port-service'
 import { Settings } from '@/services/settings'
 import * as Utils from '@/services/utils'
-import { State, Tab, TreeItemType, WindowChild } from '@/types/session-tree'
+import {
+  Note,
+  State,
+  Tab,
+  TreeItemType,
+  WindowChild,
+} from '@/types/session-tree'
 
 /**
  * Adds a tab to the session tree.
@@ -184,8 +190,10 @@ export function removeTab(tabUid: UID, emitDelta: boolean = true): void {
           { parentUid: tab.parentUid },
           emitDelta,
         )
-      } else {
+      } else if (child.type === TreeItemType.NOTE) {
         Tree.updateNote(child.uid, { parentUid: tab.parentUid }, emitDelta)
+      } else {
+        child.parentUid = tab.parentUid
       }
     }
   }
@@ -832,7 +840,7 @@ export function tabIndentIncrease(tabUids: UID[]): void {
   }
 
   // repairInvalidTabParentUids(win, false)
-  const childrenMap = Tree.buildChildrenMap(Tree.getTabs(win.children))
+  const childrenMap = Tree.buildChildrenMap(win.children)
 
   // remove any tabs from the selection that are descendants of other selected tabs
   const filteredTabs = removeDescendantTabs(tabs, childrenMap)
@@ -903,7 +911,7 @@ export function tabIndentDecrease(tabUids: UID[]): void {
   }
 
   // repairInvalidTabParentUids(win, false)
-  const childrenMap = Tree.buildChildrenMap(Tree.getTabs(win.children))
+  const childrenMap = Tree.buildChildrenMap(win.children)
 
   // remove any tabs from the selection that are descendants of other selected tabs
   const filteredTabs = removeDescendantTabs(tabs, childrenMap)
@@ -923,12 +931,14 @@ export function tabIndentDecrease(tabUids: UID[]): void {
     // siblings directly below the tab now become its children
     const siblings = oldParentUid ? childrenMap.get(oldParentUid) || [] : []
     const lowerSiblings = siblings.filter(
-      (s) => win.children.findIndex((t) => t.uid === s.uid) > tabIndex,
+      (s): s is Tab =>
+        s.type === TreeItemType.TAB &&
+        win.children.findIndex((t) => t.uid === s.uid) > tabIndex,
     )
     if (lowerSiblings.length > 0) {
       Tree.updateTab({ tabUid: tab.uid }, { isParent: true }) // now a parent
       for (const child of lowerSiblings) {
-        Tree.updateTab({ tabUid: child.uid }, { parentUid: tab.uid })
+        updateChildItem(child, { parentUid: tab.uid })
       }
     }
     if (tab.indentLevel === minimumIndent) {
@@ -965,12 +975,12 @@ export function tabIndentDecrease(tabUids: UID[]): void {
  * when the input selection contains both a parent and its children.
  *
  * @param {Tab[]} selectedTabs - The list of selected tabs.
- * @param {Map<UID, Tab[]>} childrenMap - A map of parent UIDs to their child tabs.
+ * @param {Map<UID, WindowChild[]>} childrenMap - A map of parent UIDs to their child items.
  * @returns {Tab[]} A filtered list of tabs excluding descendants of other selected tabs.
  */
 function removeDescendantTabs(
   selectedTabs: Tab[],
-  childrenMap: Map<UID, Tab[]>,
+  childrenMap: Map<UID, WindowChild[]>,
 ): Tab[] {
   const skip = new Set<UID>()
   const result: Tab[] = []
@@ -991,18 +1001,18 @@ function removeDescendantTabs(
  * Recursively collects the UIDs of all descendant tabs of the given tabs.
  * Updates the provided set with the collected UIDs.
  *
- * @param {Tab[]} tabs - The list of tabs whose descendants are to be collected.
- * @param {Map<UID, Tab[]>} childrenMap - A map of parent UIDs to their child tabs.
+ * @param {WindowChild[]} items - The list of child items whose tab descendants are to be collected.
+ * @param {Map<UID, WindowChild[]>} childrenMap - A map of parent UIDs to their child items.
  * @param {Set<UID>} set - A set to store the collected descendant UIDs.
  */
 function collectDescendantTabIds(
-  tabs: Tab[],
-  childrenMap: Map<UID, Tab[]>,
+  items: WindowChild[],
+  childrenMap: Map<UID, WindowChild[]>,
   set: Set<UID>,
 ): void {
-  for (const tab of tabs) {
-    if (tab.uid !== undefined) set.add(tab.uid)
-    const children = childrenMap.get(tab.uid) || []
+  for (const item of items) {
+    if (item.type === TreeItemType.TAB) set.add(item.uid)
+    const children = childrenMap.get(item.uid) || []
     if (children.length) collectDescendantTabIds(children, childrenMap, set)
   }
 }
@@ -1017,7 +1027,9 @@ function tabHasSiblingsAbove(tab: Tab): boolean {
     const targetIndent = tab.indentLevel ?? 1
     for (let i = currentIndex - 1; i >= 0; i--) {
       const candidate = win.children[i]
-      if ((candidate.indentLevel ?? 1) === targetIndent) return true
+      if ((candidate.indentLevel ?? 1) === targetIndent) {
+        return isValidTabParent(candidate)
+      }
       if ((candidate.indentLevel ?? 1) < targetIndent) return false
     }
   }
@@ -1029,9 +1041,9 @@ function tabHasSiblingsAbove(tab: Tab): boolean {
  * Finds the parent tab for a given tab based on its indent level.
  *
  * @param {WindowChild} item - The tab to find the parent for.
- * @returns {Tab | undefined} The parent tab if found, otherwise undefined.
+ * @returns {Tab | Note | undefined} The parent item if found, otherwise undefined.
  */
-function findParent(item: WindowChild): WindowChild | undefined {
+function findParent(item: WindowChild): Tab | Note | undefined {
   const win = Tree.windowsByUid.get(item.windowUid ? item.windowUid : '')
   if (!win) return undefined
 
@@ -1041,11 +1053,8 @@ function findParent(item: WindowChild): WindowChild | undefined {
     const targetIndent = (item.indentLevel ?? 1) - 1
     for (let i = currentIndex - 1; i >= 0; i--) {
       const candidate = win.children[i]
-      if (
-        // candidate.type === TreeItemType.TAB &&
-        (candidate.indentLevel ?? 1) === targetIndent
-      ) {
-        return candidate
+      if ((candidate.indentLevel ?? 1) === targetIndent) {
+        return isValidTabParent(candidate) ? candidate : undefined
       }
     }
   }
@@ -1065,22 +1074,42 @@ function updateParentItemFlag(parentUid: UID, isParent: boolean): void {
   }
 }
 
+function isValidTabParent(item: WindowChild): item is Tab | Note {
+  return item.type === TreeItemType.TAB || item.type === TreeItemType.NOTE
+}
+
+function updateChildItem(
+  item: WindowChild,
+  contents: Partial<
+    Pick<WindowChild, 'indentLevel' | 'isVisible' | 'parentUid'>
+  >,
+  emitDelta: boolean = true,
+): void {
+  if (item.type === TreeItemType.TAB) {
+    Tree.updateTab({ tabUid: item.uid }, contents as Partial<Tab>, emitDelta)
+  } else if (item.type === TreeItemType.NOTE) {
+    Tree.updateNote(item.uid, contents as Partial<Note>, emitDelta)
+  } else {
+    Tree.updateSeparator(item.uid, contents, emitDelta)
+  }
+}
+
 /**
  * Decreases indent level recursively for child tabs.
  *
- * @param {Tab[]} nodes - The list of tabs to decrease indent for.
- * @param {Map<UID, Tab[]>} childrenMap - A map of parent UIDs to their child tabs.
+ * @param {WindowChild[]} nodes - The list of child items to decrease indent for.
+ * @param {Map<UID, WindowChild[]>} childrenMap - A map of parent UIDs to their child items.
  * @param {boolean = true} emitDelta - Whether to emit a tree delta event for this update.
  */
 function decreaseIndentRecursively(
-  nodes: Tab[],
-  childrenMap: Map<UID, Tab[]>,
+  nodes: WindowChild[],
+  childrenMap: Map<UID, WindowChild[]>,
   minimumIndent: number = 1,
   emitDelta: boolean = true,
 ) {
   for (const node of nodes) {
-    Tree.updateTab(
-      { tabUid: node.uid },
+    updateChildItem(
+      node,
       { indentLevel: Math.max((node.indentLevel ?? 1) - 1, minimumIndent) },
       emitDelta,
     )
@@ -1093,15 +1122,15 @@ function decreaseIndentRecursively(
 /**
  * Increases indent level recursively for child tabs.
  *
- * @param {Tab[]} nodes - The list of tabs to increase indent for.
- * @param {Map<UID, Tab[]>} childrenMap - A map of parent UIDs to their child tabs.
+ * @param {WindowChild[]} nodes - The list of child items to increase indent for.
+ * @param {Map<UID, WindowChild[]>} childrenMap - A map of parent UIDs to their child items.
  */
-function increaseIndentRecursively(nodes: Tab[], childrenMap: Map<UID, Tab[]>) {
+function increaseIndentRecursively(
+  nodes: WindowChild[],
+  childrenMap: Map<UID, WindowChild[]>,
+) {
   for (const node of nodes) {
-    Tree.updateTab(
-      { tabUid: node.uid },
-      { indentLevel: (node.indentLevel ?? 1) + 1 },
-    )
+    updateChildItem(node, { indentLevel: (node.indentLevel ?? 1) + 1 })
     const children = childrenMap.get(node.uid) || []
     if (children.length) increaseIndentRecursively(children, childrenMap)
   }

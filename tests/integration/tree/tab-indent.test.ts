@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { Tree } from '@/services/background-tree'
 import {
   createNote,
+  createSeparator,
   createTab,
   createWindow,
   resetTree,
@@ -42,6 +43,133 @@ describe('tab indentation', () => {
     expect(parentTab.isParent).toBe(true)
     expectTreeInvariants()
   })
+
+  it('increases indent for note and separator descendants when increasing a parent tab indent', () => {
+    const newParent = createTab('tab-new-parent' as UID)
+    const movedTab = createTab('tab-moved' as UID, { isParent: true })
+    const childNote = createNote('note-child' as UID, {
+      parentUid: movedTab.uid,
+      indentLevel: 2,
+      isParent: true,
+    })
+    const childSeparator = createSeparator('separator-child' as UID, {
+      parentUid: movedTab.uid,
+      indentLevel: 2,
+    })
+    const grandchildTab = createTab('tab-grandchild' as UID, {
+      parentUid: childNote.uid,
+      indentLevel: 3,
+    })
+    createWindow('window-1' as UID, [
+      newParent,
+      movedTab,
+      childNote,
+      childSeparator,
+      grandchildTab,
+    ])
+
+    Tree.tabIndentIncrease([movedTab.uid])
+
+    expect(movedTab.parentUid).toBe(newParent.uid)
+    expect(movedTab.indentLevel).toBe(2)
+    expect(childNote.parentUid).toBe(movedTab.uid)
+    expect(childNote.indentLevel).toBe(3)
+    expect(childSeparator.parentUid).toBe(movedTab.uid)
+    expect(childSeparator.indentLevel).toBe(3)
+    expect(grandchildTab.parentUid).toBe(childNote.uid)
+    expect(grandchildTab.indentLevel).toBe(4)
+    expect(newParent.isParent).toBe(true)
+    expectTreeInvariants()
+  })
+
+  it('does not increase a tab indent under a preceding separator sibling', () => {
+    const separator = createSeparator('separator-parent' as UID)
+    const tab = createTab('tab-child' as UID)
+    const window = createWindow('window-1' as UID, [separator, tab])
+
+    Tree.tabIndentIncrease([tab.uid])
+
+    expect(window.children.map((item) => item.uid)).toEqual([
+      separator.uid,
+      tab.uid,
+    ])
+    expect(tab.parentUid).toBeUndefined()
+    expect(tab.indentLevel).toBe(1)
+    expect(separator.isParent).toBe(false)
+    expectTreeInvariants()
+  })
+
+  it.each([
+    ['tab', () => createTab('tab-earlier' as UID)],
+    ['note', () => createNote('note-earlier' as UID)],
+  ] as const)(
+    'does not increase a root tab indent past an intervening separator after a preceding %s',
+    (_parentType, createEarlierSibling) => {
+      const earlierSibling = createEarlierSibling()
+      const separator = createSeparator('separator-between' as UID)
+      const tab = createTab('tab-child' as UID)
+      const window = createWindow('window-1' as UID, [
+        earlierSibling,
+        separator,
+        tab,
+      ])
+
+      Tree.tabIndentIncrease([tab.uid])
+
+      expect(window.children.map((item) => item.uid)).toEqual([
+        earlierSibling.uid,
+        separator.uid,
+        tab.uid,
+      ])
+      expect(tab.parentUid).toBeUndefined()
+      expect(tab.indentLevel).toBe(1)
+      expect(earlierSibling.isParent).toBeFalsy()
+      expect(separator.isParent).toBe(false)
+      expectTreeInvariants()
+    },
+  )
+
+  it.each([
+    ['tab', () => createTab('tab-earlier' as UID)],
+    ['note', () => createNote('note-earlier' as UID)],
+  ] as const)(
+    'does not increase a nested tab indent past an intervening separator after a preceding %s',
+    (_parentType, createEarlierSibling) => {
+      const parentTab = createTab('tab-parent' as UID, { isParent: true })
+      const earlierSibling = createEarlierSibling()
+      earlierSibling.parentUid = parentTab.uid
+      earlierSibling.indentLevel = 2
+      const separator = createSeparator('separator-between' as UID, {
+        parentUid: parentTab.uid,
+        indentLevel: 2,
+      })
+      const tab = createTab('tab-child' as UID, {
+        parentUid: parentTab.uid,
+        indentLevel: 2,
+      })
+      const window = createWindow('window-1' as UID, [
+        parentTab,
+        earlierSibling,
+        separator,
+        tab,
+      ])
+
+      Tree.tabIndentIncrease([tab.uid])
+
+      expect(window.children.map((item) => item.uid)).toEqual([
+        parentTab.uid,
+        earlierSibling.uid,
+        separator.uid,
+        tab.uid,
+      ])
+      expect(parentTab.isParent).toBe(true)
+      expect(tab.parentUid).toBe(parentTab.uid)
+      expect(tab.indentLevel).toBe(2)
+      expect(earlierSibling.isParent).toBeFalsy()
+      expect(separator.isParent).toBe(false)
+      expectTreeInvariants()
+    },
+  )
 
   it('does not decrease a nested window root tab to the window indent level', () => {
     const parentNote = createNote('note-parent' as UID, {
@@ -101,6 +229,46 @@ describe('tab indentation', () => {
     expectTreeInvariants()
   })
 
+  it('keeps lower note and separator siblings under the old parent when decreasing a tab indent', () => {
+    const parentTab = createTab('tab-parent' as UID, { isParent: true })
+    const tabChild = createTab('tab-child' as UID, {
+      parentUid: parentTab.uid,
+      indentLevel: 2,
+    })
+    const noteChild = createNote('note-child' as UID, {
+      parentUid: parentTab.uid,
+      indentLevel: 2,
+    })
+    const separatorChild = createSeparator('separator-child' as UID, {
+      parentUid: parentTab.uid,
+      indentLevel: 2,
+    })
+    const window = createWindow('window-1' as UID, [
+      parentTab,
+      tabChild,
+      noteChild,
+      separatorChild,
+    ])
+
+    Tree.tabIndentDecrease([tabChild.uid])
+
+    expect(window.children.map((item) => item.uid)).toEqual([
+      parentTab.uid,
+      tabChild.uid,
+      noteChild.uid,
+      separatorChild.uid,
+    ])
+    expect(parentTab.isParent).toBe(true)
+    expect(tabChild.parentUid).toBeUndefined()
+    expect(tabChild.indentLevel).toBe(1)
+    expect(tabChild.isParent).toBeFalsy()
+    expect(noteChild.parentUid).toBe(parentTab.uid)
+    expect(noteChild.indentLevel).toBe(2)
+    expect(separatorChild.parentUid).toBe(parentTab.uid)
+    expect(separatorChild.indentLevel).toBe(2)
+    expectTreeInvariants()
+  })
+
   it('clears a note parent when decreasing indent reparents its remaining tab children', () => {
     const parentNote = createNote('note-parent' as UID, {
       isParent: true,
@@ -135,6 +303,48 @@ describe('tab indentation', () => {
     expect(movedTab.isParent).toBe(true)
     expect(lowerTab.parentUid).toBe(movedTab.uid)
     expect(lowerTab.indentLevel).toBe(2)
+    expectTreeInvariants()
+  })
+
+  it('decreases indent for note and separator descendants when decreasing a parent tab indent', () => {
+    const parentNote = createNote('note-parent' as UID, { isParent: true })
+    const movedTab = createTab('tab-moved' as UID, {
+      parentUid: parentNote.uid,
+      indentLevel: 2,
+      isParent: true,
+    })
+    const childNote = createNote('note-child' as UID, {
+      parentUid: movedTab.uid,
+      indentLevel: 3,
+      isParent: true,
+    })
+    const childSeparator = createSeparator('separator-child' as UID, {
+      parentUid: movedTab.uid,
+      indentLevel: 3,
+    })
+    const grandchildTab = createTab('tab-grandchild' as UID, {
+      parentUid: childNote.uid,
+      indentLevel: 4,
+    })
+    createWindow('window-1' as UID, [
+      parentNote,
+      movedTab,
+      childNote,
+      childSeparator,
+      grandchildTab,
+    ])
+
+    Tree.tabIndentDecrease([movedTab.uid])
+
+    expect(movedTab.parentUid).toBeUndefined()
+    expect(movedTab.indentLevel).toBe(1)
+    expect(childNote.parentUid).toBe(movedTab.uid)
+    expect(childNote.indentLevel).toBe(2)
+    expect(childSeparator.parentUid).toBe(movedTab.uid)
+    expect(childSeparator.indentLevel).toBe(2)
+    expect(grandchildTab.parentUid).toBe(childNote.uid)
+    expect(grandchildTab.indentLevel).toBe(3)
+    expect(parentNote.isParent).toBe(false)
     expectTreeInvariants()
   })
 })

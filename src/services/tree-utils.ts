@@ -1,4 +1,11 @@
-import { TreeItemType, type Note, type Tab, type TreeItem, type Window } from '@/types/session-tree'
+import {
+  TreeItemType,
+  type Note,
+  type Separator,
+  type Tab,
+  type TreeItem,
+  type Window,
+} from '@/types/session-tree'
 
 export function isWindow(item: TreeItem): item is Window {
   return item.type === TreeItemType.WINDOW
@@ -10,6 +17,10 @@ export function isTab(item: TreeItem): item is Tab {
 
 export function isNote(item: TreeItem): item is Note {
   return item.type === TreeItemType.NOTE
+}
+
+export function isSeparator(item: TreeItem): item is Separator {
+  return item.type === TreeItemType.SEPARATOR
 }
 
 export function getChildren(item: TreeItem): TreeItem[] {

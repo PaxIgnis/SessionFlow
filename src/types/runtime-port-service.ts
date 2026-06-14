@@ -1,5 +1,11 @@
 import { SessionTreeMessage } from '@/types/messages'
-import { Note, Tab, TopLevelTreeItem, Window } from '@/types/session-tree'
+import {
+  Note,
+  Separator,
+  Tab,
+  TopLevelTreeItem,
+  Window,
+} from '@/types/session-tree'
 
 export const SESSION_TREE_PORT_NAME = 'sessiontree-rpc'
 
@@ -38,6 +44,14 @@ export type SessionTreeDelta =
   | { op: 'noteCreated'; parentUid?: UID; note: Note; index: number }
   | { op: 'noteRemoved'; noteUid: UID }
   | { op: 'noteUpdated'; note: Note }
+  | {
+      op: 'separatorCreated'
+      parentUid?: UID
+      separator: Separator
+      index: number
+    }
+  | { op: 'separatorRemoved'; separatorUid: UID }
+  | { op: 'separatorUpdated'; separator: Separator }
 
 export interface SessionTreePortDeltaMessage {
   type: 'delta'

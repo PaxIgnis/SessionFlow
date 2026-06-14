@@ -7,6 +7,7 @@ export function expectTreeInvariants(): void {
   const expectedWindows = new Map<UID, Window>()
   const expectedTabs = new Set<UID>()
   const expectedNotes = new Set<UID>()
+  const expectedSeparators = new Set<UID>()
   const topLevelByUid = new Map(Tree.Items.map((item) => [item.uid, item]))
 
   for (const item of Tree.Items) {
@@ -29,11 +30,21 @@ export function expectTreeInvariants(): void {
     if (item.type === TreeItemType.WINDOW) {
       expectedWindows.set(item.uid, item)
       expect(Tree.windowsByUid.get(item.uid)).toBe(item)
-      expectWindowChildrenInvariants(item, seenUids, expectedTabs, expectedNotes)
-    } else {
+      expectWindowChildrenInvariants(
+        item,
+        seenUids,
+        expectedTabs,
+        expectedNotes,
+        expectedSeparators,
+      )
+    } else if (item.type === TreeItemType.NOTE) {
       expectedNotes.add(item.uid)
       expect(item.windowUid, `top-level note ${item.uid} has windowUid`).toBeUndefined()
       expect(Tree.notesByUid.get(item.uid)).toBe(item)
+    } else {
+      expectedSeparators.add(item.uid)
+      expect(item.windowUid, `top-level separator ${item.uid} has windowUid`).toBeUndefined()
+      expect(Tree.separatorsByUid.get(item.uid)).toBe(item)
     }
   }
 
@@ -48,6 +59,7 @@ export function expectTreeInvariants(): void {
   expect(new Set(Tree.windowsByUid.keys())).toEqual(new Set(expectedWindows.keys()))
   expect(new Set(Tree.tabsByUid.keys())).toEqual(expectedTabs)
   expect(new Set(Tree.notesByUid.keys())).toEqual(expectedNotes)
+  expect(new Set(Tree.separatorsByUid.keys())).toEqual(expectedSeparators)
   expect(Tree.existingUidsSet).toEqual(seenUids)
 }
 
@@ -56,6 +68,7 @@ function expectWindowChildrenInvariants(
   seenUids: Set<UID>,
   expectedTabs: Set<UID>,
   expectedNotes: Set<UID>,
+  expectedSeparators: Set<UID>,
 ): void {
   const byUid = new Map<UID, WindowChild>()
   for (const child of window.children) {
@@ -67,9 +80,12 @@ function expectWindowChildrenInvariants(
     if (child.type === TreeItemType.TAB) {
       expectedTabs.add(child.uid)
       expect(Tree.tabsByUid.get(child.uid)).toBe(child)
-    } else {
+    } else if (child.type === TreeItemType.NOTE) {
       expectedNotes.add(child.uid)
       expect(Tree.notesByUid.get(child.uid)).toBe(child)
+    } else {
+      expectedSeparators.add(child.uid)
+      expect(Tree.separatorsByUid.get(child.uid)).toBe(child)
     }
   }
 

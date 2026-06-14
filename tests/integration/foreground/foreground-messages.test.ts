@@ -86,6 +86,44 @@ describe('foreground message helpers', () => {
     })
   })
 
+  it('sends separator command payloads', async () => {
+    const {
+      createSeparator,
+      createSeparatorBelow,
+      removeSeparator,
+      separatorIndentDecrease,
+      separatorIndentIncrease,
+    } = await import('@/services/foreground-messages')
+
+    createSeparator('window-1' as UID, 2)
+    removeSeparator('separator-1' as UID)
+    createSeparatorBelow('separator-1' as UID)
+    separatorIndentIncrease(['separator-1' as UID])
+    separatorIndentDecrease(['separator-1' as UID])
+
+    expect(sendTreeCommand).toHaveBeenNthCalledWith(1, {
+      action: 'createSeparator',
+      parentUid: 'window-1',
+      index: 2,
+    })
+    expect(sendTreeCommand).toHaveBeenNthCalledWith(2, {
+      action: 'removeSeparator',
+      separatorUid: 'separator-1',
+    })
+    expect(sendTreeCommand).toHaveBeenNthCalledWith(3, {
+      action: 'createSeparatorBelow',
+      separatorUid: 'separator-1',
+    })
+    expect(sendTreeCommand).toHaveBeenNthCalledWith(4, {
+      action: 'separatorIndentIncrease',
+      separatorUids: ['separator-1'],
+    })
+    expect(sendTreeCommand).toHaveBeenNthCalledWith(5, {
+      action: 'separatorIndentDecrease',
+      separatorUids: ['separator-1'],
+    })
+  })
+
   it('uses settings-driven tab double-click actions', async () => {
     const { tabDoubleClick } = await import('@/services/foreground-messages')
 

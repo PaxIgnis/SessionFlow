@@ -131,8 +131,10 @@ export function removeWindow(windowUid: UID): void {
       Tree.existingUidsSet.delete(child.uid)
       if (child.type === TreeItemType.TAB) {
         Tree.tabsByUid.delete(child.uid)
-      } else {
+      } else if (child.type === TreeItemType.NOTE) {
         Tree.notesByUid.delete(child.uid)
+      } else {
+        Tree.separatorsByUid.delete(child.uid)
       }
     }
     Tree.existingUidsSet.delete(window.uid)

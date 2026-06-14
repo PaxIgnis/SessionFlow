@@ -2,6 +2,7 @@ import { SessionTree } from '@/services/foreground-tree'
 import { Selection } from '@/services/selection'
 import {
   Note,
+  Separator,
   SelectionType,
   Tab,
   TreeItem,
@@ -122,6 +123,7 @@ function selectWindowChildItemRange(
 function getWindowUid(item: TreeItem): UID | undefined {
   if (item.type === TreeItemType.TAB) return item.windowUid
   if (item.type === TreeItemType.NOTE) return item.windowUid
+  if (item.type === TreeItemType.SEPARATOR) return item.windowUid
   return undefined
 }
 
@@ -137,7 +139,8 @@ function addSelectedItem(item: TreeItem | undefined): void {
 function getSelectionType(item: TreeItem): SelectionType {
   if (item.type === TreeItemType.WINDOW) return SelectionType.WINDOW
   if (item.type === TreeItemType.TAB) return SelectionType.TAB
-  return SelectionType.NOTE
+  if (item.type === TreeItemType.NOTE) return SelectionType.NOTE
+  return SelectionType.SEPARATOR
 }
 
 export function removeSelectedItem(item: TreeItem, type: SelectionType) {
@@ -222,6 +225,12 @@ export function getSelectedNotes(): Array<Note> {
     .map((selectedItem) => selectedItem.item as Note)
 }
 
+export function getSelectedSeparators(): Array<Separator> {
+  return Selection.selectedItems.value
+    .filter((selectedItem) => selectedItem.type === SelectionType.SEPARATOR)
+    .map((selectedItem) => selectedItem.item as Separator)
+}
+
 export function getSelectedItems(type: SelectionType): Array<TreeItem> {
   if (type === SelectionType.WINDOW) {
     return getSelectedWindows()
@@ -229,6 +238,8 @@ export function getSelectedItems(type: SelectionType): Array<TreeItem> {
     return getSelectedTabs()
   } else if (type === SelectionType.NOTE) {
     return getSelectedNotes()
+  } else if (type === SelectionType.SEPARATOR) {
+    return getSelectedSeparators()
   }
   return []
 }

@@ -1,6 +1,13 @@
 import { DeferredEventsQueue } from '@/services/background-deferred-events-queue'
 import { Tree } from '@/services/background-tree'
-import { Note, State, Tab, TreeItemType, Window } from '@/types/session-tree'
+import {
+  Note,
+  Separator,
+  State,
+  Tab,
+  TreeItemType,
+  Window,
+} from '@/types/session-tree'
 
 let nextWindowId = 1
 let nextTabId = 1
@@ -12,6 +19,7 @@ export function resetTree(): void {
   Tree.existingUidsSet = new Set<UID>()
   Tree.tabsByUid = new Map<UID, Tab>()
   Tree.notesByUid = new Map<UID, Note>()
+  Tree.separatorsByUid = new Map<UID, Separator>()
   Tree.windowsByUid = new Map<UID, Window>()
   Tree.initialized = true
   DeferredEventsQueue.windows = new Map()
@@ -22,7 +30,7 @@ export function resetTree(): void {
 
 export function createWindow(
   uid: UID,
-  children: Array<Tab | Note> = [],
+  children: Array<Tab | Note | Separator> = [],
   overrides: Partial<Window> = {},
 ): Window {
   const window: Window = {
@@ -84,11 +92,29 @@ export function createNote(
   }
 }
 
-function indexChild(child: Tab | Note): void {
+export function createSeparator(
+  uid: UID,
+  overrides: Partial<Separator> = {},
+): Separator {
+  return {
+    type: TreeItemType.SEPARATOR,
+    uid,
+    selected: false,
+    windowUid: undefined,
+    indentLevel: 1,
+    isParent: false,
+    collapsed: false,
+    ...overrides,
+  }
+}
+
+function indexChild(child: Tab | Note | Separator): void {
   Tree.existingUidsSet.add(child.uid)
   if (child.type === TreeItemType.TAB) {
     Tree.tabsByUid.set(child.uid, child)
-  } else {
+  } else if (child.type === TreeItemType.NOTE) {
     Tree.notesByUid.set(child.uid, child)
+  } else {
+    Tree.separatorsByUid.set(child.uid, child)
   }
 }

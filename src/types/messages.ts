@@ -175,6 +175,36 @@ export interface UpdateNoteTextMessage {
 }
 
 // ==============================
+// Separator Messages
+// ==============================
+
+export interface CreateSeparatorMessage {
+  action: 'createSeparator'
+  parentUid?: UID
+  index?: number
+}
+
+export interface RemoveSeparatorMessage {
+  action: 'removeSeparator'
+  separatorUid: UID
+}
+
+export interface CreateSeparatorBelowMessage {
+  action: 'createSeparatorBelow'
+  separatorUid: UID
+}
+
+export interface SeparatorIndentIncreaseMessage {
+  action: 'separatorIndentIncrease'
+  separatorUids: UID[]
+}
+
+export interface SeparatorIndentDecreaseMessage {
+  action: 'separatorIndentDecrease'
+  separatorUids: UID[]
+}
+
+// ==============================
 // Debug Messages
 // ==============================
 
@@ -193,6 +223,8 @@ export interface DeselectAllItemsMessage {
 export type SessionTreeMessage =
   | CloseTabMessage
   | CloseWindowMessage
+  | CreateSeparatorMessage
+  | CreateSeparatorBelowMessage
   | CreateNoteMessage
   | DeselectAllItemsMessage
   | DuplicateTabMessage
@@ -209,8 +241,11 @@ export type SessionTreeMessage =
   | PrintSessionTreeMessage
   | ReloadTabMessage
   | RemoveNoteMessage
+  | RemoveSeparatorMessage
   | SaveAndRemoveWindowMessage
   | SaveTabMessage
+  | SeparatorIndentDecreaseMessage
+  | SeparatorIndentIncreaseMessage
   | TabIndentDecreaseMessage
   | TabIndentIncreaseMessage
   | ToggleCollapseTabMessage

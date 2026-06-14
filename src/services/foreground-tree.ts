@@ -1,6 +1,7 @@
 import { SessionTreeDelta } from '@/types/runtime-port-service'
 import {
   Note,
+  Separator,
   Tab,
   TopLevelTreeItem,
   TreeItem,
@@ -77,11 +78,13 @@ function reindexTree(): void {
   SessionTree.windowsByUid.clear()
   SessionTree.tabsByUid.clear()
   SessionTree.notesByUid.clear()
+  SessionTree.separatorsByUid.clear()
 
   walk(SessionTree.reactiveItems.value, (item) => {
     if (item.type === TreeItemType.WINDOW) SessionTree.windowsByUid.set(item.uid, item)
     else if (item.type === TreeItemType.TAB) SessionTree.tabsByUid.set(item.uid, item)
-    else SessionTree.notesByUid.set(item.uid, item)
+    else if (item.type === TreeItemType.NOTE) SessionTree.notesByUid.set(item.uid, item)
+    else SessionTree.separatorsByUid.set(item.uid, item)
   })
 }
 
@@ -149,7 +152,18 @@ function applyDelta(delta: SessionTreeDelta): void {
     }
     case 'noteCreated':
     case 'noteRemoved':
+    case 'separatorCreated':
+    case 'separatorRemoved':
       return
+    case 'separatorUpdated': {
+      const existingSeparator = SessionTree.separatorsByUid.get(
+        delta.separator.uid,
+      )
+      if (existingSeparator)
+        updateTreeItemInPlace(existingSeparator, delta.separator)
+      reindexTree()
+      return
+    }
     case 'noteUpdated': {
       const existingNote = SessionTree.notesByUid.get(delta.note.uid)
       if (existingNote) updateTreeItemInPlace(existingNote, delta.note)
@@ -166,6 +180,7 @@ export const SessionTree = {
   windowsByUid: new Map<UID, Window>(),
   tabsByUid: new Map<UID, Tab>(),
   notesByUid: new Map<UID, Note>(),
+  separatorsByUid: new Map<UID, Separator>(),
 
   replaceSessionTree(items: TopLevelTreeItem[]) {
     replaceSessionTree(items)

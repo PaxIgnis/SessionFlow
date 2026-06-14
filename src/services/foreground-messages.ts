@@ -342,6 +342,46 @@ export function updateNoteText(noteUid: UID, text: string) {
 }
 
 // ==============================
+// Separator Messages
+// ==============================
+
+export function createSeparator(parentUid?: UID, index?: number) {
+  void sendTreeCommand({
+    action: 'createSeparator',
+    parentUid,
+    index,
+  } as Messages.CreateSeparatorMessage)
+}
+
+export function removeSeparator(separatorUid: UID) {
+  void sendTreeCommand({
+    action: 'removeSeparator',
+    separatorUid,
+  } as Messages.RemoveSeparatorMessage)
+}
+
+export function createSeparatorBelow(separatorUid: UID) {
+  void sendTreeCommand({
+    action: 'createSeparatorBelow',
+    separatorUid,
+  } as Messages.CreateSeparatorBelowMessage)
+}
+
+export function separatorIndentIncrease(separatorUids: UID[]) {
+  void sendTreeCommand({
+    action: 'separatorIndentIncrease',
+    separatorUids,
+  } as Messages.SeparatorIndentIncreaseMessage)
+}
+
+export function separatorIndentDecrease(separatorUids: UID[]) {
+  void sendTreeCommand({
+    action: 'separatorIndentDecrease',
+    separatorUids,
+  } as Messages.SeparatorIndentDecreaseMessage)
+}
+
+// ==============================
 // Debug Messages
 // ==============================
 export function printSessionTree() {
