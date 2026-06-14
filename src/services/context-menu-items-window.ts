@@ -5,6 +5,45 @@ import { ContextMenuItem } from '@/types/context-menu'
 import { State } from '@/types/session-tree'
 
 export const contextMenuItemsWindow: Record<string, () => ContextMenuItem> = {
+  duplicateTreeItem: () => {
+    return {
+      id: 'duplicateTreeItem',
+      label: 'Duplicate',
+      icon: 'duplicate',
+      enabled: Selection.getSelectedWindows().length > 0,
+      action: () =>
+        Messages.duplicateTreeItems(
+          Selection.getSelectedWindows().map((window) => window.uid),
+        ),
+    }
+  },
+
+  treeItemIndentIncrease: () => {
+    return {
+      id: 'treeItemIndentIncrease',
+      label: 'Increase Indent',
+      icon: 'indent-increase',
+      enabled: Selection.getSelectedWindows().length > 0,
+      action: () =>
+        Messages.treeItemIndentIncrease(
+          Selection.getSelectedWindows().map((window) => window.uid),
+        ),
+    }
+  },
+
+  treeItemIndentDecrease: () => {
+    return {
+      id: 'treeItemIndentDecrease',
+      label: 'Decrease Indent',
+      icon: 'indent-decrease',
+      enabled: Selection.getSelectedWindows().length > 0,
+      action: () =>
+        Messages.treeItemIndentDecrease(
+          Selection.getSelectedWindows().map((window) => window.uid),
+        ),
+    }
+  },
+
   saveWindow: () => {
     return {
       id: 'saveWindow',

@@ -35,5 +35,11 @@ import { STRINGS } from '@/types/strings'
       :options="OPTIONS.boolean"
       @update="Settings.saveSettingsToStorage()"
     />
+    <ToggleButton
+      label="When Indent Is Adjusted, Include Children of Selected Items"
+      v-model="Settings.values.includeChildrenOfSelectedItemsWhenIndenting"
+      :options="OPTIONS.includeChildrenOfSelectedItemsWhenIndenting"
+      @update="Settings.saveSettingsToStorage()"
+    />
   </section>
 </template>

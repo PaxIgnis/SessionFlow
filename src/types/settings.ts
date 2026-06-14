@@ -4,6 +4,7 @@ export interface Settings {
   openSessionTreeInSameLocation: boolean
   openSessionTreeOnStartup: boolean
   restorePreviousSessionOnStartup: boolean
+  includeChildrenOfSelectedItemsWhenIndenting: (typeof SETTINGS_TYPES.includeChildrenOfSelectedItemsWhenIndenting)[number]
 
   // Windows
   focusWindowOnOpen: boolean
@@ -42,6 +43,11 @@ export const SETTINGS_TYPES = {
   doubleClickOnOpenTab: ['save', 'close', 'reload', 'duplicate', 'focus'],
   doubleClickOnSavedTab: ['open', 'remove', 'duplicate'],
   includeChildrenOfSelectedItems: ['always', 'collapsed', 'never'],
+  includeChildrenOfSelectedItemsWhenIndenting: [
+    'always',
+    'collapsed',
+    'never',
+  ],
   refreshFaviconsAfterPeriodOfTimeUnit: [
     'seconds',
     'minutes',
@@ -70,6 +76,11 @@ export const OPTIONS = {
     { label: 'Duplicate', value: 'duplicate' },
   ],
   includeChildrenOfSelectedItems: [
+    { label: 'Always', value: 'always' },
+    { label: 'Only if Collapsed', value: 'collapsed' },
+    { label: 'Never', value: 'never' },
+  ],
+  includeChildrenOfSelectedItemsWhenIndenting: [
     { label: 'Always', value: 'always' },
     { label: 'Only if Collapsed', value: 'collapsed' },
     { label: 'Never', value: 'never' },

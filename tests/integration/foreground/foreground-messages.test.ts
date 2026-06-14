@@ -60,6 +60,44 @@ describe('foreground message helpers', () => {
     })
   })
 
+  it('sends generic tree item action payloads', async () => {
+    const { duplicateTreeItems, treeItemIndentDecrease, treeItemIndentIncrease } =
+      await import('@/services/foreground-messages')
+
+    duplicateTreeItems(['note-1' as UID, 'window-1' as UID])
+    treeItemIndentIncrease(['note-1' as UID])
+    treeItemIndentDecrease(['window-1' as UID])
+
+    expect(sendTreeCommand).toHaveBeenNthCalledWith(1, {
+      action: 'duplicateTreeItems',
+      itemUIDs: ['note-1', 'window-1'],
+    })
+    expect(sendTreeCommand).toHaveBeenNthCalledWith(2, {
+      action: 'treeItemIndentIncrease',
+      itemUIDs: ['note-1'],
+    })
+    expect(sendTreeCommand).toHaveBeenNthCalledWith(3, {
+      action: 'treeItemIndentDecrease',
+      itemUIDs: ['window-1'],
+    })
+  })
+
+  it('does not expose item-specific foreground duplicate helpers', async () => {
+    const messages = await import('@/services/foreground-messages')
+
+    expect('duplicateTab' in messages).toBe(false)
+    expect('duplicateTabs' in messages).toBe(false)
+  })
+
+  it('does not expose item-specific foreground indent helpers', async () => {
+    const messages = await import('@/services/foreground-messages')
+
+    expect('tabIndentIncrease' in messages).toBe(false)
+    expect('tabIndentDecrease' in messages).toBe(false)
+    expect('separatorIndentIncrease' in messages).toBe(false)
+    expect('separatorIndentDecrease' in messages).toBe(false)
+  })
+
   it('sends note command payloads', async () => {
     const { createNote, removeNote, updateNoteText } = await import(
       '@/services/foreground-messages'
@@ -91,15 +129,11 @@ describe('foreground message helpers', () => {
       createSeparator,
       createSeparatorBelow,
       removeSeparator,
-      separatorIndentDecrease,
-      separatorIndentIncrease,
     } = await import('@/services/foreground-messages')
 
     createSeparator('window-1' as UID, 2)
     removeSeparator('separator-1' as UID)
     createSeparatorBelow('separator-1' as UID)
-    separatorIndentIncrease(['separator-1' as UID])
-    separatorIndentDecrease(['separator-1' as UID])
 
     expect(sendTreeCommand).toHaveBeenNthCalledWith(1, {
       action: 'createSeparator',
@@ -113,14 +147,6 @@ describe('foreground message helpers', () => {
     expect(sendTreeCommand).toHaveBeenNthCalledWith(3, {
       action: 'createSeparatorBelow',
       separatorUid: 'separator-1',
-    })
-    expect(sendTreeCommand).toHaveBeenNthCalledWith(4, {
-      action: 'separatorIndentIncrease',
-      separatorUids: ['separator-1'],
-    })
-    expect(sendTreeCommand).toHaveBeenNthCalledWith(5, {
-      action: 'separatorIndentDecrease',
-      separatorUids: ['separator-1'],
     })
   })
 
@@ -164,7 +190,7 @@ describe('foreground message helpers', () => {
     ['save', 'saveTab'],
     ['close', 'closeTab'],
     ['reload', 'reloadTab'],
-    ['duplicate', 'duplicateTab'],
+    ['duplicate', 'duplicateTreeItems'],
     ['focus', 'focusTab'],
   ] as const)('uses open-tab double-click action %s', async (setting, action) => {
     const { tabDoubleClick } = await import('@/services/foreground-messages')
@@ -187,7 +213,7 @@ describe('foreground message helpers', () => {
   it.each([
     ['open', 'openTab'],
     ['remove', 'closeTab'],
-    ['duplicate', 'duplicateTab'],
+    ['duplicate', 'duplicateTreeItems'],
   ] as const)('uses saved-tab double-click action %s', async (setting, action) => {
     const { tabDoubleClick } = await import('@/services/foreground-messages')
     Settings.values.doubleClickOnSavedTab = setting

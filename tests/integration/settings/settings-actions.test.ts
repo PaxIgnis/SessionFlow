@@ -115,6 +115,7 @@ describe('settings actions', () => {
         openWindowsInSameLocationUpdateInterval: 15,
         openWindowsInSameLocationUpdateIntervalUnit: 'minutes',
         includeChildrenOfSelectedItems: 'always',
+        includeChildrenOfSelectedItemsWhenIndenting: 'never',
       },
     })
     const { loadSettingsFromStorage } = await import('@/services/settings-actions')
@@ -126,5 +127,8 @@ describe('settings actions', () => {
       'minutes',
     )
     expect(Settings.values.includeChildrenOfSelectedItems).toBe('always')
+    expect(Settings.values.includeChildrenOfSelectedItemsWhenIndenting).toBe(
+      'never',
+    )
   })
 })

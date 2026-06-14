@@ -8,6 +8,10 @@ function selectedParentUid(): UID | undefined {
   return selected?.uid
 }
 
+function selectedItemUids(): UID[] {
+  return Selection.selectedItems.value.map((selected) => selected.item.uid)
+}
+
 export const contextMenuItemsNote: Record<string, () => ContextMenuItem> = {
   createNote: () => {
     return {
@@ -16,6 +20,36 @@ export const contextMenuItemsNote: Record<string, () => ContextMenuItem> = {
       icon: 'note',
       enabled: Selection.selectedItems.value.length <= 1,
       action: () => Messages.createNote(selectedParentUid()),
+    }
+  },
+
+  duplicateTreeItem: () => {
+    return {
+      id: 'duplicateTreeItem',
+      label: 'Duplicate',
+      icon: 'duplicate',
+      enabled: Selection.selectedItems.value.length > 0,
+      action: () => Messages.duplicateTreeItems(selectedItemUids()),
+    }
+  },
+
+  treeItemIndentIncrease: () => {
+    return {
+      id: 'treeItemIndentIncrease',
+      label: 'Increase Indent',
+      icon: 'indent-increase',
+      enabled: Selection.selectedItems.value.length > 0,
+      action: () => Messages.treeItemIndentIncrease(selectedItemUids()),
+    }
+  },
+
+  treeItemIndentDecrease: () => {
+    return {
+      id: 'treeItemIndentDecrease',
+      label: 'Decrease Indent',
+      icon: 'indent-decrease',
+      enabled: Selection.selectedItems.value.length > 0,
+      action: () => Messages.treeItemIndentDecrease(selectedItemUids()),
     }
   },
 

@@ -523,8 +523,6 @@ function onMessage(message: Messages.SessionTreeMessage): void {
 function dispatchCommand(message: Messages.SessionTreeMessage): void {
   if (message.action === 'closeTab') {
     Tree.closeTab(message)
-  } else if (message.action === 'duplicateTab') {
-    Tree.duplicateTab(message)
   } else if (message.action === 'saveTab') {
     Tree.saveTab(message)
   } else if (message.action === 'openTab') {
@@ -576,16 +574,8 @@ function dispatchCommand(message: Messages.SessionTreeMessage): void {
     Tree.removeSeparator(message.separatorUid)
   } else if (message.action === 'createSeparatorBelow') {
     Tree.createSeparatorBelow(message.separatorUid)
-  } else if (message.action === 'separatorIndentIncrease') {
-    Tree.separatorIndentIncrease(message.separatorUids)
-  } else if (message.action === 'separatorIndentDecrease') {
-    Tree.separatorIndentDecrease(message.separatorUids)
   } else if (message.action === 'deselectAllItems') {
     Tree.deselectAllItems()
-  } else if (message.action === 'tabIndentIncrease') {
-    Tree.tabIndentIncrease(message.tabUids)
-  } else if (message.action === 'tabIndentDecrease') {
-    Tree.tabIndentDecrease(message.tabUids)
   } else if (message.action === 'moveTabs') {
     Tree.moveTabs(
       message.tabUIDs,
@@ -605,6 +595,12 @@ function dispatchCommand(message: Messages.SessionTreeMessage): void {
     )
   } else if (message.action === 'moveWindows') {
     Tree.moveWindows(message.windowUIDs, message.targetIndex, message.copy)
+  } else if (message.action === 'duplicateTreeItems') {
+    Tree.duplicateTreeItems(message.itemUIDs)
+  } else if (message.action === 'treeItemIndentIncrease') {
+    Tree.treeItemIndentIncrease(message.itemUIDs)
+  } else if (message.action === 'treeItemIndentDecrease') {
+    Tree.treeItemIndentDecrease(message.itemUIDs)
   } else if (message.action === 'pinTab') {
     Tree.pinTab(message.tabUid)
   } else if (message.action === 'unpinTab') {

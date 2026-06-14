@@ -27,17 +27,15 @@ const openTabs = vi.hoisted(() => vi.fn())
 const reloadTabs = vi.hoisted(() => vi.fn())
 const saveTabs = vi.hoisted(() => vi.fn())
 const closeTabs = vi.hoisted(() => vi.fn())
-const duplicateTabs = vi.hoisted(() => vi.fn())
 const pinTabs = vi.hoisted(() => vi.fn())
 const unpinTabs = vi.hoisted(() => vi.fn())
-const tabIndentIncrease = vi.hoisted(() => vi.fn())
-const tabIndentDecrease = vi.hoisted(() => vi.fn())
 const createNote = vi.hoisted(() => vi.fn())
 const createSeparator = vi.hoisted(() => vi.fn())
 const createSeparatorBelow = vi.hoisted(() => vi.fn())
 const removeSeparator = vi.hoisted(() => vi.fn())
-const separatorIndentDecrease = vi.hoisted(() => vi.fn())
-const separatorIndentIncrease = vi.hoisted(() => vi.fn())
+const duplicateTreeItems = vi.hoisted(() => vi.fn())
+const treeItemIndentDecrease = vi.hoisted(() => vi.fn())
+const treeItemIndentIncrease = vi.hoisted(() => vi.fn())
 const openModal = vi.hoisted(() => vi.fn())
 
 vi.mock('@/services/foreground-messages', () => ({
@@ -45,17 +43,15 @@ vi.mock('@/services/foreground-messages', () => ({
   reloadTabs,
   saveTabs,
   closeTabs,
-  duplicateTabs,
   pinTabs,
   unpinTabs,
-  tabIndentIncrease,
-  tabIndentDecrease,
   createNote,
   createSeparator,
   createSeparatorBelow,
   removeSeparator,
-  separatorIndentDecrease,
-  separatorIndentIncrease,
+  duplicateTreeItems,
+  treeItemIndentDecrease,
+  treeItemIndentIncrease,
 }))
 
 vi.mock('@/services/modal-state', () => ({
@@ -222,10 +218,10 @@ describe('context menu actions', () => {
       (item) => item.id === 'createSeparatorBelow',
     )
     const increaseItem = items.find(
-      (item) => item.id === 'separatorIndentIncrease',
+      (item) => item.id === 'treeItemIndentIncrease',
     )
     const decreaseItem = items.find(
-      (item) => item.id === 'separatorIndentDecrease',
+      (item) => item.id === 'treeItemIndentDecrease',
     )
     const removeItem = items.find((item) => item.id === 'removeSeparator')
 
@@ -258,10 +254,86 @@ describe('context menu actions', () => {
 
     expect(createNote).toHaveBeenCalledWith(window.uid, 1)
     expect(createSeparatorBelow).toHaveBeenCalledWith(separator.uid)
-    expect(separatorIndentIncrease).toHaveBeenCalledWith([separator.uid])
-    expect(separatorIndentDecrease).toHaveBeenCalledWith([separator.uid])
+    expect(treeItemIndentIncrease).toHaveBeenCalledWith([separator.uid])
+    expect(treeItemIndentDecrease).toHaveBeenCalledWith([separator.uid])
     expect(removeSeparator).toHaveBeenCalledWith(separator.uid)
   })
+
+  it.each([
+    {
+      label: 'window',
+      configName: 'windowConfig',
+      selectionType: SelectionType.WINDOW,
+      makeSelection: () => makeForegroundWindow('window-structural' as UID),
+      hasDuplicateTreeItem: true,
+    },
+    {
+      label: 'tab',
+      configName: 'tabConfig',
+      selectionType: SelectionType.TAB,
+      makeSelection: () => makeForegroundTab('tab-structural' as UID),
+      hasDuplicateTreeItem: true,
+    },
+    {
+      label: 'note',
+      configName: 'noteConfig',
+      selectionType: SelectionType.NOTE,
+      makeSelection: () => makeForegroundNote('note-structural' as UID),
+      hasDuplicateTreeItem: true,
+    },
+    {
+      label: 'separator',
+      configName: 'separatorConfig',
+      selectionType: SelectionType.SEPARATOR,
+      makeSelection: () =>
+        makeForegroundSeparator('separator-structural' as UID),
+      hasDuplicateTreeItem: false,
+    },
+  ] as const)(
+    'creates enabled generic indent menu actions for a selected $label through the merged context menu registry',
+    ({ configName, selectionType, makeSelection, hasDuplicateTreeItem }) => {
+      const selected = makeSelection()
+      Selection.selectedItems.value = [{ item: selected, type: selectionType }]
+
+      const items = createContextMenuItems(ContextMenu[configName])
+      const duplicateItem = items.find((item) => item.id === 'duplicateTreeItem')
+      const increaseItem = items.find(
+        (item) => item.id === 'treeItemIndentIncrease',
+      )
+      const decreaseItem = items.find(
+        (item) => item.id === 'treeItemIndentDecrease',
+      )
+
+      if (hasDuplicateTreeItem) {
+        expect(duplicateItem).toMatchObject({
+          label: 'Duplicate',
+          enabled: true,
+        })
+      } else {
+        expect(duplicateItem).toBeUndefined()
+      }
+      expect(increaseItem).toMatchObject({
+        label: 'Increase Indent',
+        enabled: true,
+      })
+      expect(decreaseItem).toMatchObject({
+        label: 'Decrease Indent',
+        enabled: true,
+      })
+
+      if (hasDuplicateTreeItem) duplicateItem?.action?.()
+      increaseItem?.action?.()
+      decreaseItem?.action?.()
+
+      if (hasDuplicateTreeItem) {
+        expect(duplicateTreeItems).toHaveBeenCalledWith([selected.uid])
+      } else {
+        expect(duplicateTreeItems).not.toHaveBeenCalled()
+      }
+      expect(treeItemIndentIncrease).toHaveBeenCalledWith([selected.uid])
+      expect(treeItemIndentDecrease).toHaveBeenCalledWith([selected.uid])
+    },
+  )
 
   it('selects the right-clicked tab and opens its browser menu', () => {
     const tab = makeForegroundTab('tab-context' as UID, {

@@ -984,6 +984,246 @@ export function moveTreeItems(
   })
 }
 
+export function duplicateTreeItems(itemUIDs: UID[]): void {
+  const openTabUids = new Set(
+    itemUIDs.filter((uid) => {
+      const tab = Tree.tabsByUid.get(uid)
+      return tab?.state === State.OPEN
+    }),
+  )
+  for (const uid of openTabUids) {
+    const tab = Tree.tabsByUid.get(uid)
+    if (tab) Tree.duplicateTab({ tabId: tab.id, tabUid: tab.uid })
+  }
+
+  const moveBlocks = buildMoveBlocks(
+    itemUIDs.filter((uid) => !openTabUids.has(uid)),
+  )
+  if (moveBlocks.length === 0) return
+
+  const insertionBlocks = [...moveBlocks].sort((a, b) => {
+    if (a.children === b.children) return b.startIndex - a.startIndex
+    return 0
+  })
+
+  for (const block of insertionBlocks) {
+    const duplicates = cloneTreeItemBlock(block.items)
+    block.children.splice(block.startIndex + block.items.length, 0, ...duplicates)
+  }
+
+  Tree.recomputeSessionTree(false)
+  emitTreeDelta({
+    op: 'treeReplaced',
+    treeItems: structuredClone(Tree.Items),
+  })
+}
+
+export function treeItemIndentIncrease(itemUIDs: UID[]): void {
+  const separatorUids: UID[] = []
+
+  for (const uid of itemUIDs) {
+    const location = findItemLocation(uid)
+    if (!location) continue
+
+    if (location.item.type === TreeItemType.SEPARATOR) {
+      separatorUids.push(uid)
+      continue
+    }
+    if (location.index === 0) continue
+
+    const previous = findPreviousSiblingAtSameIndent(
+      location.children,
+      location.index,
+      location.item.indentLevel ?? 0,
+    )
+    if (!previous || previous.type === TreeItemType.SEPARATOR) continue
+
+    const targetWindowUid =
+      previous.type === TreeItemType.WINDOW
+        ? previous.uid
+        : Tree.getWindowUidForParent(previous)
+    const targetIndex =
+      previous.type === TreeItemType.WINDOW
+        ? previous.children.length
+        : location.index
+
+    Tree.moveTreeItems(
+      [uid],
+      targetIndex,
+      previous.uid,
+      targetWindowUid,
+      false,
+      includeChildrenWhenIndenting(location.item),
+    )
+  }
+
+  if (separatorUids.length) Tree.separatorIndentIncrease(separatorUids)
+}
+
+export function treeItemIndentDecrease(itemUIDs: UID[]): void {
+  for (const uid of itemUIDs) {
+    const location = findItemLocation(uid)
+    if (!location) continue
+
+    if (location.item.parentUid) {
+      decreaseItemFromParent(
+        location.item,
+        includeChildrenWhenIndenting(location.item),
+      )
+    } else if (
+      location.item.type !== TreeItemType.WINDOW &&
+      location.item.windowUid
+    ) {
+      decreaseItemFromWindowRoot(
+        location.item,
+        includeChildrenWhenIndenting(location.item),
+      )
+    }
+  }
+}
+
+function includeChildrenWhenIndenting(item: TreeItem): boolean {
+  const setting = Settings.values.includeChildrenOfSelectedItemsWhenIndenting
+  if (setting === 'always') return true
+  if (setting === 'never') return false
+  return item.collapsed === true
+}
+
+function cloneTreeItemBlock(items: TreeItem[]): TreeItem[] {
+  const uidMap = new Map<UID, UID>()
+  for (const item of items) {
+    reserveCloneUid(item, uidMap)
+  }
+  return items.map((item) => cloneTreeItem(item, uidMap))
+}
+
+function reserveCloneUid(item: TreeItem, uidMap: Map<UID, UID>): void {
+  uidMap.set(item.uid, Utils.createUid(Tree.existingUidsSet))
+  if (item.type === TreeItemType.WINDOW) {
+    for (const child of item.children) reserveCloneUid(child, uidMap)
+  }
+}
+
+function cloneTreeItem<T extends TreeItem>(item: T, uidMap: Map<UID, UID>): T {
+  const clone = structuredClone(item) as T
+  applyClonedTreeItemIdentity(clone, item, uidMap)
+  registerClonedTreeItem(clone)
+  return clone
+}
+
+function applyClonedTreeItemIdentity(
+  clone: TreeItem,
+  source: TreeItem,
+  uidMap: Map<UID, UID>,
+): void {
+  clone.uid = uidMap.get(source.uid)!
+  clone.selected = false
+  clone.parentUid = source.parentUid ? (uidMap.get(source.parentUid) ?? source.parentUid) : undefined
+
+  if (clone.type === TreeItemType.WINDOW && source.type === TreeItemType.WINDOW) {
+    clone.id = -1
+    clone.state = State.SAVED
+    clone.active = false
+    clone.activeTabId = undefined
+    clone.children.forEach((child, index) => {
+      applyClonedTreeItemIdentity(child, source.children[index], uidMap)
+      child.windowUid = clone.uid
+    })
+    return
+  }
+
+  if (clone.type === TreeItemType.TAB) {
+    clone.id = -1
+    clone.state = State.SAVED
+    clone.active = false
+  }
+}
+
+function registerClonedTreeItem(item: TreeItem): void {
+  Tree.existingUidsSet.add(item.uid)
+  if (item.type === TreeItemType.WINDOW) {
+    Tree.windowsByUid.set(item.uid, item)
+    for (const child of item.children) registerClonedTreeItem(child)
+  } else if (item.type === TreeItemType.TAB) {
+    Tree.tabsByUid.set(item.uid, item)
+  } else if (item.type === TreeItemType.NOTE) {
+    Tree.notesByUid.set(item.uid, item)
+  } else {
+    Tree.separatorsByUid.set(item.uid, item)
+  }
+}
+
+function findPreviousSiblingAtSameIndent(
+  items: TreeItem[],
+  index: number,
+  indentLevel: number,
+): TreeItem | undefined {
+  for (let i = index - 1; i >= 0; i--) {
+    const itemIndent = items[i].indentLevel ?? 0
+    if (itemIndent === indentLevel) return items[i]
+    if (itemIndent < indentLevel) return undefined
+  }
+  return undefined
+}
+
+function decreaseItemFromParent(
+  item: TreeItem,
+  includeDescendants: boolean,
+): void {
+  if (!item.parentUid) return
+  const parent = getItemByUid(item.parentUid)
+  if (!parent) return
+  const parentLocation = findItemLocation(parent.uid)
+  if (!parentLocation) return
+
+  const targetIndex = getSubtreeEndIndex(
+    parentLocation.children,
+    parentLocation.index,
+  )
+  const targetWindowUid =
+    parent.type === TreeItemType.WINDOW
+      ? parent.uid
+      : Tree.getWindowUidForParent(parent)
+  const newParentUid =
+    parent.type === TreeItemType.WINDOW ? undefined : parent.parentUid
+
+  Tree.moveTreeItems(
+    [item.uid],
+    targetIndex,
+    newParentUid,
+    targetWindowUid,
+    false,
+    includeDescendants,
+  )
+}
+
+function decreaseItemFromWindowRoot(
+  item: TreeItem,
+  includeDescendants: boolean,
+): void {
+  if (
+    item.type !== TreeItemType.TAB &&
+    item.type !== TreeItemType.NOTE &&
+    item.type !== TreeItemType.SEPARATOR
+  ) {
+    return
+  }
+  if (!item.windowUid) return
+  const window = Tree.windowsByUid.get(item.windowUid)
+  if (!window) return
+  const windowLocation = findItemLocation(window.uid)
+  if (!windowLocation) return
+
+  Tree.moveTreeItems(
+    [item.uid],
+    getSubtreeEndIndex(windowLocation.children, windowLocation.index),
+    window.parentUid,
+    undefined,
+    false,
+    includeDescendants,
+  )
+}
+
 function buildMoveBlocks(itemUIDs: UID[]): MoveBlock[] {
   const selected = new Set(itemUIDs)
   const locations = itemUIDs
@@ -1009,8 +1249,7 @@ function buildMoveBlocks(itemUIDs: UID[]): MoveBlock[] {
 
 function prepareBlockForMoveWithoutDescendants(block: MoveBlock): void {
   if (
-    (block.root.type !== TreeItemType.NOTE &&
-      block.root.type !== TreeItemType.SEPARATOR) ||
+    block.root.type === TreeItemType.WINDOW ||
     block.items.length <= 1
   ) {
     return

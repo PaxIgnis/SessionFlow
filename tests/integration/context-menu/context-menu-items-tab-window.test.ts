@@ -2,38 +2,46 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Selection } from '@/services/selection'
 import { SelectionType, State } from '@/types/session-tree'
 import {
+  makeForegroundNote,
   makeForegroundTab,
   makeForegroundWindow,
 } from '../../helpers/foreground-tree-fixtures'
 
-const duplicateTabs = vi.hoisted(() => vi.fn())
 const openTabs = vi.hoisted(() => vi.fn())
 const reloadTabs = vi.hoisted(() => vi.fn())
 const saveTabs = vi.hoisted(() => vi.fn())
 const closeTabs = vi.hoisted(() => vi.fn())
 const pinTabs = vi.hoisted(() => vi.fn())
 const unpinTabs = vi.hoisted(() => vi.fn())
-const tabIndentIncrease = vi.hoisted(() => vi.fn())
 const saveWindows = vi.hoisted(() => vi.fn())
 const closeWindows = vi.hoisted(() => vi.fn())
+const createNote = vi.hoisted(() => vi.fn())
+const removeNote = vi.hoisted(() => vi.fn())
+const duplicateTreeItems = vi.hoisted(() => vi.fn())
+const treeItemIndentDecrease = vi.hoisted(() => vi.fn())
+const treeItemIndentIncrease = vi.hoisted(() => vi.fn())
 const openModal = vi.hoisted(() => vi.fn())
+const openEditNoteModal = vi.hoisted(() => vi.fn())
 
 vi.mock('@/services/foreground-messages', () => ({
-  duplicateTabs,
   openTabs,
   reloadTabs,
   saveTabs,
   closeTabs,
   pinTabs,
   unpinTabs,
-  tabIndentIncrease,
-  tabIndentDecrease: vi.fn(),
   saveWindows,
   closeWindows,
+  createNote,
+  removeNote,
+  duplicateTreeItems,
+  treeItemIndentDecrease,
+  treeItemIndentIncrease,
 }))
 
 vi.mock('@/services/modal-state', () => ({
   openModal,
+  openEditNoteModal,
 }))
 
 describe('tab context menu items', () => {
@@ -74,11 +82,13 @@ describe('tab context menu items', () => {
       '@/services/context-menu-items-tab'
     )
 
-    contextMenuItemsTab.duplicateTab().action?.()
-    contextMenuItemsTab.tabIndentIncrease().action?.()
+    contextMenuItemsTab.duplicateTreeItem().action?.()
+    contextMenuItemsTab.treeItemIndentIncrease().action?.()
+    contextMenuItemsTab.treeItemIndentDecrease().action?.()
 
-    expect(duplicateTabs).toHaveBeenCalledWith([tab])
-    expect(tabIndentIncrease).toHaveBeenCalledWith([tab])
+    expect(duplicateTreeItems).toHaveBeenCalledWith([tab.uid])
+    expect(treeItemIndentIncrease).toHaveBeenCalledWith([tab.uid])
+    expect(treeItemIndentDecrease).toHaveBeenCalledWith([tab.uid])
   })
 
   it('opens edit custom label modal only for a single selected tab', async () => {
@@ -139,12 +149,41 @@ describe('window context menu items', () => {
     contextMenuItemsWindow.saveWindow().action?.()
     contextMenuItemsWindow.closeWindow().action?.()
     contextMenuItemsWindow.editWindowTitle().action?.()
+    contextMenuItemsWindow.duplicateTreeItem().action?.()
+    contextMenuItemsWindow.treeItemIndentIncrease().action?.()
+    contextMenuItemsWindow.treeItemIndentDecrease().action?.()
 
     expect(saveWindows).toHaveBeenCalledWith([window])
     expect(closeWindows).toHaveBeenCalledWith([window])
+    expect(duplicateTreeItems).toHaveBeenCalledWith([window.uid])
+    expect(treeItemIndentIncrease).toHaveBeenCalledWith([window.uid])
+    expect(treeItemIndentDecrease).toHaveBeenCalledWith([window.uid])
     expect(openModal).toHaveBeenCalledWith({
       kind: 'editWindowTitle',
       window,
     })
+  })
+})
+
+describe('note structural context menu items', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    Selection.selectedItems.value = []
+  })
+
+  it('dispatches duplicate and indent actions with selected note uids', async () => {
+    const note = makeForegroundNote('note-1' as UID)
+    Selection.selectedItems.value = [{ item: note, type: SelectionType.NOTE }]
+    const { contextMenuItemsNote } = await import(
+      '@/services/context-menu-items-note'
+    )
+
+    contextMenuItemsNote.duplicateTreeItem().action?.()
+    contextMenuItemsNote.treeItemIndentIncrease().action?.()
+    contextMenuItemsNote.treeItemIndentDecrease().action?.()
+
+    expect(duplicateTreeItems).toHaveBeenCalledWith([note.uid])
+    expect(treeItemIndentIncrease).toHaveBeenCalledWith([note.uid])
+    expect(treeItemIndentDecrease).toHaveBeenCalledWith([note.uid])
   })
 })

@@ -6,6 +6,7 @@ export const DEFAULT_SETTINGS: Settings = {
   openSessionTreeInSameLocation: true,
   openSessionTreeOnStartup: false,
   restorePreviousSessionOnStartup: false,
+  includeChildrenOfSelectedItemsWhenIndenting: 'always',
 
   // Windows
   focusWindowOnOpen: true,

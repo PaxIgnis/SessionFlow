@@ -5,13 +5,16 @@ import { ContextMenuItem } from '@/types/context-menu'
 import { State } from '@/types/session-tree'
 
 export const contextMenuItemsTab: Record<string, () => ContextMenuItem> = {
-  duplicateTab: () => {
+  duplicateTreeItem: () => {
     return {
-      id: 'duplicateTab',
+      id: 'duplicateTreeItem',
       label: 'Duplicate',
       icon: 'duplicate',
       enabled: Selection.getSelectedTabs().length > 0,
-      action: () => Messages.duplicateTabs(Selection.getSelectedTabs()),
+      action: () =>
+        Messages.duplicateTreeItems(
+          Selection.getSelectedTabs().map((tab) => tab.uid),
+        ),
     }
   },
 
@@ -75,23 +78,29 @@ export const contextMenuItemsTab: Record<string, () => ContextMenuItem> = {
     }
   },
 
-  tabIndentIncrease: () => {
+  treeItemIndentIncrease: () => {
     return {
-      id: 'tabIndentIncrease',
+      id: 'treeItemIndentIncrease',
       label: 'Increase Indent',
       icon: 'indent-increase',
       enabled: Selection.getSelectedTabs().length > 0,
-      action: () => Messages.tabIndentIncrease(Selection.getSelectedTabs()),
+      action: () =>
+        Messages.treeItemIndentIncrease(
+          Selection.getSelectedTabs().map((tab) => tab.uid),
+        ),
     }
   },
 
-  tabIndentDecrease: () => {
+  treeItemIndentDecrease: () => {
     return {
-      id: 'tabIndentDecrease',
+      id: 'treeItemIndentDecrease',
       label: 'Decrease Indent',
       icon: 'indent-decrease',
       enabled: Selection.getSelectedTabs().length > 0,
-      action: () => Messages.tabIndentDecrease(Selection.getSelectedTabs()),
+      action: () =>
+        Messages.treeItemIndentDecrease(
+          Selection.getSelectedTabs().map((tab) => tab.uid),
+        ),
     }
   },
 

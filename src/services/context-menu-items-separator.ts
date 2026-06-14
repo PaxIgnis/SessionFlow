@@ -9,6 +9,10 @@ function selectedParentUid(): UID | undefined {
   return selected?.uid
 }
 
+function selectedItemUids(): UID[] {
+  return Selection.selectedItems.value.map((selected) => selected.item.uid)
+}
+
 function getCreateNoteTargetBelowSeparator(
   separator: Separator,
 ): { parentUid: UID | undefined; index: number | undefined } {
@@ -76,30 +80,26 @@ export const contextMenuItemsSeparator: Record<string, () => ContextMenuItem> =
       }
     },
 
-    separatorIndentIncrease: () => {
+    treeItemIndentIncrease: () => {
       return {
-        id: 'separatorIndentIncrease',
+        id: 'treeItemIndentIncrease',
         label: 'Increase Indent',
         icon: 'indent-increase',
-        enabled: Selection.getSelectedSeparators().length > 0,
+        enabled: Selection.selectedItems.value.length > 0,
         action: () => {
-          Messages.separatorIndentIncrease(
-            Selection.getSelectedSeparators().map((separator) => separator.uid),
-          )
+          Messages.treeItemIndentIncrease(selectedItemUids())
         },
       }
     },
 
-    separatorIndentDecrease: () => {
+    treeItemIndentDecrease: () => {
       return {
-        id: 'separatorIndentDecrease',
+        id: 'treeItemIndentDecrease',
         label: 'Decrease Indent',
         icon: 'indent-decrease',
-        enabled: Selection.getSelectedSeparators().length > 0,
+        enabled: Selection.selectedItems.value.length > 0,
         action: () => {
-          Messages.separatorIndentDecrease(
-            Selection.getSelectedSeparators().map((separator) => separator.uid),
-          )
+          Messages.treeItemIndentDecrease(selectedItemUids())
         },
       }
     },

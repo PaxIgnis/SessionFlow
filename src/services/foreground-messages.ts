@@ -21,20 +21,6 @@ export function closeTabs(tabs: Array<Tab>) {
   })
 }
 
-export function duplicateTab(tabId: number, tabUid: UID) {
-  void sendTreeCommand({
-    action: 'duplicateTab',
-    tabId: tabId,
-    tabUid: tabUid,
-  } as Messages.DuplicateTabMessage)
-}
-
-export function duplicateTabs(tabs: Array<Tab>) {
-  tabs.forEach((tab) => {
-    duplicateTab(tab.id, tab.uid)
-  })
-}
-
 export function focusTab(tabId: number, windowId: number) {
   void sendTreeCommand({
     action: 'focusTab',
@@ -130,7 +116,7 @@ export function tabDoubleClick(
     } else if (tabDoubleClickAction === 'reload') {
       reloadTab(tabId)
     } else if (tabDoubleClickAction === 'duplicate') {
-      duplicateTab(tabId, tabUid)
+      duplicateTreeItems([tabUid])
     } else if (tabDoubleClickAction === 'focus') {
       focusTab(tabId, windowId)
     }
@@ -142,25 +128,9 @@ export function tabDoubleClick(
     } else if (tabDoubleClickAction === 'remove') {
       closeTab(tabId, tabUid)
     } else if (tabDoubleClickAction === 'duplicate') {
-      duplicateTab(tabId, tabUid)
+      duplicateTreeItems([tabUid])
     }
   }
-}
-
-export function tabIndentDecrease(tabs: Array<Tab>) {
-  const tabUids = tabs.map((tab) => tab.uid)
-  void sendTreeCommand({
-    action: 'tabIndentDecrease',
-    tabUids: tabUids,
-  })
-}
-
-export function tabIndentIncrease(tabs: Array<Tab>) {
-  const tabUids = tabs.map((tab) => tab.uid)
-  void sendTreeCommand({
-    action: 'tabIndentIncrease',
-    tabUids: tabUids,
-  })
 }
 
 export function toggleCollapseTab(tabUid: UID) {
@@ -306,6 +276,27 @@ export function updateWindowTitle(windowUid: UID, newTitle: string) {
   } as Messages.UpdateWindowTitleMessage)
 }
 
+export function duplicateTreeItems(itemUIDs: Array<UID>) {
+  void sendTreeCommand({
+    action: 'duplicateTreeItems',
+    itemUIDs,
+  } as Messages.DuplicateTreeItemsMessage)
+}
+
+export function treeItemIndentIncrease(itemUIDs: Array<UID>) {
+  void sendTreeCommand({
+    action: 'treeItemIndentIncrease',
+    itemUIDs,
+  } as Messages.TreeItemIndentIncreaseMessage)
+}
+
+export function treeItemIndentDecrease(itemUIDs: Array<UID>) {
+  void sendTreeCommand({
+    action: 'treeItemIndentDecrease',
+    itemUIDs,
+  } as Messages.TreeItemIndentDecreaseMessage)
+}
+
 // ==============================
 // Note Messages
 // ==============================
@@ -365,20 +356,6 @@ export function createSeparatorBelow(separatorUid: UID) {
     action: 'createSeparatorBelow',
     separatorUid,
   } as Messages.CreateSeparatorBelowMessage)
-}
-
-export function separatorIndentIncrease(separatorUids: UID[]) {
-  void sendTreeCommand({
-    action: 'separatorIndentIncrease',
-    separatorUids,
-  } as Messages.SeparatorIndentIncreaseMessage)
-}
-
-export function separatorIndentDecrease(separatorUids: UID[]) {
-  void sendTreeCommand({
-    action: 'separatorIndentDecrease',
-    separatorUids,
-  } as Messages.SeparatorIndentDecreaseMessage)
 }
 
 // ==============================

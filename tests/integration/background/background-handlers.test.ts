@@ -19,7 +19,6 @@ async function loadBackgroundHandlers() {
   const treeMethods = {
     addTab: vi.fn(),
     closeTab: vi.fn(),
-    duplicateTab: vi.fn(),
     saveTab: vi.fn(),
     openTab: vi.fn(),
     closeWindow: vi.fn(),
@@ -35,9 +34,10 @@ async function loadBackgroundHandlers() {
     updateNoteText: vi.fn(),
     toggleCollapseNote: vi.fn(),
     removeNote: vi.fn(),
+    duplicateTreeItems: vi.fn(),
     deselectAllItems: vi.fn(),
-    tabIndentIncrease: vi.fn(),
-    tabIndentDecrease: vi.fn(),
+    treeItemIndentIncrease: vi.fn(),
+    treeItemIndentDecrease: vi.fn(),
     moveTabs: vi.fn(),
     moveTreeItems: vi.fn(),
     moveWindows: vi.fn(),
@@ -432,12 +432,6 @@ describe('background handlers', () => {
       [{ action: 'closeTab', tabId: 1, tabUid: 'tab-1' as UID }],
     ],
     [
-      'duplicateTab',
-      { action: 'duplicateTab', tabId: 2, tabUid: 'tab-2' as UID },
-      'duplicateTab',
-      [{ action: 'duplicateTab', tabId: 2, tabUid: 'tab-2' as UID }],
-    ],
-    [
       'saveTab',
       { action: 'saveTab', tabId: 3, tabUid: 'tab-3' as UID },
       'saveTab',
@@ -581,12 +575,16 @@ describe('background handlers', () => {
       copy: true,
     })
     dispatchCommand({
-      action: 'tabIndentIncrease',
-      tabUids: ['tab-2' as UID],
+      action: 'duplicateTreeItems',
+      itemUIDs: ['note-1' as UID, 'window-1' as UID],
     })
     dispatchCommand({
-      action: 'tabIndentDecrease',
-      tabUids: ['tab-3' as UID],
+      action: 'treeItemIndentIncrease',
+      itemUIDs: ['note-2' as UID],
+    })
+    dispatchCommand({
+      action: 'treeItemIndentDecrease',
+      itemUIDs: ['window-2' as UID],
     })
     dispatchCommand({ action: 'pinTab', tabUid: 'tab-4' as UID })
     dispatchCommand({ action: 'unpinTab', tabUid: 'tab-5' as UID })
@@ -608,8 +606,12 @@ describe('background handlers', () => {
       true,
     )
     expect(mocks.moveWindows).toHaveBeenCalledWith(['window-3'], 5, true)
-    expect(mocks.tabIndentIncrease).toHaveBeenCalledWith(['tab-2'])
-    expect(mocks.tabIndentDecrease).toHaveBeenCalledWith(['tab-3'])
+    expect(mocks.duplicateTreeItems).toHaveBeenCalledWith([
+      'note-1',
+      'window-1',
+    ])
+    expect(mocks.treeItemIndentIncrease).toHaveBeenCalledWith(['note-2'])
+    expect(mocks.treeItemIndentDecrease).toHaveBeenCalledWith(['window-2'])
     expect(mocks.pinTab).toHaveBeenCalledWith('tab-4')
     expect(mocks.unpinTab).toHaveBeenCalledWith('tab-5')
     expect(mocks.updateWindowPositionInterval).toHaveBeenCalledTimes(1)

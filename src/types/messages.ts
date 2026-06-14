@@ -13,12 +13,6 @@ export interface CloseTabMessage {
   tabUid: UID
 }
 
-export interface DuplicateTabMessage {
-  action: 'duplicateTab'
-  tabId: number
-  tabUid: UID
-}
-
 export interface FocusTabMessage {
   action: 'focusTab'
   tabId: number
@@ -56,16 +50,6 @@ export interface SaveTabMessage {
   action: 'saveTab'
   tabId: number
   tabUid: UID
-}
-
-export interface TabIndentDecreaseMessage {
-  action: 'tabIndentDecrease'
-  tabUids: UID[]
-}
-
-export interface TabIndentIncreaseMessage {
-  action: 'tabIndentIncrease'
-  tabUids: UID[]
 }
 
 export interface ToggleCollapseTabMessage {
@@ -114,6 +98,21 @@ export interface MoveTreeItemsMessage {
   targetWindowUid?: UID
   copy: boolean
   includeDescendants?: boolean
+}
+
+export interface DuplicateTreeItemsMessage {
+  action: 'duplicateTreeItems'
+  itemUIDs: UID[]
+}
+
+export interface TreeItemIndentIncreaseMessage {
+  action: 'treeItemIndentIncrease'
+  itemUIDs: UID[]
+}
+
+export interface TreeItemIndentDecreaseMessage {
+  action: 'treeItemIndentDecrease'
+  itemUIDs: UID[]
 }
 
 export interface OpenWindowMessage {
@@ -194,16 +193,6 @@ export interface CreateSeparatorBelowMessage {
   separatorUid: UID
 }
 
-export interface SeparatorIndentIncreaseMessage {
-  action: 'separatorIndentIncrease'
-  separatorUids: UID[]
-}
-
-export interface SeparatorIndentDecreaseMessage {
-  action: 'separatorIndentDecrease'
-  separatorUids: UID[]
-}
-
 // ==============================
 // Debug Messages
 // ==============================
@@ -227,7 +216,7 @@ export type SessionTreeMessage =
   | CreateSeparatorBelowMessage
   | CreateNoteMessage
   | DeselectAllItemsMessage
-  | DuplicateTabMessage
+  | DuplicateTreeItemsMessage
   | FocusTabMessage
   | FocusWindowMessage
   | MoveTabsMessage
@@ -244,10 +233,8 @@ export type SessionTreeMessage =
   | RemoveSeparatorMessage
   | SaveAndRemoveWindowMessage
   | SaveTabMessage
-  | SeparatorIndentDecreaseMessage
-  | SeparatorIndentIncreaseMessage
-  | TabIndentDecreaseMessage
-  | TabIndentIncreaseMessage
+  | TreeItemIndentDecreaseMessage
+  | TreeItemIndentIncreaseMessage
   | ToggleCollapseTabMessage
   | ToggleCollapseNoteMessage
   | ToggleCollapseWindowMessage
