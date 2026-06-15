@@ -1,8 +1,12 @@
 import * as Messages from '@/services/foreground-messages'
 import { SessionTree } from '@/services/foreground-tree'
 import { Selection } from '@/services/selection'
+import {
+  canDecreaseIndentSelectedItems,
+  canIncreaseIndentSelectedItems,
+} from '@/services/context-menu-actions'
 import { ContextMenuItem } from '@/types/context-menu'
-import { Separator, TreeItem } from '@/types/session-tree'
+import type { Separator, TreeItem } from '@/types/session-tree'
 
 function selectedParentUid(): UID | undefined {
   const selected = Selection.selectedItems.value[0]?.item
@@ -85,7 +89,7 @@ export const contextMenuItemsSeparator: Record<string, () => ContextMenuItem> =
         id: 'treeItemIndentIncrease',
         label: 'Increase Indent',
         icon: 'indent-increase',
-        enabled: Selection.selectedItems.value.length > 0,
+        enabled: canIncreaseIndentSelectedItems(selectedItems()),
         action: () => {
           Messages.treeItemIndentIncrease(selectedItemUids())
         },
@@ -97,7 +101,7 @@ export const contextMenuItemsSeparator: Record<string, () => ContextMenuItem> =
         id: 'treeItemIndentDecrease',
         label: 'Decrease Indent',
         icon: 'indent-decrease',
-        enabled: Selection.selectedItems.value.length > 0,
+        enabled: canDecreaseIndentSelectedItems(selectedItems()),
         action: () => {
           Messages.treeItemIndentDecrease(selectedItemUids())
         },
@@ -118,3 +122,7 @@ export const contextMenuItemsSeparator: Record<string, () => ContextMenuItem> =
       }
     },
   }
+
+function selectedItems(): TreeItem[] {
+  return Selection.selectedItems.value.map((selected) => selected.item)
+}

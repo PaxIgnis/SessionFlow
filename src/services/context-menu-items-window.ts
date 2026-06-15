@@ -1,6 +1,10 @@
 import * as Messages from '@/services/foreground-messages'
 import { openModal } from '@/services/modal-state'
 import { Selection } from '@/services/selection'
+import {
+  canDecreaseIndentSelectedItems,
+  canIncreaseIndentSelectedItems,
+} from '@/services/context-menu-actions'
 import { ContextMenuItem } from '@/types/context-menu'
 import { State } from '@/types/session-tree'
 
@@ -23,7 +27,7 @@ export const contextMenuItemsWindow: Record<string, () => ContextMenuItem> = {
       id: 'treeItemIndentIncrease',
       label: 'Increase Indent',
       icon: 'indent-increase',
-      enabled: Selection.getSelectedWindows().length > 0,
+      enabled: canIncreaseIndentSelectedItems(Selection.getSelectedWindows()),
       action: () =>
         Messages.treeItemIndentIncrease(
           Selection.getSelectedWindows().map((window) => window.uid),
@@ -36,7 +40,7 @@ export const contextMenuItemsWindow: Record<string, () => ContextMenuItem> = {
       id: 'treeItemIndentDecrease',
       label: 'Decrease Indent',
       icon: 'indent-decrease',
-      enabled: Selection.getSelectedWindows().length > 0,
+      enabled: canDecreaseIndentSelectedItems(Selection.getSelectedWindows()),
       action: () =>
         Messages.treeItemIndentDecrease(
           Selection.getSelectedWindows().map((window) => window.uid),

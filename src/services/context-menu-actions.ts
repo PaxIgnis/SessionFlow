@@ -1,4 +1,5 @@
 import { ContextMenu } from '@/services/context-menu'
+import { SessionTree } from '@/services/foreground-tree'
 import {
   ContextMenuConfig,
   ContextMenuItem,
@@ -12,8 +13,16 @@ import {
   SelectionType,
   Separator,
   Tab,
+  TreeItemType,
   Window,
 } from '@/types/session-tree'
+import type { TreeItem } from '@/types/session-tree'
+
+interface ItemLocation {
+  item: TreeItem
+  children: TreeItem[]
+  index: number
+}
 
 /**
  * Controls logic opening of context menu based on selected type.
@@ -103,6 +112,78 @@ export function createContextMenu(items: ContextMenuItem[]): void {
  */
 export function clear(): void {
   browser.menus.removeAll()
+}
+
+export function canIncreaseIndentSelectedItems(items: TreeItem[]): boolean {
+  return items.some((item) => canIncreaseIndent(item))
+}
+
+export function canDecreaseIndentSelectedItems(items: TreeItem[]): boolean {
+  return items.some((item) => canDecreaseIndent(item))
+}
+
+function canIncreaseIndent(item: TreeItem): boolean {
+  const location = findItemLocation(item.uid)
+  if (!location || location.index === 0) return false
+
+  const previous = findPreviousSiblingAtSameIndent(
+    location.children,
+    location.index,
+    location.item.indentLevel ?? 0,
+  )
+  if (!previous || previous.type === TreeItemType.SEPARATOR) return false
+
+  if (
+    location.item.type === TreeItemType.WINDOW &&
+    previous.type === TreeItemType.WINDOW
+  ) {
+    return false
+  }
+
+  return true
+}
+
+function canDecreaseIndent(item: TreeItem): boolean {
+  const location = findItemLocation(item.uid)
+  if (!location) return false
+
+  if (location.item.parentUid) return true
+  if (location.item.type === TreeItemType.WINDOW) return false
+  if (!location.item.windowUid) return false
+
+  return location.item.type !== TreeItemType.TAB
+}
+
+function findItemLocation(uid: UID): ItemLocation | undefined {
+  const topLevelItems = SessionTree.reactiveItems.value as TreeItem[]
+  const topLevelIndex = topLevelItems.findIndex((item) => item.uid === uid)
+  if (topLevelIndex !== -1) {
+    return {
+      item: topLevelItems[topLevelIndex],
+      children: topLevelItems,
+      index: topLevelIndex,
+    }
+  }
+
+  for (const window of SessionTree.windowsByUid.values()) {
+    const children = window.children as TreeItem[]
+    const index = children.findIndex((item) => item.uid === uid)
+    if (index !== -1) return { item: children[index], children, index }
+  }
+  return undefined
+}
+
+function findPreviousSiblingAtSameIndent(
+  items: TreeItem[],
+  index: number,
+  indentLevel: number,
+): TreeItem | undefined {
+  for (let i = index - 1; i >= 0; i--) {
+    const itemIndent = items[i].indentLevel ?? 0
+    if (itemIndent === indentLevel) return items[i]
+    if (itemIndent < indentLevel) return undefined
+  }
+  return undefined
 }
 
 /**

@@ -204,8 +204,12 @@ describe('context menu actions', () => {
   )
 
   it('creates separator menu actions for note insert, separator insert, indent, and removal', () => {
+    const previous = makeForegroundTab('tab-previous' as UID)
     const separator = makeForegroundSeparator('separator-1' as UID)
-    const window = makeForegroundWindow('window-1' as UID, [separator])
+    const window = makeForegroundWindow('window-1' as UID, [
+      previous,
+      separator,
+    ])
     resetForegroundTree([window])
     separator.selected = true
     Selection.selectedItems.value = [
@@ -252,7 +256,7 @@ describe('context menu actions', () => {
     decreaseItem?.action?.()
     removeItem?.action?.()
 
-    expect(createNote).toHaveBeenCalledWith(window.uid, 1)
+    expect(createNote).toHaveBeenCalledWith(window.uid, 2)
     expect(createSeparatorBelow).toHaveBeenCalledWith(separator.uid)
     expect(treeItemIndentIncrease).toHaveBeenCalledWith([separator.uid])
     expect(treeItemIndentDecrease).toHaveBeenCalledWith([separator.uid])
@@ -264,35 +268,111 @@ describe('context menu actions', () => {
       label: 'window',
       configName: 'windowConfig',
       selectionType: SelectionType.WINDOW,
-      makeSelection: () => makeForegroundWindow('window-structural' as UID),
+      setup: () => {
+        const parent = makeForegroundNote('note-parent' as UID, {
+          indentLevel: 0,
+          isParent: true,
+          windowUid: undefined,
+        })
+        const previous = makeForegroundNote('note-previous' as UID, {
+          parentUid: parent.uid,
+          indentLevel: 1,
+          windowUid: undefined,
+        })
+        const selected = makeForegroundWindow('window-structural' as UID, [], {
+          parentUid: parent.uid,
+          indentLevel: 1,
+        })
+        resetForegroundTree([parent, previous, selected])
+        return selected
+      },
       hasDuplicateTreeItem: true,
     },
     {
       label: 'tab',
       configName: 'tabConfig',
       selectionType: SelectionType.TAB,
-      makeSelection: () => makeForegroundTab('tab-structural' as UID),
+      setup: () => {
+        const parent = makeForegroundTab('tab-parent' as UID, {
+          isParent: true,
+        })
+        const previous = makeForegroundTab('tab-previous' as UID, {
+          parentUid: parent.uid,
+          indentLevel: 2,
+        })
+        const selected = makeForegroundTab('tab-structural' as UID, {
+          parentUid: parent.uid,
+          indentLevel: 2,
+        })
+        resetForegroundTree([
+          makeForegroundWindow('window-1' as UID, [
+            parent,
+            previous,
+            selected,
+          ]),
+        ])
+        return selected
+      },
       hasDuplicateTreeItem: true,
     },
     {
       label: 'note',
       configName: 'noteConfig',
       selectionType: SelectionType.NOTE,
-      makeSelection: () => makeForegroundNote('note-structural' as UID),
+      setup: () => {
+        const parent = makeForegroundTab('tab-parent' as UID, {
+          isParent: true,
+        })
+        const previous = makeForegroundNote('note-previous' as UID, {
+          parentUid: parent.uid,
+          indentLevel: 2,
+        })
+        const selected = makeForegroundNote('note-structural' as UID, {
+          parentUid: parent.uid,
+          indentLevel: 2,
+        })
+        resetForegroundTree([
+          makeForegroundWindow('window-1' as UID, [
+            parent,
+            previous,
+            selected,
+          ]),
+        ])
+        return selected
+      },
       hasDuplicateTreeItem: true,
     },
     {
       label: 'separator',
       configName: 'separatorConfig',
       selectionType: SelectionType.SEPARATOR,
-      makeSelection: () =>
-        makeForegroundSeparator('separator-structural' as UID),
+      setup: () => {
+        const parent = makeForegroundTab('tab-parent' as UID, {
+          isParent: true,
+        })
+        const previous = makeForegroundTab('tab-previous' as UID, {
+          parentUid: parent.uid,
+          indentLevel: 2,
+        })
+        const selected = makeForegroundSeparator('separator-structural' as UID, {
+          parentUid: parent.uid,
+          indentLevel: 2,
+        })
+        resetForegroundTree([
+          makeForegroundWindow('window-1' as UID, [
+            parent,
+            previous,
+            selected,
+          ]),
+        ])
+        return selected
+      },
       hasDuplicateTreeItem: false,
     },
   ] as const)(
     'creates enabled generic indent menu actions for a selected $label through the merged context menu registry',
-    ({ configName, selectionType, makeSelection, hasDuplicateTreeItem }) => {
-      const selected = makeSelection()
+    ({ configName, selectionType, setup, hasDuplicateTreeItem }) => {
+      const selected = setup()
       Selection.selectedItems.value = [{ item: selected, type: selectionType }]
 
       const items = createContextMenuItems(ContextMenu[configName])
@@ -334,6 +414,177 @@ describe('context menu actions', () => {
       expect(treeItemIndentDecrease).toHaveBeenCalledWith([selected.uid])
     },
   )
+
+  it.each([
+    {
+      label: 'first root tab',
+      configName: 'tabConfig',
+      selectionType: SelectionType.TAB,
+      setup: () => {
+        const selected = makeForegroundTab('tab-first' as UID)
+        resetForegroundTree([
+          makeForegroundWindow('window-1' as UID, [selected]),
+        ])
+        return selected
+      },
+      canIncrease: false,
+      canDecrease: false,
+    },
+    {
+      label: 'tab after separator',
+      configName: 'tabConfig',
+      selectionType: SelectionType.TAB,
+      setup: () => {
+        const separator = makeForegroundSeparator('separator-1' as UID)
+        const selected = makeForegroundTab('tab-after-separator' as UID)
+        resetForegroundTree([
+          makeForegroundWindow('window-1' as UID, [separator, selected]),
+        ])
+        return selected
+      },
+      canIncrease: false,
+      canDecrease: false,
+    },
+    {
+      label: 'top-level window',
+      configName: 'windowConfig',
+      selectionType: SelectionType.WINDOW,
+      setup: () => {
+        const selected = makeForegroundWindow('window-root' as UID)
+        resetForegroundTree([selected])
+        return selected
+      },
+      canIncrease: false,
+      canDecrease: false,
+    },
+    {
+      label: 'window after window',
+      configName: 'windowConfig',
+      selectionType: SelectionType.WINDOW,
+      setup: () => {
+        const previous = makeForegroundWindow('window-previous' as UID)
+        const selected = makeForegroundWindow('window-after-window' as UID)
+        resetForegroundTree([previous, selected])
+        return selected
+      },
+      canIncrease: false,
+      canDecrease: false,
+    },
+    {
+      label: 'window-root note',
+      configName: 'noteConfig',
+      selectionType: SelectionType.NOTE,
+      setup: () => {
+        const selected = makeForegroundNote('note-window-root' as UID)
+        resetForegroundTree([
+          makeForegroundWindow('window-1' as UID, [selected]),
+        ])
+        return selected
+      },
+      canIncrease: false,
+      canDecrease: true,
+    },
+    {
+      label: 'window-root separator',
+      configName: 'separatorConfig',
+      selectionType: SelectionType.SEPARATOR,
+      setup: () => {
+        const selected = makeForegroundSeparator('separator-window-root' as UID)
+        resetForegroundTree([
+          makeForegroundWindow('window-1' as UID, [selected]),
+        ])
+        return selected
+      },
+      canIncrease: false,
+      canDecrease: true,
+    },
+  ] as const)(
+    'disables indent menu actions that cannot move a selected $label',
+    ({ configName, selectionType, setup, canIncrease, canDecrease }) => {
+      const selected = setup()
+      Selection.selectedItems.value = [{ item: selected, type: selectionType }]
+
+      const items = createContextMenuItems(ContextMenu[configName])
+      const increaseItem = items.find(
+        (item) => item.id === 'treeItemIndentIncrease',
+      )
+      const decreaseItem = items.find(
+        (item) => item.id === 'treeItemIndentDecrease',
+      )
+
+      expect(increaseItem).toMatchObject({
+        label: 'Increase Indent',
+        enabled: canIncrease,
+      })
+      expect(decreaseItem).toMatchObject({
+        label: 'Decrease Indent',
+        enabled: canDecrease,
+      })
+    },
+  )
+
+  it('disables indent actions when none of the selected items can move', () => {
+    const firstRootTab = makeForegroundTab('tab-first' as UID)
+    const separator = makeForegroundSeparator('separator-1' as UID)
+    const tabAfterSeparator = makeForegroundTab('tab-after-separator' as UID)
+    const rootWindow = makeForegroundWindow('window-root' as UID)
+    resetForegroundTree([
+      makeForegroundWindow('window-1' as UID, [
+        firstRootTab,
+        separator,
+        tabAfterSeparator,
+      ]),
+      rootWindow,
+    ])
+    Selection.selectedItems.value = [
+      { item: firstRootTab, type: SelectionType.TAB },
+      { item: tabAfterSeparator, type: SelectionType.TAB },
+      { item: rootWindow, type: SelectionType.WINDOW },
+    ]
+
+    const items = createContextMenuItems(ContextMenu.tabConfig)
+
+    expect(
+      items.find((item) => item.id === 'treeItemIndentIncrease'),
+    ).toMatchObject({ enabled: false })
+    expect(
+      items.find((item) => item.id === 'treeItemIndentDecrease'),
+    ).toMatchObject({ enabled: false })
+  })
+
+  it('enables indent actions when any selected item can move', () => {
+    const stuck = makeForegroundTab('tab-stuck' as UID)
+    const parent = makeForegroundTab('tab-parent' as UID, { isParent: true })
+    const previous = makeForegroundTab('tab-previous' as UID, {
+      parentUid: parent.uid,
+      indentLevel: 2,
+    })
+    const movable = makeForegroundTab('tab-movable' as UID, {
+      parentUid: parent.uid,
+      indentLevel: 2,
+    })
+    resetForegroundTree([
+      makeForegroundWindow('window-1' as UID, [
+        stuck,
+        parent,
+        previous,
+        movable,
+      ]),
+    ])
+    Selection.selectedItems.value = [
+      { item: stuck, type: SelectionType.TAB },
+      { item: movable, type: SelectionType.TAB },
+    ]
+
+    const items = createContextMenuItems(ContextMenu.tabConfig)
+
+    expect(
+      items.find((item) => item.id === 'treeItemIndentIncrease'),
+    ).toMatchObject({ enabled: true })
+    expect(
+      items.find((item) => item.id === 'treeItemIndentDecrease'),
+    ).toMatchObject({ enabled: true })
+  })
 
   it('selects the right-clicked tab and opens its browser menu', () => {
     const tab = makeForegroundTab('tab-context' as UID, {
