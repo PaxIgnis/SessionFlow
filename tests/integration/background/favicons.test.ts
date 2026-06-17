@@ -8,12 +8,12 @@ describe('favicon service', () => {
       'FileReader',
       class {
         result: string | ArrayBuffer | null = null
-        onloadend: (
-          (this: FileReader, ev: ProgressEvent<FileReader>) => void
-        ) | null = null
-        onerror: (
-          (this: FileReader, ev: ProgressEvent<FileReader>) => void
-        ) | null = null
+        onloadend:
+          | ((this: FileReader, ev: ProgressEvent<FileReader>) => void)
+          | null = null
+        onerror:
+          | ((this: FileReader, ev: ProgressEvent<FileReader>) => void)
+          | null = null
 
         readAsDataURL() {
           queueMicrotask(() => {
@@ -126,9 +126,7 @@ describe('favicon service', () => {
     const fetchAndStoreFavicon = vi
       .spyOn(service, 'fetchAndStoreFavicon')
       .mockImplementation((url) =>
-        url === 'https://missing.test/first'
-          ? missingFetch
-          : Promise.resolve(),
+        url === 'https://missing.test/first' ? missingFetch : Promise.resolve(),
       )
     const saveCacheToStorage = vi
       .spyOn(service, 'saveCacheToStorage')
@@ -190,9 +188,12 @@ describe('favicon service', () => {
     )
     installFileReaderDataUrl(dataUrl)
 
-    const updateFavicon = service.updateFavicon('https://cdn.example/icon.png', {
-      url: 'https://page.example/articles/1',
-    } as browser.tabs.Tab)
+    const updateFavicon = service.updateFavicon(
+      'https://cdn.example/icon.png',
+      {
+        url: 'https://page.example/articles/1',
+      } as browser.tabs.Tab,
+    )
 
     expect(cache.has('page.example')).toBe(false)
     await updateFavicon
@@ -214,9 +215,7 @@ describe('favicon service', () => {
         } as unknown as Response)
         .mockResolvedValueOnce({
           ok: true,
-          text: vi
-            .fn()
-            .mockResolvedValue('<link rel="icon" href="/icon.svg">'),
+          text: vi.fn().mockResolvedValue('<link rel="icon" href="/icon.svg">'),
         } as unknown as Response)
         .mockResolvedValueOnce({
           ok: true,
@@ -230,14 +229,8 @@ describe('favicon service', () => {
     } as browser.tabs.Tab)
 
     expect(fetch).toHaveBeenNthCalledWith(1, 'https://cdn.example/missing.ico')
-    expect(fetch).toHaveBeenNthCalledWith(
-      2,
-      'https://page.example/articles/1',
-    )
-    expect(fetch).toHaveBeenNthCalledWith(
-      3,
-      'https://page.example/icon.svg',
-    )
+    expect(fetch).toHaveBeenNthCalledWith(2, 'https://page.example/articles/1')
+    expect(fetch).toHaveBeenNthCalledWith(3, 'https://page.example/icon.svg')
     expect(cache.get('page.example')?.dataUrl).toBe(fallbackDataUrl)
   })
 
@@ -286,7 +279,9 @@ describe('favicon service', () => {
   it('checks and requests favicon permissions defensively', async () => {
     const service = new FaviconService()
     vi.mocked(browser.permissions.contains).mockResolvedValue(true)
-    vi.mocked(browser.permissions.request).mockRejectedValue(new Error('denied'))
+    vi.mocked(browser.permissions.request).mockRejectedValue(
+      new Error('denied'),
+    )
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
 
     await expect(service.hasFetchPermissions()).resolves.toBe(true)

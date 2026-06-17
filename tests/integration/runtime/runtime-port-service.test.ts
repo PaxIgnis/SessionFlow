@@ -54,6 +54,43 @@ describe('runtime port service', () => {
     })
   })
 
+  it('waits for async command dispatch before resolving command requests', async () => {
+    const { runtime } = await loadRuntimePortService()
+    let resolveDispatch: () => void = () => {}
+    const dispatchPromise = new Promise<void>((resolve) => {
+      resolveDispatch = resolve
+    })
+    const dispatchCommand = vi.fn(() => dispatchPromise)
+    runtime.initializeSessionTreePort({
+      dispatchCommand,
+      getSnapshot: () => [],
+    })
+
+    let resolved = false
+    const commandPromise = runtime
+      .sendTreeCommand({
+        action: 'moveTreeItems',
+        itemUIDs: ['tab-1' as UID],
+        targetIndex: 0,
+        targetWindowUid: 'window-1' as UID,
+        copy: false,
+      })
+      .then(() => {
+        resolved = true
+      })
+    await flushMicrotasks()
+    await flushMicrotasks()
+    await flushMicrotasks()
+
+    expect(dispatchCommand).toHaveBeenCalled()
+    expect(resolved).toBe(false)
+
+    resolveDispatch()
+    await commandPromise
+
+    expect(resolved).toBe(true)
+  })
+
   it('rejects command requests when the dispatcher throws', async () => {
     const { runtime } = await loadRuntimePortService()
     runtime.initializeSessionTreePort({

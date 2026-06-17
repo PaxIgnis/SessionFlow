@@ -33,7 +33,11 @@ describe('note mutations', () => {
     const window = createWindow('window-1' as UID, [tab, noteParent])
 
     const tabChildUid = Tree.createNote(tab.uid, undefined, 'Tab child')
-    const noteChildUid = Tree.createNote(noteParent.uid, undefined, 'Note child')
+    const noteChildUid = Tree.createNote(
+      noteParent.uid,
+      undefined,
+      'Note child',
+    )
     const tabChild = Tree.notesByUid.get(tabChildUid)
     const noteChild = Tree.notesByUid.get(noteChildUid)
 

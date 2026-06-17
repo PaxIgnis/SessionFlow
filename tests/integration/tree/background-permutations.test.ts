@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { Tree } from '@/services/background-tree'
-import { TreeItemType } from '@/types/session-tree'
+import { State, TreeItemType } from '@/types/session-tree'
+import { installFakeBrowser } from '../../helpers/fake-browser'
 import {
   createNote,
   createTab,
@@ -78,10 +79,26 @@ describe('background tree permutations', () => {
   })
 
   it.each([
-    { label: 'from tab parent with no siblings', parentType: 'tab', sibling: false },
-    { label: 'from tab parent with note sibling', parentType: 'tab', sibling: true },
-    { label: 'from note parent with no siblings', parentType: 'note', sibling: false },
-    { label: 'from note parent with note sibling', parentType: 'note', sibling: true },
+    {
+      label: 'from tab parent with no siblings',
+      parentType: 'tab',
+      sibling: false,
+    },
+    {
+      label: 'from tab parent with note sibling',
+      parentType: 'tab',
+      sibling: true,
+    },
+    {
+      label: 'from note parent with no siblings',
+      parentType: 'note',
+      sibling: false,
+    },
+    {
+      label: 'from note parent with note sibling',
+      parentType: 'note',
+      sibling: true,
+    },
   ])('removes a tab child $label', ({ parentType, sibling }) => {
     const parent =
       parentType === 'tab'
@@ -95,7 +112,9 @@ describe('background tree permutations', () => {
       parentUid: parent.uid,
       indentLevel: 2,
     })
-    const children = sibling ? [parent, childTab, siblingNote] : [parent, childTab]
+    const children = sibling
+      ? [parent, childTab, siblingNote]
+      : [parent, childTab]
     const window = createWindow('window-1' as UID, children)
 
     Tree.removeTab(childTab.uid, false)
@@ -114,68 +133,82 @@ describe('background tree permutations', () => {
     { label: 'root end', targetIndex: 3, parentType: 'root' },
     { label: 'tab parent', targetIndex: 2, parentType: 'tab' },
     { label: 'note parent', targetIndex: 2, parentType: 'note' },
-  ])('moves a saved tab to $label in the same window', async ({ targetIndex, parentType }) => {
-    const tabParent = createTab('tab-parent' as UID)
-    const noteParent = createNote('note-parent' as UID)
-    const moved = createTab('tab-moved' as UID)
-    const window = createWindow('window-1' as UID, [
-      tabParent,
-      noteParent,
-      moved,
-    ])
-    const parentUid =
-      parentType === 'tab'
-        ? tabParent.uid
-        : parentType === 'note'
-          ? noteParent.uid
-          : undefined
+  ])(
+    'moves a saved tab to $label in the same window',
+    async ({ targetIndex, parentType }) => {
+      const tabParent = createTab('tab-parent' as UID)
+      const noteParent = createNote('note-parent' as UID)
+      const moved = createTab('tab-moved' as UID)
+      const window = createWindow('window-1' as UID, [
+        tabParent,
+        noteParent,
+        moved,
+      ])
+      const parentUid =
+        parentType === 'tab'
+          ? tabParent.uid
+          : parentType === 'note'
+            ? noteParent.uid
+            : undefined
 
-    await Tree.moveTabs([moved.uid], window.uid, targetIndex, parentUid, false)
+      await Tree.moveTreeItems(
+        [moved.uid],
+        targetIndex,
+        parentUid,
+        window.uid,
+        false,
+        false,
+      )
 
-    const movedTab = Tree.tabsByUid.get(moved.uid)
-    expect(movedTab?.parentUid).toBe(parentUid)
-    expect(movedTab?.indentLevel).toBe(parentUid ? 2 : 1)
-    if (parentType === 'tab') expect(tabParent.isParent).toBe(true)
-    if (parentType === 'note') expect(noteParent.isParent).toBe(true)
-    expectTreeInvariants()
-  })
+      const movedTab = Tree.tabsByUid.get(moved.uid)
+      expect(movedTab?.parentUid).toBe(parentUid)
+      expect(movedTab?.indentLevel).toBe(parentUid ? 2 : 1)
+      if (parentType === 'tab') expect(tabParent.isParent).toBe(true)
+      if (parentType === 'note') expect(noteParent.isParent).toBe(true)
+      expectTreeInvariants()
+    },
+  )
 
   it.each([
     { label: 'root start', targetIndex: 0, parentType: 'root' },
     { label: 'root end', targetIndex: 1, parentType: 'root' },
     { label: 'tab parent', targetIndex: 1, parentType: 'tab' },
     { label: 'note parent', targetIndex: 1, parentType: 'note' },
-  ])('moves a saved tab across windows to $label', async ({ targetIndex, parentType }) => {
-    const moved = createTab('tab-moved' as UID)
-    const sourceWindow = createWindow('window-source' as UID, [moved])
-    const tabParent = createTab('tab-parent' as UID)
-    const noteParent = createNote('note-parent' as UID)
-    const targetWindow = createWindow('window-target' as UID, [
-      tabParent,
-      noteParent,
-    ])
-    const parentUid =
-      parentType === 'tab'
-        ? tabParent.uid
-        : parentType === 'note'
-          ? noteParent.uid
-          : undefined
+  ])(
+    'moves a saved tab across windows to $label',
+    async ({ targetIndex, parentType }) => {
+      const moved = createTab('tab-moved' as UID)
+      const sourceWindow = createWindow('window-source' as UID, [moved])
+      const tabParent = createTab('tab-parent' as UID)
+      const noteParent = createNote('note-parent' as UID)
+      const targetWindow = createWindow('window-target' as UID, [
+        tabParent,
+        noteParent,
+      ])
+      const parentUid =
+        parentType === 'tab'
+          ? tabParent.uid
+          : parentType === 'note'
+            ? noteParent.uid
+            : undefined
 
-    await Tree.moveTabs(
-      [moved.uid],
-      targetWindow.uid,
-      targetIndex,
-      parentUid,
-      false,
-    )
+      await Tree.moveTreeItems(
+        [moved.uid],
+        targetIndex,
+        parentUid,
+        targetWindow.uid,
+        false,
+        false,
+      )
 
-    const movedTab = Tree.tabsByUid.get(moved.uid)
-    expect(Tree.windowsByUid.has(sourceWindow.uid)).toBe(false)
-    expect(movedTab?.windowUid).toBe(targetWindow.uid)
-    expect(movedTab?.parentUid).toBe(parentUid)
-    expect(movedTab?.indentLevel).toBe(parentUid ? 2 : 1)
-    expectTreeInvariants()
-  })
+      const movedTab = Tree.tabsByUid.get(moved.uid)
+      expect(Tree.windowsByUid.has(sourceWindow.uid)).toBe(false)
+      expect(movedTab?.windowUid).toBe(targetWindow.uid)
+      expect(movedTab?.parentUid).toBe(parentUid)
+      expect(movedTab?.indentLevel).toBe(parentUid ? 2 : 1)
+      expectTreeInvariants()
+    },
+  )
 
   it.each([
     { label: 'top-level to window root', source: 'top', parent: 'window' },
@@ -192,7 +225,9 @@ describe('background tree permutations', () => {
     const tabParent = createTab('tab-parent' as UID)
     const noteParent = createNote('note-parent' as UID)
     const windowChildren =
-      source === 'top' ? [tabParent, noteParent] : [moved, tabParent, noteParent]
+      source === 'top'
+        ? [tabParent, noteParent]
+        : [moved, tabParent, noteParent]
     const window = createWindow('window-1' as UID, windowChildren)
     const parentUid =
       parent === 'top'
@@ -223,7 +258,10 @@ describe('background tree permutations', () => {
 
   it.each([
     { label: 'window under top-level note', parentType: 'top-note' },
-    { label: 'top-level note under top-level note', parentType: 'top-note-note' },
+    {
+      label: 'top-level note under top-level note',
+      parentType: 'top-note-note',
+    },
     { label: 'window back to top level', parentType: 'top' },
   ])('moves top-level items: $label', ({ parentType }) => {
     const parentNote = addTopLevelNote('note-parent' as UID)
@@ -273,13 +311,36 @@ describe('background tree permutations', () => {
   })
 
   it('keeps pinned tabs before unpinned tabs but allows unpinned tabs before notes', async () => {
+    const fakeBrowser = installFakeBrowser()
     const note = createNote('note-1' as UID)
-    const pinned = createTab('tab-pinned' as UID, { pinned: true })
-    const moved = createTab('tab-moved' as UID)
-    const tail = createTab('tab-tail' as UID)
-    const window = createWindow('window-1' as UID, [note, pinned, tail, moved])
+    const pinned = createTab('tab-pinned' as UID, {
+      id: 10,
+      pinned: true,
+      state: State.OPEN,
+    })
+    const moved = createTab('tab-moved' as UID, {
+      id: 20,
+      state: State.OPEN,
+    })
+    const tail = createTab('tab-tail' as UID, {
+      id: 30,
+      state: State.OPEN,
+    })
+    const window = createWindow(
+      'window-1' as UID,
+      [note, pinned, tail, moved],
+      { id: 100, state: State.OPEN },
+    )
+    fakeBrowser.tabs.move.mockResolvedValueOnce({ id: 20 } as browser.tabs.Tab)
 
-    await Tree.moveTabs([moved.uid], window.uid, 0, undefined, false)
+    await Tree.moveTreeItems(
+      [moved.uid],
+      0,
+      undefined,
+      window.uid,
+      false,
+      false,
+    )
 
     expect(window.children.map((item) => item.uid)).toEqual([
       note.uid,
@@ -292,16 +353,35 @@ describe('background tree permutations', () => {
   })
 
   it('does not allow a pinned tab to move after unpinned tabs', async () => {
-    const pinned = createTab('tab-pinned' as UID, { pinned: true })
-    const unpinnedA = createTab('tab-unpinned-a' as UID)
-    const unpinnedB = createTab('tab-unpinned-b' as UID)
-    const window = createWindow('window-1' as UID, [
-      pinned,
-      unpinnedA,
-      unpinnedB,
-    ])
+    const fakeBrowser = installFakeBrowser()
+    const pinned = createTab('tab-pinned' as UID, {
+      id: 10,
+      pinned: true,
+      state: State.OPEN,
+    })
+    const unpinnedA = createTab('tab-unpinned-a' as UID, {
+      id: 20,
+      state: State.OPEN,
+    })
+    const unpinnedB = createTab('tab-unpinned-b' as UID, {
+      id: 30,
+      state: State.OPEN,
+    })
+    const window = createWindow(
+      'window-1' as UID,
+      [pinned, unpinnedA, unpinnedB],
+      { id: 100, state: State.OPEN },
+    )
+    fakeBrowser.tabs.move.mockResolvedValueOnce({ id: 10 } as browser.tabs.Tab)
 
-    await Tree.moveTabs([pinned.uid], window.uid, 3, undefined, false)
+    await Tree.moveTreeItems(
+      [pinned.uid],
+      3,
+      undefined,
+      window.uid,
+      false,
+      false,
+    )
 
     expect(window.children.map((item) => item.uid)).toEqual([
       pinned.uid,
@@ -321,7 +401,14 @@ describe('background tree permutations', () => {
       parent,
     ])
 
-    await Tree.moveTabs([movedTab.uid], window.uid, 3, parent.uid, false)
+    await Tree.moveTreeItems(
+      [movedTab.uid],
+      3,
+      parent.uid,
+      window.uid,
+      false,
+      false,
+    )
     Tree.moveTreeItems([movedNote.uid], 4, parent.uid, window.uid, false)
 
     expect(window.children.map((item) => item.uid)).toEqual([
@@ -421,24 +508,92 @@ describe('background tree permutations', () => {
   })
 
   it.each([
-    { relation: 'same window', sourceParentType: 'root', destParentType: 'root' },
-    { relation: 'same window', sourceParentType: 'root', destParentType: 'tab' },
-    { relation: 'same window', sourceParentType: 'root', destParentType: 'note' },
-    { relation: 'same window', sourceParentType: 'tab', destParentType: 'root' },
+    {
+      relation: 'same window',
+      sourceParentType: 'root',
+      destParentType: 'root',
+    },
+    {
+      relation: 'same window',
+      sourceParentType: 'root',
+      destParentType: 'tab',
+    },
+    {
+      relation: 'same window',
+      sourceParentType: 'root',
+      destParentType: 'note',
+    },
+    {
+      relation: 'same window',
+      sourceParentType: 'tab',
+      destParentType: 'root',
+    },
     { relation: 'same window', sourceParentType: 'tab', destParentType: 'tab' },
-    { relation: 'same window', sourceParentType: 'tab', destParentType: 'note' },
-    { relation: 'same window', sourceParentType: 'note', destParentType: 'root' },
-    { relation: 'same window', sourceParentType: 'note', destParentType: 'tab' },
-    { relation: 'same window', sourceParentType: 'note', destParentType: 'note' },
-    { relation: 'different window', sourceParentType: 'root', destParentType: 'root' },
-    { relation: 'different window', sourceParentType: 'root', destParentType: 'tab' },
-    { relation: 'different window', sourceParentType: 'root', destParentType: 'note' },
-    { relation: 'different window', sourceParentType: 'tab', destParentType: 'root' },
-    { relation: 'different window', sourceParentType: 'tab', destParentType: 'tab' },
-    { relation: 'different window', sourceParentType: 'tab', destParentType: 'note' },
-    { relation: 'different window', sourceParentType: 'note', destParentType: 'root' },
-    { relation: 'different window', sourceParentType: 'note', destParentType: 'tab' },
-    { relation: 'different window', sourceParentType: 'note', destParentType: 'note' },
+    {
+      relation: 'same window',
+      sourceParentType: 'tab',
+      destParentType: 'note',
+    },
+    {
+      relation: 'same window',
+      sourceParentType: 'note',
+      destParentType: 'root',
+    },
+    {
+      relation: 'same window',
+      sourceParentType: 'note',
+      destParentType: 'tab',
+    },
+    {
+      relation: 'same window',
+      sourceParentType: 'note',
+      destParentType: 'note',
+    },
+    {
+      relation: 'different window',
+      sourceParentType: 'root',
+      destParentType: 'root',
+    },
+    {
+      relation: 'different window',
+      sourceParentType: 'root',
+      destParentType: 'tab',
+    },
+    {
+      relation: 'different window',
+      sourceParentType: 'root',
+      destParentType: 'note',
+    },
+    {
+      relation: 'different window',
+      sourceParentType: 'tab',
+      destParentType: 'root',
+    },
+    {
+      relation: 'different window',
+      sourceParentType: 'tab',
+      destParentType: 'tab',
+    },
+    {
+      relation: 'different window',
+      sourceParentType: 'tab',
+      destParentType: 'note',
+    },
+    {
+      relation: 'different window',
+      sourceParentType: 'note',
+      destParentType: 'root',
+    },
+    {
+      relation: 'different window',
+      sourceParentType: 'note',
+      destParentType: 'tab',
+    },
+    {
+      relation: 'different window',
+      sourceParentType: 'note',
+      destParentType: 'note',
+    },
   ])(
     'moves a saved tab from $sourceParentType to $destParentType in $relation',
     async ({ relation, sourceParentType, destParentType }) => {
@@ -479,11 +634,12 @@ describe('background tree permutations', () => {
             ? destNoteParent.uid
             : undefined
 
-      await Tree.moveTabs(
+      await Tree.moveTreeItems(
         [moved.uid],
-        targetWindow.uid,
         targetWindow.children.length,
         destParentUid,
+        targetWindow.uid,
+        false,
         false,
       )
 
@@ -504,24 +660,92 @@ describe('background tree permutations', () => {
   )
 
   it.each([
-    { relation: 'same window', sourceParentType: 'root', destParentType: 'root' },
-    { relation: 'same window', sourceParentType: 'root', destParentType: 'tab' },
-    { relation: 'same window', sourceParentType: 'root', destParentType: 'note' },
-    { relation: 'same window', sourceParentType: 'tab', destParentType: 'root' },
+    {
+      relation: 'same window',
+      sourceParentType: 'root',
+      destParentType: 'root',
+    },
+    {
+      relation: 'same window',
+      sourceParentType: 'root',
+      destParentType: 'tab',
+    },
+    {
+      relation: 'same window',
+      sourceParentType: 'root',
+      destParentType: 'note',
+    },
+    {
+      relation: 'same window',
+      sourceParentType: 'tab',
+      destParentType: 'root',
+    },
     { relation: 'same window', sourceParentType: 'tab', destParentType: 'tab' },
-    { relation: 'same window', sourceParentType: 'tab', destParentType: 'note' },
-    { relation: 'same window', sourceParentType: 'note', destParentType: 'root' },
-    { relation: 'same window', sourceParentType: 'note', destParentType: 'tab' },
-    { relation: 'same window', sourceParentType: 'note', destParentType: 'note' },
-    { relation: 'different window', sourceParentType: 'root', destParentType: 'root' },
-    { relation: 'different window', sourceParentType: 'root', destParentType: 'tab' },
-    { relation: 'different window', sourceParentType: 'root', destParentType: 'note' },
-    { relation: 'different window', sourceParentType: 'tab', destParentType: 'root' },
-    { relation: 'different window', sourceParentType: 'tab', destParentType: 'tab' },
-    { relation: 'different window', sourceParentType: 'tab', destParentType: 'note' },
-    { relation: 'different window', sourceParentType: 'note', destParentType: 'root' },
-    { relation: 'different window', sourceParentType: 'note', destParentType: 'tab' },
-    { relation: 'different window', sourceParentType: 'note', destParentType: 'note' },
+    {
+      relation: 'same window',
+      sourceParentType: 'tab',
+      destParentType: 'note',
+    },
+    {
+      relation: 'same window',
+      sourceParentType: 'note',
+      destParentType: 'root',
+    },
+    {
+      relation: 'same window',
+      sourceParentType: 'note',
+      destParentType: 'tab',
+    },
+    {
+      relation: 'same window',
+      sourceParentType: 'note',
+      destParentType: 'note',
+    },
+    {
+      relation: 'different window',
+      sourceParentType: 'root',
+      destParentType: 'root',
+    },
+    {
+      relation: 'different window',
+      sourceParentType: 'root',
+      destParentType: 'tab',
+    },
+    {
+      relation: 'different window',
+      sourceParentType: 'root',
+      destParentType: 'note',
+    },
+    {
+      relation: 'different window',
+      sourceParentType: 'tab',
+      destParentType: 'root',
+    },
+    {
+      relation: 'different window',
+      sourceParentType: 'tab',
+      destParentType: 'tab',
+    },
+    {
+      relation: 'different window',
+      sourceParentType: 'tab',
+      destParentType: 'note',
+    },
+    {
+      relation: 'different window',
+      sourceParentType: 'note',
+      destParentType: 'root',
+    },
+    {
+      relation: 'different window',
+      sourceParentType: 'note',
+      destParentType: 'tab',
+    },
+    {
+      relation: 'different window',
+      sourceParentType: 'note',
+      destParentType: 'note',
+    },
   ])(
     'moves a note from $sourceParentType to $destParentType in $relation',
     ({ relation, sourceParentType, destParentType }) => {

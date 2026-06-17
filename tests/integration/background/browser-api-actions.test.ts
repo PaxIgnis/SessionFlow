@@ -28,10 +28,7 @@ describe('background browser API interactions', () => {
     await Tree.moveTab(tab.uid, window.uid, 0, undefined, false, false)
 
     expect(browser.tabs.move).not.toHaveBeenCalled()
-    expect(window.children.map((item) => item.uid)).toEqual([
-      tab.uid,
-      note.uid,
-    ])
+    expect(window.children.map((item) => item.uid)).toEqual([tab.uid, note.uid])
     expectTreeInvariants()
   })
 
@@ -45,14 +42,10 @@ describe('background browser API interactions', () => {
       id: 11,
       state: State.OPEN,
     })
-    const window = createWindow(
-      'window-1' as UID,
-      [note, firstTab, movedTab],
-      {
-        id: 20,
-        state: State.OPEN,
-      },
-    )
+    const window = createWindow('window-1' as UID, [note, firstTab, movedTab], {
+      id: 20,
+      state: State.OPEN,
+    })
     vi.mocked(browser.tabs.move).mockResolvedValue({
       id: movedTab.id,
     } as browser.tabs.Tab)

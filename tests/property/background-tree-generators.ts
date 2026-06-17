@@ -1,11 +1,7 @@
 import fc from 'fast-check'
 import { Tree } from '@/services/background-tree'
 import { Note, Tab, TreeItem, Window, WindowChild } from '@/types/session-tree'
-import {
-  createNote,
-  createTab,
-  createWindow,
-} from '../helpers/tree-fixtures'
+import { createNote, createTab, createWindow } from '../helpers/tree-fixtures'
 
 export interface GeneratedWindowSpec {
   uid: UID
@@ -23,11 +19,12 @@ const maxWindows = 3
 const maxRootBlocksPerWindow = 4
 const maxDirectChildrenPerRoot = 2
 
-export const smallWindowSpecsArbitrary: fc.Arbitrary<GeneratedWindowSpec[]> =
-  fc.array(windowChildDraftsArbitrary(), {
+export const smallWindowSpecsArbitrary: fc.Arbitrary<GeneratedWindowSpec[]> = fc
+  .array(windowChildDraftsArbitrary(), {
     minLength: 1,
     maxLength: maxWindows,
-  }).map((windowChildren) =>
+  })
+  .map((windowChildren) =>
     windowChildren.map((children, windowIndex) => ({
       uid: `window-${windowIndex}` as UID,
       children: children.map((child, childIndex) => ({
@@ -58,7 +55,9 @@ export function allTabs(): Tab[] {
 }
 
 export function allNotes(): Note[] {
-  return allWindowChildren().filter((child): child is Note => Tree.isNote(child))
+  return allWindowChildren().filter((child): child is Note =>
+    Tree.isNote(child),
+  )
 }
 
 function windowChildDraftsArbitrary(): fc.Arbitrary<

@@ -15,16 +15,17 @@ function updateObjectProperties<T extends object>(
   source: Partial<T>,
 ): void {
   Object.entries(source).forEach(([key, value]) => {
-    if (value !== undefined) {
-      ;(target as Record<string, unknown>)[key] = value
-    }
+    ;(target as Record<string, unknown>)[key] = value
   })
 }
 
 function updateTreeItemInPlace(target: TreeItem, source: TreeItem): void {
   if (target.type !== source.type) return
 
-  if (target.type === TreeItemType.WINDOW && source.type === TreeItemType.WINDOW) {
+  if (
+    target.type === TreeItemType.WINDOW &&
+    source.type === TreeItemType.WINDOW
+  ) {
     const { children, ...windowProps } = source
     updateObjectProperties(target, windowProps)
     reconcileChildren(target.children as TreeItem[], children as TreeItem[])
@@ -81,9 +82,12 @@ function reindexTree(): void {
   SessionTree.separatorsByUid.clear()
 
   walk(SessionTree.reactiveItems.value, (item) => {
-    if (item.type === TreeItemType.WINDOW) SessionTree.windowsByUid.set(item.uid, item)
-    else if (item.type === TreeItemType.TAB) SessionTree.tabsByUid.set(item.uid, item)
-    else if (item.type === TreeItemType.NOTE) SessionTree.notesByUid.set(item.uid, item)
+    if (item.type === TreeItemType.WINDOW)
+      SessionTree.windowsByUid.set(item.uid, item)
+    else if (item.type === TreeItemType.TAB)
+      SessionTree.tabsByUid.set(item.uid, item)
+    else if (item.type === TreeItemType.NOTE)
+      SessionTree.notesByUid.set(item.uid, item)
     else SessionTree.separatorsByUid.set(item.uid, item)
   })
 }

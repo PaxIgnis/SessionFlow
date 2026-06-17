@@ -1,8 +1,5 @@
 import { $, browser, expect } from '@wdio/globals'
-import {
-  FIREFOX_EXTENSION_ID,
-  SESSION_TREE_URL,
-} from './firefox-extension.mjs'
+import { FIREFOX_EXTENSION_ID, SESSION_TREE_URL } from './firefox-extension.mjs'
 import { clickFirefoxExtensionAction } from './firefox-chrome-context.mjs'
 import { collectCoverageFromCurrentWindow } from './e2e-coverage.mjs'
 
@@ -12,16 +9,21 @@ export async function openSessionTreePopup() {
 
   await browser.waitUntil(
     async () => {
-      if ((await browser.getWindowHandles()).length > handlesBeforeClick.length) {
+      if (
+        (await browser.getWindowHandles()).length > handlesBeforeClick.length
+      ) {
         return true
       }
 
       await clickFirefoxExtensionAction(FIREFOX_EXTENSION_ID)
-      return (await browser.getWindowHandles()).length > handlesBeforeClick.length
+      return (
+        (await browser.getWindowHandles()).length > handlesBeforeClick.length
+      )
     },
     {
       timeout: 10_000,
-      timeoutMsg: 'Expected the extension action to open a session tree window.',
+      timeoutMsg:
+        'Expected the extension action to open a session tree window.',
     },
   )
 

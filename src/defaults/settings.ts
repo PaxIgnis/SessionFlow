@@ -31,6 +31,7 @@ export const DEFAULT_SETTINGS: Settings = {
   enableDropFromExternalSources: false,
   includeSelectedItemsWithDraggedItem: true,
   includeChildrenOfSelectedItems: 'collapsed',
+  allowDropOntoDescendantItems: true,
   tryToMaintainHierarchyOfDraggedItems: true,
   tryToMaintainCollapsedStateOfDraggedItems: true,
 

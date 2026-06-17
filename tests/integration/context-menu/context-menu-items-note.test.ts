@@ -31,9 +31,8 @@ describe('note context menu items', () => {
     Selection.selectedItems.value = [
       { item: selected, type: SelectionType.NOTE },
     ]
-    const { contextMenuItemsNote } = await import(
-      '@/services/context-menu-items-note'
-    )
+    const { contextMenuItemsNote } =
+      await import('@/services/context-menu-items-note')
 
     const menuItem = contextMenuItemsNote.createNote()
     expect(menuItem.action).toBeDefined()
@@ -57,21 +56,22 @@ describe('note context menu items', () => {
       type: SelectionType.NOTE,
       selected: makeForegroundNote('note-parent' as UID),
     },
-  ])('creates a note under a selected $type context parent', async ({ selected, type }) => {
-    Selection.selectedItems.value = [{ item: selected, type }]
-    const { contextMenuItemsNote } = await import(
-      '@/services/context-menu-items-note'
-    )
+  ])(
+    'creates a note under a selected $type context parent',
+    async ({ selected, type }) => {
+      Selection.selectedItems.value = [{ item: selected, type }]
+      const { contextMenuItemsNote } =
+        await import('@/services/context-menu-items-note')
 
-    contextMenuItemsNote.createNote().action?.()
+      contextMenuItemsNote.createNote().action?.()
 
-    expect(createNote).toHaveBeenCalledWith(selected.uid)
-  })
+      expect(createNote).toHaveBeenCalledWith(selected.uid)
+    },
+  )
 
   it('creates a root note from the panel menu when no item is selected', async () => {
-    const { contextMenuItemsNote } = await import(
-      '@/services/context-menu-items-note'
-    )
+    const { contextMenuItemsNote } =
+      await import('@/services/context-menu-items-note')
 
     const menuItem = contextMenuItemsNote.createNote()
     menuItem.action?.()
@@ -87,9 +87,8 @@ describe('note context menu items', () => {
       { item: first, type: SelectionType.NOTE },
       { item: second, type: SelectionType.NOTE },
     ]
-    const { contextMenuItemsNote } = await import(
-      '@/services/context-menu-items-note'
-    )
+    const { contextMenuItemsNote } =
+      await import('@/services/context-menu-items-note')
 
     const menuItem = contextMenuItemsNote.createNote()
 
@@ -99,9 +98,8 @@ describe('note context menu items', () => {
   it('opens the edit note modal only when one note is selected', async () => {
     const note = makeForegroundNote('note-1' as UID)
     Selection.selectedItems.value = [{ item: note, type: SelectionType.NOTE }]
-    const { contextMenuItemsNote } = await import(
-      '@/services/context-menu-items-note'
-    )
+    const { contextMenuItemsNote } =
+      await import('@/services/context-menu-items-note')
 
     const menuItem = contextMenuItemsNote.editNote()
     expect(menuItem.action).toBeDefined()
@@ -119,9 +117,8 @@ describe('note context menu items', () => {
       { item: first, type: SelectionType.NOTE },
       { item: second, type: SelectionType.NOTE },
     ]
-    const { contextMenuItemsNote } = await import(
-      '@/services/context-menu-items-note'
-    )
+    const { contextMenuItemsNote } =
+      await import('@/services/context-menu-items-note')
 
     const menuItem = contextMenuItemsNote.removeNote()
     expect(menuItem.action).toBeDefined()

@@ -54,7 +54,7 @@ describe('drag-and-drop onDrop command path', () => {
     DragAndDrop.dragInfo = null
   })
 
-  it('sends moveTabs when dropping a tab into a window', () => {
+  it('sends moveTreeItems when dropping a tab into a window', () => {
     const tab = makeForegroundTab('tab-1' as UID)
     const window = makeForegroundWindow('window-1' as UID, [tab])
     resetForegroundTree([window])
@@ -69,14 +69,54 @@ describe('drag-and-drop onDrop command path', () => {
 
     onDrop(event)
 
-    expect(moveTabs).toHaveBeenCalledWith(
+    expect(moveTabs).not.toHaveBeenCalled()
+    expect(moveTreeItems).toHaveBeenCalledWith(
       [tab.uid],
-      window.uid,
       0,
       undefined,
+      window.uid,
+      false,
       false,
     )
-    expect(moveTreeItems).not.toHaveBeenCalled()
+    expect(moveWindows).not.toHaveBeenCalled()
+  })
+
+  it('does not include expanded tab descendants for collapsed-only tab drag drops', () => {
+    Settings.values.includeChildrenOfSelectedItems = 'collapsed'
+    const parentTab = makeForegroundTab('tab-parent' as UID, {
+      collapsed: false,
+      isParent: true,
+    })
+    const childTab = makeForegroundTab('tab-child' as UID, {
+      parentUid: parentTab.uid,
+      indentLevel: 2,
+    })
+    const targetTab = makeForegroundTab('tab-target' as UID)
+    const window = makeForegroundWindow('window-1' as UID, [
+      parentTab,
+      childTab,
+      targetTab,
+    ])
+    resetForegroundTree([window])
+    DragAndDrop.dragInfo = { dragType: DragType.TAB, items: [parentTab] }
+
+    const target = createFakeDragTarget({
+      id: targetTab.uid,
+      type: 'tab',
+    })
+    const event = createFakeDragEvent({ target, yRatio: 0.5 })
+
+    DragAndDrop.onDrop(event)
+
+    expect(moveTreeItems).toHaveBeenCalledWith(
+      [parentTab.uid],
+      3,
+      targetTab.uid,
+      window.uid,
+      false,
+      false,
+    )
+    expect(moveTabs).not.toHaveBeenCalled()
     expect(moveWindows).not.toHaveBeenCalled()
   })
 
@@ -128,7 +168,7 @@ describe('drag-and-drop onDrop command path', () => {
     expect(DragAndDrop.dragState.isValidDropTarget).toBe(false)
   })
 
-  it('sends moveTabs with the tab parent when dropping a tab into a tab', () => {
+  it('sends moveTreeItems with the tab parent when dropping a tab into a tab', () => {
     const parent = makeForegroundTab('tab-parent' as UID)
     const tab = makeForegroundTab('tab-1' as UID)
     const window = makeForegroundWindow('window-1' as UID, [parent, tab])
@@ -143,11 +183,13 @@ describe('drag-and-drop onDrop command path', () => {
 
     DragAndDrop.onDrop(event)
 
-    expect(moveTabs).toHaveBeenCalledWith(
+    expect(moveTabs).not.toHaveBeenCalled()
+    expect(moveTreeItems).toHaveBeenCalledWith(
       [tab.uid],
-      window.uid,
       1,
       parent.uid,
+      window.uid,
+      false,
       false,
     )
   })
@@ -167,16 +209,107 @@ describe('drag-and-drop onDrop command path', () => {
 
     DragAndDrop.onDrop(event)
 
-    expect(moveTabs).toHaveBeenCalledWith(
+    expect(moveTabs).not.toHaveBeenCalled()
+    expect(moveTreeItems).toHaveBeenCalledWith(
       [tab.uid],
-      window.uid,
       0,
       undefined,
+      window.uid,
+      false,
       false,
     )
   })
 
-  it('sends tab and note move commands in order for mixed dragged items', () => {
+  it('uses undefined parentUid when dropping a child tab above a root tab', () => {
+    const beta = makeForegroundTab('tab-beta' as UID)
+    const initial = makeForegroundTab('tab-initial' as UID, {
+      isParent: true,
+    })
+    const alpha = makeForegroundTab('tab-alpha' as UID, {
+      parentUid: initial.uid,
+      indentLevel: 2,
+    })
+    const window = makeForegroundWindow('window-1' as UID, [
+      beta,
+      initial,
+      alpha,
+    ])
+    resetForegroundTree([window])
+    DragAndDrop.dragInfo = { dragType: DragType.TAB, items: [alpha] }
+
+    const target = createFakeDragTarget({
+      id: beta.uid,
+      type: 'tab',
+    })
+    const event = createFakeDragEvent({ target, yRatio: 0.1 })
+
+    DragAndDrop.onDrop(event)
+
+    expect(moveTabs).not.toHaveBeenCalled()
+    expect(moveTreeItems).toHaveBeenCalledWith(
+      [alpha.uid],
+      0,
+      undefined,
+      window.uid,
+      false,
+      false,
+    )
+  })
+
+  it('keeps included note and separator descendants under their dragged tab parents', () => {
+    Settings.values.includeChildrenOfSelectedItems = 'collapsed'
+    const target = makeForegroundTab('tab-target' as UID)
+    const parent = makeForegroundTab('tab-parent' as UID, {
+      collapsed: true,
+      isParent: true,
+    })
+    const childTab = makeForegroundTab('tab-child' as UID, {
+      parentUid: parent.uid,
+      indentLevel: 2,
+      isParent: true,
+    })
+    const childNote = makeForegroundNote('note-child' as UID, {
+      parentUid: parent.uid,
+      indentLevel: 2,
+    })
+    const childSeparator = makeForegroundSeparator('separator-child' as UID, {
+      parentUid: childTab.uid,
+      indentLevel: 3,
+    })
+    const window = makeForegroundWindow('window-1' as UID, [
+      target,
+      parent,
+      childTab,
+      childNote,
+      childSeparator,
+    ])
+    resetForegroundTree([window])
+    DragAndDrop.dragInfo = {
+      dragType: DragType.TAB,
+      items: [parent, childTab, childNote, childSeparator] as TreeItem[],
+    }
+
+    const eventTarget = createFakeDragTarget({
+      id: target.uid,
+      type: 'tab',
+    })
+    const event = createFakeDragEvent({ target: eventTarget, yRatio: 0.1 })
+
+    DragAndDrop.onDrop(event)
+
+    expect(moveTabs).not.toHaveBeenCalled()
+    expect(moveTreeItems).toHaveBeenCalledTimes(1)
+    expect(moveTreeItems).toHaveBeenCalledWith(
+      [parent.uid, childTab.uid, childNote.uid, childSeparator.uid],
+      0,
+      undefined,
+      window.uid,
+      false,
+      true,
+    )
+  })
+
+  it('sends one tree item move command for mixed dragged tab and note items', () => {
     const parent = makeForegroundNote('note-parent' as UID)
     const tab = makeForegroundTab('tab-1' as UID)
     const note = makeForegroundNote('note-1' as UID)
@@ -195,18 +328,51 @@ describe('drag-and-drop onDrop command path', () => {
 
     DragAndDrop.onDrop(event)
 
-    expect(moveTabs).toHaveBeenCalledWith(
-      [tab.uid],
-      window.uid,
+    expect(moveTabs).not.toHaveBeenCalled()
+    expect(moveTreeItems).toHaveBeenCalledWith(
+      [tab.uid, note.uid],
       1,
       parent.uid,
+      window.uid,
+      false,
       false,
     )
+  })
+
+  it('sends one tree item move command for tab-source note and separator payloads', () => {
+    const target = makeForegroundTab('tab-target' as UID)
+    const note = makeForegroundNote('note-1' as UID)
+    const separator = makeForegroundSeparator('separator-1' as UID, {
+      parentUid: note.uid,
+      indentLevel: 2,
+    })
+    const window = makeForegroundWindow('window-1' as UID, [
+      target,
+      note,
+      separator,
+    ])
+    resetForegroundTree([window])
+    DragAndDrop.dragInfo = {
+      dragType: DragType.TAB,
+      items: [note, separator] as TreeItem[],
+    }
+
+    const eventTarget = createFakeDragTarget({
+      id: target.uid,
+      type: 'tab',
+    })
+    const event = createFakeDragEvent({ target: eventTarget, yRatio: 0.9 })
+
+    DragAndDrop.onDrop(event)
+
+    expect(moveTabs).not.toHaveBeenCalled()
+    expect(moveTreeItems).toHaveBeenCalledTimes(1)
     expect(moveTreeItems).toHaveBeenCalledWith(
-      [note.uid],
-      2,
-      parent.uid,
+      [note.uid, separator.uid],
+      1,
+      undefined,
       window.uid,
+      false,
       false,
     )
   })
@@ -233,6 +399,591 @@ describe('drag-and-drop onDrop command path', () => {
     expect(moveTreeItems).not.toHaveBeenCalled()
     expect(moveWindows).not.toHaveBeenCalled()
   })
+
+  it('allows the A-F descendant drop by default and emits the descendant-target move command', () => {
+    const tabA = makeForegroundTab('tab-a' as UID, { indentLevel: 1 })
+    const tabB = makeForegroundTab('tab-b' as UID, {
+      parentUid: tabA.uid,
+      indentLevel: 2,
+    })
+    const tabC = makeForegroundTab('tab-c' as UID, {
+      parentUid: tabB.uid,
+      indentLevel: 3,
+    })
+    const tabD = makeForegroundTab('tab-d' as UID, {
+      parentUid: tabC.uid,
+      indentLevel: 4,
+    })
+    const tabE = makeForegroundTab('tab-e' as UID, {
+      parentUid: tabB.uid,
+      indentLevel: 3,
+    })
+    const tabF = makeForegroundTab('tab-f' as UID, { indentLevel: 1 })
+    const window = makeForegroundWindow('window-1' as UID, [
+      tabA,
+      tabB,
+      tabC,
+      tabD,
+      tabE,
+      tabF,
+    ])
+    resetForegroundTree([window])
+    DragAndDrop.dragInfo = { dragType: DragType.TAB, items: [tabC] }
+
+    const target = createFakeDragTarget({
+      id: tabD.uid,
+      type: 'tab',
+    })
+    const event = createFakeDragEvent({ target, yRatio: 0.9 })
+
+    DragAndDrop.onDrop(event)
+
+    expect(moveTabs).not.toHaveBeenCalled()
+    expect(moveTreeItems).toHaveBeenCalledWith(
+      [tabC.uid],
+      4,
+      tabC.uid,
+      window.uid,
+      false,
+      false,
+    )
+    expect(moveWindows).not.toHaveBeenCalled()
+  })
+
+  it('allows the A-F descendant drop when the target descendant is included in the drag payload', () => {
+    Settings.values.includeChildrenOfSelectedItems = 'always'
+    const tabA = makeForegroundTab('tab-a' as UID, { indentLevel: 1 })
+    const tabB = makeForegroundTab('tab-b' as UID, {
+      parentUid: tabA.uid,
+      indentLevel: 2,
+    })
+    const tabC = makeForegroundTab('tab-c' as UID, {
+      parentUid: tabB.uid,
+      indentLevel: 3,
+    })
+    const tabD = makeForegroundTab('tab-d' as UID, {
+      parentUid: tabC.uid,
+      indentLevel: 4,
+    })
+    const tabE = makeForegroundTab('tab-e' as UID, {
+      parentUid: tabB.uid,
+      indentLevel: 3,
+    })
+    const tabF = makeForegroundTab('tab-f' as UID, { indentLevel: 1 })
+    const window = makeForegroundWindow('window-1' as UID, [
+      tabA,
+      tabB,
+      tabC,
+      tabD,
+      tabE,
+      tabF,
+    ])
+    resetForegroundTree([window])
+    DragAndDrop.dragInfo = {
+      dragType: DragType.TAB,
+      items: [tabC, tabD] as TreeItem[],
+    }
+
+    const target = createFakeDragTarget({
+      id: tabD.uid,
+      type: 'tab',
+    })
+    const event = createFakeDragEvent({ target, yRatio: 0.9 })
+
+    DragAndDrop.onDrop(event)
+
+    expect(moveTabs).not.toHaveBeenCalled()
+    expect(moveTreeItems).toHaveBeenCalledWith(
+      [tabC.uid, tabD.uid],
+      4,
+      tabC.uid,
+      window.uid,
+      false,
+      true,
+    )
+    expect(moveWindows).not.toHaveBeenCalled()
+  })
+
+  it('does not move tab C in the A-F descendant drop when descendant drops are disabled', () => {
+    Settings.values.includeChildrenOfSelectedItems = 'always'
+    Settings.values.allowDropOntoDescendantItems = false
+    const tabA = makeForegroundTab('tab-a' as UID, { indentLevel: 1 })
+    const tabB = makeForegroundTab('tab-b' as UID, {
+      parentUid: tabA.uid,
+      indentLevel: 2,
+    })
+    const tabC = makeForegroundTab('tab-c' as UID, {
+      parentUid: tabB.uid,
+      indentLevel: 3,
+    })
+    const tabD = makeForegroundTab('tab-d' as UID, {
+      parentUid: tabC.uid,
+      indentLevel: 4,
+    })
+    const tabE = makeForegroundTab('tab-e' as UID, {
+      parentUid: tabB.uid,
+      indentLevel: 3,
+    })
+    const tabF = makeForegroundTab('tab-f' as UID, { indentLevel: 1 })
+    const window = makeForegroundWindow('window-1' as UID, [
+      tabA,
+      tabB,
+      tabC,
+      tabD,
+      tabE,
+      tabF,
+    ])
+    resetForegroundTree([window])
+    DragAndDrop.dragInfo = {
+      dragType: DragType.TAB,
+      items: [tabC, tabD] as TreeItem[],
+    }
+
+    const target = createFakeDragTarget({
+      id: tabD.uid,
+      type: 'tab',
+    })
+    const event = createFakeDragEvent({ target, yRatio: 0.9 })
+
+    DragAndDrop.onDrop(event)
+
+    expect(moveTabs).not.toHaveBeenCalled()
+    expect(moveTreeItems).not.toHaveBeenCalled()
+    expect(moveWindows).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    {
+      label: 'above',
+      yRatio: 0.1,
+      expectedIndex: 1,
+      expectedParentUid: 'tab-a' as UID,
+    },
+    {
+      label: 'mid',
+      yRatio: 0.5,
+      expectedIndex: 2,
+      expectedParentUid: 'tab-b' as UID,
+    },
+    {
+      label: 'below',
+      yRatio: 0.9,
+      expectedIndex: 2,
+      expectedParentUid: 'tab-a' as UID,
+    },
+  ])(
+    'sends the exact move command when dropping a tab $label its direct child',
+    ({ yRatio, expectedIndex, expectedParentUid }) => {
+      Settings.values.allowDropOntoDescendantItems = true
+      const tabA = makeForegroundTab('tab-a' as UID, {
+        indentLevel: 1,
+        isParent: true,
+      })
+      const tabB = makeForegroundTab('tab-b' as UID, {
+        parentUid: tabA.uid,
+        indentLevel: 2,
+      })
+      const tail = makeForegroundTab('tab-tail' as UID)
+      const window = makeForegroundWindow('window-1' as UID, [tabA, tabB, tail])
+      resetForegroundTree([window])
+      DragAndDrop.dragInfo = { dragType: DragType.TAB, items: [tabA] }
+
+      const target = createFakeDragTarget({
+        id: tabB.uid,
+        type: 'tab',
+      })
+      const event = createFakeDragEvent({ target, yRatio })
+
+      DragAndDrop.onDrop(event)
+
+      expect(moveTabs).not.toHaveBeenCalled()
+      expect(moveTreeItems).toHaveBeenCalledWith(
+        [tabA.uid],
+        expectedIndex,
+        expectedParentUid,
+        window.uid,
+        false,
+        true,
+      )
+      expect(moveWindows).not.toHaveBeenCalled()
+    },
+  )
+
+  it.each([
+    {
+      source: 'tab' as const,
+      target: 'direct descendant tab' as const,
+      targetDepth: 'direct' as const,
+      targetType: 'tab' as const,
+      yRatio: 0.1,
+      label: 'above',
+    },
+    {
+      source: 'tab' as const,
+      target: 'direct descendant tab' as const,
+      targetDepth: 'direct' as const,
+      targetType: 'tab' as const,
+      yRatio: 0.5,
+      label: 'mid',
+    },
+    {
+      source: 'tab' as const,
+      target: 'direct descendant tab' as const,
+      targetDepth: 'direct' as const,
+      targetType: 'tab' as const,
+      yRatio: 0.9,
+      label: 'below',
+    },
+    {
+      source: 'tab' as const,
+      target: 'non-direct descendant tab' as const,
+      targetDepth: 'nested' as const,
+      targetType: 'tab' as const,
+      yRatio: 0.1,
+      label: 'above',
+    },
+    {
+      source: 'tab' as const,
+      target: 'non-direct descendant tab' as const,
+      targetDepth: 'nested' as const,
+      targetType: 'tab' as const,
+      yRatio: 0.5,
+      label: 'mid',
+    },
+    {
+      source: 'tab' as const,
+      target: 'non-direct descendant tab' as const,
+      targetDepth: 'nested' as const,
+      targetType: 'tab' as const,
+      yRatio: 0.9,
+      label: 'below',
+    },
+    {
+      source: 'note' as const,
+      target: 'direct descendant note' as const,
+      targetDepth: 'direct' as const,
+      targetType: 'note' as const,
+      yRatio: 0.1,
+      label: 'above',
+    },
+    {
+      source: 'note' as const,
+      target: 'direct descendant note' as const,
+      targetDepth: 'direct' as const,
+      targetType: 'note' as const,
+      yRatio: 0.5,
+      label: 'mid',
+    },
+    {
+      source: 'note' as const,
+      target: 'direct descendant note' as const,
+      targetDepth: 'direct' as const,
+      targetType: 'note' as const,
+      yRatio: 0.9,
+      label: 'below',
+    },
+    {
+      source: 'note' as const,
+      target: 'non-direct descendant note' as const,
+      targetDepth: 'nested' as const,
+      targetType: 'note' as const,
+      yRatio: 0.1,
+      label: 'above',
+    },
+    {
+      source: 'note' as const,
+      target: 'non-direct descendant note' as const,
+      targetDepth: 'nested' as const,
+      targetType: 'note' as const,
+      yRatio: 0.5,
+      label: 'mid',
+    },
+    {
+      source: 'note' as const,
+      target: 'non-direct descendant note' as const,
+      targetDepth: 'nested' as const,
+      targetType: 'note' as const,
+      yRatio: 0.9,
+      label: 'below',
+    },
+    {
+      source: 'mixed tab/note' as const,
+      target: 'direct descendant note' as const,
+      targetDepth: 'direct' as const,
+      targetType: 'note' as const,
+      yRatio: 0.1,
+      label: 'above',
+    },
+    {
+      source: 'mixed tab/note' as const,
+      target: 'direct descendant note' as const,
+      targetDepth: 'direct' as const,
+      targetType: 'note' as const,
+      yRatio: 0.5,
+      label: 'mid',
+    },
+    {
+      source: 'mixed tab/note' as const,
+      target: 'direct descendant note' as const,
+      targetDepth: 'direct' as const,
+      targetType: 'note' as const,
+      yRatio: 0.9,
+      label: 'below',
+    },
+    {
+      source: 'mixed tab/note' as const,
+      target: 'non-direct descendant tab' as const,
+      targetDepth: 'nested' as const,
+      targetType: 'tab' as const,
+      yRatio: 0.1,
+      label: 'above',
+    },
+    {
+      source: 'mixed tab/note' as const,
+      target: 'non-direct descendant tab' as const,
+      targetDepth: 'nested' as const,
+      targetType: 'tab' as const,
+      yRatio: 0.5,
+      label: 'mid',
+    },
+    {
+      source: 'mixed tab/note' as const,
+      target: 'non-direct descendant tab' as const,
+      targetDepth: 'nested' as const,
+      targetType: 'tab' as const,
+      yRatio: 0.9,
+      label: 'below',
+    },
+  ])(
+    'does not move when $source is dropped $label its $target with descendant drops disabled',
+    ({ source, targetDepth, targetType, yRatio }) => {
+      Settings.values.allowDropOntoDescendantItems = false
+      const setup = setupDescendantDropFixture(source)
+      const target =
+        targetDepth === 'direct'
+          ? setup.directDescendant
+          : setup.nestedDescendant
+      const eventTarget = createFakeDragTarget({
+        id: target.uid,
+        type: targetType,
+      })
+      const event = createFakeDragEvent({ target: eventTarget, yRatio })
+
+      DragAndDrop.onDrop(event)
+
+      expect(moveTabs).not.toHaveBeenCalled()
+      expect(moveTreeItems).not.toHaveBeenCalled()
+      expect(moveWindows).not.toHaveBeenCalled()
+    },
+  )
+
+  it.each([
+    {
+      source: 'tab' as const,
+      targetDepth: 'direct' as const,
+      targetType: 'tab' as const,
+      yRatio: 0.1,
+      label: 'above direct descendant tab',
+    },
+    {
+      source: 'tab' as const,
+      targetDepth: 'direct' as const,
+      targetType: 'tab' as const,
+      yRatio: 0.5,
+      label: 'mid direct descendant tab',
+    },
+    {
+      source: 'tab' as const,
+      targetDepth: 'direct' as const,
+      targetType: 'tab' as const,
+      yRatio: 0.9,
+      label: 'below direct descendant tab',
+    },
+    {
+      source: 'tab' as const,
+      targetDepth: 'nested' as const,
+      targetType: 'tab' as const,
+      yRatio: 0.1,
+      label: 'above non-direct descendant tab',
+    },
+    {
+      source: 'tab' as const,
+      targetDepth: 'nested' as const,
+      targetType: 'tab' as const,
+      yRatio: 0.5,
+      label: 'mid non-direct descendant tab',
+    },
+    {
+      source: 'tab' as const,
+      targetDepth: 'nested' as const,
+      targetType: 'tab' as const,
+      yRatio: 0.9,
+      label: 'below non-direct descendant tab',
+    },
+    {
+      source: 'note' as const,
+      targetDepth: 'direct' as const,
+      targetType: 'note' as const,
+      yRatio: 0.1,
+      label: 'above direct descendant note',
+    },
+    {
+      source: 'note' as const,
+      targetDepth: 'direct' as const,
+      targetType: 'note' as const,
+      yRatio: 0.5,
+      label: 'mid direct descendant note',
+    },
+    {
+      source: 'note' as const,
+      targetDepth: 'direct' as const,
+      targetType: 'note' as const,
+      yRatio: 0.9,
+      label: 'below direct descendant note',
+    },
+    {
+      source: 'note' as const,
+      targetDepth: 'nested' as const,
+      targetType: 'note' as const,
+      yRatio: 0.1,
+      label: 'above non-direct descendant note',
+    },
+    {
+      source: 'note' as const,
+      targetDepth: 'nested' as const,
+      targetType: 'note' as const,
+      yRatio: 0.5,
+      label: 'mid non-direct descendant note',
+    },
+    {
+      source: 'note' as const,
+      targetDepth: 'nested' as const,
+      targetType: 'note' as const,
+      yRatio: 0.9,
+      label: 'below non-direct descendant note',
+    },
+  ])(
+    'marks dropping $source $label invalid during drag when descendant drops are disabled',
+    ({ source, targetDepth, targetType, yRatio }) => {
+      Settings.values.allowDropOntoDescendantItems = false
+      const setup = setupDescendantDropFixture(source)
+      const target =
+        targetDepth === 'direct'
+          ? setup.directDescendant
+          : setup.nestedDescendant
+      const eventTarget = createFakeDragTarget({
+        id: target.uid,
+        type: targetType,
+      })
+      const event = createFakeDragEvent({ target: eventTarget, yRatio })
+
+      DragAndDrop.onDragMove(event)
+
+      expect(DragAndDrop.dragState.isValidDropTarget).toBe(false)
+      expect(DragAndDrop.dragState.dropPosition).toBe(DropPosition.NONE)
+      expect(event.dataTransfer?.dropEffect).toBe('none')
+      expect(eventTarget.classList.contains('drag-over-above')).toBe(false)
+      expect(eventTarget.classList.contains('drag-over-mid')).toBe(false)
+      expect(eventTarget.classList.contains('drag-over-below')).toBe(false)
+    },
+  )
+
+  it('drops an expanded note mid onto a descendant note when descendant drops are allowed', () => {
+    Settings.values.includeChildrenOfSelectedItems = 'collapsed'
+    Settings.values.allowDropOntoDescendantItems = true
+    const note = makeForegroundNote('note-source' as UID, {
+      collapsed: false,
+      isParent: true,
+    })
+    const child = makeForegroundNote('note-child' as UID, {
+      parentUid: note.uid,
+      indentLevel: 2,
+    })
+    const tail = makeForegroundTab('tab-tail' as UID)
+    const window = makeForegroundWindow('window-1' as UID, [note, child, tail])
+    resetForegroundTree([window])
+    DragAndDrop.dragInfo = { dragType: DragType.NOTE, items: [note] }
+
+    const target = createFakeDragTarget({
+      id: child.uid,
+      type: 'note',
+    })
+    const event = createFakeDragEvent({ target, yRatio: 0.5 })
+
+    DragAndDrop.onDrop(event)
+
+    expect(moveTreeItems).toHaveBeenCalledWith(
+      [note.uid],
+      2,
+      child.uid,
+      window.uid,
+      false,
+      false,
+    )
+    expect(moveTabs).not.toHaveBeenCalled()
+    expect(moveWindows).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    {
+      label: 'above direct descendant note',
+      targetDepth: 'direct' as const,
+      yRatio: 0.1,
+      expectedPosition: DropPosition.ABOVE,
+    },
+    {
+      label: 'mid direct descendant note',
+      targetDepth: 'direct' as const,
+      yRatio: 0.5,
+      expectedPosition: DropPosition.MID,
+    },
+    {
+      label: 'below direct descendant note',
+      targetDepth: 'direct' as const,
+      yRatio: 0.9,
+      expectedPosition: DropPosition.BELOW,
+    },
+    {
+      label: 'above non-direct descendant note',
+      targetDepth: 'nested' as const,
+      yRatio: 0.1,
+      expectedPosition: DropPosition.ABOVE,
+    },
+    {
+      label: 'mid non-direct descendant note',
+      targetDepth: 'nested' as const,
+      yRatio: 0.5,
+      expectedPosition: DropPosition.MID,
+    },
+    {
+      label: 'below non-direct descendant note',
+      targetDepth: 'nested' as const,
+      yRatio: 0.9,
+      expectedPosition: DropPosition.BELOW,
+    },
+  ])(
+    'marks dropping a note $label valid when descendant drops are allowed',
+    ({ targetDepth, yRatio, expectedPosition }) => {
+      Settings.values.includeChildrenOfSelectedItems = 'always'
+      Settings.values.allowDropOntoDescendantItems = true
+      const setup = setupDescendantDropFixture('note')
+      const target =
+        targetDepth === 'direct'
+          ? setup.directDescendant
+          : setup.nestedDescendant
+      const eventTarget = createFakeDragTarget({
+        id: target.uid,
+        type: 'note',
+      })
+      const event = createFakeDragEvent({ target: eventTarget, yRatio })
+
+      DragAndDrop.onDragMove(event)
+
+      expect(DragAndDrop.dragState.isValidDropTarget).toBe(true)
+      expect(DragAndDrop.dragState.dropPosition).toBe(expectedPosition)
+      expect(event.dataTransfer?.dropEffect).toBe('move')
+    },
+  )
 
   it('sends moveWindows when dropping a window below another window', () => {
     const sourceWindow = makeForegroundWindow('window-source' as UID)
@@ -282,6 +1033,7 @@ describe('drag-and-drop onDrop command path', () => {
   })
 
   it('uses the lower subtree boundary when dropping a note below a collapsed note', () => {
+    Settings.values.includeChildrenOfSelectedItems = 'collapsed'
     const collapsed = makeForegroundNote('note-collapsed' as UID, {
       collapsed: true,
       isParent: true,
@@ -319,6 +1071,7 @@ describe('drag-and-drop onDrop command path', () => {
   })
 
   it('sends moveTreeItems when dropping a note above a tab sibling', () => {
+    Settings.values.includeChildrenOfSelectedItems = 'collapsed'
     const tab = makeForegroundTab('tab-1' as UID)
     const note = makeForegroundNote('note-1' as UID)
     const window = makeForegroundWindow('window-1' as UID, [tab, note])
@@ -386,14 +1139,15 @@ describe('drag-and-drop onDrop command path', () => {
 
     DragAndDrop.onDrop(event)
 
-    expect(moveTabs).toHaveBeenCalledWith(
+    expect(moveTabs).not.toHaveBeenCalled()
+    expect(moveTreeItems).toHaveBeenCalledWith(
       [tab.uid],
-      window.uid,
       1,
       undefined,
+      window.uid,
+      false,
       false,
     )
-    expect(moveTreeItems).not.toHaveBeenCalled()
     expect(moveWindows).not.toHaveBeenCalled()
   })
 
@@ -558,7 +1312,7 @@ describe('drag-and-drop onDrop command path', () => {
     expect(target.classList.contains('drag-over-below')).toBe(false)
   })
 
-  it('marks dropping a note above its included child window invalid during drag', () => {
+  it('marks dropping a note above its included child window valid when descendant drops are allowed', () => {
     Settings.values.includeChildrenOfSelectedItems = 'always'
     const note = makeForegroundNote('note-parent' as UID, {
       indentLevel: 0,
@@ -580,10 +1334,10 @@ describe('drag-and-drop onDrop command path', () => {
 
     DragAndDrop.onDragMove(event)
 
-    expect(DragAndDrop.dragState.isValidDropTarget).toBe(false)
-    expect(DragAndDrop.dragState.dropPosition).toBe(DropPosition.NONE)
-    expect(event.dataTransfer?.dropEffect).toBe('none')
-    expect(target.classList.contains('drag-over-above')).toBe(false)
+    expect(DragAndDrop.dragState.isValidDropTarget).toBe(true)
+    expect(DragAndDrop.dragState.dropPosition).toBe(DropPosition.ABOVE)
+    expect(event.dataTransfer?.dropEffect).toBe('move')
+    expect(target.classList.contains('drag-over-above')).toBe(true)
   })
 
   it.each([
@@ -745,7 +1499,11 @@ describe('drag-and-drop onDrop command path', () => {
 
   it.each([
     { setting: 'always' as const, collapsed: false, includeDescendants: true },
-    { setting: 'collapsed' as const, collapsed: false, includeDescendants: false },
+    {
+      setting: 'collapsed' as const,
+      collapsed: false,
+      includeDescendants: false,
+    },
     { setting: 'never' as const, collapsed: false, includeDescendants: false },
   ])(
     'drops an expanded note with a tab child into a tab using child inclusion setting: $setting',
@@ -822,6 +1580,142 @@ describe('drag-and-drop onDrop command path', () => {
     },
   )
 
+  it.each([
+    {
+      allowDescendantDrops: false,
+      expectedAllowed: false,
+      targetDepth: 'direct' as const,
+      yRatio: 0.1,
+      label: 'above direct tab',
+    },
+    {
+      allowDescendantDrops: false,
+      expectedAllowed: false,
+      targetDepth: 'direct' as const,
+      yRatio: 0.5,
+      label: 'mid direct tab',
+    },
+    {
+      allowDescendantDrops: false,
+      expectedAllowed: false,
+      targetDepth: 'direct' as const,
+      yRatio: 0.9,
+      label: 'below direct tab',
+    },
+    {
+      allowDescendantDrops: false,
+      expectedAllowed: false,
+      targetDepth: 'nested' as const,
+      yRatio: 0.1,
+      label: 'above nested tab',
+    },
+    {
+      allowDescendantDrops: false,
+      expectedAllowed: false,
+      targetDepth: 'nested' as const,
+      yRatio: 0.5,
+      label: 'mid nested tab',
+    },
+    {
+      allowDescendantDrops: false,
+      expectedAllowed: false,
+      targetDepth: 'nested' as const,
+      yRatio: 0.9,
+      label: 'below nested tab',
+    },
+    {
+      allowDescendantDrops: true,
+      expectedAllowed: true,
+      targetDepth: 'direct' as const,
+      yRatio: 0.1,
+      label: 'above direct tab',
+    },
+    {
+      allowDescendantDrops: true,
+      expectedAllowed: true,
+      targetDepth: 'direct' as const,
+      yRatio: 0.5,
+      label: 'mid direct tab',
+    },
+    {
+      allowDescendantDrops: true,
+      expectedAllowed: true,
+      targetDepth: 'direct' as const,
+      yRatio: 0.9,
+      label: 'below direct tab',
+    },
+    {
+      allowDescendantDrops: true,
+      expectedAllowed: true,
+      targetDepth: 'nested' as const,
+      yRatio: 0.1,
+      label: 'above nested tab',
+    },
+    {
+      allowDescendantDrops: true,
+      expectedAllowed: true,
+      targetDepth: 'nested' as const,
+      yRatio: 0.5,
+      label: 'mid nested tab',
+    },
+    {
+      allowDescendantDrops: true,
+      expectedAllowed: true,
+      targetDepth: 'nested' as const,
+      yRatio: 0.9,
+      label: 'below nested tab',
+    },
+  ])(
+    'validates dropping a root note $label inside its descendant child window when descendant drops allowed is $allowDescendantDrops',
+    ({ allowDescendantDrops, expectedAllowed, targetDepth, yRatio }) => {
+      Settings.values.includeChildrenOfSelectedItems = 'always'
+      Settings.values.allowDropOntoDescendantItems = allowDescendantDrops
+      const note = makeForegroundNote('note-parent' as UID, {
+        indentLevel: 0,
+        isParent: true,
+        windowUid: undefined,
+      })
+      const rootTab = makeForegroundTab('tab-root' as UID)
+      const childTab = makeForegroundTab('tab-child' as UID, {
+        parentUid: rootTab.uid,
+        indentLevel: 2,
+      })
+      const childWindow = makeForegroundWindow(
+        'window-child' as UID,
+        [rootTab, childTab],
+        {
+          indentLevel: 1,
+          parentUid: note.uid,
+        },
+      )
+      resetForegroundTree([note, childWindow])
+      DragAndDrop.dragInfo = { dragType: DragType.NOTE, items: [note] }
+
+      const target = targetDepth === 'direct' ? rootTab : childTab
+      const eventTarget = createFakeDragTarget({
+        id: target.uid,
+        type: 'tab',
+      })
+      const event = createFakeDragEvent({ target: eventTarget, yRatio })
+
+      DragAndDrop.onDragMove(event)
+
+      expect(DragAndDrop.dragState.isValidDropTarget).toBe(expectedAllowed)
+      expect(event.dataTransfer?.dropEffect).toBe(
+        expectedAllowed ? 'move' : 'none',
+      )
+      expect(eventTarget.classList.contains('drag-over-above')).toBe(
+        expectedAllowed && yRatio < 0.33,
+      )
+      expect(eventTarget.classList.contains('drag-over-mid')).toBe(
+        expectedAllowed && yRatio >= 0.33 && yRatio <= 0.66,
+      )
+      expect(eventTarget.classList.contains('drag-over-below')).toBe(
+        expectedAllowed && yRatio > 0.66,
+      )
+    },
+  )
+
   it('uses the note subtree boundary when dropping a tab below a parent note', () => {
     const parent = makeForegroundNote('note-parent' as UID, { isParent: true })
     const child = makeForegroundNote('note-child' as UID, {
@@ -841,12 +1735,14 @@ describe('drag-and-drop onDrop command path', () => {
 
     DragAndDrop.onDrop(event)
 
-    expect(moveTabs).toHaveBeenCalledWith(
+    expect(moveTabs).not.toHaveBeenCalled()
+    expect(moveTreeItems).toHaveBeenCalledWith(
       [tab.uid],
-      window.uid,
       2,
       undefined,
+      window.uid,
       false,
+      true,
     )
   })
 
@@ -933,3 +1829,107 @@ describe('drag-and-drop onDrop command path', () => {
     expect(moveWindows).not.toHaveBeenCalled()
   })
 })
+
+function expectNoMoveCommands(): void {
+  expect(moveTabs).not.toHaveBeenCalled()
+  expect(moveTreeItems).not.toHaveBeenCalled()
+  expect(moveWindows).not.toHaveBeenCalled()
+}
+
+function setupDescendantDropFixture(
+  source: 'tab' | 'note' | 'mixed tab/note',
+): {
+  directDescendant: TreeItem
+  nestedDescendant: TreeItem
+} {
+  if (source === 'note') {
+    Settings.values.includeChildrenOfSelectedItems = 'always'
+    const note = makeForegroundNote('note-source' as UID, {
+      isParent: true,
+    })
+    const directDescendant = makeForegroundNote('note-child' as UID, {
+      parentUid: note.uid,
+      indentLevel: 2,
+      isParent: true,
+    })
+    const nestedDescendant = makeForegroundNote('note-grandchild' as UID, {
+      parentUid: directDescendant.uid,
+      indentLevel: 3,
+    })
+    const tail = makeForegroundTab('tab-tail' as UID)
+    const window = makeForegroundWindow('window-1' as UID, [
+      note,
+      directDescendant,
+      nestedDescendant,
+      tail,
+    ])
+    resetForegroundTree([window])
+    DragAndDrop.dragInfo = { dragType: DragType.NOTE, items: [note] }
+
+    return {
+      directDescendant,
+      nestedDescendant,
+    }
+  }
+
+  if (source === 'mixed tab/note') {
+    const tab = makeForegroundTab('tab-source' as UID, {
+      isParent: true,
+    })
+    const directDescendant = makeForegroundNote('note-child' as UID, {
+      parentUid: tab.uid,
+      indentLevel: 2,
+      isParent: true,
+    })
+    const nestedDescendant = makeForegroundTab('tab-grandchild' as UID, {
+      parentUid: directDescendant.uid,
+      indentLevel: 3,
+    })
+    const draggedNote = makeForegroundNote('note-dragged-sibling' as UID)
+    const tail = makeForegroundTab('tab-tail' as UID)
+    const window = makeForegroundWindow('window-1' as UID, [
+      tab,
+      directDescendant,
+      nestedDescendant,
+      draggedNote,
+      tail,
+    ])
+    resetForegroundTree([window])
+    DragAndDrop.dragInfo = {
+      dragType: DragType.TAB,
+      items: [tab, draggedNote] as TreeItem[],
+    }
+
+    return {
+      directDescendant,
+      nestedDescendant,
+    }
+  }
+
+  const tab = makeForegroundTab('tab-source' as UID, {
+    isParent: true,
+  })
+  const directDescendant = makeForegroundTab('tab-child' as UID, {
+    parentUid: tab.uid,
+    indentLevel: 2,
+    isParent: true,
+  })
+  const nestedDescendant = makeForegroundTab('tab-grandchild' as UID, {
+    parentUid: directDescendant.uid,
+    indentLevel: 3,
+  })
+  const tail = makeForegroundTab('tab-tail' as UID)
+  const window = makeForegroundWindow('window-1' as UID, [
+    tab,
+    directDescendant,
+    nestedDescendant,
+    tail,
+  ])
+  resetForegroundTree([window])
+  DragAndDrop.dragInfo = { dragType: DragType.TAB, items: [tab] }
+
+  return {
+    directDescendant,
+    nestedDescendant,
+  }
+}

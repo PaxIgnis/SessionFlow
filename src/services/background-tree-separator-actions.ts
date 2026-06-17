@@ -150,11 +150,15 @@ function decreaseFromItemParent(
   const parent = Tree.getItemByUid(separator.parentUid)
   if (!parent) return
 
-  const parentIndex = containingItems.findIndex((item) => item.uid === parent.uid)
+  const parentIndex = containingItems.findIndex(
+    (item) => item.uid === parent.uid,
+  )
   if (parentIndex === -1) return
   const targetIndex = subtreeEndIndex(containingItems, parentIndex)
   const targetWindowUid =
-    parent.type === TreeItemType.WINDOW ? parent.uid : Tree.getWindowUidForParent(parent)
+    parent.type === TreeItemType.WINDOW
+      ? parent.uid
+      : Tree.getWindowUidForParent(parent)
   const newParentUid =
     parent.type === TreeItemType.WINDOW ? undefined : parent.parentUid
 

@@ -1,6 +1,11 @@
 import { expect } from 'vitest'
 import { Tree } from '@/services/background-tree'
-import { TreeItem, TreeItemType, Window, WindowChild } from '@/types/session-tree'
+import {
+  TreeItem,
+  TreeItemType,
+  Window,
+  WindowChild,
+} from '@/types/session-tree'
 
 export function expectTreeInvariants(): void {
   const seenUids = new Set<UID>()
@@ -13,9 +18,14 @@ export function expectTreeInvariants(): void {
   for (const item of Tree.Items) {
     expect(seenUids.has(item.uid), `duplicate uid ${item.uid}`).toBe(false)
     seenUids.add(item.uid)
-    const parent = item.parentUid ? topLevelByUid.get(item.parentUid) : undefined
+    const parent = item.parentUid
+      ? topLevelByUid.get(item.parentUid)
+      : undefined
     if (item.parentUid) {
-      expect(parent, `top-level parent ${item.parentUid} for ${item.uid}`).toBeDefined()
+      expect(
+        parent,
+        `top-level parent ${item.parentUid} for ${item.uid}`,
+      ).toBeDefined()
       expect(parent?.type, `top-level parent type for ${item.uid}`).toBe(
         TreeItemType.NOTE,
       )
@@ -23,9 +33,10 @@ export function expectTreeInvariants(): void {
     expect(item.indentLevel, `top-level item ${item.uid} indent`).toBe(
       parent ? (parent.indentLevel ?? 0) + 1 : 0,
     )
-    expect(item.isVisible !== false, `top-level visibility for ${item.uid}`).toBe(
-      expectedTopLevelVisibility(item, topLevelByUid),
-    )
+    expect(
+      item.isVisible !== false,
+      `top-level visibility for ${item.uid}`,
+    ).toBe(expectedTopLevelVisibility(item, topLevelByUid))
 
     if (item.type === TreeItemType.WINDOW) {
       expectedWindows.set(item.uid, item)
@@ -39,11 +50,17 @@ export function expectTreeInvariants(): void {
       )
     } else if (item.type === TreeItemType.NOTE) {
       expectedNotes.add(item.uid)
-      expect(item.windowUid, `top-level note ${item.uid} has windowUid`).toBeUndefined()
+      expect(
+        item.windowUid,
+        `top-level note ${item.uid} has windowUid`,
+      ).toBeUndefined()
       expect(Tree.notesByUid.get(item.uid)).toBe(item)
     } else {
       expectedSeparators.add(item.uid)
-      expect(item.windowUid, `top-level separator ${item.uid} has windowUid`).toBeUndefined()
+      expect(
+        item.windowUid,
+        `top-level separator ${item.uid} has windowUid`,
+      ).toBeUndefined()
       expect(Tree.separatorsByUid.get(item.uid)).toBe(item)
     }
   }
@@ -56,7 +73,9 @@ export function expectTreeInvariants(): void {
     }
   }
 
-  expect(new Set(Tree.windowsByUid.keys())).toEqual(new Set(expectedWindows.keys()))
+  expect(new Set(Tree.windowsByUid.keys())).toEqual(
+    new Set(expectedWindows.keys()),
+  )
   expect(new Set(Tree.tabsByUid.keys())).toEqual(expectedTabs)
   expect(new Set(Tree.notesByUid.keys())).toEqual(expectedNotes)
   expect(new Set(Tree.separatorsByUid.keys())).toEqual(expectedSeparators)

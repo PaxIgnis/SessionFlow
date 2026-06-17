@@ -5,7 +5,12 @@ import { Tree } from '@/services/background-tree'
 import { emitTreeDelta } from '@/services/runtime-port-service'
 import { Settings } from '@/services/settings'
 import * as Utils from '@/services/utils'
-import { State, TreeItemType, Window, WindowPosition } from '@/types/session-tree'
+import {
+  State,
+  TreeItemType,
+  Window,
+  WindowPosition,
+} from '@/types/session-tree'
 
 /**
  * Sets the state of the window and all tabs to SAVED and resets the IDs.

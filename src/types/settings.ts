@@ -29,6 +29,7 @@ export interface Settings {
   enableDropFromExternalSources: boolean
   includeSelectedItemsWithDraggedItem: boolean
   includeChildrenOfSelectedItems: (typeof SETTINGS_TYPES.includeChildrenOfSelectedItems)[number]
+  allowDropOntoDescendantItems: boolean
   tryToMaintainHierarchyOfDraggedItems: boolean
   tryToMaintainCollapsedStateOfDraggedItems: boolean
 
@@ -43,11 +44,7 @@ export const SETTINGS_TYPES = {
   doubleClickOnOpenTab: ['save', 'close', 'reload', 'duplicate', 'focus'],
   doubleClickOnSavedTab: ['open', 'remove', 'duplicate'],
   includeChildrenOfSelectedItems: ['always', 'collapsed', 'never'],
-  includeChildrenOfSelectedItemsWhenIndenting: [
-    'always',
-    'collapsed',
-    'never',
-  ],
+  includeChildrenOfSelectedItemsWhenIndenting: ['always', 'collapsed', 'never'],
   refreshFaviconsAfterPeriodOfTimeUnit: [
     'seconds',
     'minutes',

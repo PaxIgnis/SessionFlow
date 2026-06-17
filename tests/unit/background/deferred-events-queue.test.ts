@@ -32,8 +32,12 @@ describe('deferred events queue', () => {
   })
 
   it('does nothing when processing missing window or tab ids', () => {
-    expect(() => DeferredEventsQueue.processDeferredWindowEvents(999)).not.toThrow()
-    expect(() => DeferredEventsQueue.processDeferredTabEvents(999)).not.toThrow()
+    expect(() =>
+      DeferredEventsQueue.processDeferredWindowEvents(999),
+    ).not.toThrow()
+    expect(() =>
+      DeferredEventsQueue.processDeferredTabEvents(999),
+    ).not.toThrow()
     expect(DeferredEventsQueue.windows.size).toBe(0)
     expect(DeferredEventsQueue.tabs.size).toBe(0)
   })

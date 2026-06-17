@@ -56,10 +56,7 @@ export function createWindow(
   return window
 }
 
-export function createTab(
-  uid: UID,
-  overrides: Partial<Tab> = {},
-): Tab {
+export function createTab(uid: UID, overrides: Partial<Tab> = {}): Tab {
   return {
     type: TreeItemType.TAB,
     uid,
@@ -76,10 +73,7 @@ export function createTab(
   }
 }
 
-export function createNote(
-  uid: UID,
-  overrides: Partial<Note> = {},
-): Note {
+export function createNote(uid: UID, overrides: Partial<Note> = {}): Note {
   return {
     type: TreeItemType.NOTE,
     uid,

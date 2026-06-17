@@ -10,11 +10,7 @@ import {
   Window,
 } from '@/types/session-tree'
 
-export function selectItem(
-  item: TreeItem,
-  type: SelectionType,
-  e: MouseEvent,
-) {
+export function selectItem(item: TreeItem, type: SelectionType, e: MouseEvent) {
   const firstItem = Selection.selectedItems.value[0]
 
   const ctrlKey = e.ctrlKey || e.metaKey

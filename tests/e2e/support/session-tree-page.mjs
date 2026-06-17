@@ -211,11 +211,15 @@ export class SessionTreePage {
       )
 
       if (!item?.onclick) {
-        throw new Error(`Captured context menu item "${menuTitle}" has no onclick.`)
+        throw new Error(
+          `Captured context menu item "${menuTitle}" has no onclick.`,
+        )
       }
 
       if (item.enabled === false) {
-        throw new Error(`Captured context menu item "${menuTitle}" is disabled.`)
+        throw new Error(
+          `Captured context menu item "${menuTitle}" is disabled.`,
+        )
       }
 
       item.onclick()
@@ -412,7 +416,9 @@ export class SessionTreePage {
             },
           }),
         )
-        .then(() => window.browser.runtime.sendMessage({ type: 'settingsUpdated' }))
+        .then(() =>
+          window.browser.runtime.sendMessage({ type: 'settingsUpdated' }),
+        )
         .then(() => done({ ok: true }))
         .catch((error) =>
           done({
@@ -439,9 +445,7 @@ export class SessionTreePage {
         const dataTransfer = new DataTransfer()
         const targetRect = targetElement.getBoundingClientRect()
         const clientX = Math.floor(targetRect.left + targetRect.width / 2)
-        const clientY = Math.floor(
-          getDropClientY(targetRect, dropPosition),
-        )
+        const clientY = Math.floor(getDropClientY(targetRect, dropPosition))
 
         const dispatchDragEvent = (element, type) => {
           element.dispatchEvent(
@@ -506,8 +510,7 @@ export function notesInWindow(windowItem) {
 
 export function childNotesOf(parent, containingWindow) {
   return containingWindow.children.filter(
-    (item) =>
-      item.type === TreeItemType.Note && item.parentUid === parent.uid,
+    (item) => item.type === TreeItemType.Note && item.parentUid === parent.uid,
   )
 }
 

@@ -305,11 +305,7 @@ describe('context menu actions', () => {
           indentLevel: 2,
         })
         resetForegroundTree([
-          makeForegroundWindow('window-1' as UID, [
-            parent,
-            previous,
-            selected,
-          ]),
+          makeForegroundWindow('window-1' as UID, [parent, previous, selected]),
         ])
         return selected
       },
@@ -332,11 +328,7 @@ describe('context menu actions', () => {
           indentLevel: 2,
         })
         resetForegroundTree([
-          makeForegroundWindow('window-1' as UID, [
-            parent,
-            previous,
-            selected,
-          ]),
+          makeForegroundWindow('window-1' as UID, [parent, previous, selected]),
         ])
         return selected
       },
@@ -354,16 +346,15 @@ describe('context menu actions', () => {
           parentUid: parent.uid,
           indentLevel: 2,
         })
-        const selected = makeForegroundSeparator('separator-structural' as UID, {
-          parentUid: parent.uid,
-          indentLevel: 2,
-        })
+        const selected = makeForegroundSeparator(
+          'separator-structural' as UID,
+          {
+            parentUid: parent.uid,
+            indentLevel: 2,
+          },
+        )
         resetForegroundTree([
-          makeForegroundWindow('window-1' as UID, [
-            parent,
-            previous,
-            selected,
-          ]),
+          makeForegroundWindow('window-1' as UID, [parent, previous, selected]),
         ])
         return selected
       },
@@ -376,7 +367,9 @@ describe('context menu actions', () => {
       Selection.selectedItems.value = [{ item: selected, type: selectionType }]
 
       const items = createContextMenuItems(ContextMenu[configName])
-      const duplicateItem = items.find((item) => item.id === 'duplicateTreeItem')
+      const duplicateItem = items.find(
+        (item) => item.id === 'duplicateTreeItem',
+      )
       const increaseItem = items.find(
         (item) => item.id === 'treeItemIndentIncrease',
       )

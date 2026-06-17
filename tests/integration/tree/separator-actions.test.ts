@@ -129,7 +129,9 @@ describe('separator mutations', () => {
 
     expect(secondUid).toBeDefined()
     expect(Tree.Items.map((item) => item.uid)).toEqual([first.uid, secondUid])
-    expect(Tree.separatorsByUid.get(secondUid as UID)?.parentUid).toBeUndefined()
+    expect(
+      Tree.separatorsByUid.get(secondUid as UID)?.parentUid,
+    ).toBeUndefined()
     expect(Tree.separatorsByUid.get(secondUid as UID)?.indentLevel).toBe(0)
     expectTreeInvariants()
   })

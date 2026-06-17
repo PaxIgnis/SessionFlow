@@ -898,26 +898,232 @@ export function hasChildrenInContainer(
  * @param {boolean} [copy=false] - Whether to copy the items instead of moving.
  * @param {boolean} [includeDescendants=true] - Whether to move selected items with their descendants.
  */
-export function moveTreeItems(
+export async function moveTreeItems(
   itemUIDs: UID[],
   targetIndex: number,
   parentUid?: UID,
   targetWindowUid?: UID,
   copy: boolean = false,
   includeDescendants: boolean = true,
-): void {
+): Promise<void> {
   if (copy) {
     console.warn('moveTreeItems: copy is not implemented')
     return
   }
 
-  const destination = getContainerForParent(parentUid, targetWindowUid)
+  if (moveIncludesBrowserBackedTabs(itemUIDs, includeDescendants)) {
+    const preparedMove = prepareItemsForBrowserBackedTreeMove(
+      itemUIDs,
+      parentUid,
+      targetWindowUid,
+      includeDescendants,
+    )
+    if (preparedMove.items.length === 0) return
+    if (itemsContainBrowserBackedTabs(preparedMove.items)) {
+      await moveTreeItemsIncludingTabs(
+        preparedMove.items,
+        targetIndex,
+        preparedMove.parentUid,
+        targetWindowUid,
+      )
+    } else {
+      moveNonTabTreeItems(
+        itemUIDs,
+        targetIndex,
+        preparedMove.parentUid,
+        targetWindowUid,
+        includeDescendants,
+      )
+    }
+    return
+  }
+
+  moveNonTabTreeItems(
+    itemUIDs,
+    targetIndex,
+    parentUid,
+    targetWindowUid,
+    includeDescendants,
+  )
+}
+
+/**
+ * Checks whether a requested tree item move includes live browser-backed tabs.
+ *
+ * @param {UID[]} itemUIDs - UIDs of the requested move roots.
+ * @param {boolean} includeDescendants - Whether descendants should be included in the check.
+ * @returns {boolean} Whether the move includes an open or discarded tab.
+ */
+function moveIncludesBrowserBackedTabs(
+  itemUIDs: UID[],
+  includeDescendants: boolean,
+): boolean {
   const moveBlocks = buildMoveBlocks(itemUIDs)
-  if (moveBlocks.length === 0) return
+  return moveBlocks.some((block) => {
+    const items = includeDescendants ? block.items : [block.root]
+    return itemsContainBrowserBackedTabs(items)
+  })
+}
+
+/**
+ * Checks whether a list of tree items contains open or discarded tabs.
+ *
+ * @param {TreeItem[]} items - Tree items to inspect.
+ * @returns {boolean} Whether any item is backed by a live browser tab.
+ */
+function itemsContainBrowserBackedTabs(items: TreeItem[]): boolean {
+  return items.some(
+    (item) =>
+      item.type === TreeItemType.TAB &&
+      (item.state === State.OPEN || item.state === State.DISCARDED),
+  )
+}
+
+/**
+ * Prepares a browser-backed tree item move without mutating until validation passes.
+ * Handles descendant drops, self drops, top-level restrictions, and root-only moves.
+ *
+ * @param {UID[]} itemUIDs - UIDs of the requested move roots.
+ * @param {UID | undefined} parentUid - Requested parent UID for the move.
+ * @param {UID | undefined} targetWindowUid - Target window UID for window child moves.
+ * @param {boolean} includeDescendants - Whether selected roots should move with descendants.
+ * @returns {{ items: TreeItem[]; parentUid: UID | undefined }} Prepared items and effective parent UID.
+ */
+function prepareItemsForBrowserBackedTreeMove(
+  itemUIDs: UID[],
+  parentUid: UID | undefined,
+  targetWindowUid: UID | undefined,
+  includeDescendants: boolean,
+): { items: TreeItem[]; parentUid: UID | undefined } {
+  let effectiveParentUid = parentUid
+  let destination = getContainerForParent(effectiveParentUid, targetWindowUid)
+  const moveBlocks = buildMoveBlocks(itemUIDs)
+  if (moveBlocks.length === 0)
+    return { items: [], parentUid: effectiveParentUid }
+  const blocksToMoveWithoutDescendants = new Set<MoveBlock>()
+
   const movingToTopLevel = !destination.parent && !targetWindowUid
+  const destinationParent = destination.parent
+  const blocksDroppedOntoDescendants = destinationParent
+    ? moveBlocks.filter((block) =>
+        isDestinationDescendantOfBlock(destinationParent, block),
+      )
+    : []
+  const blocksDroppedOntoMovedRoots = destinationParent
+    ? moveBlocks.filter((block) => destinationParent.uid === block.root.uid)
+    : []
+
+  if (
+    blocksDroppedOntoDescendants.length > 0 &&
+    !Settings.values.allowDropOntoDescendantItems
+  ) {
+    return { items: [], parentUid: effectiveParentUid }
+  }
 
   if (!includeDescendants) {
     for (const block of moveBlocks) {
+      if (destinationParent?.uid === block.root.uid) {
+        // Dropping relative to a detached root should use the root's old parent
+        // because the root will no longer be a parent of its former children.
+        effectiveParentUid = block.root.parentUid
+      }
+      blocksToMoveWithoutDescendants.add(block)
+    }
+  } else if (movingToTopLevel) {
+    for (const block of moveBlocks) {
+      if (blockHasInvalidTopLevelDescendants(block)) {
+        // Tabs cannot live at the top level, so keep invalid descendants in
+        // their current container and move only the requested root.
+        blocksToMoveWithoutDescendants.add(block)
+      }
+    }
+  }
+  if (includeDescendants) {
+    for (const block of [
+      ...blocksDroppedOntoDescendants,
+      ...blocksDroppedOntoMovedRoots,
+    ]) {
+      if (destinationParent?.uid === block.root.uid) {
+        // Dropping onto the root itself means "drop relative to where the root
+        // used to be" after descendants are detached.
+        effectiveParentUid = block.root.parentUid
+      }
+      blocksToMoveWithoutDescendants.add(block)
+    }
+  }
+  destination = getContainerForParent(effectiveParentUid, targetWindowUid)
+  // Validate against the planned root-only blocks before mutating live parent
+  // metadata. Rejected browser-backed moves must leave the tree untouched.
+  const preparedMoveBlocks = moveBlocks.map((block) =>
+    blocksToMoveWithoutDescendants.has(block)
+      ? { ...block, items: [block.root] }
+      : block,
+  )
+  const rootsMovedWithoutDescendants = new Set(
+    [...blocksToMoveWithoutDescendants].map((block) => block.root.uid),
+  )
+  if (
+    !isValidDestination(
+      destination.parent,
+      preparedMoveBlocks,
+      rootsMovedWithoutDescendants,
+    )
+  ) {
+    return { items: [], parentUid: effectiveParentUid }
+  }
+  for (const block of blocksToMoveWithoutDescendants) {
+    prepareBlockForMoveWithoutDescendants(block)
+  }
+
+  return {
+    items: preparedMoveBlocks.flatMap((block) => block.items),
+    parentUid: effectiveParentUid,
+  }
+}
+
+/**
+ * Moves tree items that do not require browser tab movement.
+ * Handles top-level moves, window child moves, and parent metadata updates.
+ *
+ * @param {UID[]} itemUIDs - UIDs of the items to move.
+ * @param {number} targetIndex - Index in the destination list where items should be inserted.
+ * @param {UID} [parentUid] - Optional destination parent UID.
+ * @param {UID} [targetWindowUid] - Optional target window UID for window child moves.
+ * @param {boolean} [includeDescendants=true] - Whether to move roots with their descendants.
+ */
+function moveNonTabTreeItems(
+  itemUIDs: UID[],
+  targetIndex: number,
+  parentUid?: UID,
+  targetWindowUid?: UID,
+  includeDescendants: boolean = true,
+): void {
+  let effectiveParentUid = parentUid
+  let destination = getContainerForParent(effectiveParentUid, targetWindowUid)
+  const moveBlocks = buildMoveBlocks(itemUIDs)
+  if (moveBlocks.length === 0) return
+  const movingToTopLevel = !destination.parent && !targetWindowUid
+  const destinationParent = destination.parent
+  const blocksDroppedOntoDescendants = destinationParent
+    ? moveBlocks.filter((block) =>
+        isDestinationDescendantOfBlock(destinationParent, block),
+      )
+    : []
+
+  if (
+    blocksDroppedOntoDescendants.length > 0 &&
+    !Settings.values.allowDropOntoDescendantItems
+  ) {
+    return
+  }
+
+  if (!includeDescendants) {
+    for (const block of moveBlocks) {
+      if (destinationParent?.uid === block.root.uid) {
+        // Dropping relative to a detached root should use the root's old parent
+        // because the root will no longer be a parent of its former children.
+        effectiveParentUid = block.root.parentUid
+      }
       prepareBlockForMoveWithoutDescendants(block)
     }
   } else if (movingToTopLevel) {
@@ -927,6 +1133,15 @@ export function moveTreeItems(
       }
     }
   }
+  if (includeDescendants) {
+    for (const block of blocksDroppedOntoDescendants) {
+      if (destinationParent?.uid === block.root.uid) {
+        effectiveParentUid = block.root.parentUid
+      }
+      prepareBlockForMoveWithoutDescendants(block)
+    }
+  }
+  destination = getContainerForParent(effectiveParentUid, targetWindowUid)
   if (!isValidDestination(destination.parent, moveBlocks)) return
 
   let adjustedTargetIndex = Math.max(
@@ -984,6 +1199,208 @@ export function moveTreeItems(
   })
 }
 
+/**
+ * Moves tree items when the requested move includes live browser-backed tabs.
+ * Uses browser tab movement for tabs and then replays non-tab items into place.
+ *
+ * @param {TreeItem[]} requestedItems - Prepared items to move.
+ * @param {number} targetIndex - Index in the target window child list.
+ * @param {UID | undefined} parentUid - Effective parent UID for moved root items.
+ * @param {UID | undefined} targetWindowUid - Target window UID for the move.
+ */
+async function moveTreeItemsIncludingTabs(
+  requestedItems: TreeItem[],
+  targetIndex: number,
+  parentUid: UID | undefined,
+  targetWindowUid: UID | undefined,
+): Promise<void> {
+  if (requestedItems.length === 0) return
+  if (!targetWindowUid) {
+    console.error('moveTreeItems: target window is required when moving tabs')
+    return
+  }
+
+  const targetWindow = Tree.windowsByUid.get(targetWindowUid)
+  if (!targetWindow) {
+    console.error(
+      `moveTreeItems: Target window with UID ${targetWindowUid} not found`,
+    )
+    return
+  }
+
+  let tabTargetIndex = targetIndex
+  if (tabTargetIndex < 0 || tabTargetIndex > targetWindow.children.length) {
+    console.error(
+      `moveTreeItems: Invalid target index ${targetIndex} for window ${targetWindowUid}`,
+    )
+    tabTargetIndex = targetWindow.children.length
+  }
+
+  const movedItemUids = new Set(requestedItems.map((item) => item.uid))
+  const originalParentUidByUid = new Map(
+    requestedItems.map((item) => [item.uid, item.parentUid] as const),
+  )
+  const originalOrderByUid = new Map(
+    requestedItems.map((item, index) => [item.uid, index] as const),
+  )
+  const tabs = requestedItems
+    .filter((item): item is Tab => item.type === TreeItemType.TAB)
+    .sort(compareTabsByTreeOrder)
+  const nonTabItems = requestedItems.filter(
+    (item) => item.type !== TreeItemType.TAB,
+  )
+
+  const newUidMapping: Map<UID, UID> = new Map()
+  const updatedWindows: Set<UID> = new Set([targetWindowUid])
+
+  for (const tab of tabs) {
+    updatedWindows.add(tab.windowUid)
+    const isPinned = tab.pinned || false
+    let originalTargetIndex = tabTargetIndex
+    let targetIndexAdjusted = false
+    if (isPinned) {
+      const lastPinnedIndex = targetWindow.children.findLastIndex(
+        (item) => item.type === TreeItemType.TAB && item.pinned,
+      )
+      if (lastPinnedIndex + 1 < tabTargetIndex) {
+        tabTargetIndex = lastPinnedIndex + 1
+        targetIndexAdjusted = true
+      }
+    } else {
+      const lastPinnedIndex = targetWindow.children.findLastIndex(
+        (item) => item.type === TreeItemType.TAB && item.pinned,
+      )
+      if (lastPinnedIndex !== -1 && tabTargetIndex <= lastPinnedIndex) {
+        tabTargetIndex = lastPinnedIndex + 1
+        targetIndexAdjusted = true
+      }
+    }
+
+    const sourceIndex = targetWindow.children.findIndex(
+      (item) => item.uid === tab.uid,
+    )
+    if (tab.windowUid === targetWindowUid && sourceIndex < tabTargetIndex) {
+      // Moving downward inside the same window shifts the browser target left
+      // once the source tab is removed.
+      tabTargetIndex--
+    }
+
+    let newParentUid: UID | undefined = undefined
+    if (
+      Settings.values.tryToMaintainHierarchyOfDraggedItems &&
+      originalParentUidByUid.get(tab.uid) &&
+      newUidMapping.has(originalParentUidByUid.get(tab.uid) as UID)
+    ) {
+      newParentUid = newUidMapping.get(
+        originalParentUidByUid.get(tab.uid) as UID,
+      )
+    }
+
+    const newTabUid = await Tree.moveTab(
+      tab.uid,
+      targetWindowUid,
+      tabTargetIndex,
+      targetIndexAdjusted ? undefined : (newParentUid ?? parentUid),
+      false,
+      false,
+    )
+    if (newTabUid) newUidMapping.set(tab.uid, newTabUid)
+    if (targetIndexAdjusted) {
+      if (tabTargetIndex <= originalTargetIndex) originalTargetIndex++
+      if (
+        tab.windowUid === targetWindowUid &&
+        sourceIndex < originalTargetIndex
+      ) {
+        originalTargetIndex--
+      }
+      tabTargetIndex = originalTargetIndex
+    } else {
+      tabTargetIndex++
+    }
+  }
+
+  Tree.recomputeSessionTree(false)
+
+  if (Settings.values.tryToMaintainCollapsedStateOfDraggedItems) {
+    for (const tab of tabs) {
+      if (!tab.collapsed) continue
+      const newTabUid = newUidMapping.get(tab.uid)
+      if (!newTabUid) continue
+      const newTab = Tree.tabsByUid.get(newTabUid)
+      if (!newTab) continue
+      if (newTab.isParent) Tree.toggleCollapseTab(newTabUid, false)
+    }
+  }
+
+  nonTabItems.forEach((item, index) => {
+    const currentItem = getItemByUid(item.uid)
+    if (!currentItem) return
+    // Tabs are moved first through the browser API. Non-tabs are replayed
+    // afterward at their original relative positions in the requested block.
+    moveNonTabTreeItems(
+      [currentItem.uid],
+      targetIndex + (originalOrderByUid.get(item.uid) ?? tabs.length + index),
+      getMovedTreeItemParentUid(
+        originalParentUidByUid.get(currentItem.uid),
+        movedItemUids,
+        parentUid,
+      ),
+      targetWindowUid,
+      false,
+    )
+  })
+
+  for (const windowUid of updatedWindows) {
+    const window = Tree.windowsByUid.get(windowUid)
+    if (window) {
+      emitTreeDelta({
+        op: 'windowUpdated',
+        window: structuredClone(window),
+      })
+    }
+  }
+}
+
+/**
+ * Resolves the parent UID for a moved non-tab item after tab roots are moved.
+ *
+ * @param {UID | undefined} originalParentUid - The item's parent UID before the move.
+ * @param {Set<UID>} movedItemUids - UIDs included in the current move.
+ * @param {UID | undefined} dropParentUid - Parent UID requested by the drop target.
+ * @returns {UID | undefined} The parent UID to use for the moved item.
+ */
+function getMovedTreeItemParentUid(
+  originalParentUid: UID | undefined,
+  movedItemUids: Set<UID>,
+  dropParentUid: UID | undefined,
+): UID | undefined {
+  return originalParentUid && movedItemUids.has(originalParentUid)
+    ? originalParentUid
+    : dropParentUid
+}
+
+/**
+ * Compares tabs by their current order in the session tree.
+ * Tabs in earlier top-level windows sort before tabs in later windows.
+ *
+ * @param {Tab} a - First tab to compare.
+ * @param {Tab} b - Second tab to compare.
+ * @returns {number} Sort order by window and child index.
+ */
+function compareTabsByTreeOrder(a: Tab, b: Tab): number {
+  const winIndexA = Tree.Items.findIndex((item) => item.uid === a.windowUid)
+  const winIndexB = Tree.Items.findIndex((item) => item.uid === b.windowUid)
+  if (winIndexA === -1 || winIndexB === -1) return 0
+  if (winIndexA !== winIndexB) return winIndexA - winIndexB
+
+  const window = Tree.windowsByUid.get(a.windowUid)
+  if (!window) return 0
+  const indexA = window.children.findIndex((item) => item.uid === a.uid)
+  const indexB = window.children.findIndex((item) => item.uid === b.uid)
+  if (indexA === -1 || indexB === -1) return 0
+  return indexA - indexB
+}
+
 export function duplicateTreeItems(itemUIDs: UID[]): void {
   const openTabUids = new Set(
     itemUIDs.filter((uid) => {
@@ -1008,7 +1425,11 @@ export function duplicateTreeItems(itemUIDs: UID[]): void {
 
   for (const block of insertionBlocks) {
     const duplicates = cloneTreeItemBlock(block.items)
-    block.children.splice(block.startIndex + block.items.length, 0, ...duplicates)
+    block.children.splice(
+      block.startIndex + block.items.length,
+      0,
+      ...duplicates,
+    )
   }
 
   Tree.recomputeSessionTree(false)
@@ -1018,7 +1439,7 @@ export function duplicateTreeItems(itemUIDs: UID[]): void {
   })
 }
 
-export function treeItemIndentIncrease(itemUIDs: UID[]): void {
+export async function treeItemIndentIncrease(itemUIDs: UID[]): Promise<void> {
   const separatorUids: UID[] = []
 
   for (const uid of itemUIDs) {
@@ -1047,7 +1468,7 @@ export function treeItemIndentIncrease(itemUIDs: UID[]): void {
         ? previous.children.length
         : location.index
 
-    Tree.moveTreeItems(
+    await Tree.moveTreeItems(
       [uid],
       targetIndex,
       previous.uid,
@@ -1060,13 +1481,13 @@ export function treeItemIndentIncrease(itemUIDs: UID[]): void {
   if (separatorUids.length) Tree.separatorIndentIncrease(separatorUids)
 }
 
-export function treeItemIndentDecrease(itemUIDs: UID[]): void {
+export async function treeItemIndentDecrease(itemUIDs: UID[]): Promise<void> {
   for (const uid of itemUIDs) {
     const location = findItemLocation(uid)
     if (!location) continue
 
     if (location.item.parentUid) {
-      decreaseItemFromParent(
+      await decreaseItemFromParent(
         location.item,
         includeChildrenWhenIndenting(location.item),
       )
@@ -1074,7 +1495,7 @@ export function treeItemIndentDecrease(itemUIDs: UID[]): void {
       location.item.type !== TreeItemType.WINDOW &&
       location.item.windowUid
     ) {
-      decreaseItemFromWindowRoot(
+      await decreaseItemFromWindowRoot(
         location.item,
         includeChildrenWhenIndenting(location.item),
       )
@@ -1118,9 +1539,14 @@ function applyClonedTreeItemIdentity(
 ): void {
   clone.uid = uidMap.get(source.uid)!
   clone.selected = false
-  clone.parentUid = source.parentUid ? (uidMap.get(source.parentUid) ?? source.parentUid) : undefined
+  clone.parentUid = source.parentUid
+    ? (uidMap.get(source.parentUid) ?? source.parentUid)
+    : undefined
 
-  if (clone.type === TreeItemType.WINDOW && source.type === TreeItemType.WINDOW) {
+  if (
+    clone.type === TreeItemType.WINDOW &&
+    source.type === TreeItemType.WINDOW
+  ) {
     clone.id = -1
     clone.state = State.SAVED
     clone.active = false
@@ -1166,10 +1592,10 @@ function findPreviousSiblingAtSameIndent(
   return undefined
 }
 
-function decreaseItemFromParent(
+async function decreaseItemFromParent(
   item: TreeItem,
   includeDescendants: boolean,
-): void {
+): Promise<void> {
   if (!item.parentUid) return
   const parent = getItemByUid(item.parentUid)
   if (!parent) return
@@ -1187,7 +1613,7 @@ function decreaseItemFromParent(
   const newParentUid =
     parent.type === TreeItemType.WINDOW ? undefined : parent.parentUid
 
-  Tree.moveTreeItems(
+  await Tree.moveTreeItems(
     [item.uid],
     targetIndex,
     newParentUid,
@@ -1197,10 +1623,10 @@ function decreaseItemFromParent(
   )
 }
 
-function decreaseItemFromWindowRoot(
+async function decreaseItemFromWindowRoot(
   item: TreeItem,
   includeDescendants: boolean,
-): void {
+): Promise<void> {
   if (
     item.type !== TreeItemType.TAB &&
     item.type !== TreeItemType.NOTE &&
@@ -1214,7 +1640,7 @@ function decreaseItemFromWindowRoot(
   const windowLocation = findItemLocation(window.uid)
   if (!windowLocation) return
 
-  Tree.moveTreeItems(
+  await Tree.moveTreeItems(
     [item.uid],
     getSubtreeEndIndex(windowLocation.children, windowLocation.index),
     window.parentUid,
@@ -1248,10 +1674,7 @@ function buildMoveBlocks(itemUIDs: UID[]): MoveBlock[] {
 }
 
 function prepareBlockForMoveWithoutDescendants(block: MoveBlock): void {
-  if (
-    block.root.type === TreeItemType.WINDOW ||
-    block.items.length <= 1
-  ) {
+  if (block.root.type === TreeItemType.WINDOW || block.items.length <= 1) {
     return
   }
 
@@ -1275,6 +1698,21 @@ function blockHasInvalidTopLevelDescendants(block: MoveBlock): boolean {
         item.type !== TreeItemType.NOTE &&
         item.type !== TreeItemType.SEPARATOR,
     )
+}
+
+/**
+ * Checks whether a destination parent is inside a move block.
+ *
+ * @param {TreeItem} parent - Destination parent item.
+ * @param {MoveBlock} block - Move block to inspect.
+ * @returns {boolean} Whether the destination parent is a descendant of the block root.
+ */
+function isDestinationDescendantOfBlock(
+  parent: TreeItem,
+  block: MoveBlock,
+): boolean {
+  const byUid = new Map(block.children.map((item) => [item.uid, item] as const))
+  return isDescendantOf(parent, block.root.uid, byUid)
 }
 
 function hasSelectedAncestor(item: TreeItem, selected: Set<UID>): boolean {
@@ -1315,6 +1753,7 @@ export function findItemLocation(uid: UID): ItemLocation | undefined {
 function isValidDestination(
   parent: TreeItem | undefined,
   moveBlocks: MoveBlock[],
+  rootsMovedWithoutDescendants: Set<UID> = new Set(),
 ) {
   const movingItems = moveBlocks.flatMap((block) => block.items)
 
@@ -1330,6 +1769,7 @@ function isValidDestination(
   if (
     moveBlocks.some((block) => {
       if (parent.uid === block.root.uid) return true
+      if (rootsMovedWithoutDescendants.has(block.root.uid)) return false
       const location = findItemLocation(parent.uid)
       if (!location) return false
       const byUid = new Map(

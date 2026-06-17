@@ -47,10 +47,7 @@ export function makeForegroundWindow(
   return window
 }
 
-export function makeForegroundTab(
-  uid: UID,
-  overrides: Partial<Tab> = {},
-): Tab {
+export function makeForegroundTab(uid: UID, overrides: Partial<Tab> = {}): Tab {
   return {
     type: TreeItemType.TAB,
     uid,

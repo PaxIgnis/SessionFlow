@@ -64,6 +64,14 @@ import { STRINGS } from '@/types/strings'
       "
       @update="Settings.saveSettingsToStorage()"
     />
+    <ToggleButton
+      class="dependent-element"
+      label="Items Can Be Dropped onto Descendant Items"
+      v-model="Settings.values.allowDropOntoDescendantItems"
+      :options="OPTIONS.boolean"
+      :disabled="!Settings.values.enableDragAndDrop"
+      @update="Settings.saveSettingsToStorage()"
+    />
   </section>
 </template>
 

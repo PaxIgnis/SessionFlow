@@ -7,7 +7,14 @@ import { initializeSessionTreePort } from '@/services/runtime-port-service'
 import { Selection } from '@/services/selection'
 import { Settings } from '@/services/settings'
 import * as Messages from '@/types/messages'
-import { LoadingStatus, State, Tab, TreeItemType } from '@/types/session-tree'
+import {
+  LoadingStatus,
+  State,
+  Tab,
+  TreeItemType,
+  Window,
+  WindowChild,
+} from '@/types/session-tree'
 
 // ==============================
 // Event Listeners
@@ -308,18 +315,27 @@ async function tabsOnMoved(
     console.error('Error getting tabs')
     return
   }
+  const repairedChildrenPlacedBeforeParents =
+    repairChildrenPlacedBeforeParents(window)
   // return if order matches
   if (
     openSessionTreeTabs.every(
       (tab, index) => tab.id === openBrowserTabs[index].id,
     )
   ) {
+    if (repairedChildrenPlacedBeforeParents) {
+      Tree.recomputeSessionTree()
+    }
     return
   }
   // if order doesn't match, update the sessionTree order to match the browser order
   const movedTabIndex = window.children.findIndex(
     (tab) => tab.type === TreeItemType.TAB && tab.id === tabId,
   )
+  if (movedTabIndex === -1) {
+    console.warn('Moved tab not found in session tree:', tabId)
+    return
+  }
   const tab = window.children[movedTabIndex] as Tab
   Tree.removeTab(tab.uid)
   if (moveInfo.toIndex + 1 >= openSessionTreeTabs.length) {
@@ -370,6 +386,97 @@ async function tabsOnMoved(
     )
   }
   Tree.recomputeSessionTree()
+}
+
+/**
+ * Repairs child items that appear before their parent in a window child list.
+ * Repeats until multi-level inversions are resolved.
+ *
+ * @param {Window} window - The window whose child ordering should be repaired.
+ * @returns {boolean} Whether any child parent or indent metadata was updated.
+ */
+function repairChildrenPlacedBeforeParents(window: Window): boolean {
+  let repaired = false
+  let changedInPass = true
+  while (changedInPass) {
+    changedInPass = false
+    const childIndexByUid = new Map<UID, number>(
+      window.children.map((child, index) => [child.uid, index]),
+    )
+
+    for (const [index, child] of window.children.entries()) {
+      if (!child.parentUid) continue
+
+      const parentIndex = childIndexByUid.get(child.parentUid)
+      if (parentIndex === undefined || parentIndex < index) continue
+
+      const parent = window.children[parentIndex]
+      // If a child appears before its parent, promote it to the parent's level
+      // so future recompute passes do not keep an impossible ordering.
+      const parentUid = parent.uid === child.uid ? undefined : parent.parentUid
+      const indentLevel =
+        parent.uid === child.uid ? 1 : (parent.indentLevel ?? 1)
+      if (updateWindowChildParent(child, parentUid, indentLevel)) {
+        updateParentFlagIfEmpty(window, parent)
+        repaired = true
+        changedInPass = true
+      }
+    }
+  }
+  return repaired
+}
+
+/**
+ * Updates a window child item parent and indent metadata.
+ *
+ * @param {WindowChild} child - The child item to update.
+ * @param {UID} [parentUid] - The new parent UID, or undefined for a root child.
+ * @param {number} indentLevel - The child indent level after repair.
+ * @returns {boolean} Whether the child metadata changed.
+ */
+function updateWindowChildParent(
+  child: WindowChild,
+  parentUid: UID | undefined,
+  indentLevel: number,
+): boolean {
+  if (child.parentUid === parentUid && child.indentLevel === indentLevel) {
+    return false
+  }
+
+  const updates = { parentUid, indentLevel }
+  if (child.type === TreeItemType.TAB) {
+    Tree.updateTab({ tabUid: child.uid }, updates)
+  } else if (child.type === TreeItemType.NOTE) {
+    Tree.updateNote(child.uid, updates)
+  } else if (child.type === TreeItemType.SEPARATOR) {
+    Tree.updateSeparator(child.uid, updates)
+  }
+  child.parentUid = parentUid
+  child.indentLevel = indentLevel
+  return true
+}
+
+/**
+ * Clears the parent flag when an item no longer has children.
+ *
+ * @param {Window} window - The window containing the potential parent item.
+ * @param {WindowChild} parent - The item whose parent flag may be cleared.
+ */
+function updateParentFlagIfEmpty(window: Window, parent: WindowChild): void {
+  if (
+    parent.type === TreeItemType.SEPARATOR ||
+    window.children.some((child) => child.parentUid === parent.uid)
+  ) {
+    return
+  }
+
+  if (parent.type === TreeItemType.TAB) {
+    Tree.updateTab({ tabUid: parent.uid }, { isParent: false })
+    parent.isParent = false
+  } else if (parent.type === TreeItemType.NOTE) {
+    Tree.updateNote(parent.uid, { isParent: false })
+    parent.isParent = false
+  }
 }
 
 /**
@@ -517,16 +624,18 @@ function browserActionOnClicked(): void {
  * Most of these will be user actions performed in the session tree.
  */
 function onMessage(message: Messages.SessionTreeMessage): void {
-  dispatchCommand(message)
+  void dispatchCommand(message)
 }
 
-function dispatchCommand(message: Messages.SessionTreeMessage): void {
+async function dispatchCommand(
+  message: Messages.SessionTreeMessage,
+): Promise<void> {
   if (message.action === 'closeTab') {
     Tree.closeTab(message)
   } else if (message.action === 'saveTab') {
     Tree.saveTab(message)
   } else if (message.action === 'openTab') {
-    Tree.openTab(message)
+    await Tree.openTab(message)
   } else if (message.action === 'reloadTab') {
     Browser.reloadTab(message)
   } else if (message.action === 'closeWindow') {
@@ -534,7 +643,7 @@ function dispatchCommand(message: Messages.SessionTreeMessage): void {
   } else if (message.action === 'saveWindow') {
     Tree.saveAndRemoveWindow(message)
   } else if (message.action === 'openWindow') {
-    Tree.openWindow(message)
+    await Tree.openWindow(message)
   } else if (message.action === 'focusTab') {
     Browser.focusTabAndWindow(message)
   } else if (message.action === 'focusWindow') {
@@ -576,16 +685,8 @@ function dispatchCommand(message: Messages.SessionTreeMessage): void {
     Tree.createSeparatorBelow(message.separatorUid)
   } else if (message.action === 'deselectAllItems') {
     Tree.deselectAllItems()
-  } else if (message.action === 'moveTabs') {
-    Tree.moveTabs(
-      message.tabUIDs,
-      message.targetWindowUid,
-      message.targetIndex,
-      message.parentUid,
-      message.copy,
-    )
   } else if (message.action === 'moveTreeItems') {
-    Tree.moveTreeItems(
+    await Tree.moveTreeItems(
       message.itemUIDs,
       message.targetIndex,
       message.parentUid,
@@ -598,9 +699,9 @@ function dispatchCommand(message: Messages.SessionTreeMessage): void {
   } else if (message.action === 'duplicateTreeItems') {
     Tree.duplicateTreeItems(message.itemUIDs)
   } else if (message.action === 'treeItemIndentIncrease') {
-    Tree.treeItemIndentIncrease(message.itemUIDs)
+    await Tree.treeItemIndentIncrease(message.itemUIDs)
   } else if (message.action === 'treeItemIndentDecrease') {
-    Tree.treeItemIndentDecrease(message.itemUIDs)
+    await Tree.treeItemIndentDecrease(message.itemUIDs)
   } else if (message.action === 'pinTab') {
     Tree.pinTab(message.tabUid)
   } else if (message.action === 'unpinTab') {

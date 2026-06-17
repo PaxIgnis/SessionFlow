@@ -22,7 +22,8 @@ describe('settings actions', () => {
         doubleClickOnSavedTab: 'bad-option',
       },
     })
-    const { loadSettingsFromStorage } = await import('@/services/settings-actions')
+    const { loadSettingsFromStorage } =
+      await import('@/services/settings-actions')
 
     await loadSettingsFromStorage()
 
@@ -49,16 +50,19 @@ describe('settings actions', () => {
 
   it('does nothing when storage has no settings object', async () => {
     vi.mocked(browser.storage.local.get).mockResolvedValue({})
-    const { loadSettingsFromStorage } = await import('@/services/settings-actions')
+    const { loadSettingsFromStorage } =
+      await import('@/services/settings-actions')
 
     await loadSettingsFromStorage()
 
     expect(Settings.values).toEqual(expect.objectContaining(DEFAULT_SETTINGS))
+    expect(Settings.values.allowDropOntoDescendantItems).toBe(true)
   })
 
   it('saves settings and broadcasts the update message', async () => {
     Settings.values.openSessionTreeOnStartup = true
-    const { saveSettingsToStorage } = await import('@/services/settings-actions')
+    const { saveSettingsToStorage } =
+      await import('@/services/settings-actions')
 
     await saveSettingsToStorage()
 
@@ -78,9 +82,8 @@ describe('settings actions', () => {
         openSessionTreeOnStartup: true,
       },
     })
-    const { setupSettingsUpdatedListener } = await import(
-      '@/services/settings-actions'
-    )
+    const { setupSettingsUpdatedListener } =
+      await import('@/services/settings-actions')
 
     setupSettingsUpdatedListener()
     fakeBrowser.runtime.onMessage.emit({ type: 'settingsUpdated' })
@@ -95,9 +98,8 @@ describe('settings actions', () => {
         openSessionTreeOnStartup: true,
       },
     })
-    const { setupSettingsUpdatedListener } = await import(
-      '@/services/settings-actions'
-    )
+    const { setupSettingsUpdatedListener } =
+      await import('@/services/settings-actions')
 
     setupSettingsUpdatedListener()
     fakeBrowser.runtime.onMessage.emit({ type: 'otherMessage' })
@@ -116,9 +118,11 @@ describe('settings actions', () => {
         openWindowsInSameLocationUpdateIntervalUnit: 'minutes',
         includeChildrenOfSelectedItems: 'always',
         includeChildrenOfSelectedItemsWhenIndenting: 'never',
+        allowDropOntoDescendantItems: false,
       },
     })
-    const { loadSettingsFromStorage } = await import('@/services/settings-actions')
+    const { loadSettingsFromStorage } =
+      await import('@/services/settings-actions')
 
     await loadSettingsFromStorage()
 
@@ -130,5 +134,6 @@ describe('settings actions', () => {
     expect(Settings.values.includeChildrenOfSelectedItemsWhenIndenting).toBe(
       'never',
     )
+    expect(Settings.values.allowDropOntoDescendantItems).toBe(false)
   })
 })

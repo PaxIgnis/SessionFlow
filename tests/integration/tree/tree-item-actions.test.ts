@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '@/defaults/settings'
 import { Tree } from '@/services/background-tree'
 import { Settings } from '@/services/settings'
@@ -15,6 +15,7 @@ import { expectTreeInvariants } from '../../helpers/tree-invariants'
 
 describe('generic tree item structural actions', () => {
   beforeEach(() => {
+    vi.restoreAllMocks()
     installFakeBrowser()
     resetTree()
     Object.assign(Settings.values, structuredClone(DEFAULT_SETTINGS))
@@ -191,10 +192,7 @@ describe('generic tree item structural actions', () => {
 
     Tree.treeItemIndentIncrease([window.uid])
 
-    expect(Tree.Items.map((item) => item.uid)).toEqual([
-      parent.uid,
-      window.uid,
-    ])
+    expect(Tree.Items.map((item) => item.uid)).toEqual([parent.uid, window.uid])
     expect(window.parentUid).toBe(parent.uid)
     expect(window.indentLevel).toBe(1)
     expect(tab.windowUid).toBe(window.uid)
@@ -381,6 +379,51 @@ describe('generic tree item structural actions', () => {
       expectTreeInvariants()
     },
   )
+
+  it('waits for async tree item movement when increasing indent', async () => {
+    const parent = createTab('tab-parent' as UID, {
+      id: 10,
+      state: State.OPEN,
+    })
+    const movedTab = createTab('tab-moved' as UID, {
+      id: 20,
+      state: State.OPEN,
+    })
+    const window = createWindow('window-1' as UID, [parent, movedTab], {
+      id: 100,
+      state: State.OPEN,
+    })
+    let resolveMove: () => void = () => {}
+    const moveTreeItems = vi.spyOn(Tree, 'moveTreeItems').mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolveMove = resolve
+      }),
+    )
+
+    let resolved = false
+    const indentPromise = Promise.resolve(
+      Tree.treeItemIndentIncrease([movedTab.uid]),
+    ).then(() => {
+      resolved = true
+    })
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(moveTreeItems).toHaveBeenCalledWith(
+      [movedTab.uid],
+      1,
+      parent.uid,
+      window.uid,
+      false,
+      false,
+    )
+    expect(resolved).toBe(false)
+
+    resolveMove()
+    await indentPromise
+
+    expect(resolved).toBe(true)
+  })
 
   it.each([
     {

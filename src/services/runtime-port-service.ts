@@ -9,7 +9,9 @@ import {
 } from '@/types/runtime-port-service'
 import { TopLevelTreeItem } from '@/types/session-tree'
 
-type DispatchCommand = (message: Messages.SessionTreeMessage) => void
+type DispatchCommand = (
+  message: Messages.SessionTreeMessage,
+) => void | Promise<void>
 
 type SnapshotGetter = () => TopLevelTreeItem[]
 
@@ -118,26 +120,40 @@ function onConnect(port: browser.runtime.Port): void {
   })
 
   port.onMessage.addListener((message: object) => {
-    const typedMessage = message as SessionTreePortRequest
-    if (typedMessage.type === 'subscribe') {
-      void handleSubscribe(port, typedMessage.requestId)
-      return
-    }
-
-    if (typedMessage.type === 'command') {
-      try {
-        if (!dispatchCommandHandler) {
-          throw new Error('Session tree command dispatcher is not initialized')
-        }
-        dispatchCommandHandler(typedMessage.command)
-        sendResponse(port, typedMessage.requestId, true)
-      } catch (error) {
-        sendResponse(port, typedMessage.requestId, false, {
-          error: String(error),
-        })
-      }
-    }
+    void handlePortMessage(port, message)
   })
+}
+
+/**
+ * Handles a runtime port request from the foreground session tree.
+ * Awaits command dispatch so command responses reflect async mutation completion.
+ *
+ * @param {browser.runtime.Port} port - Runtime port that sent the request.
+ * @param {object} message - Raw port message to handle.
+ */
+async function handlePortMessage(
+  port: browser.runtime.Port,
+  message: object,
+): Promise<void> {
+  const typedMessage = message as SessionTreePortRequest
+  if (typedMessage.type === 'subscribe') {
+    void handleSubscribe(port, typedMessage.requestId)
+    return
+  }
+
+  if (typedMessage.type === 'command') {
+    try {
+      if (!dispatchCommandHandler) {
+        throw new Error('Session tree command dispatcher is not initialized')
+      }
+      await dispatchCommandHandler(typedMessage.command)
+      sendResponse(port, typedMessage.requestId, true)
+    } catch (error) {
+      sendResponse(port, typedMessage.requestId, false, {
+        error: String(error),
+      })
+    }
+  }
 }
 
 async function handleSubscribe(

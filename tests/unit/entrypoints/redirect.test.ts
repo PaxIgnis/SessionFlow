@@ -70,8 +70,7 @@ describe('redirect entrypoint', () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     installRedirectGlobals({
       document,
-      search:
-        '?targetUrl=about%3Aconfig&targetTitle=Advanced%20Preferences',
+      search: '?targetUrl=about%3Aconfig&targetTitle=Advanced%20Preferences',
       writeText,
     })
 

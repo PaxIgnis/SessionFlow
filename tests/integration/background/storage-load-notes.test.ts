@@ -140,10 +140,7 @@ function makeStoredTab(
   } as Window['children'][number]
 }
 
-function makeStoredNote(
-  uid: UID,
-  overrides: Partial<Note> = {},
-): Note {
+function makeStoredNote(uid: UID, overrides: Partial<Note> = {}): Note {
   return {
     type: TreeItemType.NOTE,
     uid,

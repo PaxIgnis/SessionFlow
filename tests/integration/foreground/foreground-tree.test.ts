@@ -183,6 +183,34 @@ describe('foreground SessionTree deltas', () => {
     expectForegroundIndexes()
   })
 
+  it('clears a stale tab parent when a tab update explicitly sets parentUid undefined', () => {
+    const parent = makeForegroundTab('tab-parent' as UID, { isParent: true })
+    const child = makeForegroundTab('tab-child' as UID, {
+      parentUid: parent.uid,
+      indentLevel: 2,
+    })
+    const window = makeForegroundWindow('window-1' as UID, [child, parent])
+    resetForegroundTree([window])
+
+    SessionTree.applyDelta({
+      op: 'tabUpdated',
+      tab: {
+        ...child,
+        parentUid: undefined,
+        indentLevel: 1,
+      },
+    })
+
+    const updatedChild = SessionTree.tabsByUid.get(child.uid)
+    expect(updatedChild?.uid).toBe(child.uid)
+    expect(
+      Object.prototype.hasOwnProperty.call(updatedChild, 'parentUid'),
+    ).toBe(true)
+    expect(updatedChild?.parentUid).toBeUndefined()
+    expect(updatedChild?.indentLevel).toBe(1)
+    expectForegroundIndexes()
+  })
+
   it('applies window create/remove and note update deltas', () => {
     const note = makeForegroundNote('note-1' as UID, { text: 'before' })
     const window = makeForegroundWindow('window-1' as UID, [note])
@@ -311,7 +339,7 @@ describe('foreground SessionTree deltas', () => {
     expectForegroundIndexes()
   })
 
-  it('does not overwrite existing fields with undefined during updates', () => {
+  it('does not overwrite existing fields when optional fields are omitted during updates', () => {
     const tab = makeForegroundTab('tab-1' as UID, {
       title: 'Title',
       customLabel: 'Label',
@@ -322,13 +350,13 @@ describe('foreground SessionTree deltas', () => {
     const window = makeForegroundWindow('window-1' as UID, [tab, note])
     resetForegroundTree([window])
 
+    const { customLabel: _customLabel, ...tabUpdateWithoutCustomLabel } = {
+      ...tab,
+      title: 'Updated',
+    }
     SessionTree.applyDelta({
       op: 'tabUpdated',
-      tab: {
-        ...tab,
-        title: 'Updated',
-        customLabel: undefined,
-      },
+      tab: tabUpdateWithoutCustomLabel,
     })
     SessionTree.applyDelta({
       op: 'noteUpdated',
@@ -342,6 +370,42 @@ describe('foreground SessionTree deltas', () => {
     expect(SessionTree.tabsByUid.get(tab.uid)?.title).toBe('Updated')
     expect(SessionTree.tabsByUid.get(tab.uid)?.customLabel).toBe('Label')
     expect(SessionTree.notesByUid.get(note.uid)?.text).toBe('Updated note')
+    expectForegroundIndexes()
+  })
+
+  it('clears optional fields when updates explicitly set them to undefined', () => {
+    const tab = makeForegroundTab('tab-1' as UID, {
+      customLabel: 'Label',
+    })
+    const separator = makeForegroundSeparator('separator-1' as UID, {
+      parentUid: tab.uid,
+      windowUid: 'window-1' as UID,
+      indentLevel: 2,
+    })
+    const window = makeForegroundWindow('window-1' as UID, [tab, separator])
+    resetForegroundTree([window])
+
+    SessionTree.applyDelta({
+      op: 'tabUpdated',
+      tab: {
+        ...tab,
+        customLabel: undefined,
+      },
+    })
+    SessionTree.applyDelta({
+      op: 'separatorUpdated',
+      separator: {
+        ...separator,
+        parentUid: undefined,
+        indentLevel: 1,
+      },
+    })
+
+    expect(SessionTree.tabsByUid.get(tab.uid)?.customLabel).toBeUndefined()
+    expect(
+      SessionTree.separatorsByUid.get(separator.uid)?.parentUid,
+    ).toBeUndefined()
+    expect(SessionTree.separatorsByUid.get(separator.uid)?.indentLevel).toBe(1)
     expectForegroundIndexes()
   })
 })

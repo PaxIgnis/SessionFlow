@@ -16,10 +16,7 @@ import {
 import { Selection } from '@/services/selection'
 import { Settings } from '@/services/settings'
 import '@/styles/variables.css'
-import {
-  TreeItem as SessionTreeItem,
-  TreeItemType,
-} from '@/types/session-tree'
+import { TreeItem as SessionTreeItem, TreeItemType } from '@/types/session-tree'
 import { computed, onBeforeUnmount, onMounted } from 'vue'
 
 let unsubscribeFromTreeDelta: (() => void) | undefined

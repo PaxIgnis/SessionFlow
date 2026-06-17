@@ -19,15 +19,6 @@ export interface FocusTabMessage {
   windowId: number
 }
 
-export interface MoveTabsMessage {
-  action: 'moveTabs'
-  tabUIDs: UID[]
-  targetWindowUid: UID
-  targetIndex: number
-  parentUid?: UID
-  copy: boolean
-}
-
 export interface OpenTabMessage {
   action: 'openTab'
   tabUid: UID
@@ -219,7 +210,6 @@ export type SessionTreeMessage =
   | DuplicateTreeItemsMessage
   | FocusTabMessage
   | FocusWindowMessage
-  | MoveTabsMessage
   | MoveTreeItemsMessage
   | MoveWindowsMessage
   | OpenTabMessage

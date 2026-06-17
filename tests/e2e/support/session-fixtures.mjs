@@ -65,7 +65,9 @@ export async function seedSessionTabs(
   }
 }
 
-export async function seedSingleSessionTab(title = SESSION_FIXTURE_TITLES.initial) {
+export async function seedSingleSessionTab(
+  title = SESSION_FIXTURE_TITLES.initial,
+) {
   return seedSessionTabs([title])
 }
 
@@ -341,7 +343,9 @@ async function waitForExtensionTabByTitle(title) {
         window.browser.tabs
           .query({})
           .then((tabs) => {
-            const tab = tabs.find((candidate) => candidate.title === targetTitle)
+            const tab = tabs.find(
+              (candidate) => candidate.title === targetTitle,
+            )
             done({
               ok: true,
               tabId: tab?.id,

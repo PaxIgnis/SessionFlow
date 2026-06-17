@@ -40,9 +40,8 @@ describe('separator context menu items', () => {
     Selection.selectedItems.value = [
       { item: separator, type: SelectionType.SEPARATOR },
     ]
-    const { contextMenuItemsSeparator } = await import(
-      '@/services/context-menu-items-separator'
-    )
+    const { contextMenuItemsSeparator } =
+      await import('@/services/context-menu-items-separator')
 
     contextMenuItemsSeparator.createNote().action?.()
 
@@ -56,9 +55,8 @@ describe('separator context menu items', () => {
     Selection.selectedItems.value = [
       { item: separator, type: SelectionType.SEPARATOR },
     ]
-    const { contextMenuItemsSeparator } = await import(
-      '@/services/context-menu-items-separator'
-    )
+    const { contextMenuItemsSeparator } =
+      await import('@/services/context-menu-items-separator')
 
     contextMenuItemsSeparator.createNote().action?.()
 
@@ -84,9 +82,8 @@ describe('separator context menu items', () => {
       Selection.selectedItems.value = [
         { item: separator, type: SelectionType.SEPARATOR },
       ]
-      const { contextMenuItemsSeparator } = await import(
-        '@/services/context-menu-items-separator'
-      )
+      const { contextMenuItemsSeparator } =
+        await import('@/services/context-menu-items-separator')
 
       contextMenuItemsSeparator.createNote().action?.()
 
@@ -101,9 +98,8 @@ describe('separator context menu items', () => {
       { item: first, type: SelectionType.SEPARATOR },
       { item: second, type: SelectionType.SEPARATOR },
     ]
-    const { contextMenuItemsSeparator } = await import(
-      '@/services/context-menu-items-separator'
-    )
+    const { contextMenuItemsSeparator } =
+      await import('@/services/context-menu-items-separator')
 
     const menuItem = contextMenuItemsSeparator.createNote()
 
@@ -115,9 +111,8 @@ describe('separator context menu items', () => {
     Selection.selectedItems.value = [
       { item: separator, type: SelectionType.SEPARATOR },
     ]
-    const { contextMenuItemsSeparator } = await import(
-      '@/services/context-menu-items-separator'
-    )
+    const { contextMenuItemsSeparator } =
+      await import('@/services/context-menu-items-separator')
 
     contextMenuItemsSeparator.treeItemIndentIncrease().action?.()
     contextMenuItemsSeparator.treeItemIndentDecrease().action?.()

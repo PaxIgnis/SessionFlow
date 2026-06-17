@@ -73,7 +73,9 @@ function normalizeCoverageMap(rawCoverageMap, projectRoot) {
 }
 
 function mergeCoverageInto(targetCoverageMap, sourceCoverageMap) {
-  for (const [sourceFile, sourceCoverage] of Object.entries(sourceCoverageMap)) {
+  for (const [sourceFile, sourceCoverage] of Object.entries(
+    sourceCoverageMap,
+  )) {
     if (!targetCoverageMap[sourceFile]) {
       targetCoverageMap[sourceFile] = sourceCoverage
       continue
@@ -105,7 +107,8 @@ function coverageMapsMatch(targetCoverage, sourceCoverage) {
   return (
     JSON.stringify(targetCoverage.statementMap) ===
       JSON.stringify(sourceCoverage.statementMap) &&
-    JSON.stringify(targetCoverage.fnMap) === JSON.stringify(sourceCoverage.fnMap) &&
+    JSON.stringify(targetCoverage.fnMap) ===
+      JSON.stringify(sourceCoverage.fnMap) &&
     JSON.stringify(targetCoverage.branchMap) ===
       JSON.stringify(sourceCoverage.branchMap)
   )
@@ -121,7 +124,8 @@ function mergeStatementHitsByLine(targetCoverage, sourceCoverage) {
     const sourceHits = sourceLineHits.get(statementLocation.start.line) ?? 0
 
     if (sourceHits > 0) {
-      mergedCoverage.s[statementId] = (mergedCoverage.s[statementId] ?? 0) + sourceHits
+      mergedCoverage.s[statementId] =
+        (mergedCoverage.s[statementId] ?? 0) + sourceHits
     }
   }
 
@@ -151,7 +155,9 @@ function collectStatementHitsByLine(fileCoverage) {
 }
 
 function normalizeSourceFile(sourceFile, projectRoot) {
-  const normalizedProjectRoot = projectRoot.replaceAll('\\', '/').replace(/\/$/, '')
+  const normalizedProjectRoot = projectRoot
+    .replaceAll('\\', '/')
+    .replace(/\/$/, '')
   let normalizedSourceFile = sourceFile.replaceAll('\\', '/')
 
   if (
@@ -159,7 +165,9 @@ function normalizeSourceFile(sourceFile, projectRoot) {
       .toLowerCase()
       .startsWith(`${normalizedProjectRoot.toLowerCase()}/`)
   ) {
-    normalizedSourceFile = normalizedSourceFile.slice(normalizedProjectRoot.length + 1)
+    normalizedSourceFile = normalizedSourceFile.slice(
+      normalizedProjectRoot.length + 1,
+    )
   }
 
   return normalizedSourceFile.replace(/^\.\//, '')

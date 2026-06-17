@@ -63,9 +63,8 @@ describe('tab context menu items', () => {
       { item: saved, type: SelectionType.TAB },
       { item: open, type: SelectionType.TAB },
     ]
-    const { contextMenuItemsTab } = await import(
-      '@/services/context-menu-items-tab'
-    )
+    const { contextMenuItemsTab } =
+      await import('@/services/context-menu-items-tab')
 
     expect(contextMenuItemsTab.openTab().enabled).toBe(true)
     expect(contextMenuItemsTab.reloadTab().enabled).toBe(true)
@@ -78,9 +77,8 @@ describe('tab context menu items', () => {
   it('dispatches tab actions with selected tabs', async () => {
     const tab = makeForegroundTab('tab-1' as UID)
     Selection.selectedItems.value = [{ item: tab, type: SelectionType.TAB }]
-    const { contextMenuItemsTab } = await import(
-      '@/services/context-menu-items-tab'
-    )
+    const { contextMenuItemsTab } =
+      await import('@/services/context-menu-items-tab')
 
     contextMenuItemsTab.duplicateTreeItem().action?.()
     contextMenuItemsTab.treeItemIndentIncrease().action?.()
@@ -94,9 +92,8 @@ describe('tab context menu items', () => {
   it('opens edit custom label modal only for a single selected tab', async () => {
     const tab = makeForegroundTab('tab-1' as UID, { customLabel: 'Label' })
     Selection.selectedItems.value = [{ item: tab, type: SelectionType.TAB }]
-    const { contextMenuItemsTab } = await import(
-      '@/services/context-menu-items-tab'
-    )
+    const { contextMenuItemsTab } =
+      await import('@/services/context-menu-items-tab')
 
     const item = contextMenuItemsTab.editLabel()
     item.action?.()
@@ -127,9 +124,8 @@ describe('window context menu items', () => {
       { item: saved, type: SelectionType.WINDOW },
       { item: open, type: SelectionType.WINDOW },
     ]
-    const { contextMenuItemsWindow } = await import(
-      '@/services/context-menu-items-window'
-    )
+    const { contextMenuItemsWindow } =
+      await import('@/services/context-menu-items-window')
 
     expect(contextMenuItemsWindow.saveWindow().enabled).toBe(true)
     expect(contextMenuItemsWindow.closeWindow().enabled).toBe(true)
@@ -142,9 +138,8 @@ describe('window context menu items', () => {
     Selection.selectedItems.value = [
       { item: window, type: SelectionType.WINDOW },
     ]
-    const { contextMenuItemsWindow } = await import(
-      '@/services/context-menu-items-window'
-    )
+    const { contextMenuItemsWindow } =
+      await import('@/services/context-menu-items-window')
 
     contextMenuItemsWindow.saveWindow().action?.()
     contextMenuItemsWindow.closeWindow().action?.()
@@ -174,9 +169,8 @@ describe('note structural context menu items', () => {
   it('dispatches duplicate and indent actions with selected note uids', async () => {
     const note = makeForegroundNote('note-1' as UID)
     Selection.selectedItems.value = [{ item: note, type: SelectionType.NOTE }]
-    const { contextMenuItemsNote } = await import(
-      '@/services/context-menu-items-note'
-    )
+    const { contextMenuItemsNote } =
+      await import('@/services/context-menu-items-note')
 
     contextMenuItemsNote.duplicateTreeItem().action?.()
     contextMenuItemsNote.treeItemIndentIncrease().action?.()

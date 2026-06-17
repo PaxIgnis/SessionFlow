@@ -21,10 +21,7 @@ describe('tab indentation', () => {
 
     Tree.tabIndentIncrease([tab.uid])
 
-    expect(window.children.map((item) => item.uid)).toEqual([
-      note.uid,
-      tab.uid,
-    ])
+    expect(window.children.map((item) => item.uid)).toEqual([note.uid, tab.uid])
     expect(tab.parentUid).toBe(note.uid)
     expect(tab.indentLevel).toBe(2)
     expect(note.isParent).toBe(true)

@@ -15,25 +15,15 @@ describe('foreground message helpers', () => {
     Object.assign(Settings.values, structuredClone(DEFAULT_SETTINGS))
   })
 
-  it('sends moveTabs command payloads', async () => {
-    const { moveTabs } = await import('@/services/foreground-messages')
+  it('does not expose the legacy moveTabs command helper', async () => {
+    const messages = await import('@/services/foreground-messages')
 
-    moveTabs(['tab-1' as UID], 'window-1' as UID, 2, undefined, false)
-
-    expect(sendTreeCommand).toHaveBeenCalledWith({
-      action: 'moveTabs',
-      tabUIDs: ['tab-1'],
-      targetWindowUid: 'window-1',
-      targetIndex: 2,
-      parentUid: undefined,
-      copy: false,
-    })
+    expect('moveTabs' in messages).toBe(false)
   })
 
   it('sends moveTreeItems and moveWindows command payloads', async () => {
-    const { moveTreeItems, moveWindows } = await import(
-      '@/services/foreground-messages'
-    )
+    const { moveTreeItems, moveWindows } =
+      await import('@/services/foreground-messages')
 
     moveTreeItems(
       ['note-1' as UID],
@@ -61,8 +51,11 @@ describe('foreground message helpers', () => {
   })
 
   it('sends generic tree item action payloads', async () => {
-    const { duplicateTreeItems, treeItemIndentDecrease, treeItemIndentIncrease } =
-      await import('@/services/foreground-messages')
+    const {
+      duplicateTreeItems,
+      treeItemIndentDecrease,
+      treeItemIndentIncrease,
+    } = await import('@/services/foreground-messages')
 
     duplicateTreeItems(['note-1' as UID, 'window-1' as UID])
     treeItemIndentIncrease(['note-1' as UID])
@@ -99,9 +92,8 @@ describe('foreground message helpers', () => {
   })
 
   it('sends note command payloads', async () => {
-    const { createNote, removeNote, updateNoteText } = await import(
-      '@/services/foreground-messages'
-    )
+    const { createNote, removeNote, updateNoteText } =
+      await import('@/services/foreground-messages')
 
     createNote('window-1' as UID, 1, 'hello')
     updateNoteText('note-1' as UID, 'updated')
@@ -125,11 +117,8 @@ describe('foreground message helpers', () => {
   })
 
   it('sends separator command payloads', async () => {
-    const {
-      createSeparator,
-      createSeparatorBelow,
-      removeSeparator,
-    } = await import('@/services/foreground-messages')
+    const { createSeparator, createSeparatorBelow, removeSeparator } =
+      await import('@/services/foreground-messages')
 
     createSeparator('window-1' as UID, 2)
     removeSeparator('separator-1' as UID)
@@ -192,50 +181,55 @@ describe('foreground message helpers', () => {
     ['reload', 'reloadTab'],
     ['duplicate', 'duplicateTreeItems'],
     ['focus', 'focusTab'],
-  ] as const)('uses open-tab double-click action %s', async (setting, action) => {
-    const { tabDoubleClick } = await import('@/services/foreground-messages')
-    Settings.values.doubleClickOnOpenTab = setting
+  ] as const)(
+    'uses open-tab double-click action %s',
+    async (setting, action) => {
+      const { tabDoubleClick } = await import('@/services/foreground-messages')
+      Settings.values.doubleClickOnOpenTab = setting
 
-    tabDoubleClick(
-      10,
-      20,
-      'tab-1' as UID,
-      'window-1' as UID,
-      State.OPEN,
-      'https://example.test',
-    )
+      tabDoubleClick(
+        10,
+        20,
+        'tab-1' as UID,
+        'window-1' as UID,
+        State.OPEN,
+        'https://example.test',
+      )
 
-    expect(sendTreeCommand).toHaveBeenCalledWith(
-      expect.objectContaining({ action }),
-    )
-  })
+      expect(sendTreeCommand).toHaveBeenCalledWith(
+        expect.objectContaining({ action }),
+      )
+    },
+  )
 
   it.each([
     ['open', 'openTab'],
     ['remove', 'closeTab'],
     ['duplicate', 'duplicateTreeItems'],
-  ] as const)('uses saved-tab double-click action %s', async (setting, action) => {
-    const { tabDoubleClick } = await import('@/services/foreground-messages')
-    Settings.values.doubleClickOnSavedTab = setting
+  ] as const)(
+    'uses saved-tab double-click action %s',
+    async (setting, action) => {
+      const { tabDoubleClick } = await import('@/services/foreground-messages')
+      Settings.values.doubleClickOnSavedTab = setting
 
-    tabDoubleClick(
-      -1,
-      -1,
-      'tab-1' as UID,
-      'window-1' as UID,
-      State.SAVED,
-      'https://example.test',
-    )
+      tabDoubleClick(
+        -1,
+        -1,
+        'tab-1' as UID,
+        'window-1' as UID,
+        State.SAVED,
+        'https://example.test',
+      )
 
-    expect(sendTreeCommand).toHaveBeenCalledWith(
-      expect.objectContaining({ action }),
-    )
-  })
+      expect(sendTreeCommand).toHaveBeenCalledWith(
+        expect.objectContaining({ action }),
+      )
+    },
+  )
 
   it('sends multi-tab helper commands in item order', async () => {
-    const { closeTabs, openTabs, unpinTabs } = await import(
-      '@/services/foreground-messages'
-    )
+    const { closeTabs, openTabs, unpinTabs } =
+      await import('@/services/foreground-messages')
     const tabs = [
       {
         uid: 'tab-1' as UID,

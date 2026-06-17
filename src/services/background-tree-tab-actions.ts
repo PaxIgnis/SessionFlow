@@ -1137,169 +1137,6 @@ function increaseIndentRecursively(
 }
 
 /**
- * Moves a list of tabs to a specified position within a target window.
- * Tabs can be from more than one window.
- *
- * @param {UID[]} tabUIDs - Unsorted list of tabs to move in the tree
- * @param {UID} targetWindowUid - The UID of the target window where tabs will be moved
- * @param {number} targetIndex - The index in the target window's tab list where tabs will be inserted
- * @param {boolean} copy - Whether to copy the tabs instead of moving them
- */
-export async function moveTabs(
-  tabUIDs: UID[],
-  targetWindowUid: UID,
-  targetIndex: number,
-  parentUid?: UID,
-  copy: boolean = false,
-): Promise<void> {
-  // TODO: implement copy functionality
-  console.log(
-    `moveTabs: Moving tabs to window ${targetWindowUid} at index ${targetIndex}`,
-  )
-  const tabs: Tab[] = []
-  for (const uid of tabUIDs) {
-    const tab = Tree.tabsByUid.get(uid)
-    if (tab) {
-      tabs.push({ ...tab })
-    } else {
-      console.error(`Tab with UID ${uid} not found`)
-    }
-  }
-
-  // first sort tabs in descending order of how they appear in the tree
-  tabs.sort((a, b) => {
-    const winIndexA = Tree.Items.findIndex((w) => w.uid === a.windowUid)
-    const winIndexB = Tree.Items.findIndex((w) => w.uid === b.windowUid)
-    if (winIndexA === -1 || winIndexB === -1) return 0
-    if (winIndexA !== winIndexB) return winIndexA - winIndexB
-
-    const win = Tree.windowsByUid.get(a.windowUid)
-    if (!win) return 0
-    const indexA = win.children.findIndex((t) => t.uid === a.uid)
-    const indexB = win.children.findIndex((t) => t.uid === b.uid)
-    if (indexA === -1 || indexB === -1) return 0
-    return indexA - indexB
-  })
-
-  // check if destination window and target index are valid
-  const targetWindow = Tree.windowsByUid.get(targetWindowUid)
-  if (!targetWindow) {
-    console.error(`Target window with UID ${targetWindowUid} not found`)
-    return
-  }
-  if (targetIndex < 0 || targetIndex > targetWindow.children.length) {
-    console.error(
-      `Invalid target index ${targetIndex} for window ${targetWindowUid}`,
-    )
-    // if index is invalid, set to last position
-    targetIndex = targetWindow.children.length
-  }
-
-  const newUidMapping: Map<UID, UID> = new Map()
-  const updatedWindows: Set<UID> = new Set() // to track which windows have been updated for emitting deltas at the end
-  updatedWindows.add(targetWindowUid)
-
-  // move each tab
-  for (const tab of tabs) {
-    updatedWindows.add(tab.windowUid)
-    // check if target index needs to be adjusted depending on tab pinned state
-    // i.e. pinned tabs cannot be moved after unpinned tabs and vice versa
-    const isPinned = tab.pinned || false
-    let originalTargetIndex = targetIndex
-    let targetIndexAdjusted = false
-    if (isPinned) {
-      const lastPinnedIndex = targetWindow.children.findLastIndex(
-        (t) => t.type === TreeItemType.TAB && t.pinned,
-      )
-      // if tab is pinned and target index is after last pinned tab, move it to after last pinned tab
-      if (lastPinnedIndex + 1 < targetIndex) {
-        targetIndex = lastPinnedIndex + 1
-        targetIndexAdjusted = true
-      }
-    } else {
-      const lastPinnedIndex = targetWindow.children.findLastIndex(
-        (t) => t.type === TreeItemType.TAB && t.pinned,
-      )
-      // if tab is unpinned and target index is before pinned tabs, move it to after pinned tabs
-      if (lastPinnedIndex !== -1 && targetIndex <= lastPinnedIndex) {
-        targetIndex = lastPinnedIndex + 1
-        targetIndexAdjusted = true
-      }
-    }
-    const sourceIndex = targetWindow.children.findIndex(
-      (t) => t.uid === tab.uid,
-    )
-    // check if removing tab will affect index
-    if (
-      !copy &&
-      tab.windowUid === targetWindowUid &&
-      sourceIndex < targetIndex
-    ) {
-      targetIndex--
-    }
-
-    let newParentUid: UID | undefined = undefined
-    if (
-      Settings.values.tryToMaintainHierarchyOfDraggedItems &&
-      tab.parentUid &&
-      newUidMapping.has(tab.parentUid as UID)
-    ) {
-      newParentUid = newUidMapping.get(tab.parentUid as UID)
-    }
-
-    const newTabUid = await moveTab(
-      tab.uid,
-      targetWindowUid,
-      targetIndex,
-      targetIndexAdjusted ? undefined : (newParentUid ?? parentUid), // only use parentUid if target index was not adjusted
-      copy,
-      false, // emitDelta is set to false here to batch updates until the end of the loop
-    )
-    if (newTabUid) newUidMapping.set(tab.uid, newTabUid)
-    if (targetIndexAdjusted) {
-      // reset target index for next tab
-      if (targetIndex <= originalTargetIndex) originalTargetIndex++
-      if (
-        !copy &&
-        tab.windowUid === targetWindowUid &&
-        sourceIndex < originalTargetIndex
-      ) {
-        originalTargetIndex--
-      }
-
-      targetIndex = originalTargetIndex
-    } else {
-      targetIndex++
-    }
-  }
-
-  // loop through moved tabs that were collapsed and re-collapse them if they have children
-  if (Settings.values.tryToMaintainCollapsedStateOfDraggedItems) {
-    for (const tab of tabs) {
-      if (!tab.collapsed) continue
-      const newTabUid = newUidMapping.get(tab.uid)
-      if (!newTabUid) continue
-      const newTab = Tree.tabsByUid.get(newTabUid)
-      if (!newTab) continue
-      if (newTab.isParent) {
-        toggleCollapseTab(newTabUid, false) // emitDelta is set to false here to batch updates until the end of the loop
-      }
-    }
-  }
-
-  // emit tree delta events for all updated windows at the end to batch changes
-  for (const windowUid of updatedWindows) {
-    const window = Tree.windowsByUid.get(windowUid)
-    if (window) {
-      emitTreeDelta({
-        op: 'windowUpdated',
-        window: structuredClone(window),
-      })
-    }
-  }
-}
-
-/**
  * Moves a single tab to a specified position within a target window.
  * Handles both saved and open tabs.
  *
@@ -1330,8 +1167,7 @@ export async function moveTab(
   // check if tab and target window exists
   const tab = Tree.tabsByUid.get(tabUID)
   const targetWindow = Tree.windowsByUid.get(targetWindowUid)
-  const effectiveParentUid =
-    parentUid === targetWindowUid ? undefined : parentUid
+  let effectiveParentUid = parentUid === targetWindowUid ? undefined : parentUid
 
   if (!tab || !targetWindow) {
     console.error(`moveTab: Tab or target window not found`)
@@ -1348,6 +1184,30 @@ export async function moveTab(
   ) {
     console.error(
       `moveTab: Parent item ${effectiveParentUid} not found in target window`,
+    )
+    return
+  }
+  if (effectiveParentUid === tab.uid) {
+    if (!Settings.values.allowDropOntoDescendantItems) {
+      console.error(
+        `moveTab: Cannot move tab ${tabUID} under itself or its descendant ${effectiveParentUid}`,
+      )
+      return
+    }
+    // A self-parent request can happen after descendant-drop preparation strips
+    // children; fall back to the nearest valid parent outside the old subtree.
+    effectiveParentUid = nearestParentOutsideTabSubtree(
+      tab,
+      effectiveParentUid,
+      targetWindow.children,
+    )
+  } else if (
+    effectiveParentUid &&
+    isSelfOrDescendantParent(tab, effectiveParentUid, targetWindow.children) &&
+    !Settings.values.allowDropOntoDescendantItems
+  ) {
+    console.error(
+      `moveTab: Cannot move tab ${tabUID} under itself or its descendant ${effectiveParentUid}`,
     )
     return
   }
@@ -1486,4 +1346,59 @@ export async function moveTab(
     return tab.uid
   }
   return tab.uid
+}
+
+/**
+ * Checks whether a requested parent UID is the tab itself or one of its descendants.
+ *
+ * @param {Tab} tab - Tab being moved.
+ * @param {UID} parentUid - Requested parent UID.
+ * @param {WindowChild[]} children - Children in the containing window.
+ * @returns {boolean} Whether the parent UID is invalid because it is inside the tab subtree.
+ */
+function isSelfOrDescendantParent(
+  tab: Tab,
+  parentUid: UID,
+  children: WindowChild[],
+): boolean {
+  if (parentUid === tab.uid) return true
+
+  const tabIndex = children.findIndex((item) => item.uid === tab.uid)
+  if (tabIndex === -1) return false
+
+  const tabIndent = tab.indentLevel ?? 1
+  for (let i = tabIndex + 1; i < children.length; i++) {
+    const candidate = children[i]
+    if ((candidate.indentLevel ?? 1) <= tabIndent) break
+    if (candidate.uid === parentUid) return true
+  }
+  return false
+}
+
+/**
+ * Finds the nearest ancestor that is outside a tab subtree.
+ * Used when descendant drops are allowed and a tab is dropped onto itself or a descendant.
+ *
+ * @param {Tab} tab - Tab being moved.
+ * @param {UID} parentUid - Requested parent UID inside the tab subtree.
+ * @param {WindowChild[]} children - Children in the containing window.
+ * @returns {UID | undefined} The nearest parent UID outside the subtree, if one exists.
+ */
+function nearestParentOutsideTabSubtree(
+  tab: Tab,
+  parentUid: UID,
+  children: WindowChild[],
+): UID | undefined {
+  const byUid = new Map(children.map((item) => [item.uid, item]))
+  let candidate = byUid.get(parentUid)
+
+  while (
+    candidate &&
+    (candidate.uid === tab.uid ||
+      isSelfOrDescendantParent(tab, candidate.uid, children))
+  ) {
+    candidate = candidate.parentUid ? byUid.get(candidate.parentUid) : undefined
+  }
+
+  return candidate?.uid
 }

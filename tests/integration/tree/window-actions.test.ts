@@ -4,10 +4,7 @@ import { OnCreatedQueue } from '@/services/background-on-created-queue'
 import { Tree } from '@/services/background-tree'
 import { Settings } from '@/services/settings'
 import { State } from '@/types/session-tree'
-import {
-  flushMicrotasks,
-  installFakeBrowser,
-} from '../../helpers/fake-browser'
+import { flushMicrotasks, installFakeBrowser } from '../../helpers/fake-browser'
 import {
   createNote,
   createTab,
@@ -304,7 +301,10 @@ describe('window actions', () => {
     expect(Tree.windowsByUid.has(window.uid)).toBe(false)
     expect(Tree.tabsByUid.has(tab.uid)).toBe(false)
     await vi.waitFor(() => {
-      expect(consoleDebug).toHaveBeenCalledWith('Window ID not found.', window.id)
+      expect(consoleDebug).toHaveBeenCalledWith(
+        'Window ID not found.',
+        window.id,
+      )
     })
     expect(browser.windows.remove).not.toHaveBeenCalled()
     expectTreeInvariants()

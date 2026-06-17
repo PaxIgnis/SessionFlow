@@ -53,9 +53,21 @@ describe('selection actions', () => {
     const indexedFirst = indexedWindow.children[0]
     const indexedSecond = indexedWindow.children[1]
 
-    Selection.selectItem(indexedFirst, SelectionType.TAB, mouse({ ctrlKey: true }))
-    Selection.selectItem(indexedSecond, SelectionType.TAB, mouse({ ctrlKey: true }))
-    Selection.selectItem(indexedFirst, SelectionType.TAB, mouse({ ctrlKey: true }))
+    Selection.selectItem(
+      indexedFirst,
+      SelectionType.TAB,
+      mouse({ ctrlKey: true }),
+    )
+    Selection.selectItem(
+      indexedSecond,
+      SelectionType.TAB,
+      mouse({ ctrlKey: true }),
+    )
+    Selection.selectItem(
+      indexedFirst,
+      SelectionType.TAB,
+      mouse({ ctrlKey: true }),
+    )
 
     expect(indexedFirst.selected).toBe(false)
     expect(indexedSecond.selected).toBe(true)
@@ -79,7 +91,11 @@ describe('selection actions', () => {
     const indexedLast = indexedWindow.children[2]
 
     Selection.selectItem(indexedFirst, SelectionType.TAB, mouse())
-    Selection.selectItem(indexedLast, SelectionType.TAB, mouse({ shiftKey: true }))
+    Selection.selectItem(
+      indexedLast,
+      SelectionType.TAB,
+      mouse({ shiftKey: true }),
+    )
 
     expect(Selection.selectedItems.value.map((item) => item.item.uid)).toEqual([
       first.uid,
@@ -100,7 +116,11 @@ describe('selection actions', () => {
     const indexedLast = SessionTree.windowsByUid.get(last.uid)!
 
     Selection.selectItem(indexedFirst, SelectionType.WINDOW, mouse())
-    Selection.selectItem(indexedLast, SelectionType.WINDOW, mouse({ shiftKey: true }))
+    Selection.selectItem(
+      indexedLast,
+      SelectionType.WINDOW,
+      mouse({ shiftKey: true }),
+    )
 
     expect(Selection.selectedItems.value.map((item) => item.item.uid)).toEqual([
       first.uid,
@@ -160,7 +180,11 @@ describe('selection actions', () => {
       second.uid,
     ])
 
-    Selection.selectItemForContextMenu(indexedFirst, SelectionType.NOTE, mouse())
+    Selection.selectItemForContextMenu(
+      indexedFirst,
+      SelectionType.NOTE,
+      mouse(),
+    )
 
     expect(Selection.selectedItems.value.map((item) => item.item.uid)).toEqual([
       first.uid,

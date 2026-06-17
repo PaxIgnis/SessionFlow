@@ -47,13 +47,13 @@ describe('critical Firefox UI workflows', () => {
       if (handles.includes(popup.popupHandle)) {
         await browser.switchToWindow(popup.popupHandle)
         if (sessionTree) {
-        await sessionTree.removeAllNotes()
-        await sessionTree.updateSettings({
-          saveWindowOnClose: false,
-          saveTabOnClose: false,
-        })
+          await sessionTree.removeAllNotes()
+          await sessionTree.updateSettings({
+            saveWindowOnClose: false,
+            saveTabOnClose: false,
+          })
+        }
       }
-    }
     }
 
     if (seed) {
@@ -303,6 +303,279 @@ describe('critical Firefox UI workflows', () => {
     await expectSingleOpenWindowWithRootTabs([SESSION_FIXTURE_TITLES.initial])
   })
 
+  it('drags a tab below its descendant tab without blocking or corrupting the tree', async () => {
+    await openSeededSessionTree()
+
+    await switchToPrimaryBrowserWindow()
+    const alphaHandle = await openFixtureTab(seed, SESSION_FIXTURE_TITLES.alpha)
+    const betaHandle = await openFixtureTab(seed, SESSION_FIXTURE_TITLES.beta)
+    await browser.switchToWindow(popup.popupHandle)
+
+    await sessionTree.dragTreeItem(
+      SESSION_FIXTURE_TITLES.alpha,
+      SESSION_FIXTURE_TITLES.initial,
+      DropPosition.Middle,
+    )
+    await sessionTree.dragTreeItem(
+      SESSION_FIXTURE_TITLES.beta,
+      SESSION_FIXTURE_TITLES.alpha,
+      DropPosition.Middle,
+    )
+
+    await sessionTree.dragTreeItem(
+      SESSION_FIXTURE_TITLES.alpha,
+      SESSION_FIXTURE_TITLES.beta,
+      DropPosition.Below,
+    )
+
+    await sessionTree.waitForBackgroundTree((tree) => {
+      const windowItem = onlyOpenWindow(tree)
+      if (!windowItem) return false
+      const tabs = tabsInWindow(windowItem)
+      const initial = tabs.find(
+        (tab) => tab.title === SESSION_FIXTURE_TITLES.initial,
+      )
+      const alpha = tabs.find(
+        (tab) => tab.title === SESSION_FIXTURE_TITLES.alpha,
+      )
+      const beta = tabs.find((tab) => tab.title === SESSION_FIXTURE_TITLES.beta)
+      if (!initial || !alpha || !beta) return false
+
+      const order = windowItem.children.map((item) => item.uid)
+      return (
+        order.indexOf(beta.uid) < order.indexOf(alpha.uid) &&
+        initial.parentUid === undefined &&
+        alpha.parentUid === initial.uid &&
+        beta.parentUid === initial.uid &&
+        alpha.indentLevel === 2 &&
+        beta.indentLevel === 2
+      )
+    }, 'Expected dragged tab to move below its descendant without remaining blocked.')
+
+    await removeFixtureTab(SESSION_FIXTURE_TITLES.beta)
+    await removeFixtureTab(SESSION_FIXTURE_TITLES.alpha)
+    await waitForBrowserHandleClosed(betaHandle, SESSION_FIXTURE_TITLES.beta)
+    await waitForBrowserHandleClosed(alphaHandle, SESSION_FIXTURE_TITLES.alpha)
+    await expectSingleOpenWindowWithRootTabs([SESSION_FIXTURE_TITLES.initial])
+  })
+
+  it('promotes a remaining child tab to root after its parent is moved above another root tab', async () => {
+    await openSeededSessionTree()
+
+    await switchToPrimaryBrowserWindow()
+    const alphaHandle = await openFixtureTab(seed, SESSION_FIXTURE_TITLES.alpha)
+    const betaHandle = await openFixtureTab(seed, SESSION_FIXTURE_TITLES.beta)
+    await browser.switchToWindow(popup.popupHandle)
+
+    await sessionTree.dragTreeItem(
+      SESSION_FIXTURE_TITLES.alpha,
+      SESSION_FIXTURE_TITLES.initial,
+      DropPosition.Middle,
+    )
+    await sessionTree.dragTreeItem(
+      SESSION_FIXTURE_TITLES.beta,
+      SESSION_FIXTURE_TITLES.initial,
+      DropPosition.Middle,
+    )
+    await sessionTree.waitForBackgroundTree((tree) => {
+      const windowItem = onlyOpenWindow(tree)
+      if (!windowItem) return false
+      const tabs = tabsInWindow(windowItem)
+      const initial = tabs.find(
+        (tab) => tab.title === SESSION_FIXTURE_TITLES.initial,
+      )
+      const alpha = tabs.find(
+        (tab) => tab.title === SESSION_FIXTURE_TITLES.alpha,
+      )
+      const beta = tabs.find((tab) => tab.title === SESSION_FIXTURE_TITLES.beta)
+
+      return (
+        initial &&
+        alpha &&
+        beta &&
+        alpha.parentUid === initial.uid &&
+        beta.parentUid === initial.uid &&
+        initial.isParent === true
+      )
+    }, 'Expected two child tabs nested under the initial tab.')
+
+    await sessionTree.dragTreeItem(
+      SESSION_FIXTURE_TITLES.beta,
+      SESSION_FIXTURE_TITLES.initial,
+      DropPosition.Above,
+    )
+    await sessionTree.waitForBackgroundTree((tree) => {
+      const windowItem = onlyOpenWindow(tree)
+      if (!windowItem) return false
+      const tabs = tabsInWindow(windowItem)
+      const initial = tabs.find(
+        (tab) => tab.title === SESSION_FIXTURE_TITLES.initial,
+      )
+      const alpha = tabs.find(
+        (tab) => tab.title === SESSION_FIXTURE_TITLES.alpha,
+      )
+      const beta = tabs.find((tab) => tab.title === SESSION_FIXTURE_TITLES.beta)
+      if (!initial || !alpha || !beta) return false
+
+      return (
+        windowItem.children.map((item) => item.uid).join('|') ===
+          [beta.uid, initial.uid, alpha.uid].join('|') &&
+        beta.parentUid === undefined &&
+        initial.parentUid === undefined &&
+        alpha.parentUid === initial.uid &&
+        initial.isParent === true
+      )
+    }, 'Expected the second child tab to become a root tab above the initial tab.')
+
+    await sessionTree.dragTreeItem(
+      SESSION_FIXTURE_TITLES.alpha,
+      SESSION_FIXTURE_TITLES.beta,
+      DropPosition.Above,
+    )
+
+    await sessionTree.waitForBackgroundTree((tree) => {
+      const windowItem = onlyOpenWindow(tree)
+      if (!windowItem) return false
+      const tabs = tabsInWindow(windowItem)
+      const initial = tabs.find(
+        (tab) => tab.title === SESSION_FIXTURE_TITLES.initial,
+      )
+      const alpha = tabs.find(
+        (tab) => tab.title === SESSION_FIXTURE_TITLES.alpha,
+      )
+      const beta = tabs.find((tab) => tab.title === SESSION_FIXTURE_TITLES.beta)
+      if (!initial || !alpha || !beta) return false
+
+      return (
+        windowItem.children.map((item) => item.uid).join('|') ===
+          [alpha.uid, beta.uid, initial.uid].join('|') &&
+        alpha.parentUid === undefined &&
+        beta.parentUid === undefined &&
+        initial.parentUid === undefined &&
+        alpha.indentLevel === 1 &&
+        beta.indentLevel === 1 &&
+        initial.indentLevel === 1 &&
+        initial.isParent === false
+      )
+    }, 'Expected remaining child tab to become a root tab after moving above the former parent.')
+
+    await removeFixtureTab(SESSION_FIXTURE_TITLES.beta)
+    await removeFixtureTab(SESSION_FIXTURE_TITLES.alpha)
+    await waitForBrowserHandleClosed(betaHandle, SESSION_FIXTURE_TITLES.beta)
+    await waitForBrowserHandleClosed(alphaHandle, SESSION_FIXTURE_TITLES.alpha)
+    await expectSingleOpenWindowWithRootTabs([SESSION_FIXTURE_TITLES.initial])
+  })
+
+  it('drags a parent tab onto the middle of its child tab', async () => {
+    await openSeededSessionTree()
+
+    await switchToPrimaryBrowserWindow()
+    const alphaHandle = await openFixtureTab(seed, SESSION_FIXTURE_TITLES.alpha)
+    await browser.switchToWindow(popup.popupHandle)
+
+    await sessionTree.dragTreeItem(
+      SESSION_FIXTURE_TITLES.alpha,
+      SESSION_FIXTURE_TITLES.initial,
+      DropPosition.Middle,
+    )
+    await sessionTree.waitForBackgroundTree((tree) => {
+      const windowItem = onlyOpenWindow(tree)
+      if (!windowItem) return false
+      const tabs = tabsInWindow(windowItem)
+      const initial = tabs.find(
+        (tab) => tab.title === SESSION_FIXTURE_TITLES.initial,
+      )
+      const alpha = tabs.find(
+        (tab) => tab.title === SESSION_FIXTURE_TITLES.alpha,
+      )
+
+      return (
+        initial &&
+        alpha &&
+        alpha.parentUid === initial.uid &&
+        initial.isParent === true
+      )
+    }, 'Expected alpha to be nested under the initial tab before the descendant mid drop.')
+
+    await sessionTree.dragTreeItem(
+      SESSION_FIXTURE_TITLES.initial,
+      SESSION_FIXTURE_TITLES.alpha,
+      DropPosition.Middle,
+    )
+
+    await sessionTree.waitForBackgroundTree((tree) => {
+      const windowItem = onlyOpenWindow(tree)
+      if (!windowItem) return false
+      const tabs = tabsInWindow(windowItem)
+      const initial = tabs.find(
+        (tab) => tab.title === SESSION_FIXTURE_TITLES.initial,
+      )
+      const alpha = tabs.find(
+        (tab) => tab.title === SESSION_FIXTURE_TITLES.alpha,
+      )
+      if (!initial || !alpha) return false
+
+      return (
+        windowItem.children.map((item) => item.uid).join('|') ===
+          [alpha.uid, initial.uid].join('|') &&
+        alpha.parentUid === undefined &&
+        initial.parentUid === alpha.uid &&
+        alpha.indentLevel === 1 &&
+        initial.indentLevel === 2 &&
+        alpha.isParent === true &&
+        initial.isParent === false
+      )
+    }, 'Expected parent tab to become a child of the child tab after a mid drop.')
+
+    await removeFixtureTab(SESSION_FIXTURE_TITLES.alpha)
+    await waitForBrowserHandleClosed(alphaHandle, SESSION_FIXTURE_TITLES.alpha)
+    await expectSingleOpenWindowWithRootTabs([SESSION_FIXTURE_TITLES.initial])
+  })
+
+  it('drags a note onto the middle of its descendant note', async () => {
+    await openSeededSessionTree()
+
+    const windowItem = await onlyTrackedOpenWindow()
+    await sessionTree.sendTreeCommand({
+      action: 'createNote',
+      parentUid: windowItem.uid,
+      text: 'Parent note',
+    })
+    const parentNoteUid = await noteUidByText('Parent note')
+    await sessionTree.sendTreeCommand({
+      action: 'createNote',
+      parentUid: parentNoteUid,
+      text: 'Child note',
+    })
+    await browser.switchToWindow(popup.popupHandle)
+    await sessionTree.expectNoteVisible('Parent note')
+    await sessionTree.expectNoteVisible('Child note')
+
+    await sessionTree.dragTreeItem(
+      'Parent note',
+      'Child note',
+      DropPosition.Middle,
+    )
+
+    await sessionTree.waitForBackgroundTree((tree) => {
+      const windowItem = onlyOpenWindow(tree)
+      if (!windowItem) return false
+      const notes = notesInWindow(windowItem)
+      const parent = notes.find((note) => note.text === 'Parent note')
+      const child = notes.find((note) => note.text === 'Child note')
+      if (!parent || !child) return false
+
+      const order = windowItem.children.map((item) => item.uid)
+      return (
+        order.indexOf(child.uid) < order.indexOf(parent.uid) &&
+        child.parentUid === undefined &&
+        parent.parentUid === child.uid &&
+        child.indentLevel === 1 &&
+        parent.indentLevel === 2
+      )
+    }, 'Expected note to be dropped onto the middle of its descendant note.')
+  })
+
   it('adds a browser window and shows two open windows with one tab each', async () => {
     await openSeededSessionTree()
 
@@ -445,7 +718,10 @@ describe('critical Firefox UI workflows', () => {
     await sessionTree.captureContextMenuItems()
     await sessionTree.openTabContextMenu(alphaTitle)
     await sessionTree.clickCapturedContextMenuItem('Open')
-    const reopenedTabId = await trackExtensionFixtureTabByTitle(seed, alphaTitle)
+    const reopenedTabId = await trackExtensionFixtureTabByTitle(
+      seed,
+      alphaTitle,
+    )
     await browser.switchToWindow(popup.popupHandle)
 
     await expectSingleOpenWindowWithRootTabs([
@@ -608,10 +884,7 @@ describe('critical Firefox UI workflows', () => {
     await sessionTree.confirmEditTextModal()
     await browser.switchToWindow(popup.popupHandle)
 
-    await expectTabCustomLabel(
-      SESSION_FIXTURE_TITLES.alpha,
-      CUSTOM_LABEL_TEXT,
-    )
+    await expectTabCustomLabel(SESSION_FIXTURE_TITLES.alpha, CUSTOM_LABEL_TEXT)
     await sessionTree.waitForItemTextVisible(CUSTOM_LABEL_TEXT)
 
     await removeFixtureTab(SESSION_FIXTURE_TITLES.alpha)
@@ -769,25 +1042,28 @@ async function expectOnlyOpenWindowTitle(title) {
 }
 
 async function expectSingleSavedWindowWithRootTabs(tabTitles) {
-  await sessionTree.waitForBackgroundTree((tree) => {
-    const savedWindows = savedWindowsInTree(tree)
-    if (savedWindows.length !== 1 || openWindowsInTree(tree).length !== 0) {
-      return false
-    }
+  await sessionTree.waitForBackgroundTree(
+    (tree) => {
+      const savedWindows = savedWindowsInTree(tree)
+      if (savedWindows.length !== 1 || openWindowsInTree(tree).length !== 0) {
+        return false
+      }
 
-    const rootTabs = rootTabsInWindow(savedWindows[0])
-    if (rootTabs.length !== tabTitles.length) return false
+      const rootTabs = rootTabsInWindow(savedWindows[0])
+      if (rootTabs.length !== tabTitles.length) return false
 
-    return tabTitles.every((title) =>
-      rootTabs.some(
-        (tab) =>
-          tab.title === title &&
-          tab.state === TreeItemState.Saved &&
-          tab.parentUid === undefined &&
-          tab.indentLevel === 1,
-      ),
-    )
-  }, `Expected one saved window with root tabs: ${tabTitles.join(', ')}.`)
+      return tabTitles.every((title) =>
+        rootTabs.some(
+          (tab) =>
+            tab.title === title &&
+            tab.state === TreeItemState.Saved &&
+            tab.parentUid === undefined &&
+            tab.indentLevel === 1,
+        ),
+      )
+    },
+    `Expected one saved window with root tabs: ${tabTitles.join(', ')}.`,
+  )
 }
 
 async function expectOneOpenWindowAndOneSavedWindowWithRootTabs(
@@ -815,6 +1091,19 @@ async function expectSingleNoteText(text) {
     )
     return notes.length === 1 && notes[0].text === text
   }, `Expected one note with text "${text}".`)
+}
+
+async function noteUidByText(text) {
+  const tree = await sessionTree.backgroundTreeSnapshot()
+  const note = windowsInTree(tree)
+    .flatMap((windowItem) => notesInWindow(windowItem))
+    .find((candidate) => candidate.text === text)
+
+  if (!note) {
+    throw new Error(`Expected note "${text}" to exist.`)
+  }
+
+  return note.uid
 }
 
 async function expectNoNotes() {
@@ -864,8 +1153,7 @@ async function expectTabCustomLabel(title, customLabel) {
       .filter((tab) => tab.title === title)
 
     return (
-      matchingTabs.length === 1 &&
-      matchingTabs[0].customLabel === customLabel
+      matchingTabs.length === 1 && matchingTabs[0].customLabel === customLabel
     )
   }, `Expected tab "${title}" custom label to be "${customLabel}".`)
 }
@@ -952,8 +1240,7 @@ async function removeFixtureTab(title, state) {
     .flatMap((windowItem) => tabsInWindow(windowItem))
     .find(
       (tab) =>
-        tab.title === title &&
-        (state === undefined || tab.state === state),
+        tab.title === title && (state === undefined || tab.state === state),
     )
 
   if (!matchingTab) {
@@ -1106,10 +1393,13 @@ async function waitForBrowserHandleClosed(handle, title) {
 }
 
 async function waitForBrowserTitleCount(title, count) {
-  await browser.waitUntil(async () => (await browserTitleCount(title)) === count, {
-    timeout: 10_000,
-    timeoutMsg: `Expected ${count} browser tab(s) titled "${title}".`,
-  })
+  await browser.waitUntil(
+    async () => (await browserTitleCount(title)) === count,
+    {
+      timeout: 10_000,
+      timeoutMsg: `Expected ${count} browser tab(s) titled "${title}".`,
+    },
+  )
 }
 
 async function waitForBrowserTitleChanged(previousTitle, titlePrefix) {
@@ -1119,8 +1409,7 @@ async function waitForBrowserTitleChanged(previousTitle, titlePrefix) {
     async () => {
       currentTitle = await browser.getTitle()
       return (
-        currentTitle !== previousTitle &&
-        currentTitle.startsWith(titlePrefix)
+        currentTitle !== previousTitle && currentTitle.startsWith(titlePrefix)
       )
     },
     {

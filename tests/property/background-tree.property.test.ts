@@ -125,41 +125,37 @@ describe('background tree properties', () => {
 
   it('keeps a tab parent flag when decreasing a tab child while a note child remains', () => {
     fc.assert(
-      fc.property(
-        fc.boolean(),
-        fc.boolean(),
-        (pinnedParent, noteBeforeTab) => {
-          resetTree()
-          const parent = createTab('tab-parent' as UID, {
-            isParent: true,
-            pinned: pinnedParent,
-          })
-          const noteChild = createNote('note-child' as UID, {
-            parentUid: parent.uid,
-            indentLevel: 2,
-          })
-          const tabChild = createTab('tab-child' as UID, {
-            parentUid: parent.uid,
-            indentLevel: 2,
-          })
-          const children = noteBeforeTab
-            ? [parent, noteChild, tabChild]
-            : [parent, tabChild, noteChild]
-          const window = createWindow('window-1' as UID, children)
-          Tree.recomputeSessionTree(false)
+      fc.property(fc.boolean(), fc.boolean(), (pinnedParent, noteBeforeTab) => {
+        resetTree()
+        const parent = createTab('tab-parent' as UID, {
+          isParent: true,
+          pinned: pinnedParent,
+        })
+        const noteChild = createNote('note-child' as UID, {
+          parentUid: parent.uid,
+          indentLevel: 2,
+        })
+        const tabChild = createTab('tab-child' as UID, {
+          parentUid: parent.uid,
+          indentLevel: 2,
+        })
+        const children = noteBeforeTab
+          ? [parent, noteChild, tabChild]
+          : [parent, tabChild, noteChild]
+        const window = createWindow('window-1' as UID, children)
+        Tree.recomputeSessionTree(false)
 
-          Tree.tabIndentDecrease([tabChild.uid])
+        Tree.tabIndentDecrease([tabChild.uid])
 
-          expect(window.children.map((item) => item.uid)).toEqual(
-            children.map((item) => item.uid),
-          )
-          expect(parent.isParent).toBe(true)
-          expect(noteChild.parentUid).toBe(parent.uid)
-          expect(tabChild.parentUid).toBeUndefined()
-          expect(tabChild.indentLevel).toBe(1)
-          expectTreeInvariants()
-        },
-      ),
+        expect(window.children.map((item) => item.uid)).toEqual(
+          children.map((item) => item.uid),
+        )
+        expect(parent.isParent).toBe(true)
+        expect(noteChild.parentUid).toBe(parent.uid)
+        expect(tabChild.parentUid).toBeUndefined()
+        expect(tabChild.indentLevel).toBe(1)
+        expectTreeInvariants()
+      }),
       { numRuns: PROPERTY_RUNS },
     )
   })

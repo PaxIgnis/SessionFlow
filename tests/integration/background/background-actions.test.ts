@@ -8,10 +8,7 @@ import {
 } from '@/services/background-actions'
 import { Tree } from '@/services/background-tree'
 import { Settings } from '@/services/settings'
-import {
-  flushMicrotasks,
-  installFakeBrowser,
-} from '../../helpers/fake-browser'
+import { flushMicrotasks, installFakeBrowser } from '../../helpers/fake-browser'
 
 const mocks = vi.hoisted(() => ({
   openSessionTree: vi.fn(),

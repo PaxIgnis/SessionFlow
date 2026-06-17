@@ -202,12 +202,11 @@ export function onDrop(e: DragEvent): void {
   const id = DragAndDrop.dragState.destinationId
   const draggedItems = DragAndDrop.dragInfo!.items
   const effectiveSourceType = getEffectiveDragType(draggedItems)
-  const includeDescendantsForDraggedItems =
-    effectiveSourceType === DragType.NOTE
-      ? shouldIncludeDescendantsForDraggedItems(draggedItems)
-      : effectiveSourceType === DragType.SEPARATOR
-        ? false
-      : true
+  const draggedItemsForMove = draggedItems
+  const includeDescendantsForDraggedItems = shouldIncludeDescendantsForDrop(
+    effectiveSourceType,
+    draggedItems,
+  )
 
   // if src and drop target is type tab
   if (
@@ -374,6 +373,7 @@ export function onDrop(e: DragEvent): void {
       return
     }
   }
+
   // if src is tab and dest is tab or window
   if (
     effectiveSourceType === DragType.TAB &&
@@ -383,41 +383,14 @@ export function onDrop(e: DragEvent): void {
       DragAndDrop.dragState.destinationType === DropType.SEPARATOR)
   ) {
     if (targetWindowUid) {
-      const tabs = draggedItems.filter((item) => item.type === TreeItemType.TAB)
-      const notes = draggedItems.filter(
-        (item) => item.type === TreeItemType.NOTE,
+      Messages.moveTreeItems(
+        draggedItemsForMove.map((item) => item.uid),
+        dropIndex,
+        dropParentUid,
+        targetWindowUid,
+        false,
+        includeDescendantsForDraggedItems,
       )
-      const separators = draggedItems.filter(
-        (item) => item.type === TreeItemType.SEPARATOR,
-      )
-      if (tabs.length > 0) {
-        Messages.moveTabs(
-          tabs.map((tab) => tab.uid),
-          targetWindowUid as UID,
-          dropIndex,
-          dropParentUid,
-          false,
-        )
-      }
-      if (notes.length > 0) {
-        Messages.moveTreeItems(
-          notes.map((note) => note.uid),
-          dropIndex + tabs.length,
-          dropParentUid,
-          targetWindowUid,
-          false,
-        )
-      }
-      if (separators.length > 0) {
-        Messages.moveTreeItems(
-          separators.map((separator) => separator.uid),
-          dropIndex + tabs.length + notes.length,
-          dropParentUid,
-          targetWindowUid,
-          false,
-          false,
-        )
-      }
     }
   }
   // if src is window and dest is window or note
@@ -428,7 +401,7 @@ export function onDrop(e: DragEvent): void {
       DragAndDrop.dragState.destinationType === DropType.SEPARATOR)
   ) {
     Messages.moveTreeItems(
-      draggedItems
+      draggedItemsForMove
         .filter(
           (item) =>
             item.type === TreeItemType.WINDOW ||
@@ -455,7 +428,7 @@ export function onDrop(e: DragEvent): void {
     }
 
     Messages.moveTreeItems(
-      draggedItems.map((item) => item.uid),
+      draggedItemsForMove.map((item) => item.uid),
       dropIndex,
       dropParentUid,
       targetWindowUid,
@@ -466,7 +439,7 @@ export function onDrop(e: DragEvent): void {
   // if src is separator and dest is anything
   else if (effectiveSourceType === DragType.SEPARATOR) {
     Messages.moveTreeItems(
-      draggedItems.map((item) => item.uid),
+      draggedItemsForMove.map((item) => item.uid),
       dropIndex,
       dropParentUid,
       targetWindowUid,
@@ -550,8 +523,23 @@ function updateDropTarget(e: DragEvent): void {
   }
   DragAndDrop.dragState.destinationType = destType
 
-  // cannot drop onto self
-  if (DragAndDrop.dragInfo?.items.find((item) => item.uid === id)) return
+  const draggedItems = DragAndDrop.dragInfo?.items ?? []
+  const disabledDescendantDrop =
+    !Settings.values.allowDropOntoDescendantItems &&
+    includedDraggedDescendantsContainDestination(draggedItems, id as UID)
+
+  if (disabledDescendantDrop) {
+    return
+  }
+
+  // Cannot drop onto the dragged root itself. An included descendant target is
+  // allowed because it represents a descendant drop, not a self drop.
+  if (
+    DragAndDrop.dragInfo?.items.find((item) => item.uid === id) &&
+    !isIncludedDescendantTarget(draggedItems, id as UID)
+  ) {
+    return
+  }
 
   // check if this is a valid drop target
   const sourceType = getEffectiveDragType(DragAndDrop.dragInfo?.items ?? [])
@@ -615,16 +603,19 @@ function updateDropTarget(e: DragEvent): void {
     y,
     h,
   )
-  const draggedItems = DragAndDrop.dragInfo?.items ?? []
-  const includeDescendants =
-    sourceType === DragType.NOTE
-      ? shouldIncludeDescendantsForDraggedItems(draggedItems)
-      : sourceType === DragType.SEPARATOR
-        ? false
-      : true
+  const includeDescendants = shouldIncludeDescendantsForDrop(
+    sourceType,
+    draggedItems,
+  )
+  const allowedDescendantDrop =
+    Settings.values.allowDropOntoDescendantItems &&
+    includedDraggedDescendantsContainDestination(draggedItems, id as UID)
 
+  // When descendant drops are explicitly allowed, the background move code
+  // handles detaching the root before validating note parent constraints.
   if (
     sourceType === DragType.NOTE &&
+    !allowedDescendantDrop &&
     isSelfOrDescendantParentDrop(
       draggedItems,
       DragAndDrop.dragState.destinationType,
@@ -638,6 +629,7 @@ function updateDropTarget(e: DragEvent): void {
 
   if (
     sourceType === DragType.NOTE &&
+    !allowedDescendantDrop &&
     includeDescendants &&
     includedDraggedNoteDescendantsContainWindow(draggedItems) &&
     isWindowBackedDropTarget(
@@ -667,10 +659,7 @@ function getDropPositionForTarget(
     return y < h / 2 ? DropPosition.ABOVE : DropPosition.BELOW
   }
 
-  if (
-    sourceType === DragType.WINDOW &&
-    destinationType === DropType.WINDOW
-  ) {
+  if (sourceType === DragType.WINDOW && destinationType === DropType.WINDOW) {
     return y < h / 2 ? DropPosition.ABOVE : DropPosition.BELOW
   }
 
@@ -715,10 +704,7 @@ function isSelfOrDescendantParentDrop(
   )
   const effectiveDropParentUid = includeDescendants
     ? dropParentUid
-    : getDropParentUidAfterMovingWithoutDescendants(
-        draggedItems,
-        dropParentUid,
-      )
+    : getDropParentUidAfterMovingWithoutDescendants(draggedItems, dropParentUid)
   if (!effectiveDropParentUid) return false
 
   return draggedItems
@@ -735,9 +721,7 @@ function getDropParentUidAfterMovingWithoutDescendants(
   dropParentUid: UID | undefined,
 ): UID | undefined {
   if (!dropParentUid) return undefined
-  const draggedParent = draggedItems.find(
-    (item) => item.type === TreeItemType.NOTE && item.uid === dropParentUid,
-  )
+  const draggedParent = draggedItems.find((item) => item.uid === dropParentUid)
   return draggedParent ? draggedParent.parentUid : dropParentUid
 }
 
@@ -779,19 +763,119 @@ function getEffectiveDragType(items: TreeItem[]): DragType {
   return DragType.SEPARATOR
 }
 
+/**
+ * Determines whether a drop command should move dragged roots with descendants.
+ *
+ * @param {DragType} sourceType - Effective type of the dragged items.
+ * @param {TreeItem[]} items - Dragged items in the current drag operation.
+ * @returns {boolean} Whether descendants should be included in the move command.
+ */
+function shouldIncludeDescendantsForDrop(
+  sourceType: DragType,
+  items: TreeItem[],
+): boolean {
+  if (sourceType === DragType.SEPARATOR) return false
+  if (sourceType === DragType.WINDOW) return true
+  return shouldIncludeDescendantsForDraggedItems(items)
+}
+
 function shouldIncludeDescendantsForDraggedItems(items: TreeItem[]): boolean {
   if (Settings.values.includeChildrenOfSelectedItems === 'always') return true
   if (Settings.values.includeChildrenOfSelectedItems === 'never') return false
 
   return items
-    .filter((item) => item.type === TreeItemType.NOTE)
+    .filter(
+      (item) =>
+        item.type === TreeItemType.TAB || item.type === TreeItemType.NOTE,
+    )
     .some((item) => item.isParent && item.collapsed)
 }
 
-function includedDraggedNoteDescendantsContainWindow(items: TreeItem[]): boolean {
+function includedDraggedNoteDescendantsContainWindow(
+  items: TreeItem[],
+): boolean {
   return items
     .filter((item) => item.type === TreeItemType.NOTE)
     .some((item) => noteDescendantsContainWindow(item))
+}
+
+/**
+ * Checks whether any dragged item has the destination inside its descendant subtree.
+ *
+ * @param {TreeItem[]} items - Dragged items to inspect.
+ * @param {UID} destinationId - UID of the current drop destination.
+ * @returns {boolean} Whether the destination is a dragged descendant.
+ */
+function includedDraggedDescendantsContainDestination(
+  items: TreeItem[],
+  destinationId: UID,
+): boolean {
+  return items.some((item) => itemDescendantUids(item).has(destinationId))
+}
+
+/**
+ * Checks whether a destination is a descendant included in the drag payload.
+ *
+ * @param {TreeItem[]} items - Dragged items to inspect.
+ * @param {UID} destinationId - UID of the current drop destination.
+ * @returns {boolean} Whether the destination is included as a descendant target.
+ */
+function isIncludedDescendantTarget(
+  items: TreeItem[],
+  destinationId: UID,
+): boolean {
+  return items.some(
+    (item) =>
+      item.uid !== destinationId && itemDescendantUids(item).has(destinationId),
+  )
+}
+
+/**
+ * Collects descendant UIDs for a tree item in the foreground tree.
+ *
+ * @param {TreeItem} item - Tree item whose descendants should be collected.
+ * @returns {Set<UID>} Descendant UIDs for the item.
+ */
+function itemDescendantUids(item: TreeItem): Set<UID> {
+  const descendantUids = new Set<UID>()
+  if (item.type === TreeItemType.WINDOW) {
+    addWindowChildDescendantUids(item.children as TreeItem[], descendantUids)
+  }
+
+  const location = findItemLocation(
+    SessionTree.reactiveItems.value as TreeItem[],
+    item.uid,
+  )
+  if (!location) return descendantUids
+
+  const itemIndent = item.indentLevel ?? 0
+  for (let i = location.index + 1; i < location.children.length; i++) {
+    const candidate = location.children[i]
+    if ((candidate.indentLevel ?? 0) <= itemIndent) break
+    descendantUids.add(candidate.uid)
+    if (candidate.type === TreeItemType.WINDOW) {
+      addWindowChildDescendantUids(
+        candidate.children as TreeItem[],
+        descendantUids,
+      )
+    }
+  }
+  return descendantUids
+}
+
+/**
+ * Adds direct window child UIDs to a descendant UID set.
+ *
+ * @param {TreeItem[]} children - Window children to add.
+ * @param {Set<UID>} descendantUids - Set that receives the child UIDs.
+ */
+function addWindowChildDescendantUids(
+  children: TreeItem[],
+  descendantUids: Set<UID>,
+): void {
+  for (const child of children) {
+    descendantUids.add(child.uid)
+  }
 }
 
 function noteDescendantsContainWindow(note: TreeItem): boolean {

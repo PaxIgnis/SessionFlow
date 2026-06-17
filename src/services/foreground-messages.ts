@@ -29,23 +29,6 @@ export function focusTab(tabId: number, windowId: number) {
   } as Messages.FocusTabMessage)
 }
 
-export function moveTabs(
-  tabUIDs: Array<UID>,
-  targetWindowUid: UID,
-  targetIndex: number,
-  parentUid: UID | undefined,
-  copy: boolean = false,
-) {
-  void sendTreeCommand({
-    action: 'moveTabs',
-    tabUIDs: tabUIDs,
-    targetWindowUid: targetWindowUid,
-    targetIndex: targetIndex,
-    parentUid: parentUid,
-    copy: copy,
-  })
-}
-
 export function openTab(tabUid: UID, windowUid: UID, url: string) {
   void sendTreeCommand({
     action: 'openTab',

@@ -17,16 +17,21 @@ export async function clickFirefoxExtensionAction(extensionId) {
         const { ExtensionParent } = ChromeUtils.importESModule(
           'resource://gre/modules/ExtensionParent.sys.mjs',
         )
-        const browserWindow = window.BrowserWindowTracker?.getTopWindow?.() ?? window
+        const browserWindow =
+          window.BrowserWindowTracker?.getTopWindow?.() ?? window
         const extension = ExtensionParent.GlobalManager.getExtension(id)
         const browserAction =
-          extension && ExtensionParent.apiManager.global.browserAction.for(extension)
+          extension &&
+          ExtensionParent.apiManager.global.browserAction.for(extension)
 
         if (browserAction) {
-          browserAction.action.dispatchClick(browserWindow.gBrowser.selectedTab, {
-            button: 0,
-            modifiers: [],
-          })
+          browserAction.action.dispatchClick(
+            browserWindow.gBrowser.selectedTab,
+            {
+              button: 0,
+              modifiers: [],
+            },
+          )
           return
         }
 
@@ -36,7 +41,9 @@ export async function clickFirefoxExtensionAction(extensionId) {
           `${id.replaceAll('@', '_')}-browser-action`,
         ]
         const button =
-          widgetIds.map((widgetId) => document.getElementById(widgetId)).find(Boolean) ??
+          widgetIds
+            .map((widgetId) => document.getElementById(widgetId))
+            .find(Boolean) ??
           Array.from(document.querySelectorAll('[id$="-browser-action"]')).find(
             (element) =>
               element.getAttribute('label') === 'Session Flow' ||
@@ -59,9 +66,7 @@ export async function clickFirefoxExtensionAction(extensionId) {
           throw new Error(
             `Extension toolbar button was not found. Tried ${widgetIds.join(
               ', ',
-            )}. Available actions: ${JSON.stringify(
-              availableActions,
-            )}`,
+            )}. Available actions: ${JSON.stringify(availableActions)}`,
           )
         }
 

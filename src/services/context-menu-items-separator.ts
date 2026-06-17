@@ -17,9 +17,10 @@ function selectedItemUids(): UID[] {
   return Selection.selectedItems.value.map((selected) => selected.item.uid)
 }
 
-function getCreateNoteTargetBelowSeparator(
-  separator: Separator,
-): { parentUid: UID | undefined; index: number | undefined } {
+function getCreateNoteTargetBelowSeparator(separator: Separator): {
+  parentUid: UID | undefined
+  index: number | undefined
+} {
   const containingItems = getContainingItems(separator)
   const index = containingItems.findIndex((item) => item.uid === separator.uid)
   const parentUid =
