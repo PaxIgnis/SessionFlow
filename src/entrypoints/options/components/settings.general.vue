@@ -36,6 +36,12 @@ import { STRINGS } from '@/types/strings'
       @update="Settings.saveSettingsToStorage()"
     />
     <ToggleButton
+      label="Show Indent Lines Without Children"
+      v-model="Settings.values.showIndentLinesWithoutChildren"
+      :options="OPTIONS.boolean"
+      @update="Settings.saveSettingsToStorage()"
+    />
+    <ToggleButton
       label="When Indent Is Adjusted, Include Children of Selected Items"
       v-model="Settings.values.includeChildrenOfSelectedItemsWhenIndenting"
       :options="OPTIONS.includeChildrenOfSelectedItemsWhenIndenting"

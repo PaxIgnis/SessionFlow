@@ -4,6 +4,7 @@ export interface Settings {
   openSessionTreeInSameLocation: boolean
   openSessionTreeOnStartup: boolean
   restorePreviousSessionOnStartup: boolean
+  showIndentLinesWithoutChildren: boolean
   includeChildrenOfSelectedItemsWhenIndenting: (typeof SETTINGS_TYPES.includeChildrenOfSelectedItemsWhenIndenting)[number]
 
   // Windows

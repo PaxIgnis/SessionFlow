@@ -288,6 +288,50 @@ function getContainingList(item: TreeItem): TreeItem[] {
   return SessionTree.reactiveItems.value as TreeItem[]
 }
 
+function shouldShowVerticalIndentLine(indentLevel: number): boolean {
+  if (Settings.values.showIndentLinesWithoutChildren) return true
+
+  const currentIndent = props.item.indentLevel ?? 0
+  if (indentLevel >= currentIndent) return false
+  const containingList = getContainingList(props.item)
+  const itemIndex = containingList.findIndex(
+    (item) => item.uid === props.item.uid,
+  )
+  if (itemIndex === -1) return false
+
+  for (let i = itemIndex + 1; i < containingList.length; i++) {
+    const candidate = containingList[i]
+    if (candidate.isVisible === false) continue
+
+    const candidateIndent = candidate.indentLevel ?? 0
+    if (candidateIndent < indentLevel) return false
+    if (candidateIndent === indentLevel) return true
+  }
+
+  return false
+}
+
+function hasFollowingDirectSibling(): boolean {
+  const currentIndent = props.item.indentLevel ?? 0
+  const containingList = getContainingList(props.item)
+  const itemIndex = containingList.findIndex(
+    (item) => item.uid === props.item.uid,
+  )
+  if (itemIndex === -1) return false
+
+  for (let i = itemIndex + 1; i < containingList.length; i++) {
+    const candidate = containingList[i]
+    if (candidate.isVisible === false) continue
+
+    const candidateIndent = candidate.indentLevel ?? 0
+    if (candidateIndent < currentIndent) return false
+    if (candidateIndent === currentIndent)
+      return candidate.parentUid === props.item.parentUid
+  }
+
+  return false
+}
+
 function itemDblClickAction() {
   if (isWindow(props.item)) {
     Messages.windowDoubleClick(props.item.uid, props.item.id, props.item.state)
@@ -449,9 +493,21 @@ function flatDescendantsHaveOpenTab(item: TreeItem): boolean {
         <div
           v-for="i in Math.max(0, (props.item.indentLevel ?? 0) - 1)"
           :key="i"
-          class="tree-item-indent-line indent-line-vertical"
+          class="tree-item-indent-line"
+          :class="
+            shouldShowVerticalIndentLine(i)
+              ? 'indent-line-vertical'
+              : 'indent-line-spacer'
+          "
         ></div>
-        <div class="tree-item-indent-line indent-line-connector"></div>
+        <div
+          class="tree-item-indent-line indent-line-connector"
+          :class="{
+            'indent-line-connector-terminal':
+              !Settings.values.showIndentLinesWithoutChildren &&
+              !hasFollowingDirectSibling(),
+          }"
+        ></div>
         <div
           v-if="!(isWindow(item) || item.isParent)"
           class="tree-item-indent-line indent-line-end"
@@ -757,6 +813,7 @@ function flatDescendantsHaveOpenTab(item: TreeItem): boolean {
 }
 
 .indent-line-vertical,
+.indent-line-spacer,
 .indent-line-connector {
   border-inline-start-width: 1px;
   height: 100%;
@@ -764,9 +821,24 @@ function flatDescendantsHaveOpenTab(item: TreeItem): boolean {
   justify-self: end;
 }
 
+.indent-line-spacer {
+  border-inline-start-width: 0;
+}
+
 .indent-line-connector {
   position: relative;
 }
+
+.indent-line-connector-terminal {
+  border-inline-start-width: 0;
+}
+
+.indent-line-connector-terminal::before {
+  border-inline-start-width: 1px;
+  border-end-start-radius: 4px;
+  width: calc(100% + 1px);
+}
+
 .indent-line-end {
   border-bottom-width: 1px;
   height: calc(50% + 1px);
