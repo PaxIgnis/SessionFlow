@@ -129,6 +129,8 @@ export function onDragEnter(e: DragEvent): void {
 
 export function onDragLeave(e: DragEvent): void {
   if (e.dataTransfer) e.dataTransfer.dropEffect = 'none'
+  clearDragIndicators(DragAndDrop.dragState.prevEl)
+  DragAndDrop.dragState.prevEl = null
   DragAndDrop.dragState.destinationId = null
   DragAndDrop.dragState.isValidDropTarget = false
 }
@@ -152,7 +154,12 @@ export function onDragMove(e: DragEvent): void {
   if (!el) return
   if (!el.getAttribute) return
 
-  if (DragAndDrop.dragState.prevEl && DragAndDrop.dragState.prevEl !== el) {
+  const indicator = getDropIndicator(el)
+
+  if (
+    DragAndDrop.dragState.prevEl &&
+    DragAndDrop.dragState.prevEl !== indicator.element
+  ) {
     clearDragIndicators(DragAndDrop.dragState.prevEl)
   }
 
@@ -160,23 +167,36 @@ export function onDragMove(e: DragEvent): void {
   if (DragAndDrop.dragState.isValidDropTarget) {
     // TODO: drop effect can also be copy when it is implemented
     if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
-    switch (DragAndDrop.dragState.dropPosition) {
-      case DropPosition.ABOVE:
-        el.classList.add('drag-over-above')
-        el.classList.remove('drag-over-mid', 'drag-over-below')
-        break
-      case DropPosition.MID:
-        el.classList.add('drag-over-mid')
-        el.classList.remove('drag-over-above', 'drag-over-below')
-        break
-      case DropPosition.BELOW:
-        el.classList.add('drag-over-below')
-        el.classList.remove('drag-over-above', 'drag-over-mid')
-        break
+    if (DragAndDrop.dragState.destinationType === DropType.TREE_END) {
+      indicator.element.style.setProperty(
+        '--drop-indent-level',
+        String(indicator.indentLevel),
+      )
+      indicator.element.classList.add('drag-over-tree-end')
+      indicator.element.classList.remove(
+        'drag-over-above',
+        'drag-over-mid',
+        'drag-over-below',
+      )
+    } else {
+      switch (DragAndDrop.dragState.dropPosition) {
+        case DropPosition.ABOVE:
+          el.classList.add('drag-over-above')
+          el.classList.remove('drag-over-mid', 'drag-over-below')
+          break
+        case DropPosition.MID:
+          el.classList.add('drag-over-mid')
+          el.classList.remove('drag-over-above', 'drag-over-below')
+          break
+        case DropPosition.BELOW:
+          el.classList.add('drag-over-below')
+          el.classList.remove('drag-over-above', 'drag-over-mid')
+          break
+      }
     }
   }
 
-  DragAndDrop.dragState.prevEl = el
+  DragAndDrop.dragState.prevEl = indicator.element
 }
 
 export function onDrop(e: DragEvent): void {
@@ -373,6 +393,19 @@ export function onDrop(e: DragEvent): void {
       return
     }
   }
+  // if drop target is the open space below the last visible tree item
+  else if (DragAndDrop.dragState.destinationType === DropType.TREE_END) {
+    if (effectiveSourceType === DragType.TAB) {
+      const destinationWindow = getLastLogicalWindow()
+      if (!destinationWindow) return
+      dropIndex = destinationWindow.children.length
+      targetWindowUid = destinationWindow.uid
+    } else {
+      dropIndex = SessionTree.reactiveItems.value.length
+      targetWindowUid = undefined
+    }
+    dropParentUid = undefined
+  }
 
   // if src is tab and dest is tab or window
   if (
@@ -380,7 +413,8 @@ export function onDrop(e: DragEvent): void {
     (DragAndDrop.dragState.destinationType === DropType.TAB ||
       DragAndDrop.dragState.destinationType === DropType.WINDOW ||
       DragAndDrop.dragState.destinationType === DropType.NOTE ||
-      DragAndDrop.dragState.destinationType === DropType.SEPARATOR)
+      DragAndDrop.dragState.destinationType === DropType.SEPARATOR ||
+      DragAndDrop.dragState.destinationType === DropType.TREE_END)
   ) {
     if (targetWindowUid) {
       Messages.moveTreeItems(
@@ -398,7 +432,8 @@ export function onDrop(e: DragEvent): void {
     effectiveSourceType === DragType.WINDOW &&
     (DragAndDrop.dragState.destinationType === DropType.WINDOW ||
       DragAndDrop.dragState.destinationType === DropType.NOTE ||
-      DragAndDrop.dragState.destinationType === DropType.SEPARATOR)
+      DragAndDrop.dragState.destinationType === DropType.SEPARATOR ||
+      DragAndDrop.dragState.destinationType === DropType.TREE_END)
   ) {
     Messages.moveTreeItems(
       draggedItemsForMove
@@ -462,11 +497,11 @@ function reset(): void {
 
   // clear any drag indicators anywhere in the DOM
   const elements = document.querySelectorAll<HTMLElement>(
-    '.drag-over-above, .drag-over-mid, .drag-over-below',
+    '.drag-over-above, .drag-over-mid, .drag-over-below, .drag-over-tree-end',
   )
 
   elements.forEach((el) => {
-    el.classList.remove('drag-over-above', 'drag-over-mid', 'drag-over-below')
+    clearDragIndicators(el)
   })
 
   DragAndDrop.dragState.prevEl = null
@@ -483,7 +518,84 @@ function reset(): void {
  */
 function clearDragIndicators(el: HTMLElement | null) {
   if (!el) return
-  el.classList.remove('drag-over-above', 'drag-over-mid', 'drag-over-below')
+  el.classList.remove(
+    'drag-over-above',
+    'drag-over-mid',
+    'drag-over-below',
+    'drag-over-tree-end',
+  )
+  el.style.removeProperty('--drop-indent-level')
+}
+
+function getDropIndicator(defaultElement: HTMLElement): {
+  element: HTMLElement
+  indentLevel: number
+} {
+  if (
+    DragAndDrop.dragState.destinationType !== DropType.TREE_END ||
+    getEffectiveDragType(DragAndDrop.dragInfo?.items ?? []) !== DragType.TAB
+  ) {
+    return { element: defaultElement, indentLevel: 0 }
+  }
+
+  const destinationWindow = getLastLogicalWindow()
+  if (!destinationWindow) {
+    return { element: defaultElement, indentLevel: 0 }
+  }
+
+  const anchorUid = getVisibleTabDestinationAnchor(destinationWindow).uid
+  const anchorElement = Array.from(
+    document.querySelectorAll<HTMLElement>('.tree-item'),
+  ).find((element) => element.getAttribute('drag-and-drop-id') === anchorUid)
+
+  return {
+    element: anchorElement ?? defaultElement,
+    indentLevel: destinationWindow.indentLevel + 1,
+  }
+}
+
+function getLastLogicalWindow(): Window | undefined {
+  const items = SessionTree.reactiveItems.value
+  for (let index = items.length - 1; index >= 0; index--) {
+    const item = items[index]
+    if (item.type === TreeItemType.WINDOW) return item
+  }
+  return undefined
+}
+
+function getVisibleTabDestinationAnchor(destinationWindow: Window): TreeItem {
+  let anchor: TreeItem = destinationWindow
+
+  if (destinationWindow.isVisible !== false && !destinationWindow.collapsed) {
+    for (
+      let index = destinationWindow.children.length - 1;
+      index >= 0;
+      index--
+    ) {
+      const child = destinationWindow.children[index]
+      if (child.isVisible !== false) {
+        anchor = child
+        break
+      }
+    }
+  }
+
+  while (anchor.isVisible === false && anchor.parentUid) {
+    const parent = getTreeItem(anchor.parentUid)
+    if (!parent) break
+    anchor = parent
+  }
+
+  return anchor
+}
+
+function getTreeItem(uid: UID): TreeItem | undefined {
+  return (
+    SessionTree.windowsByUid.get(uid) ??
+    SessionTree.tabsByUid.get(uid) ??
+    SessionTree.notesByUid.get(uid) ??
+    SessionTree.separatorsByUid.get(uid)
+  )
 }
 
 /**
@@ -520,6 +632,8 @@ function updateDropTarget(e: DragEvent): void {
     destType = DropType.NOTE
   } else if (type === 'separator') {
     destType = DropType.SEPARATOR
+  } else if (type === 'tree-end') {
+    destType = DropType.TREE_END
   }
   DragAndDrop.dragState.destinationType = destType
 
@@ -543,6 +657,13 @@ function updateDropTarget(e: DragEvent): void {
 
   // check if this is a valid drop target
   const sourceType = getEffectiveDragType(DragAndDrop.dragInfo?.items ?? [])
+  if (
+    sourceType === DragType.TAB &&
+    DragAndDrop.dragState.destinationType === DropType.TREE_END &&
+    !getLastLogicalWindow()
+  ) {
+    return
+  }
   // don't allow dropping tabs onto notes that are not in a window
   if (
     sourceType === DragType.TAB &&
@@ -566,14 +687,16 @@ function updateDropTarget(e: DragEvent): void {
       DragAndDrop.dragState.destinationType !== DropType.WINDOW &&
       DragAndDrop.dragState.destinationType !== DropType.TAB &&
       DragAndDrop.dragState.destinationType !== DropType.NOTE &&
-      DragAndDrop.dragState.destinationType !== DropType.SEPARATOR
+      DragAndDrop.dragState.destinationType !== DropType.SEPARATOR &&
+      DragAndDrop.dragState.destinationType !== DropType.TREE_END
     )
       return
   } else if (sourceType === DragType.WINDOW) {
     if (
       DragAndDrop.dragState.destinationType !== DropType.WINDOW &&
       DragAndDrop.dragState.destinationType !== DropType.NOTE &&
-      DragAndDrop.dragState.destinationType !== DropType.SEPARATOR
+      DragAndDrop.dragState.destinationType !== DropType.SEPARATOR &&
+      DragAndDrop.dragState.destinationType !== DropType.TREE_END
     )
       return
   } else if (sourceType === DragType.NOTE) {
@@ -581,7 +704,8 @@ function updateDropTarget(e: DragEvent): void {
       DragAndDrop.dragState.destinationType !== DropType.WINDOW &&
       DragAndDrop.dragState.destinationType !== DropType.TAB &&
       DragAndDrop.dragState.destinationType !== DropType.NOTE &&
-      DragAndDrop.dragState.destinationType !== DropType.SEPARATOR
+      DragAndDrop.dragState.destinationType !== DropType.SEPARATOR &&
+      DragAndDrop.dragState.destinationType !== DropType.TREE_END
     )
       return
   } else if (sourceType === DragType.SEPARATOR) {
@@ -589,7 +713,8 @@ function updateDropTarget(e: DragEvent): void {
       DragAndDrop.dragState.destinationType !== DropType.WINDOW &&
       DragAndDrop.dragState.destinationType !== DropType.TAB &&
       DragAndDrop.dragState.destinationType !== DropType.NOTE &&
-      DragAndDrop.dragState.destinationType !== DropType.SEPARATOR
+      DragAndDrop.dragState.destinationType !== DropType.SEPARATOR &&
+      DragAndDrop.dragState.destinationType !== DropType.TREE_END
     )
       return
   }
@@ -651,6 +776,10 @@ function getDropPositionForTarget(
   y: number,
   h: number,
 ): DropPosition {
+  if (destinationType === DropType.TREE_END) {
+    return DropPosition.BELOW
+  }
+
   if (sourceType === DragType.TAB && destinationType === DropType.WINDOW) {
     return DropPosition.MID
   }

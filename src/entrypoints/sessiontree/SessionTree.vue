@@ -232,7 +232,12 @@ function handleEditCustomLabelCancel() {
       />
     </template>
 
-    <div style="margin-bottom: 95vh"></div>
+    <div
+      class="tree-end-drop-target drag-and-drop-target"
+      drag-and-drop-id="tree-end"
+      drag-and-drop-type="tree-end"
+      aria-hidden="true"
+    ></div>
 
     <EditTextModal
       v-if="ModalState.active?.kind === 'editWindowTitle'"
@@ -274,6 +279,11 @@ function handleEditCustomLabelCancel() {
   margin: 0;
   background-color: var(--background-color-secondary);
 }
+
+.tree-end-drop-target {
+  position: relative;
+  min-height: 95vh;
+}
 </style>
 
 <style>
@@ -284,5 +294,27 @@ body {
   overflow: hidden;
   padding: 0;
   margin: 0;
+}
+
+.tree-item.drag-over-tree-end::after,
+.tree-end-drop-target.drag-over-tree-end::before {
+  content: '';
+  position: absolute;
+  left: calc(
+    16px + var(--prepend-width, 16px) * (var(--drop-indent-level, 0) + 1)
+  );
+  right: 8px;
+  height: 2px;
+  background: var(--drag-and-drop-foreground);
+  z-index: 20;
+  border-radius: 2px;
+}
+
+.tree-item.drag-over-tree-end::after {
+  bottom: -1px;
+}
+
+.tree-end-drop-target.drag-over-tree-end::before {
+  top: -1px;
 }
 </style>

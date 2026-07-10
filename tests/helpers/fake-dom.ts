@@ -6,15 +6,30 @@ interface FakeClassList {
 
 export interface FakeDragTarget {
   classList: FakeClassList
+  style: {
+    getPropertyValue: (name: string) => string
+    removeProperty: (name: string) => string
+    setProperty: (name: string, value: string) => void
+  }
   closest: (selector: string) => FakeDragTarget | null
   getAttribute: (name: string) => string | null
   getBoundingClientRect: () => { top: number; height: number }
 }
 
-export function installFakeDocument(): () => void {
+export function installFakeDocument(
+  elements: FakeDragTarget[] = [],
+): () => void {
   const originalDocument = globalThis.document
   const fakeDocument = {
-    querySelectorAll: () => [],
+    querySelectorAll: (selector: string) => {
+      const classNames = Array.from(
+        selector.matchAll(/\.([\w-]+)/g),
+        (match) => match[1],
+      )
+      return elements.filter((element) =>
+        classNames.some((className) => element.classList.contains(className)),
+      )
+    },
   } as unknown as Document
   Object.defineProperty(globalThis, 'document', {
     configurable: true,
@@ -30,11 +45,14 @@ export function installFakeDocument(): () => void {
 
 export function createFakeDragTarget(options: {
   id: UID
-  type: 'tab' | 'window' | 'note' | 'separator'
+  type: 'tab' | 'window' | 'note' | 'separator' | 'tree-end'
+  classes?: string[]
   top?: number
   height?: number
 }): FakeDragTarget {
   const classes = new Set<string>()
+  options.classes?.forEach((className) => classes.add(className))
+  const styles = new Map<string, string>()
   const target: FakeDragTarget = {
     classList: {
       add: (...classNames: string[]) => {
@@ -44,6 +62,17 @@ export function createFakeDragTarget(options: {
         classNames.forEach((className) => classes.delete(className))
       },
       contains: (className: string) => classes.has(className),
+    },
+    style: {
+      getPropertyValue: (name: string) => styles.get(name) ?? '',
+      removeProperty: (name: string) => {
+        const previousValue = styles.get(name) ?? ''
+        styles.delete(name)
+        return previousValue
+      },
+      setProperty: (name: string, value: string) => {
+        styles.set(name, value)
+      },
     },
     closest: (selector: string) =>
       selector === '.drag-and-drop-target' ? target : null,

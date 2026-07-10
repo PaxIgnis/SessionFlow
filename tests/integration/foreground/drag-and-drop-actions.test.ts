@@ -81,6 +81,254 @@ describe('drag-and-drop onDrop command path', () => {
     expect(moveWindows).not.toHaveBeenCalled()
   })
 
+  it('appends a tab to the last logical window and ignores later non-window items', () => {
+    const movedTab = makeForegroundTab('tab-moved' as UID)
+    const sourceWindow = makeForegroundWindow('window-source' as UID, [
+      movedTab,
+    ])
+    const parentNote = makeForegroundNote('note-parent' as UID, {
+      isParent: true,
+      collapsed: true,
+      indentLevel: 0,
+      windowUid: undefined,
+    })
+    const lastWindowTab = makeForegroundTab('tab-last-window' as UID)
+    const lastWindow = makeForegroundWindow(
+      'window-last' as UID,
+      [lastWindowTab],
+      {
+        collapsed: true,
+        indentLevel: 1,
+        isVisible: false,
+        parentUid: parentNote.uid,
+      },
+    )
+    const trailingSeparator = makeForegroundSeparator(
+      'separator-trailing' as UID,
+      {
+        indentLevel: 0,
+        windowUid: undefined,
+      },
+    )
+    resetForegroundTree([
+      sourceWindow,
+      parentNote,
+      lastWindow,
+      trailingSeparator,
+    ])
+    DragAndDrop.dragInfo = { dragType: DragType.TAB, items: [movedTab] }
+
+    const target = createFakeDragTarget({
+      id: 'tree-end' as UID,
+      type: 'tree-end',
+    })
+    const event = createFakeDragEvent({ target, yRatio: 0.5 })
+
+    DragAndDrop.onDrop(event)
+
+    expect(moveTreeItems).toHaveBeenCalledWith(
+      [movedTab.uid],
+      lastWindow.children.length,
+      undefined,
+      lastWindow.uid,
+      false,
+      false,
+    )
+  })
+
+  it.each([
+    { name: 'note', sourceType: DragType.NOTE },
+    { name: 'separator', sourceType: DragType.SEPARATOR },
+  ])('appends a $name to the top-level tree', ({ name, sourceType }) => {
+    const source =
+      name === 'note'
+        ? makeForegroundNote('source-note' as UID, {
+            indentLevel: 0,
+            windowUid: undefined,
+          })
+        : makeForegroundSeparator('source-separator' as UID, {
+            indentLevel: 0,
+            windowUid: undefined,
+          })
+    const window = makeForegroundWindow('window-1' as UID)
+    const trailingNote = makeForegroundNote('trailing-note' as UID, {
+      indentLevel: 0,
+      windowUid: undefined,
+    })
+    resetForegroundTree([source, window, trailingNote])
+    DragAndDrop.dragInfo = { dragType: sourceType, items: [source] }
+
+    const target = createFakeDragTarget({
+      id: 'tree-end' as UID,
+      type: 'tree-end',
+    })
+    const event = createFakeDragEvent({ target, yRatio: 0.5 })
+
+    DragAndDrop.onDrop(event)
+
+    expect(moveTreeItems).toHaveBeenCalledWith(
+      [source.uid],
+      SessionTree.reactiveItems.value.length,
+      undefined,
+      undefined,
+      false,
+      false,
+    )
+  })
+
+  it('appends a window to the top-level tree', () => {
+    const sourceWindow = makeForegroundWindow('window-source' as UID)
+    const trailingNote = makeForegroundNote('trailing-note' as UID, {
+      indentLevel: 0,
+      windowUid: undefined,
+    })
+    resetForegroundTree([sourceWindow, trailingNote])
+    DragAndDrop.dragInfo = {
+      dragType: DragType.WINDOW,
+      items: [sourceWindow],
+    }
+
+    const target = createFakeDragTarget({
+      id: 'tree-end' as UID,
+      type: 'tree-end',
+    })
+    const event = createFakeDragEvent({ target, yRatio: 0.5 })
+
+    DragAndDrop.onDrop(event)
+
+    expect(moveTreeItems).toHaveBeenCalledWith(
+      [sourceWindow.uid],
+      SessionTree.reactiveItems.value.length,
+      undefined,
+      undefined,
+      false,
+    )
+  })
+
+  it('shows a base-indent line at the top of the bottom drop area for non-tabs', () => {
+    const note = makeForegroundNote('note-1' as UID, {
+      indentLevel: 0,
+      windowUid: undefined,
+    })
+    resetForegroundTree([note])
+    DragAndDrop.dragInfo = { dragType: DragType.NOTE, items: [note] }
+    const target = createFakeDragTarget({
+      id: 'tree-end' as UID,
+      type: 'tree-end',
+    })
+
+    DragAndDrop.onDragMove(createFakeDragEvent({ target, yRatio: 0.5 }))
+
+    expect(target.classList.contains('drag-over-tree-end')).toBe(true)
+    expect(target.style.getPropertyValue('--drop-indent-level')).toBe('0')
+  })
+
+  it('shows a tab destination line on the visible collapsed ancestor', () => {
+    const movedTab = makeForegroundTab('tab-moved' as UID)
+    const sourceWindow = makeForegroundWindow('window-source' as UID, [
+      movedTab,
+    ])
+    const collapsedNote = makeForegroundNote('collapsed-note' as UID, {
+      collapsed: true,
+      indentLevel: 0,
+      isParent: true,
+      windowUid: undefined,
+    })
+    const hiddenWindow = makeForegroundWindow('window-hidden' as UID, [], {
+      collapsed: true,
+      indentLevel: 1,
+      isVisible: false,
+      parentUid: collapsedNote.uid,
+    })
+    const trailingNote = makeForegroundNote('trailing-note' as UID, {
+      indentLevel: 0,
+      windowUid: undefined,
+    })
+    resetForegroundTree([
+      sourceWindow,
+      collapsedNote,
+      hiddenWindow,
+      trailingNote,
+    ])
+    DragAndDrop.dragInfo = { dragType: DragType.TAB, items: [movedTab] }
+
+    const visibleAncestor = createFakeDragTarget({
+      id: collapsedNote.uid,
+      type: 'note',
+      classes: ['tree-item'],
+    })
+    restoreDocument()
+    restoreDocument = installFakeDocument([visibleAncestor])
+
+    const target = createFakeDragTarget({
+      id: 'tree-end' as UID,
+      type: 'tree-end',
+    })
+    const event = createFakeDragEvent({ target, yRatio: 0.5 })
+
+    DragAndDrop.onDragMove(event)
+
+    expect(DragAndDrop.dragState.isValidDropTarget).toBe(true)
+    expect(event.dataTransfer?.dropEffect).toBe('move')
+    expect(visibleAncestor.classList.contains('drag-over-tree-end')).toBe(true)
+    expect(visibleAncestor.style.getPropertyValue('--drop-indent-level')).toBe(
+      '2',
+    )
+    expect(target.classList.contains('drag-over-tree-end')).toBe(false)
+  })
+
+  it('shows a tab destination line after the last visible child of an expanded window', () => {
+    const movedTab = makeForegroundTab('tab-moved' as UID)
+    const lastVisibleTab = makeForegroundTab('tab-last-visible' as UID, {
+      indentLevel: 2,
+    })
+    const window = makeForegroundWindow('window-1' as UID, [
+      movedTab,
+      lastVisibleTab,
+    ])
+    resetForegroundTree([window])
+    DragAndDrop.dragInfo = { dragType: DragType.TAB, items: [movedTab] }
+
+    const visibleChild = createFakeDragTarget({
+      id: lastVisibleTab.uid,
+      type: 'tab',
+      classes: ['tree-item'],
+    })
+    restoreDocument()
+    restoreDocument = installFakeDocument([visibleChild])
+
+    const target = createFakeDragTarget({
+      id: 'tree-end' as UID,
+      type: 'tree-end',
+    })
+
+    DragAndDrop.onDragMove(createFakeDragEvent({ target, yRatio: 0.5 }))
+
+    expect(visibleChild.classList.contains('drag-over-tree-end')).toBe(true)
+    expect(visibleChild.style.getPropertyValue('--drop-indent-level')).toBe('1')
+  })
+
+  it('rejects a bottom-area tab drop when the tree has no window', () => {
+    const tab = makeForegroundTab('tab-orphan' as UID)
+    const note = makeForegroundNote('note-1' as UID, {
+      indentLevel: 0,
+      windowUid: undefined,
+    })
+    resetForegroundTree([note])
+    DragAndDrop.dragInfo = { dragType: DragType.TAB, items: [tab] }
+    const target = createFakeDragTarget({
+      id: 'tree-end' as UID,
+      type: 'tree-end',
+    })
+    const event = createFakeDragEvent({ target, yRatio: 0.5 })
+
+    DragAndDrop.onDragMove(event)
+    DragAndDrop.onDrop(event)
+
+    expect(event.dataTransfer?.dropEffect).toBe('none')
+    expectNoMoveCommands()
+  })
+
   it('does not include expanded tab descendants for collapsed-only tab drag drops', () => {
     Settings.values.includeChildrenOfSelectedItems = 'collapsed'
     const parentTab = makeForegroundTab('tab-parent' as UID, {

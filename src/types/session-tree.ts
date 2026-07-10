@@ -130,6 +130,7 @@ export const enum DropType {
   OTHER = 2,
   NOTE = 3,
   SEPARATOR = 4,
+  TREE_END = 5,
 }
 
 export const enum DropPosition {
