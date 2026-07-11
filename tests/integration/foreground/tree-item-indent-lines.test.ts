@@ -3,6 +3,7 @@ import { DEFAULT_SETTINGS } from '@/defaults/settings'
 import { Settings } from '@/services/settings'
 import { State, TreeItem } from '@/types/session-tree'
 import {
+  makeForegroundNote,
   makeForegroundTab,
   makeForegroundWindow,
   resetForegroundTree,
@@ -382,6 +383,32 @@ describe('TreeItem indent guide rendering', () => {
 
     expect(Settings.values.showIndentLinesWithoutChildren).toBe(false)
     expect(countClass(markup, 'indent-line-vertical')).toBe(1)
+  })
+
+  it('continues a nested window guide through its tabs to a later sibling', async () => {
+    const parentNote = makeForegroundNote('parent-note' as UID, {
+      indentLevel: 0,
+      isParent: true,
+      windowUid: undefined,
+    })
+    const tab = makeForegroundTab('window-tab' as UID, {
+      indentLevel: 2,
+      state: State.SAVED,
+    })
+    const nestedWindow = makeForegroundWindow('nested-window' as UID, [tab], {
+      indentLevel: 1,
+      parentUid: parentNote.uid,
+    })
+    const windowSibling = makeForegroundNote('window-sibling' as UID, {
+      indentLevel: 1,
+      parentUid: parentNote.uid,
+      windowUid: undefined,
+    })
+    resetForegroundTree([parentNote, nestedWindow, windowSibling])
+
+    const markup = await renderTreeItem(tab)
+
+    expect(indentGuideColumns(markup)).toEqual(['vertical', 'connector', 'end'])
   })
 
   it('keeps only the direct parent guide line when a later parent sibling continues the branch', async () => {

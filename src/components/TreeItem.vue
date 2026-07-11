@@ -293,10 +293,8 @@ function shouldShowVerticalIndentLine(indentLevel: number): boolean {
 
   const currentIndent = props.item.indentLevel ?? 0
   if (indentLevel >= currentIndent) return false
-  const containingList = getContainingList(props.item)
-  const itemIndex = containingList.findIndex(
-    (item) => item.uid === props.item.uid,
-  )
+  const { containingList, itemUid } = getIndentLineScanContext(indentLevel)
+  const itemIndex = containingList.findIndex((item) => item.uid === itemUid)
   if (itemIndex === -1) return false
 
   for (let i = itemIndex + 1; i < containingList.length; i++) {
@@ -309,6 +307,32 @@ function shouldShowVerticalIndentLine(indentLevel: number): boolean {
   }
 
   return false
+}
+
+function getIndentLineScanContext(indentLevel: number): {
+  containingList: TreeItem[]
+  itemUid: TreeItem['uid']
+} {
+  if (
+    (isTab(props.item) || isNote(props.item) || isSeparator(props.item)) &&
+    props.item.windowUid
+  ) {
+    const containingWindow = SessionTree.windowsByUid.get(props.item.windowUid)
+    if (
+      containingWindow &&
+      indentLevel <= (containingWindow.indentLevel ?? 0)
+    ) {
+      return {
+        containingList: SessionTree.reactiveItems.value as TreeItem[],
+        itemUid: containingWindow.uid,
+      }
+    }
+  }
+
+  return {
+    containingList: getContainingList(props.item),
+    itemUid: props.item.uid,
+  }
 }
 
 function hasFollowingDirectSibling(): boolean {
