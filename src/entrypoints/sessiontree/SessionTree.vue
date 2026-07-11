@@ -2,6 +2,7 @@
 import IconChevronRight from '@/assets/chevron-right.svg'
 import IconPinned from '@/assets/pinned.svg'
 import EditTextModal from '@/components/EditTextModal.vue'
+import SessionTreeToolbar from '@/components/SessionTreeToolbar.vue'
 import TreeItem from '@/components/TreeItem.vue'
 import { DragAndDrop } from '@/services/drag-and-drop'
 import { Favicons } from '@/services/favicons'
@@ -14,6 +15,7 @@ import {
   subscribeTreePort,
 } from '@/services/runtime-port-service'
 import { Selection } from '@/services/selection'
+import * as ToolbarActions from '@/services/session-tree-toolbar-actions'
 import { Settings } from '@/services/settings'
 import '@/styles/variables.css'
 import { TreeItem as SessionTreeItem, TreeItemType } from '@/types/session-tree'
@@ -198,6 +200,13 @@ function handleEditNoteCancel() {
 function handleEditCustomLabelCancel() {
   closeModal()
 }
+
+function runToolbarAction(action: () => void | Promise<void>): void {
+  Selection.clearSelection()
+  Promise.resolve(action()).catch((error) => {
+    console.error('Session tree toolbar action failed:', error)
+  })
+}
 </script>
 
 <template>
@@ -205,39 +214,51 @@ function handleEditCustomLabelCancel() {
     class="sessiontree"
     @contextmenu.prevent
     @click="onClick"
-    @dragend="DragAndDrop.onDragEnd"
-    @dragenter.stop.prevent="DragAndDrop.onDragEnter"
-    @dragleave="DragAndDrop.onDragLeave"
-    @dragover.stop.prevent="DragAndDrop.onDragMove"
-    @drop.stop.prevent="DragAndDrop.onDrop"
   >
-    <button @click="getTabTree">Get Tab Tree</button>
     <div
-      class="hiddenAssets"
-      style="display: none"
+      class="sessiontree-content"
+      @dragend="DragAndDrop.onDragEnd"
+      @dragenter.stop.prevent="DragAndDrop.onDragEnter"
+      @dragleave="DragAndDrop.onDragLeave"
+      @dragover.stop.prevent="DragAndDrop.onDragMove"
+      @drop.stop.prevent="DragAndDrop.onDrop"
     >
-      <svg>
-        <use :xlink:href="`#${IconChevronRight}`" />
-        <use :xlink:href="`#${IconPinned}`" />
-      </svg>
+      <button @click="getTabTree">Get Tab Tree</button>
+      <div
+        class="hiddenAssets"
+        style="display: none"
+      >
+        <svg>
+          <use :xlink:href="`#${IconChevronRight}`" />
+          <use :xlink:href="`#${IconPinned}`" />
+        </svg>
+      </div>
+
+      <template
+        v-for="item in visibleTreeItems"
+        :key="item.uid"
+      >
+        <TreeItem
+          :item="item"
+          :favicon-service="faviconService"
+        />
+      </template>
+
+      <div
+        class="tree-end-drop-target drag-and-drop-target"
+        drag-and-drop-id="tree-end"
+        drag-and-drop-type="tree-end"
+        aria-hidden="true"
+      ></div>
     </div>
 
-    <template
-      v-for="item in visibleTreeItems"
-      :key="item.uid"
-    >
-      <TreeItem
-        :item="item"
-        :favicon-service="faviconService"
-      />
-    </template>
-
-    <div
-      class="tree-end-drop-target drag-and-drop-target"
-      drag-and-drop-id="tree-end"
-      drag-and-drop-type="tree-end"
-      aria-hidden="true"
-    ></div>
+    <SessionTreeToolbar
+      @add-note="runToolbarAction(ToolbarActions.addRootNote)"
+      @add-separator="runToolbarAction(ToolbarActions.addRootSeparator)"
+      @new-window="runToolbarAction(ToolbarActions.createNewWindow)"
+      @new-tab="runToolbarAction(ToolbarActions.createNewTab)"
+      @open-settings="runToolbarAction(ToolbarActions.openSettings)"
+    />
 
     <EditTextModal
       v-if="ModalState.active?.kind === 'editWindowTitle'"
@@ -270,19 +291,28 @@ function handleEditCustomLabelCancel() {
 
 <style scoped>
 .sessiontree {
+  display: flex;
+  flex-direction: column;
   min-width: 200px;
   width: 100%;
   overflow-x: hidden;
-  overflow-y: auto;
+  overflow-y: hidden;
   height: 100vh;
   position: relative;
   margin: 0;
   background-color: var(--background-color-secondary);
 }
 
+.sessiontree-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
 .tree-end-drop-target {
   position: relative;
-  min-height: 95vh;
+  min-height: calc(95vh - 42px);
 }
 </style>
 
