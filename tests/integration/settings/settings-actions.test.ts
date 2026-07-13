@@ -119,6 +119,7 @@ describe('settings actions', () => {
         includeChildrenOfSelectedItems: 'always',
         includeChildrenOfSelectedItemsWhenIndenting: 'never',
         allowDropOntoDescendantItems: false,
+        enableCopyOnDragAndDrop: false,
         tabGroupDropBehavior: 'any-adjacent-group',
         tabGroupColorIndicator: 'left',
         saveTabsWhenTabGroupDeleted: true,
@@ -141,6 +142,7 @@ describe('settings actions', () => {
       'never',
     )
     expect(Settings.values.allowDropOntoDescendantItems).toBe(false)
+    expect(Settings.values.enableCopyOnDragAndDrop).toBe(false)
     expect(Settings.values.tabGroupDropBehavior).toBe('any-adjacent-group')
     expect(Settings.values.tabGroupColorIndicator).toBe('left')
     expect(Settings.values.saveTabsWhenTabGroupDeleted).toBe(true)

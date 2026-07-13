@@ -35,6 +35,7 @@ export interface Settings {
 
   // Drag and Drop
   enableDragAndDrop: boolean
+  enableCopyOnDragAndDrop: boolean
   enableDropFromExternalSources: boolean
   includeSelectedItemsWithDraggedItem: boolean
   includeChildrenOfSelectedItems: (typeof SETTINGS_TYPES.includeChildrenOfSelectedItems)[number]

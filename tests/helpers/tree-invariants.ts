@@ -9,6 +9,7 @@ import {
 
 export function expectTreeInvariants(): void {
   const seenUids = new Set<UID>()
+  const seenTabGroupUids = new Set<UID>()
   const expectedWindows = new Map<UID, Window>()
   const expectedTabs = new Set<UID>()
   const expectedNotes = new Set<UID>()
@@ -44,6 +45,7 @@ export function expectTreeInvariants(): void {
       expectWindowChildrenInvariants(
         item,
         seenUids,
+        seenTabGroupUids,
         expectedTabs,
         expectedNotes,
         expectedSeparators,
@@ -85,6 +87,7 @@ export function expectTreeInvariants(): void {
 function expectWindowChildrenInvariants(
   window: Window,
   seenUids: Set<UID>,
+  seenTabGroupUids: Set<UID>,
   expectedTabs: Set<UID>,
   expectedNotes: Set<UID>,
   expectedSeparators: Set<UID>,
@@ -99,6 +102,14 @@ function expectWindowChildrenInvariants(
     if (child.type === TreeItemType.TAB) {
       expectedTabs.add(child.uid)
       expect(Tree.tabsByUid.get(child.uid)).toBe(child)
+      if (child.tabGroup && !seenTabGroupUids.has(child.tabGroup.uid)) {
+        expect(
+          seenUids.has(child.tabGroup.uid),
+          `tab group uid collides with tree item ${child.tabGroup.uid}`,
+        ).toBe(false)
+        seenTabGroupUids.add(child.tabGroup.uid)
+        seenUids.add(child.tabGroup.uid)
+      }
     } else if (child.type === TreeItemType.NOTE) {
       expectedNotes.add(child.uid)
       expect(Tree.notesByUid.get(child.uid)).toBe(child)

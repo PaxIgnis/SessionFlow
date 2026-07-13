@@ -494,6 +494,11 @@ export function moveWindows(
   targetIndex: number,
   copy: boolean,
 ): void {
+  if (copy) {
+    Tree.copyTreeItems(windowUIDs, targetIndex, undefined, undefined, true)
+    return
+  }
+
   const windows: Window[] = []
   for (const uid of windowUIDs) {
     const window = Tree.windowsByUid.get(uid)
@@ -525,19 +530,17 @@ export function moveWindows(
       continue
     }
 
-    // adjust targetIndex if window is before targetIndex and not copying
-    if (!copy && currentIndex < targetIndex) {
+    // adjust targetIndex if window is before targetIndex
+    if (currentIndex < targetIndex) {
       targetIndex--
     }
 
     // remove window from current position
-    if (!copy) {
-      Tree.Items.splice(currentIndex, 1)
-      emitTreeDelta({
-        op: 'windowRemoved',
-        windowUid: window.uid,
-      })
-    }
+    Tree.Items.splice(currentIndex, 1)
+    emitTreeDelta({
+      op: 'windowRemoved',
+      windowUid: window.uid,
+    })
 
     // insert window at target position
     Tree.Items.splice(targetIndex, 0, window)

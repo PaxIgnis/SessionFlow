@@ -106,8 +106,7 @@ export function onDragEnter(e: DragEvent): void {
     return
   }
 
-  // TODO: drop effect can also be copy when it is implemented
-  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
+  if (e.dataTransfer) e.dataTransfer.dropEffect = getInternalDropEffect(e)
 
   if (type === 'tab') {
     const tab = SessionTree.tabsByUid.get(id)
@@ -147,7 +146,7 @@ export function onDragMove(e: DragEvent): void {
     return
   }
   updateDropTarget(e)
-  showDropIndicator(e, 'move')
+  showDropIndicator(e, getInternalDropEffect(e))
 }
 
 export function onDrop(e: DragEvent): void {
@@ -177,6 +176,7 @@ export function onDrop(e: DragEvent): void {
   const id = DragAndDrop.dragState.destinationId
   const draggedItems = DragAndDrop.dragInfo!.items
   const effectiveSourceType = getEffectiveDragType(draggedItems)
+  const copy = isInternalCopyDrag(e)
   const draggedItemsForMove = draggedItems
   const includeDescendantsForDraggedItems = shouldIncludeDescendantsForDrop(
     effectiveSourceType,
@@ -377,7 +377,7 @@ export function onDrop(e: DragEvent): void {
         dropIndex,
         dropParentUid,
         targetWindowUid,
-        false,
+        copy,
         includeDescendantsForDraggedItems,
       )
     }
@@ -402,7 +402,7 @@ export function onDrop(e: DragEvent): void {
       dropIndex,
       dropParentUid || undefined,
       undefined,
-      false,
+      copy,
     )
   }
   // if src is note and dest is anything
@@ -422,7 +422,7 @@ export function onDrop(e: DragEvent): void {
       dropIndex,
       dropParentUid,
       targetWindowUid,
-      false,
+      copy,
       includeDescendantsForDraggedItems,
     )
   }
@@ -433,7 +433,7 @@ export function onDrop(e: DragEvent): void {
       dropIndex,
       dropParentUid,
       targetWindowUid,
-      false,
+      copy,
       false,
     )
   }
@@ -700,6 +700,18 @@ function showDropIndicator(
   DragAndDrop.dragState.prevEl = indicator.element
 }
 
+function getInternalDropEffect(e: DragEvent): DataTransfer['dropEffect'] {
+  return isInternalCopyDrag(e) ? 'copy' : 'move'
+}
+
+function isInternalCopyDrag(e: DragEvent): boolean {
+  return (
+    DragAndDrop.dragState.dragEventStarted &&
+    Settings.values.enableCopyOnDragAndDrop &&
+    e.altKey
+  )
+}
+
 function reset(): void {
   DragAndDrop.dragState.dragEventStarted = false
   DragAndDrop.dragState.sourceType = null
@@ -879,6 +891,7 @@ function updateDropTarget(
   }
 
   const draggedItems = DragAndDrop.dragInfo?.items ?? []
+  const copyRequested = isInternalCopyDrag(e)
   const disabledDescendantDrop =
     !Settings.values.allowDropOntoDescendantItems &&
     includedDraggedDescendantsContainDestination(draggedItems, id as UID)
@@ -891,7 +904,8 @@ function updateDropTarget(
   // allowed because it represents a descendant drop, not a self drop.
   if (
     DragAndDrop.dragInfo?.items.find((item) => item.uid === id) &&
-    !isIncludedDescendantTarget(draggedItems, id as UID)
+    !isIncludedDescendantTarget(draggedItems, id as UID) &&
+    !copyRequested
   ) {
     return
   }
@@ -991,6 +1005,7 @@ function updateDropTarget(
   // handles detaching the root before validating note parent constraints.
   if (
     sourceType === DragType.NOTE &&
+    !copyRequested &&
     !allowedDescendantDrop &&
     isSelfOrDescendantParentDrop(
       draggedItems,

@@ -107,6 +107,7 @@ function indexChild(child: Tab | Note | Separator): void {
   Tree.existingUidsSet.add(child.uid)
   if (child.type === TreeItemType.TAB) {
     Tree.tabsByUid.set(child.uid, child)
+    if (child.tabGroup) Tree.existingUidsSet.add(child.tabGroup.uid)
   } else if (child.type === TreeItemType.NOTE) {
     Tree.notesByUid.set(child.uid, child)
   } else {

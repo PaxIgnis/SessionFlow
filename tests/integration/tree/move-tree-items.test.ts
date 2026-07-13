@@ -11,13 +11,315 @@ import {
 } from '../../helpers/tree-fixtures'
 import { expectTreeInvariants } from '../../helpers/tree-invariants'
 import { installFakeBrowser } from '../../helpers/fake-browser'
-import { State } from '@/types/session-tree'
+import { State, Tab, Window } from '@/types/session-tree'
 
 describe('moveTreeItems', () => {
   beforeEach(() => {
     resetTree()
     Object.assign(Settings.values, structuredClone(DEFAULT_SETTINGS))
     Settings.values.allowDropOntoDescendantItems = true
+  })
+
+  it('copies a live tab subtree as saved items without changing browser or source state', async () => {
+    const fakeBrowser = installFakeBrowser()
+    const sourceGroup = {
+      uid: 'group-source' as UID,
+      id: 70,
+      title: 'Source group',
+      color: 'blue' as const,
+      collapsed: false,
+    }
+    const sourceTab = createTab('tab-source' as UID, {
+      id: 10,
+      state: State.OPEN,
+      active: true,
+      isParent: true,
+      tabGroup: sourceGroup,
+    })
+    const sourceNote = createNote('note-source-child' as UID, {
+      parentUid: sourceTab.uid,
+      indentLevel: 2,
+    })
+    const sourceChildTab = createTab('tab-source-child' as UID, {
+      id: 11,
+      state: State.DISCARDED,
+      parentUid: sourceTab.uid,
+      indentLevel: 2,
+      tabGroup: sourceGroup,
+    })
+    const sourceWindow = createWindow(
+      'window-source' as UID,
+      [sourceTab, sourceNote, sourceChildTab],
+      { id: 100, state: State.OPEN },
+    )
+    const targetNote = createNote('note-target' as UID)
+    const targetWindow = createWindow('window-target' as UID, [targetNote], {
+      id: 200,
+      state: State.OPEN,
+    })
+
+    await Tree.moveTreeItems(
+      [sourceTab.uid],
+      1,
+      targetNote.uid,
+      targetWindow.uid,
+      true,
+      true,
+    )
+
+    expect(sourceWindow.children).toEqual([
+      sourceTab,
+      sourceNote,
+      sourceChildTab,
+    ])
+    expect(sourceTab.state).toBe(State.OPEN)
+    expect(sourceChildTab.state).toBe(State.DISCARDED)
+    const copiedTab = targetWindow.children[1] as Tab
+    const copiedNote = targetWindow.children[2]
+    const copiedChildTab = targetWindow.children[3] as Tab
+    expect(copiedTab.uid).not.toBe(sourceTab.uid)
+    expect(copiedTab).toMatchObject({
+      id: -1,
+      state: State.SAVED,
+      active: false,
+      parentUid: targetNote.uid,
+      windowUid: targetWindow.uid,
+      indentLevel: 2,
+    })
+    expect(copiedNote.parentUid).toBe(copiedTab.uid)
+    expect(copiedChildTab).toMatchObject({
+      id: -1,
+      state: State.SAVED,
+      active: false,
+      parentUid: copiedTab.uid,
+      windowUid: targetWindow.uid,
+      indentLevel: 3,
+    })
+    expect(copiedTab.tabGroup?.uid).not.toBe(sourceGroup.uid)
+    expect(copiedChildTab.tabGroup).toEqual(copiedTab.tabGroup)
+    expect(copiedTab.tabGroup?.id).toBe(-1)
+    expect(fakeBrowser.tabs.move).not.toHaveBeenCalled()
+    expect(fakeBrowser.tabs.duplicate).not.toHaveBeenCalled()
+    expect(fakeBrowser.windows.create).not.toHaveBeenCalled()
+    expectTreeInvariants()
+  })
+
+  it('copies only the root and clears parent metadata when descendants are excluded', async () => {
+    const parent = createNote('note-parent' as UID, {
+      collapsed: true,
+      isParent: true,
+    })
+    const child = createTab('tab-child' as UID, {
+      parentUid: parent.uid,
+      indentLevel: 2,
+    })
+    const window = createWindow('window-1' as UID, [parent, child])
+
+    await Tree.moveTreeItems(
+      [parent.uid],
+      window.children.length,
+      undefined,
+      window.uid,
+      true,
+      false,
+    )
+
+    expect(window.children).toHaveLength(3)
+    expect(window.children[0]).toBe(parent)
+    expect(window.children[1]).toBe(child)
+    const copy = window.children[2]
+    expect(copy.uid).not.toBe(parent.uid)
+    expect(copy.isParent).toBe(false)
+    expect(copy.collapsed).toBe(false)
+    expect(copy.parentUid).toBeUndefined()
+    expect(parent.isParent).toBe(true)
+    expect(parent.collapsed).toBe(true)
+    expect(child.parentUid).toBe(parent.uid)
+    expectTreeInvariants()
+  })
+
+  it('copies explicitly selected parent and child tabs without unselected descendants', async () => {
+    const ancestor = createTab('tab-ancestor' as UID, { isParent: true })
+    const parent = createTab('tab-parent' as UID, {
+      id: 20,
+      state: State.OPEN,
+      parentUid: ancestor.uid,
+      indentLevel: 2,
+      isParent: true,
+    })
+    const child = createTab('tab-child' as UID, {
+      id: 30,
+      state: State.OPEN,
+      parentUid: parent.uid,
+      indentLevel: 3,
+      isParent: true,
+    })
+    const unselectedGrandchild = createTab('tab-grandchild' as UID, {
+      parentUid: child.uid,
+      indentLevel: 4,
+    })
+    const target = createTab('tab-target' as UID)
+    const window = createWindow('window-1' as UID, [
+      ancestor,
+      parent,
+      child,
+      unselectedGrandchild,
+      target,
+    ])
+
+    await Tree.moveTreeItems(
+      [parent.uid, child.uid],
+      window.children.length,
+      target.uid,
+      window.uid,
+      true,
+      false,
+    )
+
+    expect(window.children).toHaveLength(7)
+    expect(window.children.slice(0, 5)).toEqual([
+      ancestor,
+      parent,
+      child,
+      unselectedGrandchild,
+      target,
+    ])
+    const copiedParent = window.children[5] as Tab
+    const copiedChild = window.children[6] as Tab
+    expect(copiedParent).toMatchObject({
+      state: State.SAVED,
+      parentUid: target.uid,
+      indentLevel: 2,
+      isParent: true,
+    })
+    expect(copiedParent.uid).not.toBe(parent.uid)
+    expect(copiedChild).toMatchObject({
+      state: State.SAVED,
+      parentUid: copiedParent.uid,
+      indentLevel: 3,
+      isParent: false,
+      collapsed: false,
+    })
+    expect(copiedChild.uid).not.toBe(child.uid)
+    expect(unselectedGrandchild.parentUid).toBe(child.uid)
+    expect(child.isParent).toBe(true)
+    expectTreeInvariants()
+  })
+
+  it('uses the destination group when copying a tab between grouped tabs', async () => {
+    const sourceGroup = {
+      uid: 'group-source' as UID,
+      id: 10,
+      title: 'Source',
+      color: 'red' as const,
+      collapsed: false,
+    }
+    const destinationGroup = {
+      uid: 'group-destination' as UID,
+      id: 20,
+      title: 'Destination',
+      color: 'green' as const,
+      collapsed: false,
+    }
+    const sourceTab = createTab('tab-source' as UID, {
+      tabGroup: sourceGroup,
+    })
+    createWindow('window-source' as UID, [sourceTab])
+    const above = createTab('tab-above' as UID, {
+      tabGroup: destinationGroup,
+    })
+    const below = createTab('tab-below' as UID, {
+      tabGroup: destinationGroup,
+    })
+    const targetWindow = createWindow('window-target' as UID, [above, below])
+
+    await Tree.moveTreeItems(
+      [sourceTab.uid],
+      1,
+      undefined,
+      targetWindow.uid,
+      true,
+      false,
+    )
+
+    const copy = targetWindow.children[1] as Tab
+    expect(copy.uid).not.toBe(sourceTab.uid)
+    expect(copy.tabGroup).toEqual({ ...destinationGroup, id: -1 })
+    expect(sourceTab.tabGroup).toEqual(sourceGroup)
+    expectTreeInvariants()
+  })
+
+  it('copies an open window and all tabs as a saved window', async () => {
+    const group = {
+      uid: 'group-source' as UID,
+      id: 30,
+      title: 'Window group',
+      color: 'purple' as const,
+      collapsed: true,
+    }
+    const tab = createTab('tab-source' as UID, {
+      id: 41,
+      state: State.OPEN,
+      active: true,
+      tabGroup: group,
+    })
+    const sourceWindow = createWindow('window-source' as UID, [tab], {
+      id: 40,
+      state: State.OPEN,
+      active: true,
+      activeTabId: tab.id,
+    })
+
+    await Tree.moveTreeItems(
+      [sourceWindow.uid],
+      Tree.Items.length,
+      undefined,
+      undefined,
+      true,
+      true,
+    )
+
+    expect(Tree.Items).toHaveLength(2)
+    expect(Tree.Items[0]).toBe(sourceWindow)
+    const copy = Tree.Items[1] as Window
+    const copiedTab = copy.children[0] as Tab
+    expect(copy.uid).not.toBe(sourceWindow.uid)
+    expect(copy).toMatchObject({
+      id: -1,
+      state: State.SAVED,
+      active: false,
+      activeTabId: undefined,
+    })
+    expect(copiedTab).toMatchObject({
+      id: -1,
+      state: State.SAVED,
+      active: false,
+      windowUid: copy.uid,
+    })
+    expect(copiedTab.tabGroup?.uid).not.toBe(group.uid)
+    expect(copiedTab.tabGroup?.id).toBe(-1)
+    expect(sourceWindow.state).toBe(State.OPEN)
+    expect(tab.state).toBe(State.OPEN)
+    expectTreeInvariants()
+  })
+
+  it('rejects copying a tab to the top-level tree', async () => {
+    const tab = createTab('tab-source' as UID)
+    const window = createWindow('window-source' as UID, [tab])
+
+    await Tree.moveTreeItems(
+      [tab.uid],
+      Tree.Items.length,
+      undefined,
+      undefined,
+      true,
+      false,
+    )
+
+    expect(Tree.Items).toEqual([window])
+    expect(window.children).toEqual([tab])
+    expect(Tree.tabsByUid.size).toBe(1)
+    expectTreeInvariants()
   })
 
   it('removes the source window when its only note is moved to another window', () => {
@@ -250,6 +552,117 @@ describe('moveTreeItems', () => {
     expect(note.isParent).toBe(false)
     expect(childTab.parentUid).toBeUndefined()
     expect(childTab.indentLevel).toBe(1)
+    expectTreeInvariants()
+  })
+
+  it('moves explicitly selected indented parent and child without their unselected descendant', async () => {
+    const ancestor = createTab('tab-ancestor' as UID, { isParent: true })
+    const parent = createTab('tab-parent' as UID, {
+      parentUid: ancestor.uid,
+      indentLevel: 2,
+      isParent: true,
+    })
+    const child = createTab('tab-child' as UID, {
+      parentUid: parent.uid,
+      indentLevel: 3,
+      isParent: true,
+    })
+    const unselectedGrandchild = createTab('tab-grandchild' as UID, {
+      parentUid: child.uid,
+      indentLevel: 4,
+    })
+    const target = createTab('tab-target' as UID)
+    const window = createWindow('window-1' as UID, [
+      ancestor,
+      parent,
+      child,
+      unselectedGrandchild,
+      target,
+    ])
+
+    await Tree.moveTreeItems(
+      [parent.uid, child.uid],
+      window.children.length,
+      target.uid,
+      window.uid,
+      false,
+      false,
+    )
+
+    expect(window.children).toEqual([
+      ancestor,
+      unselectedGrandchild,
+      target,
+      parent,
+      child,
+    ])
+    expect(parent.parentUid).toBe(target.uid)
+    expect(parent.indentLevel).toBe(2)
+    expect(parent.isParent).toBe(true)
+    expect(child.parentUid).toBe(parent.uid)
+    expect(child.indentLevel).toBe(3)
+    expect(child.isParent).toBe(false)
+    expect(unselectedGrandchild.parentUid).toBe(ancestor.uid)
+    expect(unselectedGrandchild.indentLevel).toBe(2)
+    expectTreeInvariants()
+  })
+
+  it('moves both explicitly selected open parent and child tabs through Firefox', async () => {
+    const fakeBrowser = installFakeBrowser()
+    const ancestor = createTab('tab-ancestor' as UID, {
+      id: 10,
+      state: State.OPEN,
+      isParent: true,
+    })
+    const parent = createTab('tab-parent' as UID, {
+      id: 20,
+      state: State.OPEN,
+      parentUid: ancestor.uid,
+      indentLevel: 2,
+      isParent: true,
+    })
+    const child = createTab('tab-child' as UID, {
+      id: 30,
+      state: State.OPEN,
+      parentUid: parent.uid,
+      indentLevel: 3,
+    })
+    const target = createTab('tab-target' as UID, {
+      id: 40,
+      state: State.OPEN,
+    })
+    const window = createWindow(
+      'window-1' as UID,
+      [ancestor, parent, child, target],
+      { id: 100, state: State.OPEN },
+    )
+    fakeBrowser.tabs.move
+      .mockResolvedValueOnce({ id: parent.id } as browser.tabs.Tab)
+      .mockResolvedValueOnce({ id: child.id } as browser.tabs.Tab)
+
+    await Tree.moveTreeItems(
+      [parent.uid, child.uid],
+      window.children.length,
+      target.uid,
+      window.uid,
+      false,
+      false,
+    )
+
+    expect(fakeBrowser.tabs.move).toHaveBeenCalledTimes(2)
+    expect(window.children.map((item) => item.uid)).toEqual([
+      ancestor.uid,
+      target.uid,
+      parent.uid,
+      child.uid,
+    ])
+    const movedParent = Tree.tabsByUid.get(parent.uid)
+    const movedChild = Tree.tabsByUid.get(child.uid)
+    expect(movedParent?.parentUid).toBe(target.uid)
+    expect(movedParent?.indentLevel).toBe(2)
+    expect(movedParent?.isParent).toBe(true)
+    expect(movedChild?.parentUid).toBe(parent.uid)
+    expect(movedChild?.indentLevel).toBe(3)
     expectTreeInvariants()
   })
 

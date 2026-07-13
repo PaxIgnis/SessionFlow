@@ -303,6 +303,89 @@ describe('critical Firefox UI workflows', () => {
     await expectSingleOpenWindowWithRootTabs([SESSION_FIXTURE_TITLES.initial])
   })
 
+  it('Alt-copies an explicitly selected expanded parent and child hierarchy', async () => {
+    await openSeededSessionTree()
+    await sessionTree.updateSettings({
+      enableCopyOnDragAndDrop: true,
+      includeChildrenOfSelectedItems: 'collapsed',
+    })
+
+    await switchToPrimaryBrowserWindow()
+    const alphaHandle = await openFixtureTab(seed, SESSION_FIXTURE_TITLES.alpha)
+    const betaHandle = await openFixtureTab(seed, SESSION_FIXTURE_TITLES.beta)
+    await browser.switchToWindow(popup.popupHandle)
+
+    await sessionTree.dragTreeItem(
+      SESSION_FIXTURE_TITLES.alpha,
+      SESSION_FIXTURE_TITLES.initial,
+      DropPosition.Middle,
+    )
+    await sessionTree.dragTreeItem(
+      SESSION_FIXTURE_TITLES.beta,
+      SESSION_FIXTURE_TITLES.alpha,
+      DropPosition.Middle,
+    )
+    await sessionTree.selectTreeItemRange(
+      SESSION_FIXTURE_TITLES.alpha,
+      SESSION_FIXTURE_TITLES.beta,
+    )
+    await sessionTree.dragTreeItem(
+      SESSION_FIXTURE_TITLES.alpha,
+      SESSION_FIXTURE_TITLES.initial,
+      DropPosition.Above,
+      { altKey: true },
+    )
+
+    await sessionTree.waitForBackgroundTree((tree) => {
+      const windowItem = onlyOpenWindow(tree)
+      if (!windowItem) return false
+      const tabs = tabsInWindow(windowItem)
+      const alphaTabs = tabs.filter(
+        (tab) => tab.title === SESSION_FIXTURE_TITLES.alpha,
+      )
+      const betaTabs = tabs.filter(
+        (tab) => tab.title === SESSION_FIXTURE_TITLES.beta,
+      )
+      const initial = tabs.find(
+        (tab) => tab.title === SESSION_FIXTURE_TITLES.initial,
+      )
+      const openAlpha = alphaTabs.find(
+        (tab) => tab.state === TreeItemState.Open,
+      )
+      const copiedAlpha = alphaTabs.find(
+        (tab) => tab.state === TreeItemState.Saved,
+      )
+      const openBeta = betaTabs.find((tab) => tab.state === TreeItemState.Open)
+      const copiedBeta = betaTabs.find(
+        (tab) => tab.state === TreeItemState.Saved,
+      )
+
+      return Boolean(
+        initial &&
+        openAlpha &&
+        copiedAlpha &&
+        openBeta &&
+        copiedBeta &&
+        openAlpha.parentUid === initial.uid &&
+        openBeta.parentUid === openAlpha.uid &&
+        copiedAlpha.parentUid === undefined &&
+        copiedAlpha.indentLevel === 1 &&
+        copiedBeta.parentUid === copiedAlpha.uid &&
+        copiedBeta.indentLevel === 2,
+      )
+    }, 'Expected Alt-copy to preserve both explicitly selected tabs and their hierarchy.')
+    await expectBrowserTabCountByTitle(SESSION_FIXTURE_TITLES.alpha, 1)
+    await expectBrowserTabCountByTitle(SESSION_FIXTURE_TITLES.beta, 1)
+
+    await removeSavedFixtureTab(SESSION_FIXTURE_TITLES.beta)
+    await removeSavedFixtureTab(SESSION_FIXTURE_TITLES.alpha)
+    await removeFixtureTab(SESSION_FIXTURE_TITLES.beta)
+    await removeFixtureTab(SESSION_FIXTURE_TITLES.alpha)
+    await waitForBrowserHandleClosed(betaHandle, SESSION_FIXTURE_TITLES.beta)
+    await waitForBrowserHandleClosed(alphaHandle, SESSION_FIXTURE_TITLES.alpha)
+    await expectSingleOpenWindowWithRootTabs([SESSION_FIXTURE_TITLES.initial])
+  })
+
   it('drags a tab below its descendant tab without blocking or corrupting the tree', async () => {
     await openSeededSessionTree()
 

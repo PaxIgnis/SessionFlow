@@ -19,6 +19,14 @@ import { STRINGS } from '@/types/strings'
     />
     <ToggleButton
       class="dependent-element"
+      label="Hold Alt While Dragging to Copy Items"
+      v-model="Settings.values.enableCopyOnDragAndDrop"
+      :options="OPTIONS.boolean"
+      :disabled="!Settings.values.enableDragAndDrop"
+      @update="Settings.saveSettingsToStorage()"
+    />
+    <ToggleButton
+      class="dependent-element"
       label="Enable Drop from External Sources"
       v-model="Settings.values.enableDropFromExternalSources"
       :options="OPTIONS.boolean"

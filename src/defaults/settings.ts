@@ -37,6 +37,7 @@ export const DEFAULT_SETTINGS: Settings = {
 
   // Drag and Drop
   enableDragAndDrop: true,
+  enableCopyOnDragAndDrop: true,
   enableDropFromExternalSources: false,
   includeSelectedItemsWithDraggedItem: true,
   includeChildrenOfSelectedItems: 'collapsed',

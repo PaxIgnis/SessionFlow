@@ -1163,7 +1163,6 @@ export async function moveTab(
   copy: boolean = false,
   emitDelta: boolean = true,
 ): Promise<UID | void> {
-  // TODO: implement copy functionality
   console.log(
     'moveTab: ',
     tabUID,
@@ -1195,6 +1194,16 @@ export async function moveTab(
       `moveTab: Parent item ${effectiveParentUid} not found in target window`,
     )
     return
+  }
+  if (copy) {
+    return Tree.copyTreeItems(
+      [tabUID],
+      targetIndex,
+      effectiveParentUid,
+      targetWindowUid,
+      false,
+      emitDelta,
+    )[0]
   }
   if (effectiveParentUid === tab.uid) {
     if (!Settings.values.allowDropOntoDescendantItems) {

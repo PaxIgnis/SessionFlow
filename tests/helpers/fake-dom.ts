@@ -96,6 +96,7 @@ export function createFakeDragEvent(options: {
   types?: string[]
   mozItems?: unknown[]
   throwOnGetData?: boolean
+  altKey?: boolean
 }): DragEvent {
   const rect = options.target.getBoundingClientRect()
   const data = options.data ?? {}
@@ -103,6 +104,7 @@ export function createFakeDragEvent(options: {
   return {
     target: options.target,
     clientY: rect.top + rect.height * options.yRatio,
+    altKey: options.altKey ?? false,
     dataTransfer: {
       dropEffect: 'none',
       types,

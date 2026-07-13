@@ -433,7 +433,35 @@ export class SessionTreePage {
     }
   }
 
-  async dragTreeItem(sourceText, targetText, position) {
+  async selectTreeItemRange(firstText, lastText) {
+    const first = await this.treeItemByText(firstText)
+    const last = await this.treeItemByText(lastText)
+
+    await expect(first).toBeDisplayed()
+    await expect(last).toBeDisplayed()
+
+    await browser.execute(
+      (firstElement, lastElement) => {
+        firstElement.dispatchEvent(
+          new MouseEvent('click', {
+            bubbles: true,
+            cancelable: true,
+          }),
+        )
+        lastElement.dispatchEvent(
+          new MouseEvent('click', {
+            bubbles: true,
+            cancelable: true,
+            shiftKey: true,
+          }),
+        )
+      },
+      first,
+      last,
+    )
+  }
+
+  async dragTreeItem(sourceText, targetText, position, options = {}) {
     const source = await this.treeItemByText(sourceText)
     const target = await this.treeItemByText(targetText)
 
@@ -441,7 +469,7 @@ export class SessionTreePage {
     await expect(target).toBeDisplayed()
 
     await browser.execute(
-      (sourceElement, targetElement, dropPosition) => {
+      (sourceElement, targetElement, dropPosition, dragOptions) => {
         const dataTransfer = new DataTransfer()
         const targetRect = targetElement.getBoundingClientRect()
         const clientX = Math.floor(targetRect.left + targetRect.width / 2)
@@ -455,6 +483,7 @@ export class SessionTreePage {
               clientX,
               clientY,
               dataTransfer,
+              altKey: dragOptions.altKey === true,
             }),
           )
         }
@@ -480,6 +509,7 @@ export class SessionTreePage {
       source,
       target,
       position,
+      options,
     )
   }
 }

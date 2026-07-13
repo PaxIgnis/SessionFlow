@@ -3,7 +3,7 @@ import { DEFAULT_SETTINGS } from '@/defaults/settings'
 import { OnCreatedQueue } from '@/services/background-on-created-queue'
 import { Tree } from '@/services/background-tree'
 import { Settings } from '@/services/settings'
-import { State } from '@/types/session-tree'
+import { State, Window } from '@/types/session-tree'
 import { flushMicrotasks, installFakeBrowser } from '../../helpers/fake-browser'
 import {
   createNote,
@@ -250,6 +250,33 @@ describe('window actions', () => {
       first.uid,
       third.uid,
     ])
+    expectTreeInvariants()
+  })
+
+  it('copies windows with fresh saved identities through moveWindows', () => {
+    const tab = createTab('tab-open' as UID, {
+      id: 11,
+      state: State.OPEN,
+    })
+    const source = createWindow('window-source' as UID, [tab], {
+      id: 10,
+      state: State.OPEN,
+    })
+
+    Tree.moveWindows([source.uid], 1, true)
+
+    expect(Tree.Items).toHaveLength(2)
+    expect(Tree.Items[0]).toBe(source)
+    const copy = Tree.Items[1] as Window
+    expect(copy.uid).not.toBe(source.uid)
+    expect(copy.id).toBe(-1)
+    expect(copy.state).toBe(State.SAVED)
+    expect(copy.children[0].uid).not.toBe(tab.uid)
+    expect(copy.children[0]).toMatchObject({
+      id: -1,
+      state: State.SAVED,
+      windowUid: copy.uid,
+    })
     expectTreeInvariants()
   })
 

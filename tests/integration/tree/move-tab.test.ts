@@ -116,6 +116,48 @@ describe('moveTab', () => {
     expect(tab.parentUid).toBeUndefined()
     expectTreeInvariants()
   })
+
+  it('copies an open tab as a saved tab through the moveTab copy flag', async () => {
+    const fakeBrowser = installFakeBrowser()
+    const sourceTab = createTab('tab-source' as UID, {
+      id: 10,
+      state: State.OPEN,
+      active: true,
+    })
+    const sourceWindow = createWindow('window-source' as UID, [sourceTab], {
+      id: 100,
+      state: State.OPEN,
+    })
+    const targetNote = createNote('note-target' as UID)
+    const targetWindow = createWindow('window-target' as UID, [targetNote], {
+      id: 200,
+      state: State.OPEN,
+    })
+
+    const copiedUid = await Tree.moveTab(
+      sourceTab.uid,
+      targetWindow.uid,
+      1,
+      targetNote.uid,
+      true,
+      true,
+    )
+
+    expect(copiedUid).toBeDefined()
+    expect(sourceWindow.children).toEqual([sourceTab])
+    expect(sourceTab.state).toBe(State.OPEN)
+    const copy = Tree.tabsByUid.get(copiedUid!)
+    expect(copy).toMatchObject({
+      id: -1,
+      state: State.SAVED,
+      active: false,
+      parentUid: targetNote.uid,
+      windowUid: targetWindow.uid,
+    })
+    expect(fakeBrowser.tabs.move).not.toHaveBeenCalled()
+    expect(fakeBrowser.tabs.duplicate).not.toHaveBeenCalled()
+    expectTreeInvariants()
+  })
 })
 
 describe('moveTreeItems tab moves', () => {

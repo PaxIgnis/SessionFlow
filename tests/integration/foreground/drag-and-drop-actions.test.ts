@@ -83,6 +83,89 @@ describe('drag-and-drop onDrop command path', () => {
     expect(moveWindows).not.toHaveBeenCalled()
   })
 
+  it('uses the copy effect and copy command flag while Alt is held', () => {
+    const tab = makeForegroundTab('tab-1' as UID)
+    const window = makeForegroundWindow('window-1' as UID, [tab])
+    resetForegroundTree([window])
+    DragAndDrop.dragInfo = { dragType: DragType.TAB, items: [tab] }
+    const target = createFakeDragTarget({ id: window.uid, type: 'window' })
+    const event = createFakeDragEvent({
+      target,
+      yRatio: 0.5,
+      altKey: true,
+    })
+
+    DragAndDrop.onDragMove(event)
+    expect(event.dataTransfer?.dropEffect).toBe('copy')
+
+    DragAndDrop.onDrop(event)
+
+    expect(moveTreeItems).toHaveBeenCalledWith(
+      [tab.uid],
+      0,
+      undefined,
+      window.uid,
+      true,
+      false,
+    )
+  })
+
+  it('ignores Alt when drag-and-drop copying is disabled', () => {
+    Settings.values.enableCopyOnDragAndDrop = false
+    const tab = makeForegroundTab('tab-1' as UID)
+    const window = makeForegroundWindow('window-1' as UID, [tab])
+    resetForegroundTree([window])
+    DragAndDrop.dragInfo = { dragType: DragType.TAB, items: [tab] }
+    const target = createFakeDragTarget({ id: window.uid, type: 'window' })
+    const event = createFakeDragEvent({
+      target,
+      yRatio: 0.5,
+      altKey: true,
+    })
+
+    DragAndDrop.onDragMove(event)
+    expect(event.dataTransfer?.dropEffect).toBe('move')
+
+    DragAndDrop.onDrop(event)
+
+    expect(moveTreeItems).toHaveBeenCalledWith(
+      [tab.uid],
+      0,
+      undefined,
+      window.uid,
+      false,
+      false,
+    )
+  })
+
+  it('allows an Alt-drag copy below the dragged item itself', () => {
+    Settings.values.enableCopyOnDragAndDrop = true
+    const tab = makeForegroundTab('tab-1' as UID)
+    const window = makeForegroundWindow('window-1' as UID, [tab])
+    resetForegroundTree([window])
+    DragAndDrop.dragInfo = { dragType: DragType.TAB, items: [tab] }
+    const target = createFakeDragTarget({ id: tab.uid, type: 'tab' })
+    const event = createFakeDragEvent({
+      target,
+      yRatio: 0.9,
+      altKey: true,
+    })
+
+    DragAndDrop.onDragMove(event)
+    expect(DragAndDrop.dragState.isValidDropTarget).toBe(true)
+    expect(event.dataTransfer?.dropEffect).toBe('copy')
+    DragAndDrop.onDrop(event)
+
+    expect(moveTreeItems).toHaveBeenCalledWith(
+      [tab.uid],
+      1,
+      undefined,
+      window.uid,
+      true,
+      false,
+    )
+  })
+
   it('appends a tab to the last logical window and ignores later non-window items', () => {
     const movedTab = makeForegroundTab('tab-moved' as UID)
     const sourceWindow = makeForegroundWindow('window-source' as UID, [
@@ -369,6 +452,66 @@ describe('drag-and-drop onDrop command path', () => {
     expect(moveTabs).not.toHaveBeenCalled()
     expect(moveWindows).not.toHaveBeenCalled()
   })
+
+  it.each([
+    { label: 'moves', altKey: false, copy: false },
+    { label: 'copies', altKey: true, copy: true },
+  ])(
+    '$label an expanded parent and child when both tabs were explicitly selected',
+    ({ altKey, copy }) => {
+      Settings.values.includeChildrenOfSelectedItems = 'collapsed'
+      const targetTab = makeForegroundTab('tab-target' as UID)
+      const ancestorTab = makeForegroundTab('tab-ancestor' as UID, {
+        isParent: true,
+      })
+      const parentTab = makeForegroundTab('tab-parent' as UID, {
+        collapsed: false,
+        indentLevel: 2,
+        isParent: true,
+        parentUid: ancestorTab.uid,
+        selected: true,
+      })
+      const childTab = makeForegroundTab('tab-child' as UID, {
+        indentLevel: 3,
+        parentUid: parentTab.uid,
+        selected: true,
+      })
+      const window = makeForegroundWindow('window-1' as UID, [
+        targetTab,
+        ancestorTab,
+        parentTab,
+        childTab,
+      ])
+      resetForegroundTree([window])
+      DragAndDrop.dragInfo = {
+        dragType: DragType.TAB,
+        items: [parentTab, childTab],
+      }
+
+      const target = createFakeDragTarget({
+        id: targetTab.uid,
+        type: 'tab',
+      })
+      const event = createFakeDragEvent({
+        target,
+        yRatio: 0.5,
+        altKey,
+      })
+
+      DragAndDrop.onDrop(event)
+
+      expect(moveTreeItems).toHaveBeenCalledWith(
+        [parentTab.uid, childTab.uid],
+        1,
+        targetTab.uid,
+        window.uid,
+        copy,
+        false,
+      )
+      expect(moveTabs).not.toHaveBeenCalled()
+      expect(moveWindows).not.toHaveBeenCalled()
+    },
+  )
 
   it('marks external drag enter and move events as copy when external drops are enabled', () => {
     const window = makeForegroundWindow('window-1' as UID)
