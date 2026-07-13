@@ -47,6 +47,7 @@ async function loadBackgroundHandlers() {
     deselectAllItems: vi.fn(),
     treeItemIndentIncrease: vi.fn(),
     treeItemIndentDecrease: vi.fn(),
+    importExternalUrls: vi.fn(),
     moveTabs: vi.fn(),
     moveTreeItems: vi.fn(),
     moveWindows: vi.fn(),
@@ -1208,6 +1209,23 @@ describe('background handlers', () => {
 
     expect(mocks.moveTabs).not.toHaveBeenCalled()
     expect(mocks.moveTreeItems).not.toHaveBeenCalled()
+  })
+
+  it('routes external URL imports through the background tree', async () => {
+    const { initializeListeners, mocks } = await loadBackgroundHandlers()
+    initializeListeners()
+    const dispatchCommand = getDispatchCommand(mocks.initializeSessionTreePort)
+    const message = {
+      action: 'importExternalUrls' as const,
+      items: [{ url: 'https://example.test/', title: 'Example' }],
+      targetIndex: 2,
+      parentUid: 'tab-parent' as UID,
+      targetWindowUid: 'window-1' as UID,
+    }
+
+    await dispatchCommand(message)
+
+    expect(mocks.importExternalUrls).toHaveBeenCalledWith(message)
   })
 
   it('updates window titles and custom labels only when indexed items exist', async () => {

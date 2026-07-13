@@ -92,11 +92,27 @@ export function createFakeDragTarget(options: {
 export function createFakeDragEvent(options: {
   target: FakeDragTarget
   yRatio: number
+  data?: Record<string, string>
+  types?: string[]
+  mozItems?: unknown[]
+  throwOnGetData?: boolean
 }): DragEvent {
   const rect = options.target.getBoundingClientRect()
+  const data = options.data ?? {}
+  const types = options.types ?? Object.keys(data)
   return {
     target: options.target,
     clientY: rect.top + rect.height * options.yRatio,
-    dataTransfer: { dropEffect: 'none' },
+    dataTransfer: {
+      dropEffect: 'none',
+      types,
+      getData: (type: string) => {
+        if (options.throwOnGetData)
+          throw new DOMException('Protected drag data')
+        return data[type] ?? ''
+      },
+      mozItemCount: options.mozItems?.length ?? 0,
+      mozGetDataAt: (_type: string, index: number) => options.mozItems?.[index],
+    },
   } as unknown as DragEvent
 }

@@ -818,6 +818,8 @@ async function dispatchCommand(
     Tree.createSeparatorBelow(message.separatorUid)
   } else if (message.action === 'deselectAllItems') {
     Tree.deselectAllItems()
+  } else if (message.action === 'importExternalUrls') {
+    await Tree.importExternalUrls(message)
   } else if (message.action === 'moveTreeItems') {
     await Tree.moveTreeItems(
       message.itemUIDs,

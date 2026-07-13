@@ -1,4 +1,8 @@
 import { DragAndDrop } from '@/services/drag-and-drop'
+import {
+  hasSupportedExternalDropType,
+  parseExternalDrop,
+} from '@/services/external-drop'
 import * as Messages from '@/services/foreground-messages'
 import { SessionTree } from '@/services/foreground-tree'
 import { Selection } from '@/services/selection'
@@ -71,9 +75,8 @@ export function start(dragInfo: DragInfo): void {
 }
 
 export function onDragEnd(e: DragEvent): void {
-  // reset()
-  if (!Settings.values.enableDragAndDrop) return
   console.debug('drag-and-drop-actions.onDragEnd: Drag ended:', e)
+  reset()
 }
 
 export function onDragEnter(e: DragEvent): void {
@@ -81,9 +84,9 @@ export function onDragEnter(e: DragEvent): void {
   if (!Settings.values.enableDragAndDrop) return
   if (!DragAndDrop.dragState.dragEventStarted) {
     if (!Settings.values.enableDropFromExternalSources) return
-    // TODO: Handle drop from external source verification here
-    console.warn('drag-and-drop-actions.onDragEnter: External drag enter', e)
-
+    if (!hasSupportedExternalDropType(e.dataTransfer)) return
+    updateDropTarget(e, DragType.TAB, true)
+    if (!DragAndDrop.dragState.isValidDropTarget) return
     if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
     return
   }
@@ -106,11 +109,9 @@ export function onDragEnter(e: DragEvent): void {
   // TODO: drop effect can also be copy when it is implemented
   if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
 
-  // TODO: Validate drop target here, later
   if (type === 'tab') {
-    // TODO: Check if tab exists when tabsByUid is implemented in foreground tree
-    // const tab = SessionTree.tabsByUid.get(id)
-    // if (!tab) return
+    const tab = SessionTree.tabsByUid.get(id)
+    if (!tab) return
     DragAndDrop.dragState.destinationId = id
   } else if (type === 'window') {
     const window = SessionTree.windowsByUid.get(id)
@@ -138,70 +139,24 @@ export function onDragLeave(e: DragEvent): void {
 export function onDragMove(e: DragEvent): void {
   if (e.dataTransfer) e.dataTransfer.dropEffect = 'none'
   if (!Settings.values.enableDragAndDrop) return
-  // verify external drag is valid before setting drop effect
   if (!DragAndDrop.dragState.dragEventStarted) {
     if (!Settings.values.enableDropFromExternalSources) return
-    // TODO: Handle drop from external source verification here
-    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
+    if (!hasSupportedExternalDropType(e.dataTransfer)) return
+    updateDropTarget(e, DragType.TAB, true)
+    showDropIndicator(e, 'copy', DragType.TAB)
     return
   }
   updateDropTarget(e)
-
-  const el = (e.target as HTMLElement)?.closest(
-    '.drag-and-drop-target',
-  ) as HTMLElement | null
-
-  if (!el) return
-  if (!el.getAttribute) return
-
-  const indicator = getDropIndicator(el)
-
-  if (
-    DragAndDrop.dragState.prevEl &&
-    DragAndDrop.dragState.prevEl !== indicator.element
-  ) {
-    clearDragIndicators(DragAndDrop.dragState.prevEl)
-  }
-
-  // add drag indicator classes to visualize drop position
-  if (DragAndDrop.dragState.isValidDropTarget) {
-    // TODO: drop effect can also be copy when it is implemented
-    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
-    if (DragAndDrop.dragState.destinationType === DropType.TREE_END) {
-      indicator.element.style.setProperty(
-        '--drop-indent-level',
-        String(indicator.indentLevel),
-      )
-      indicator.element.classList.add('drag-over-tree-end')
-      indicator.element.classList.remove(
-        'drag-over-above',
-        'drag-over-mid',
-        'drag-over-below',
-      )
-    } else {
-      switch (DragAndDrop.dragState.dropPosition) {
-        case DropPosition.ABOVE:
-          el.classList.add('drag-over-above')
-          el.classList.remove('drag-over-mid', 'drag-over-below')
-          break
-        case DropPosition.MID:
-          el.classList.add('drag-over-mid')
-          el.classList.remove('drag-over-above', 'drag-over-below')
-          break
-        case DropPosition.BELOW:
-          el.classList.add('drag-over-below')
-          el.classList.remove('drag-over-above', 'drag-over-mid')
-          break
-      }
-    }
-  }
-
-  DragAndDrop.dragState.prevEl = indicator.element
+  showDropIndicator(e, 'move')
 }
 
 export function onDrop(e: DragEvent): void {
   console.log(DragAndDrop.dragState)
   if (!Settings.values.enableDragAndDrop) return
+  if (!DragAndDrop.dragState.dragEventStarted) {
+    handleExternalDrop(e)
+    return
+  }
   updateDropTarget(e)
 
   if (
@@ -486,6 +441,265 @@ export function onDrop(e: DragEvent): void {
   reset()
 }
 
+function handleExternalDrop(e: DragEvent): void {
+  if (
+    !Settings.values.enableDropFromExternalSources ||
+    !hasSupportedExternalDropType(e.dataTransfer)
+  ) {
+    reset()
+    return
+  }
+
+  const payload = parseExternalDrop(e.dataTransfer)
+  const tabsByBrowserId = new Map(
+    [...SessionTree.tabsByUid.values()]
+      .filter((tab) => tab.id >= 0)
+      .map((tab) => [tab.id, tab] as const),
+  )
+  const draggedTabs = payload.firefoxTabIds
+    .map((tabId) => tabsByBrowserId.get(tabId))
+    .filter((tab) => tab !== undefined)
+  const isReliableNativeTabMove =
+    payload.firefoxTabIds.length > 0 &&
+    draggedTabs.length === payload.firefoxTabIds.length
+
+  if (isReliableNativeTabMove) {
+    DragAndDrop.dragInfo = {
+      dragType: DragType.TAB,
+      items: draggedTabs,
+    }
+    DragAndDrop.dragState.sourceType = DragType.TAB
+  }
+
+  updateDropTarget(e, DragType.TAB, true)
+  const destination = getExternalTabDropDestination()
+  if (!DragAndDrop.dragState.isValidDropTarget || !destination) {
+    reset()
+    return
+  }
+
+  if (isReliableNativeTabMove) {
+    Messages.moveTreeItems(
+      draggedTabs.map((tab) => tab.uid),
+      destination.dropIndex,
+      destination.dropParentUid,
+      destination.targetWindowUid,
+      false,
+      false,
+    )
+  } else if (payload.items.length > 0) {
+    Messages.importExternalUrls(
+      payload.items,
+      destination.dropIndex,
+      destination.dropParentUid,
+      destination.targetWindowUid,
+    )
+  }
+
+  reset()
+}
+
+function getExternalTabDropDestination(): {
+  dropIndex: number
+  dropParentUid?: UID
+  targetWindowUid?: UID
+} | null {
+  const id = DragAndDrop.dragState.destinationId
+  const destinationType = DragAndDrop.dragState.destinationType
+  const dropPosition = DragAndDrop.dragState.dropPosition
+  if (!id || destinationType === null) return null
+
+  if (destinationType === DropType.TAB) {
+    const destinationTab = SessionTree.tabsByUid.get(id as UID)
+    const destinationWindow = destinationTab
+      ? SessionTree.windowsByUid.get(destinationTab.windowUid)
+      : undefined
+    if (!destinationTab || !destinationWindow) return null
+
+    const destinationIndex = destinationWindow.children.findIndex(
+      (item) => item.uid === destinationTab.uid,
+    )
+    if (destinationIndex === -1) return null
+
+    if (dropPosition === DropPosition.ABOVE) {
+      return {
+        dropIndex: destinationIndex,
+        dropParentUid: destinationTab.parentUid,
+        targetWindowUid: destinationWindow.uid,
+      }
+    }
+    if (dropPosition === DropPosition.MID) {
+      return {
+        dropIndex: destinationIndex + 1,
+        dropParentUid: destinationTab.uid,
+        targetWindowUid: destinationWindow.uid,
+      }
+    }
+    if (dropPosition === DropPosition.BELOW) {
+      const targetIndent = destinationTab.indentLevel ?? 1
+      let dropIndex = destinationWindow.children.length
+      for (
+        let index = destinationIndex + 1;
+        index < destinationWindow.children.length;
+        index++
+      ) {
+        if (
+          (destinationWindow.children[index].indentLevel ?? 1) <= targetIndent
+        ) {
+          dropIndex = index
+          break
+        }
+      }
+      return {
+        dropIndex,
+        dropParentUid: destinationTab.parentUid,
+        targetWindowUid: destinationWindow.uid,
+      }
+    }
+    return null
+  }
+
+  if (destinationType === DropType.WINDOW) {
+    const destinationWindow = SessionTree.windowsByUid.get(id as UID)
+    if (!destinationWindow || dropPosition !== DropPosition.MID) return null
+    return {
+      dropIndex: 0,
+      targetWindowUid: destinationWindow.uid,
+    }
+  }
+
+  if (destinationType === DropType.NOTE) {
+    const destinationNote = SessionTree.notesByUid.get(id as UID)
+    if (!destinationNote?.windowUid) return null
+    const destination = findItemLocation(
+      SessionTree.reactiveItems.value as TreeItem[],
+      destinationNote.uid,
+    )
+    if (!destination) return null
+
+    if (dropPosition === DropPosition.ABOVE) {
+      return {
+        dropIndex: destination.index,
+        dropParentUid: destination.parent,
+        targetWindowUid: destinationNote.windowUid,
+      }
+    }
+    if (dropPosition === DropPosition.MID) {
+      return {
+        dropIndex: destination.index + 1,
+        dropParentUid: destinationNote.uid,
+        targetWindowUid: destinationNote.windowUid,
+      }
+    }
+    if (dropPosition === DropPosition.BELOW) {
+      const targetIndent = destinationNote.indentLevel ?? 0
+      let dropIndex = destination.children.length
+      for (
+        let index = destination.index + 1;
+        index < destination.children.length;
+        index++
+      ) {
+        if ((destination.children[index].indentLevel ?? 0) <= targetIndent) {
+          dropIndex = index
+          break
+        }
+      }
+      return {
+        dropIndex,
+        dropParentUid: destination.parent,
+        targetWindowUid: destinationNote.windowUid,
+      }
+    }
+    return null
+  }
+
+  if (destinationType === DropType.SEPARATOR) {
+    const separator = SessionTree.separatorsByUid.get(id as UID)
+    if (!separator?.windowUid) return null
+    const destination = findItemLocation(
+      SessionTree.reactiveItems.value as TreeItem[],
+      separator.uid,
+    )
+    if (!destination) return null
+    if (
+      dropPosition !== DropPosition.ABOVE &&
+      dropPosition !== DropPosition.BELOW
+    ) {
+      return null
+    }
+    return {
+      dropIndex:
+        destination.index + (dropPosition === DropPosition.BELOW ? 1 : 0),
+      dropParentUid: destination.parent,
+      targetWindowUid: separator.windowUid,
+    }
+  }
+
+  if (destinationType === DropType.TREE_END) {
+    const destinationWindow = getLastLogicalWindow()
+    return destinationWindow
+      ? {
+          dropIndex: destinationWindow.children.length,
+          targetWindowUid: destinationWindow.uid,
+        }
+      : { dropIndex: 0 }
+  }
+
+  return null
+}
+
+function showDropIndicator(
+  e: DragEvent,
+  dropEffect: DataTransfer['dropEffect'],
+  sourceType?: DragType,
+): void {
+  const element = (e.target as HTMLElement)?.closest(
+    '.drag-and-drop-target',
+  ) as HTMLElement | null
+  if (!element?.getAttribute) return
+
+  const indicator = getDropIndicator(element, sourceType)
+  if (
+    DragAndDrop.dragState.prevEl &&
+    DragAndDrop.dragState.prevEl !== indicator.element
+  ) {
+    clearDragIndicators(DragAndDrop.dragState.prevEl)
+  }
+
+  if (DragAndDrop.dragState.isValidDropTarget) {
+    if (e.dataTransfer) e.dataTransfer.dropEffect = dropEffect
+    if (DragAndDrop.dragState.destinationType === DropType.TREE_END) {
+      indicator.element.style.setProperty(
+        '--drop-indent-level',
+        String(indicator.indentLevel),
+      )
+      indicator.element.classList.add('drag-over-tree-end')
+      indicator.element.classList.remove(
+        'drag-over-above',
+        'drag-over-mid',
+        'drag-over-below',
+      )
+    } else {
+      switch (DragAndDrop.dragState.dropPosition) {
+        case DropPosition.ABOVE:
+          element.classList.add('drag-over-above')
+          element.classList.remove('drag-over-mid', 'drag-over-below')
+          break
+        case DropPosition.MID:
+          element.classList.add('drag-over-mid')
+          element.classList.remove('drag-over-above', 'drag-over-below')
+          break
+        case DropPosition.BELOW:
+          element.classList.add('drag-over-below')
+          element.classList.remove('drag-over-above', 'drag-over-mid')
+          break
+      }
+    }
+  }
+
+  DragAndDrop.dragState.prevEl = indicator.element
+}
+
 function reset(): void {
   DragAndDrop.dragState.dragEventStarted = false
   DragAndDrop.dragState.sourceType = null
@@ -527,13 +741,16 @@ function clearDragIndicators(el: HTMLElement | null) {
   el.style.removeProperty('--drop-indent-level')
 }
 
-function getDropIndicator(defaultElement: HTMLElement): {
+function getDropIndicator(
+  defaultElement: HTMLElement,
+  sourceType = getEffectiveDragType(DragAndDrop.dragInfo?.items ?? []),
+): {
   element: HTMLElement
   indentLevel: number
 } {
   if (
     DragAndDrop.dragState.destinationType !== DropType.TREE_END ||
-    getEffectiveDragType(DragAndDrop.dragInfo?.items ?? []) !== DragType.TAB
+    sourceType !== DragType.TAB
   ) {
     return { element: defaultElement, indentLevel: 0 }
   }
@@ -603,7 +820,11 @@ function getTreeItem(uid: UID): TreeItem | undefined {
  *
  * @param {DragEvent} e - The drag event.
  */
-function updateDropTarget(e: DragEvent): void {
+function updateDropTarget(
+  e: DragEvent,
+  sourceTypeOverride?: DragType,
+  allowTreeEndWithoutWindow: boolean = false,
+): void {
   const el = (e.target as HTMLElement)?.closest(
     '.drag-and-drop-target',
   ) as HTMLElement | null
@@ -637,6 +858,26 @@ function updateDropTarget(e: DragEvent): void {
   }
   DragAndDrop.dragState.destinationType = destType
 
+  if (destType === DropType.OTHER) return
+  if (destType === DropType.TAB && !SessionTree.tabsByUid.has(id as UID)) {
+    return
+  }
+  if (
+    destType === DropType.WINDOW &&
+    !SessionTree.windowsByUid.has(id as UID)
+  ) {
+    return
+  }
+  if (destType === DropType.NOTE && !SessionTree.notesByUid.has(id as UID)) {
+    return
+  }
+  if (
+    destType === DropType.SEPARATOR &&
+    !SessionTree.separatorsByUid.has(id as UID)
+  ) {
+    return
+  }
+
   const draggedItems = DragAndDrop.dragInfo?.items ?? []
   const disabledDescendantDrop =
     !Settings.values.allowDropOntoDescendantItems &&
@@ -656,11 +897,14 @@ function updateDropTarget(e: DragEvent): void {
   }
 
   // check if this is a valid drop target
-  const sourceType = getEffectiveDragType(DragAndDrop.dragInfo?.items ?? [])
+  const sourceType =
+    sourceTypeOverride ??
+    getEffectiveDragType(DragAndDrop.dragInfo?.items ?? [])
   if (
     sourceType === DragType.TAB &&
     DragAndDrop.dragState.destinationType === DropType.TREE_END &&
-    !getLastLogicalWindow()
+    !getLastLogicalWindow() &&
+    !allowTreeEndWithoutWindow
   ) {
     return
   }
@@ -671,6 +915,13 @@ function updateDropTarget(e: DragEvent): void {
   ) {
     const destinationNote = SessionTree.notesByUid.get(id as UID)
     if (!destinationNote?.windowUid) return
+  }
+  if (
+    sourceType === DragType.TAB &&
+    DragAndDrop.dragState.destinationType === DropType.SEPARATOR
+  ) {
+    const destinationSeparator = SessionTree.separatorsByUid.get(id as UID)
+    if (!destinationSeparator?.windowUid) return
   }
 
   // don't allow dropping windows onto notes that are in a window

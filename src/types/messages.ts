@@ -1,3 +1,5 @@
+import type { ExternalDropItem } from '@/types/external-drop'
+
 export interface Message {
   action: string
   [key: string]: unknown
@@ -89,6 +91,14 @@ export interface MoveTreeItemsMessage {
   targetWindowUid?: UID
   copy: boolean
   includeDescendants?: boolean
+}
+
+export interface ImportExternalUrlsMessage {
+  action: 'importExternalUrls'
+  items: ExternalDropItem[]
+  targetIndex: number
+  parentUid?: UID
+  targetWindowUid?: UID
 }
 
 export interface DuplicateTreeItemsMessage {
@@ -210,6 +220,7 @@ export type SessionTreeMessage =
   | DuplicateTreeItemsMessage
   | FocusTabMessage
   | FocusWindowMessage
+  | ImportExternalUrlsMessage
   | MoveTreeItemsMessage
   | MoveWindowsMessage
   | OpenTabMessage

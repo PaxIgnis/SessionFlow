@@ -235,6 +235,21 @@ export function moveTreeItems(
   } as Messages.MoveTreeItemsMessage)
 }
 
+export function importExternalUrls(
+  items: Messages.ImportExternalUrlsMessage['items'],
+  targetIndex: number,
+  parentUid?: UID,
+  targetWindowUid?: UID,
+) {
+  void sendTreeCommand({
+    action: 'importExternalUrls',
+    items,
+    targetIndex,
+    parentUid,
+    targetWindowUid,
+  } as Messages.ImportExternalUrlsMessage)
+}
+
 // ==============================
 // Tree Messages
 // ==============================

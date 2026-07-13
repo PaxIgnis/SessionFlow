@@ -21,6 +21,7 @@ import {
 const moveTabs = vi.hoisted(() => vi.fn())
 const moveTreeItems = vi.hoisted(() => vi.fn())
 const moveWindows = vi.hoisted(() => vi.fn())
+const importExternalUrls = vi.hoisted(() => vi.fn())
 
 const childInclusionSettings = [
   { setting: 'always' as const, collapsed: false, includeDescendants: true },
@@ -29,6 +30,7 @@ const childInclusionSettings = [
 ]
 
 vi.mock('@/services/foreground-messages', () => ({
+  importExternalUrls,
   moveTabs,
   moveTreeItems,
   moveWindows,
@@ -369,27 +371,182 @@ describe('drag-and-drop onDrop command path', () => {
   })
 
   it('marks external drag enter and move events as copy when external drops are enabled', () => {
-    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const window = makeForegroundWindow('window-1' as UID)
+    resetForegroundTree([window])
     const target = createFakeDragTarget({
-      id: 'window-1' as UID,
+      id: window.uid,
       type: 'window',
     })
-    const enterEvent = createFakeDragEvent({ target, yRatio: 0.5 })
-    const moveEvent = createFakeDragEvent({ target, yRatio: 0.5 })
+    const data = { 'text/uri-list': 'https://example.test' }
+    const enterEvent = createFakeDragEvent({ target, yRatio: 0.5, data })
+    const moveEvent = createFakeDragEvent({ target, yRatio: 0.5, data })
     DragAndDrop.dragState.dragEventStarted = false
     Settings.values.enableDropFromExternalSources = true
 
-    try {
-      DragAndDrop.onDragEnter(enterEvent)
-      DragAndDrop.onDragMove(moveEvent)
+    DragAndDrop.onDragEnter(enterEvent)
+    DragAndDrop.onDragMove(moveEvent)
 
-      expect(enterEvent.dataTransfer?.dropEffect).toBe('copy')
-      expect(moveEvent.dataTransfer?.dropEffect).toBe('copy')
-      expect(DragAndDrop.dragState.destinationId).toBeNull()
-      expect(DragAndDrop.dragState.isValidDropTarget).toBe(false)
-    } finally {
-      consoleWarn.mockRestore()
-    }
+    expect(enterEvent.dataTransfer?.dropEffect).toBe('copy')
+    expect(moveEvent.dataTransfer?.dropEffect).toBe('copy')
+    expect(DragAndDrop.dragState.destinationId).toBe(window.uid)
+    expect(DragAndDrop.dragState.isValidDropTarget).toBe(true)
+    expect(target.classList.contains('drag-over-mid')).toBe(true)
+  })
+
+  it('imports multiple external links at the same tab placement used by internal drops', () => {
+    const targetTab = makeForegroundTab('tab-target' as UID)
+    const window = makeForegroundWindow('window-1' as UID, [targetTab])
+    resetForegroundTree([window])
+    DragAndDrop.dragState.dragEventStarted = false
+    Settings.values.enableDropFromExternalSources = true
+    const target = createFakeDragTarget({
+      id: targetTab.uid,
+      type: 'tab',
+    })
+    const event = createFakeDragEvent({
+      target,
+      yRatio: 0.1,
+      data: {
+        'text/uri-list':
+          '# One\r\nhttps://one.example\r\nhttps://two.example/path\r\n# Two',
+      },
+    })
+
+    DragAndDrop.onDrop(event)
+
+    expect(importExternalUrls).toHaveBeenCalledWith(
+      [
+        { url: 'https://one.example/', title: 'One' },
+        { url: 'https://two.example/path', title: 'Two' },
+      ],
+      0,
+      undefined,
+      window.uid,
+    )
+    expectNoMoveCommands()
+  })
+
+  it('moves a native Firefox tab when a reliable browser tab ID is exposed', () => {
+    const draggedTab = makeForegroundTab('tab-dragged' as UID, { id: 42 })
+    const targetTab = makeForegroundTab('tab-target' as UID, { id: 43 })
+    const window = makeForegroundWindow('window-1' as UID, [
+      draggedTab,
+      targetTab,
+    ])
+    resetForegroundTree([window])
+    DragAndDrop.dragState.dragEventStarted = false
+    Settings.values.enableDropFromExternalSources = true
+    const target = createFakeDragTarget({
+      id: targetTab.uid,
+      type: 'tab',
+    })
+    const event = createFakeDragEvent({
+      target,
+      yRatio: 0.5,
+      data: { 'text/x-moz-text-internal': draggedTab.url },
+      types: ['application/x-moz-tabbrowser-tab', 'text/x-moz-text-internal'],
+      mozItems: [{ tabId: draggedTab.id }],
+    })
+
+    DragAndDrop.onDrop(event)
+
+    expect(moveTreeItems).toHaveBeenCalledWith(
+      [draggedTab.uid],
+      2,
+      targetTab.uid,
+      window.uid,
+      false,
+      false,
+    )
+    expect(importExternalUrls).not.toHaveBeenCalled()
+  })
+
+  it('rejects dropping a reliably identified native Firefox tab onto itself', () => {
+    const tab = makeForegroundTab('tab-1' as UID, { id: 42 })
+    const window = makeForegroundWindow('window-1' as UID, [tab])
+    resetForegroundTree([window])
+    DragAndDrop.dragState.dragEventStarted = false
+    Settings.values.enableDropFromExternalSources = true
+    const target = createFakeDragTarget({ id: tab.uid, type: 'tab' })
+    const event = createFakeDragEvent({
+      target,
+      yRatio: 0.5,
+      data: { 'text/x-moz-text-internal': tab.url },
+      types: ['application/x-moz-tabbrowser-tab', 'text/x-moz-text-internal'],
+      mozItems: [{ tabId: tab.id }],
+    })
+
+    DragAndDrop.onDrop(event)
+
+    expect(importExternalUrls).not.toHaveBeenCalled()
+    expectNoMoveCommands()
+  })
+
+  it('creates a new live window destination when links are dropped into an empty tree', () => {
+    resetForegroundTree([])
+    DragAndDrop.dragState.dragEventStarted = false
+    Settings.values.enableDropFromExternalSources = true
+    const target = createFakeDragTarget({
+      id: 'tree-end' as UID,
+      type: 'tree-end',
+    })
+    const event = createFakeDragEvent({
+      target,
+      yRatio: 0.5,
+      data: { 'text/plain': 'https://example.test' },
+    })
+
+    DragAndDrop.onDrop(event)
+
+    expect(importExternalUrls).toHaveBeenCalledWith(
+      [{ url: 'https://example.test/' }],
+      0,
+      undefined,
+      undefined,
+    )
+    expectNoMoveCommands()
+  })
+
+  it('rejects non-URL plain text without sending an import command', () => {
+    const window = makeForegroundWindow('window-1' as UID)
+    resetForegroundTree([window])
+    DragAndDrop.dragState.dragEventStarted = false
+    Settings.values.enableDropFromExternalSources = true
+    const target = createFakeDragTarget({ id: window.uid, type: 'window' })
+    const event = createFakeDragEvent({
+      target,
+      yRatio: 0.5,
+      data: { 'text/plain': 'search terms, not a URL' },
+    })
+
+    DragAndDrop.onDrop(event)
+
+    expect(importExternalUrls).not.toHaveBeenCalled()
+    expectNoMoveCommands()
+  })
+
+  it('clears an internal drag after cancellation so a later external drop is recognized', () => {
+    const tab = makeForegroundTab('tab-1' as UID)
+    const window = makeForegroundWindow('window-1' as UID, [tab])
+    resetForegroundTree([window])
+    DragAndDrop.dragInfo = { dragType: DragType.TAB, items: [tab] }
+    DragAndDrop.dragState.dragEventStarted = true
+    const target = createFakeDragTarget({ id: window.uid, type: 'window' })
+
+    DragAndDrop.onDragEnd(createFakeDragEvent({ target, yRatio: 0.5 }))
+
+    expect(DragAndDrop.dragState.dragEventStarted).toBe(false)
+    expect(DragAndDrop.dragInfo).toBeNull()
+
+    Settings.values.enableDropFromExternalSources = true
+    const externalEvent = createFakeDragEvent({
+      target,
+      yRatio: 0.5,
+      data: { 'text/uri-list': 'https://example.test' },
+    })
+    DragAndDrop.onDragMove(externalEvent)
+
+    expect(externalEvent.dataTransfer?.dropEffect).toBe('copy')
   })
 
   it('keeps external drag effects disabled and clears drop target state on leave', () => {

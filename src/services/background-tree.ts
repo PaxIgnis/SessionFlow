@@ -1,4 +1,5 @@
 import * as Actions from '@/services/background-tree-actions'
+import * as ExternalDropActions from '@/services/background-external-drop-actions'
 import * as NoteActions from '@/services/background-tree-note-actions'
 import * as SeparatorActions from '@/services/background-tree-separator-actions'
 import * as TabActions from '@/services/background-tree-tab-actions'
@@ -25,6 +26,7 @@ export const Tree = {
   initialized: false as boolean,
 
   ...Actions,
+  ...ExternalDropActions,
   ...NoteActions,
   ...SeparatorActions,
   ...TabActions,
