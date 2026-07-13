@@ -48,6 +48,7 @@ export interface Settings {
   refreshFaviconsAfterPeriodOfTime: boolean
   refreshFaviconsAfterPeriodOfTimeValue: number
   refreshFaviconsAfterPeriodOfTimeUnit: (typeof SETTINGS_TYPES.refreshFaviconsAfterPeriodOfTimeUnit)[number]
+  faviconRefreshTiming: (typeof SETTINGS_TYPES.faviconRefreshTiming)[number]
 }
 
 export const SETTINGS_TYPES = {
@@ -58,13 +59,8 @@ export const SETTINGS_TYPES = {
   tabGroupDropBehavior: ['same-group-both-adjacent', 'any-adjacent-group'],
   tabGroupColorIndicator: ['right', 'left', 'hidden'],
   tabGroupInfoOnHover: ['always', 'grouped-only', 'never'],
-  refreshFaviconsAfterPeriodOfTimeUnit: [
-    'seconds',
-    'minutes',
-    'hours',
-    'days',
-    'weeks',
-  ],
+  refreshFaviconsAfterPeriodOfTimeUnit: ['hours', 'days', 'weeks'],
+  faviconRefreshTiming: ['startup-only', 'expiration-and-startup'],
   openWindowsInSameLocationUpdateIntervalUnit: ['seconds', 'minutes'],
 }
 
@@ -116,11 +112,16 @@ export const OPTIONS = {
     { label: 'Never', value: 'never' },
   ],
   refreshFaviconsAfterPeriodOfTimeUnit: [
-    { label: 'Seconds', value: 'seconds' },
-    { label: 'Minutes', value: 'minutes' },
     { label: 'Hours', value: 'hours' },
     { label: 'Days', value: 'days' },
     { label: 'Weeks', value: 'weeks' },
+  ],
+  faviconRefreshTiming: [
+    { label: 'At Firefox Startup Only', value: 'startup-only' },
+    {
+      label: 'When Expired and at Startup',
+      value: 'expiration-and-startup',
+    },
   ],
   openWindowsInSameLocationUpdateIntervalUnit: [
     { label: 'Seconds', value: 'seconds' },

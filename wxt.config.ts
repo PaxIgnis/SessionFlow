@@ -14,6 +14,7 @@ export default defineConfig({
     },
     permissions: [
       'activeTab',
+      'alarms',
       'menus',
       'menus.overrideContext',
       'scripting',

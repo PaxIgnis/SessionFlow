@@ -47,6 +47,11 @@ class FakePort {
 }
 
 export interface FakeBrowser {
+  alarms: {
+    onAlarm: FakeEvent<[browser.alarms.Alarm]>
+    clear: ReturnType<typeof vi.fn>
+    create: ReturnType<typeof vi.fn>
+  }
   browserAction: {
     onClicked: FakeEvent<[]>
     setBadgeText: ReturnType<typeof vi.fn>
@@ -131,6 +136,11 @@ export interface FakeBrowser {
 export function installFakeBrowser(): FakeBrowser {
   const onConnect = new FakeEvent<[FakePort]>()
   const browser: FakeBrowser = {
+    alarms: {
+      onAlarm: new FakeEvent<[browser.alarms.Alarm]>(),
+      clear: vi.fn().mockResolvedValue(true),
+      create: vi.fn().mockResolvedValue(undefined),
+    },
     browserAction: {
       onClicked: new FakeEvent<[]>(),
       setBadgeText: vi.fn().mockResolvedValue(undefined),

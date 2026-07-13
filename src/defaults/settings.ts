@@ -50,4 +50,5 @@ export const DEFAULT_SETTINGS: Settings = {
   refreshFaviconsAfterPeriodOfTime: false,
   refreshFaviconsAfterPeriodOfTimeValue: 7,
   refreshFaviconsAfterPeriodOfTimeUnit: 'days',
+  faviconRefreshTiming: 'startup-only',
 }

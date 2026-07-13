@@ -3,7 +3,7 @@ import * as Actions from '@/services/settings-actions'
 import { reactive } from 'vue'
 
 export const Settings = {
-  values: reactive(DEFAULT_SETTINGS),
+  values: reactive(structuredClone(DEFAULT_SETTINGS)),
 
   ...Actions,
 }

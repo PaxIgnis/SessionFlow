@@ -38,10 +38,10 @@ export async function loadSettingsFromStorage(): Promise<void> {
  * @returns a Promise that resolves when the settings have been saved
  */
 export async function saveSettingsToStorage(): Promise<void> {
-  browser.runtime.sendMessage({
+  await browser.storage.local.set({ settings: toRaw(SettingsValues.values) })
+  await browser.runtime.sendMessage({
     type: 'settingsUpdated',
   })
-  await browser.storage.local.set({ settings: toRaw(SettingsValues.values) })
 }
 
 /**
@@ -84,14 +84,27 @@ function validateAndAddSettingKey<K extends keyof Settings>(
   }
 }
 
-export function setupSettingsUpdatedListener(): void {
+export function setupSettingsUpdatedListener(
+  onSettingsUpdated?: () => void | Promise<void>,
+): void {
   // receives the settings updated message
   browser.runtime.onMessage.addListener((message) => {
     if (message.type === 'settingsUpdated') {
       // update the settings in the global Settings object
-      loadSettingsFromStorage().catch((error) => {
-        console.error('Failed to load settings from storage:', error)
-      })
+      void (async () => {
+        try {
+          await loadSettingsFromStorage()
+        } catch (error) {
+          console.error('Failed to load settings from storage:', error)
+          return
+        }
+
+        try {
+          await onSettingsUpdated?.()
+        } catch (error) {
+          console.error('Failed to apply settings update:', error)
+        }
+      })()
     }
   })
 }

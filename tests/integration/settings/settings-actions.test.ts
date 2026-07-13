@@ -59,6 +59,12 @@ describe('settings actions', () => {
     expect(Settings.values.allowDropOntoDescendantItems).toBe(true)
   })
 
+  it('keeps default settings immutable when runtime settings change', () => {
+    Settings.values.refreshFaviconsAfterPeriodOfTime = true
+
+    expect(DEFAULT_SETTINGS.refreshFaviconsAfterPeriodOfTime).toBe(false)
+  })
+
   it('saves settings and broadcasts the update message', async () => {
     Settings.values.openSessionTreeOnStartup = true
     const { saveSettingsToStorage } =
@@ -74,6 +80,11 @@ describe('settings actions', () => {
         openSessionTreeOnStartup: true,
       }),
     })
+    expect(
+      vi.mocked(browser.storage.local.set).mock.invocationCallOrder[0],
+    ).toBeLessThan(
+      vi.mocked(browser.runtime.sendMessage).mock.invocationCallOrder[0],
+    )
   })
 
   it('registers a settings updated listener that reloads storage', async () => {
@@ -90,6 +101,53 @@ describe('settings actions', () => {
     await Promise.resolve()
 
     expect(Settings.values.openSessionTreeOnStartup).toBe(true)
+  })
+
+  it('runs an update callback after reloading settings storage', async () => {
+    vi.mocked(browser.storage.local.get).mockResolvedValue({
+      settings: {
+        refreshFaviconsAfterPeriodOfTime: true,
+      },
+    })
+    const onSettingsUpdated = vi.fn(() => {
+      expect(Settings.values.refreshFaviconsAfterPeriodOfTime).toBe(true)
+    })
+    const { setupSettingsUpdatedListener } =
+      await import('@/services/settings-actions')
+
+    setupSettingsUpdatedListener(onSettingsUpdated)
+    fakeBrowser.runtime.onMessage.emit({ type: 'settingsUpdated' })
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(onSettingsUpdated).toHaveBeenCalledTimes(1)
+  })
+
+  it('reports update callback failures separately from storage failures', async () => {
+    vi.mocked(browser.storage.local.get).mockResolvedValue({
+      settings: {
+        refreshFaviconsAfterPeriodOfTime: true,
+      },
+    })
+    const error = new Error('alarms API unavailable')
+    const onSettingsUpdated = vi.fn().mockRejectedValue(error)
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { setupSettingsUpdatedListener } =
+      await import('@/services/settings-actions')
+
+    setupSettingsUpdatedListener(onSettingsUpdated)
+    fakeBrowser.runtime.onMessage.emit({ type: 'settingsUpdated' })
+
+    await vi.waitFor(() => {
+      expect(consoleError).toHaveBeenCalledWith(
+        'Failed to apply settings update:',
+        error,
+      )
+    })
+    expect(consoleError).not.toHaveBeenCalledWith(
+      'Failed to load settings from storage:',
+      error,
+    )
   })
 
   it('ignores unrelated runtime messages in the settings listener', async () => {
@@ -126,6 +184,8 @@ describe('settings actions', () => {
         showTabTitleOnHover: false,
         showTabUrlOnHover: false,
         tabGroupInfoOnHover: 'grouped-only',
+        refreshFaviconsAfterPeriodOfTimeUnit: 'hours',
+        faviconRefreshTiming: 'expiration-and-startup',
       },
     })
     const { loadSettingsFromStorage } =
@@ -149,5 +209,7 @@ describe('settings actions', () => {
     expect(Settings.values.showTabTitleOnHover).toBe(false)
     expect(Settings.values.showTabUrlOnHover).toBe(false)
     expect(Settings.values.tabGroupInfoOnHover).toBe('grouped-only')
+    expect(Settings.values.refreshFaviconsAfterPeriodOfTimeUnit).toBe('hours')
+    expect(Settings.values.faviconRefreshTiming).toBe('expiration-and-startup')
   })
 })

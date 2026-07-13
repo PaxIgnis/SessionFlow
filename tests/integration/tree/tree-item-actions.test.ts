@@ -381,6 +381,7 @@ describe('generic tree item structural actions', () => {
   )
 
   it('waits for async tree item movement when increasing indent', async () => {
+    Settings.values.includeChildrenOfSelectedItemsWhenIndenting = 'never'
     const parent = createTab('tab-parent' as UID, {
       id: 10,
       state: State.OPEN,

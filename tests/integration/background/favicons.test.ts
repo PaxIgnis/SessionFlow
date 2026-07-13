@@ -33,6 +33,7 @@ describe('favicon service', () => {
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
   })
@@ -159,6 +160,178 @@ describe('favicon service', () => {
     await fetchMissingFavicons
 
     expect(saveCacheToStorage).toHaveBeenCalledTimes(1)
+  })
+
+  it('refreshes only missing or expired domains and prefers live tab icons', async () => {
+    const now = 10_000
+    const oldEntry = {
+      url: 'expired.test',
+      dataUrl: 'data:image/png;base64,old',
+      timestamp: 1_000,
+    }
+    const freshEntry = {
+      url: 'fresh.test',
+      dataUrl: 'data:image/png;base64,fresh',
+      timestamp: 9_500,
+    }
+    const cache = new Map([
+      ['expired.test', oldEntry],
+      ['fresh.test', freshEntry],
+    ])
+    const service = new FaviconService(undefined, cache)
+    const updateFavicon = vi
+      .spyOn(service, 'updateFavicon')
+      .mockImplementation(async (favIconUrl, tab) => {
+        cache.set('expired.test', {
+          url: 'expired.test',
+          dataUrl: favIconUrl,
+          timestamp: now,
+        })
+        expect(tab?.url).toBe('https://expired.test/live')
+      })
+    const fetchAndStoreFavicon = vi
+      .spyOn(service, 'fetchAndStoreFavicon')
+      .mockImplementation(async (url) => {
+        cache.set('missing.test', {
+          url: 'missing.test',
+          dataUrl: `data:image/png;base64,${url}`,
+          timestamp: now,
+        })
+      })
+    const saveCacheToStorage = vi
+      .spyOn(service, 'saveCacheToStorage')
+      .mockResolvedValue(undefined)
+
+    const updates = await service.refreshFavicons(
+      [
+        'https://expired.test/saved',
+        'https://expired.test/duplicate',
+        'https://fresh.test/page',
+        'https://missing.test/saved',
+        'about:config',
+      ],
+      1_000,
+      [
+        {
+          url: 'https://expired.test/live',
+          favIconUrl: 'data:image/png;base64,live',
+        },
+      ],
+      now,
+    )
+
+    expect(updateFavicon).toHaveBeenCalledTimes(1)
+    expect(updateFavicon).toHaveBeenCalledWith(
+      'data:image/png;base64,live',
+      expect.objectContaining({ url: 'https://expired.test/live' }),
+    )
+    expect(fetchAndStoreFavicon).toHaveBeenCalledTimes(1)
+    expect(fetchAndStoreFavicon).toHaveBeenCalledWith(
+      'https://missing.test/saved',
+    )
+    expect(cache.get('fresh.test')).toBe(freshEntry)
+    expect(updates.map((entry) => entry.url).sort()).toEqual([
+      'expired.test',
+      'missing.test',
+    ])
+    expect(saveCacheToStorage).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps an expired cached icon when its refresh fails', async () => {
+    const oldEntry = {
+      url: 'example.test',
+      dataUrl: 'data:image/png;base64,old',
+      timestamp: 1,
+    }
+    const cache = new Map([['example.test', oldEntry]])
+    const service = new FaviconService(undefined, cache)
+    vi.spyOn(service, 'fetchAndStoreFavicon').mockResolvedValue(undefined)
+    vi.spyOn(service, 'saveCacheToStorage').mockResolvedValue(undefined)
+
+    const updates = await service.refreshFavicons(
+      ['https://example.test/page'],
+      1_000,
+      [],
+      10_000,
+    )
+
+    expect(cache.get('example.test')).toBe(oldEntry)
+    expect(updates).toEqual([])
+  })
+
+  it('calculates the earliest future expiry and delays retries for due entries', () => {
+    const cache = new Map([
+      [
+        'fresh.test',
+        {
+          url: 'fresh.test',
+          dataUrl: 'data:image/png;base64,fresh',
+          timestamp: 9_500,
+        },
+      ],
+      [
+        'expired.test',
+        {
+          url: 'expired.test',
+          dataUrl: 'data:image/png;base64,expired',
+          timestamp: 1,
+        },
+      ],
+    ])
+    const service = new FaviconService(undefined, cache)
+
+    expect(
+      service.getNextRefreshAt(
+        [
+          'https://fresh.test/page',
+          'https://expired.test/page',
+          'https://missing.test/page',
+        ],
+        1_000,
+        10_000,
+      ),
+    ).toBe(10_500)
+    expect(
+      service.getNextRefreshAt(
+        ['https://expired.test/page', 'https://missing.test/page'],
+        1_000,
+        10_000,
+      ),
+    ).toBe(11_000)
+    expect(service.getNextRefreshAt([], 1_000, 10_000)).toBeUndefined()
+  })
+
+  it('reloads persisted cache and removes stale in-memory domains', async () => {
+    const cache = new Map([
+      [
+        'old.test',
+        {
+          url: 'old.test',
+          dataUrl: 'data:image/png;base64,old',
+          timestamp: 1,
+        },
+      ],
+    ])
+    const service = new FaviconService(
+      { storageKey: 'favicons', expiryDays: 7 },
+      cache,
+    )
+    vi.mocked(browser.storage.local.get).mockResolvedValue({
+      favicons: JSON.stringify([
+        {
+          url: 'new.test',
+          dataUrl: 'data:image/png;base64,new',
+          timestamp: 2,
+        },
+      ]),
+    })
+
+    await service.reloadCacheFromStorage()
+
+    expect(service.getFavicon('https://old.test')).toBe('/icon/16.png')
+    expect(service.getFavicon('https://new.test')).toBe(
+      'data:image/png;base64,new',
+    )
   })
 
   it('skips non-web and malformed URLs when fetching a favicon', async () => {

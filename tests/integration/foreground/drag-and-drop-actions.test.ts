@@ -1123,6 +1123,7 @@ describe('drag-and-drop onDrop command path', () => {
     'sends the exact move command when dropping a tab $label its direct child',
     ({ yRatio, expectedIndex, expectedParentUid }) => {
       Settings.values.allowDropOntoDescendantItems = true
+      Settings.values.includeChildrenOfSelectedItems = 'always'
       const tabA = makeForegroundTab('tab-a' as UID, {
         indentLevel: 1,
         isParent: true,
@@ -2265,6 +2266,7 @@ describe('drag-and-drop onDrop command path', () => {
   )
 
   it('uses the note subtree boundary when dropping a tab below a parent note', () => {
+    Settings.values.includeChildrenOfSelectedItems = 'always'
     const parent = makeForegroundNote('note-parent' as UID, { isParent: true })
     const child = makeForegroundNote('note-child' as UID, {
       parentUid: parent.uid,

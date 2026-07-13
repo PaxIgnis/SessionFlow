@@ -41,6 +41,16 @@ export class FaviconService {
     }
   }
 
+  /**
+   * Reloads the persisted cache, replacing any in-memory entries.
+   * This is used by extension views after the background refreshes favicons.
+   */
+  public async reloadCacheFromStorage(): Promise<void> {
+    this.cache.clear()
+    await this.loadCacheFromStorage()
+    this.initialized = true
+  }
+
   public async hasFetchPermissions(): Promise<boolean> {
     try {
       return await browser.permissions.contains({
@@ -184,6 +194,110 @@ export class FaviconService {
   }
 
   /**
+   * Refreshes each missing or expired favicon represented by the supplied URLs.
+   * Open-tab favicon URLs are preferred because they reflect the icon Firefox is
+   * currently displaying. Saved tabs fall back to fetching from their page.
+   *
+   * @param urls - Page URLs represented in the session tree
+   * @param maxAgeMs - Maximum cache-entry age before it is considered expired
+   * @param openTabs - Current browser tabs whose favicon URLs may be reused
+   * @param now - Current time, injectable for deterministic scheduling/tests
+   * @returns Cache entries that were successfully added or replaced
+   */
+  public async refreshFavicons(
+    urls: Iterable<string>,
+    maxAgeMs: number,
+    openTabs: Iterable<FaviconTabSource> = [],
+    now: number = Date.now(),
+  ): Promise<FaviconCacheEntry[]> {
+    const firstUrlByDomain = this.getFirstWebUrlByDomain(urls)
+    const dueDomains = new Set<string>()
+
+    firstUrlByDomain.forEach((_url, domain) => {
+      const entry = this.cache.get(domain)
+      if (
+        !entry ||
+        !Number.isFinite(entry.timestamp) ||
+        now - entry.timestamp >= maxAgeMs
+      ) {
+        dueDomains.add(domain)
+      }
+    })
+
+    if (dueDomains.size === 0) return []
+
+    const liveTabByDomain = new Map<string, FaviconTabSource>()
+    Array.from(openTabs).forEach((tab) => {
+      if (!tab.url || !tab.favIconUrl || !this.isWebUrl(tab.url)) return
+      if (!this.canUseFaviconUrl(tab.favIconUrl)) return
+      const domain = this.getDomainFromUrl(tab.url)
+      if (domain && dueDomains.has(domain) && !liveTabByDomain.has(domain)) {
+        liveTabByDomain.set(domain, tab)
+      }
+    })
+
+    const previousEntries = new Map<string, FaviconCacheEntry | undefined>()
+    const tasks = Array.from(dueDomains).map((domain) => {
+      previousEntries.set(domain, this.cache.get(domain))
+      const liveTab = liveTabByDomain.get(domain)
+      if (liveTab?.favIconUrl) {
+        return this.updateFavicon(
+          liveTab.favIconUrl,
+          liveTab as browser.tabs.Tab,
+        )
+      }
+      return this.fetchAndStoreFavicon(firstUrlByDomain.get(domain)!)
+    })
+
+    await Promise.allSettled(tasks)
+    await this.saveCacheToStorage()
+
+    return Array.from(dueDomains).flatMap((domain) => {
+      const entry = this.cache.get(domain)
+      return entry && entry !== previousEntries.get(domain) ? [entry] : []
+    })
+  }
+
+  /**
+   * Finds the next time a favicon represented by the supplied URLs expires.
+   * Already-due or missing entries are retried after one full interval so a
+   * failed network request cannot create a tight alarm loop.
+   */
+  public getNextRefreshAt(
+    urls: Iterable<string>,
+    maxAgeMs: number,
+    now: number = Date.now(),
+  ): number | undefined {
+    if (!Number.isFinite(maxAgeMs) || maxAgeMs <= 0) return undefined
+
+    const firstUrlByDomain = this.getFirstWebUrlByDomain(urls)
+    let nextRefreshAt: number | undefined
+    let hasDueEntry = false
+
+    firstUrlByDomain.forEach((_url, domain) => {
+      const entry = this.cache.get(domain)
+      if (!entry || !Number.isFinite(entry.timestamp)) {
+        hasDueEntry = true
+        return
+      }
+
+      const expiresAt = entry.timestamp + maxAgeMs
+      if (expiresAt <= now) {
+        hasDueEntry = true
+        return
+      }
+
+      nextRefreshAt = Math.min(nextRefreshAt ?? expiresAt, expiresAt)
+    })
+
+    if (hasDueEntry) {
+      nextRefreshAt = Math.min(nextRefreshAt ?? now + maxAgeMs, now + maxAgeMs)
+    }
+
+    return nextRefreshAt
+  }
+
+  /**
    * Updates the favicon in the cache for the given tab
    *
    * @param {string} favIconUrl - The data URL of the favicon
@@ -312,6 +426,22 @@ export class FaviconService {
       /<link[^>]*rel=["'][^"']*icon[^"']*["'][^>]*href=["']([^"']+)["'][^>]*>|<link[^>]*href=["']([^"']+)["'][^>]*rel=["'][^"']*icon[^"']*["'][^>]*>/i
     const match = html.match(iconLinkRegex)
     return match?.[1] || match?.[2] || undefined
+  }
+
+  private getFirstWebUrlByDomain(urls: Iterable<string>): Map<string, string> {
+    const firstUrlByDomain = new Map<string, string>()
+    Array.from(urls).forEach((url) => {
+      if (!url || !this.isWebUrl(url)) return
+      const domain = this.getDomainFromUrl(url)
+      if (domain && !firstUrlByDomain.has(domain)) {
+        firstUrlByDomain.set(domain, url)
+      }
+    })
+    return firstUrlByDomain
+  }
+
+  private canUseFaviconUrl(url: string): boolean {
+    return url.startsWith('data:') || this.isWebUrl(url)
   }
 
   /**

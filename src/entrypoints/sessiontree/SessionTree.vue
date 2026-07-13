@@ -19,7 +19,7 @@ import * as ToolbarActions from '@/services/session-tree-toolbar-actions'
 import { Settings } from '@/services/settings'
 import '@/styles/variables.css'
 import { TreeItem as SessionTreeItem, TreeItemType } from '@/types/session-tree'
-import { computed, onBeforeUnmount, onMounted } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 
 let unsubscribeFromTreeDelta: (() => void) | undefined
 let removeRuntimeListener: (() => void) | undefined
@@ -59,6 +59,7 @@ window.onbeforeunload = () => {
 }
 
 const faviconService = Favicons
+const faviconRevision = ref(0)
 
 const visibleTreeItems = computed<SessionTreeItem[]>(() => {
   const items: SessionTreeItem[] = []
@@ -112,12 +113,17 @@ onMounted(async () => {
         console.log('FaviconUpdated message received')
         if (message.favIconUrl) {
           const tabLike = message.tab as { url?: string } | undefined
-          void faviconService.updateFavicon(
-            message.favIconUrl,
-            undefined,
-            tabLike?.url,
-          )
+          void faviconService
+            .updateFavicon(message.favIconUrl, undefined, tabLike?.url)
+            .then(() => {
+              faviconRevision.value += 1
+            })
         }
+        break
+      case 'FAVICON_CACHE_UPDATED':
+        void faviconService.reloadCacheFromStorage().then(() => {
+          faviconRevision.value += 1
+        })
         break
       default:
       // console.warn('Unknown message type:', message.type)
@@ -241,6 +247,7 @@ function runToolbarAction(action: () => void | Promise<void>): void {
         <TreeItem
           :item="item"
           :favicon-service="faviconService"
+          :favicon-revision="faviconRevision"
         />
       </template>
 

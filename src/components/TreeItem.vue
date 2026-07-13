@@ -27,7 +27,16 @@ import { computed } from 'vue'
 const props = defineProps<{
   item: TreeItem
   faviconService: FaviconService
+  faviconRevision?: number
 }>()
+
+function getTabFavicon(tab: Tab): string {
+  // Reading this prop makes background cache refreshes invalidate the image src.
+  void props.faviconRevision
+  return tab.loadingStatus === 'loading' && tab.state === State.OPEN
+    ? TAB_LOADING
+    : props.faviconService.getFavicon(tab.url)
+}
 
 function onDragStart(e: DragEvent) {
   if (!Settings.values.enableDragAndDrop) return
@@ -620,13 +629,7 @@ function flatDescendantsHaveOpenTab(item: TreeItem): boolean {
       <img
         v-if="isTab(item) || isWindow(item)"
         class="tree-item-favicon"
-        :src="
-          isTab(item)
-            ? item.loadingStatus === 'loading' && item.state === State.OPEN
-              ? TAB_LOADING
-              : props.faviconService.getFavicon(item.url)
-            : '/icon/16.png'
-        "
+        :src="isTab(item) ? getTabFavicon(item) : '/icon/16.png'"
       />
       <div class="tree-item-spacer"></div>
     </div>
