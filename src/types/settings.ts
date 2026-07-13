@@ -24,6 +24,14 @@ export interface Settings {
   saveTabOnCloseIfPreviouslySaved: boolean
   doubleClickOnOpenTab: (typeof SETTINGS_TYPES.doubleClickOnOpenTab)[number]
   doubleClickOnSavedTab: (typeof SETTINGS_TYPES.doubleClickOnSavedTab)[number]
+  showTabTitleOnHover: boolean
+  showTabUrlOnHover: boolean
+  tabGroupInfoOnHover: (typeof SETTINGS_TYPES.tabGroupInfoOnHover)[number]
+
+  // Tab Groups
+  tabGroupDropBehavior: (typeof SETTINGS_TYPES.tabGroupDropBehavior)[number]
+  tabGroupColorIndicator: (typeof SETTINGS_TYPES.tabGroupColorIndicator)[number]
+  saveTabsWhenTabGroupDeleted: boolean
 
   // Drag and Drop
   enableDragAndDrop: boolean
@@ -46,6 +54,9 @@ export const SETTINGS_TYPES = {
   doubleClickOnSavedTab: ['open', 'remove', 'duplicate'],
   includeChildrenOfSelectedItems: ['always', 'collapsed', 'never'],
   includeChildrenOfSelectedItemsWhenIndenting: ['always', 'collapsed', 'never'],
+  tabGroupDropBehavior: ['same-group-both-adjacent', 'any-adjacent-group'],
+  tabGroupColorIndicator: ['right', 'left', 'hidden'],
+  tabGroupInfoOnHover: ['always', 'grouped-only', 'never'],
   refreshFaviconsAfterPeriodOfTimeUnit: [
     'seconds',
     'minutes',
@@ -72,6 +83,26 @@ export const OPTIONS = {
     { label: 'Open', value: 'open' },
     { label: 'Remove', value: 'remove' },
     { label: 'Duplicate', value: 'duplicate' },
+  ],
+  tabGroupDropBehavior: [
+    {
+      label: 'Both Adjacent Tabs in the Same Group',
+      value: 'same-group-both-adjacent',
+    },
+    {
+      label: 'At Least One Adjacent Tab in a Group',
+      value: 'any-adjacent-group',
+    },
+  ],
+  tabGroupColorIndicator: [
+    { label: 'Right Edge', value: 'right' },
+    { label: 'Left Edge', value: 'left' },
+    { label: 'Hidden', value: 'hidden' },
+  ],
+  tabGroupInfoOnHover: [
+    { label: 'Always', value: 'always' },
+    { label: 'Grouped Tabs Only', value: 'grouped-only' },
+    { label: 'Hidden', value: 'never' },
   ],
   includeChildrenOfSelectedItems: [
     { label: 'Always', value: 'always' },

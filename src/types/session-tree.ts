@@ -36,6 +36,28 @@ export interface Tab {
   parentUid?: UID
   isVisible?: boolean
   customLabel?: string
+  tabGroup?: TabGroupMetadata
+}
+
+export type TabGroupColor =
+  | 'blue'
+  | 'cyan'
+  | 'grey'
+  | 'green'
+  | 'orange'
+  | 'pink'
+  | 'purple'
+  | 'red'
+  | 'yellow'
+
+export interface TabGroupMetadata {
+  /** Stable Session Flow identity. Firefox group IDs can change on restore. */
+  uid: UID
+  /** Current Firefox group ID, or -1 while this tab is saved. */
+  id: number
+  title?: string
+  color: TabGroupColor
+  collapsed: boolean
 }
 
 export interface Note {

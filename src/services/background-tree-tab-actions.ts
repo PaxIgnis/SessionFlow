@@ -9,6 +9,7 @@ import {
   Note,
   State,
   Tab,
+  TabGroupMetadata,
   TreeItemType,
   WindowChild,
 } from '@/types/session-tree'
@@ -41,6 +42,7 @@ export function addTab(
   parentUid?: UID,
   tabUid?: UID,
   emitDelta: boolean = true,
+  tabGroup?: TabGroupMetadata,
 ): UID | void {
   console.log('Tab Added in background.ts', windowUID, tabId, title, url)
   const tabExists = Tree.tabsByUid.get(tabUid ?? '')
@@ -69,6 +71,7 @@ export function addTab(
     isParent: false,
     indentLevel: 1,
     pinned: pinned,
+    tabGroup: tabGroup ? structuredClone(tabGroup) : undefined,
   }
   if (index !== undefined) {
     // if not pinned but index before last pinned tab, change index to
@@ -311,6 +314,7 @@ export function setTabSaved(tabUid: UID): void {
       id: -1,
       savedTime: Date.now(),
       active: false,
+      tabGroup: Tree.savedTabGroup(tab.tabGroup),
     } as Partial<Tab>
     Tree.updateTab({ tabUid: tabUid }, updatedTab)
   }
@@ -471,6 +475,9 @@ export function duplicateTab(message: { tabId: number; tabUid: UID }): void {
       false,
       newIndex,
       tab.parentUid,
+      undefined,
+      true,
+      tab.tabGroup,
     )
   }
 }
@@ -561,6 +568,7 @@ export async function openTab(message: {
       Tree.updateTabId(message.tabUid, tab.id!)
       Tree.updateTabState(message.tabUid, State.OPEN)
       if (pinned) Browser.pinTab(tab.id!)
+      await Tree.restoreTabGroup(message.tabUid)
     } catch (error) {
       console.error('Error opening window:', error)
     }
@@ -613,6 +621,7 @@ export async function openTab(message: {
         message.tabUid,
         tab.discarded ? State.DISCARDED : State.OPEN,
       )
+      await Tree.restoreTabGroup(message.tabUid)
     } catch (error) {
       console.error('Error opening tab:', error)
     }
@@ -1250,6 +1259,7 @@ export async function moveTab(
     effectiveParentUid,
     tab.uid,
     emitDelta,
+    tab.tabGroup,
   )
 
   const targetIndexInBrowser = targetWindow.children.filter(

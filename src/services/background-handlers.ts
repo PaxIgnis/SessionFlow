@@ -11,10 +11,31 @@ import {
   LoadingStatus,
   State,
   Tab,
+  TabGroupMetadata,
   TreeItemType,
   Window,
   WindowChild,
 } from '@/types/session-tree'
+
+const detachedTabGroups = new Map<number, TabGroupMetadata | undefined>()
+const pendingGroupedTabRemovals = new Map<
+  number,
+  Array<{
+    tabId: number
+    removeInfo: browser.tabs._OnRemovedRemoveInfo
+  }>
+>()
+const pendingRemovedGroups = new Map<
+  number,
+  {
+    group: browser.tabGroups.TabGroup
+    removeInfo: browser.tabGroups._RemoveInfo
+  }
+>()
+const pendingGroupRemovalTimers = new Map<
+  number,
+  ReturnType<typeof setTimeout>
+>()
 
 // ==============================
 // Event Listeners
@@ -40,6 +61,10 @@ export function initializeListeners() {
   browser.tabs.onRemoved.addListener(tabsOnRemoved)
   browser.tabs.onUpdated.addListener(tabsOnUpdated)
   browser.tabs.onUpdated.addListener(tabsOnUpdatedFavicon)
+  browser.tabGroups.onCreated.addListener(Tree.tabGroupUpdated)
+  browser.tabGroups.onMoved.addListener(Tree.tabGroupMoved)
+  browser.tabGroups.onRemoved.addListener(tabGroupsOnRemoved)
+  browser.tabGroups.onUpdated.addListener(Tree.tabGroupUpdated)
   browser.windows.onCreated.addListener(windowsOnCreated)
   browser.windows.onFocusChanged.addListener(windowsOnFocusChanged)
   browser.windows.onRemoved.addListener(windowsOnRemoved)
@@ -179,7 +204,7 @@ async function tabsOnCreated(tab: browser.tabs.Tab): Promise<void> {
     const tabToLeftIndex = tabToLeft
       ? window.children.findIndex((t) => t.uid === tabToLeft.uid)
       : 0
-    Tree.addTab(
+    const tabUid = Tree.addTab(
       tab.active,
       window.uid,
       tab.id,
@@ -190,6 +215,9 @@ async function tabsOnCreated(tab: browser.tabs.Tab): Promise<void> {
       tab.pinned || false,
       tabToLeft ? tabToLeftIndex + 1 : undefined,
     )
+    if (tabUid && (tab.groupId ?? -1) !== -1) {
+      await Tree.tabGroupMembershipChanged(tab.id, tab.groupId!)
+    }
   }
 }
 
@@ -218,6 +246,34 @@ function tabsOnRemoved(
   if (index === -1) {
     return
   }
+  const tab = tabs[index]
+  if (
+    Settings.values.saveTabsWhenTabGroupDeleted &&
+    !removeInfo.isWindowClosing &&
+    tab.tabGroup?.id !== undefined &&
+    tab.tabGroup.id !== -1
+  ) {
+    const pending = pendingGroupedTabRemovals.get(tab.tabGroup.id) ?? []
+    pending.push({ tabId, removeInfo })
+    pendingGroupedTabRemovals.set(tab.tabGroup.id, pending)
+    scheduleGroupedTabRemoval(tab.tabGroup.id)
+    return
+  }
+
+  finishTabRemoval(tabId, removeInfo)
+}
+
+function finishTabRemoval(
+  tabId: number,
+  removeInfo: browser.tabs._OnRemovedRemoveInfo,
+): void {
+  const window = Tree.Items.filter(Tree.isWindow).find(
+    (w) => w.id === removeInfo.windowId,
+  )
+  if (!window) return
+  const tabs = Tree.getTabs(window.children)
+  const index = tabs.findIndex((tab) => tab.id === tabId)
+  if (index === -1) return
   if (tabs[index].state === State.SAVED) {
     return
   }
@@ -233,6 +289,50 @@ function tabsOnRemoved(
     return
   }
   Tree.removeTab(tabs[index].uid)
+}
+
+function tabGroupsOnRemoved(
+  group: browser.tabGroups.TabGroup,
+  removeInfo: browser.tabGroups._RemoveInfo,
+): void {
+  if (removeInfo.isWindowClosing) {
+    Tree.tabGroupWindowClosed(group)
+    return
+  }
+
+  if (!Settings.values.saveTabsWhenTabGroupDeleted) {
+    Tree.tabGroupRemoved(group)
+    return
+  }
+
+  pendingRemovedGroups.set(group.id, { group, removeInfo })
+  scheduleGroupedTabRemoval(group.id)
+}
+
+function scheduleGroupedTabRemoval(groupId: number): void {
+  const existingTimer = pendingGroupRemovalTimers.get(groupId)
+  if (existingTimer) clearTimeout(existingTimer)
+
+  pendingGroupRemovalTimers.set(
+    groupId,
+    setTimeout(() => finalizeGroupedTabRemoval(groupId), 100),
+  )
+}
+
+function finalizeGroupedTabRemoval(groupId: number): void {
+  const groupRemoval = pendingRemovedGroups.get(groupId)
+  const tabRemovals = pendingGroupedTabRemovals.get(groupId) ?? []
+
+  if (groupRemoval) {
+    Tree.tabGroupRemoved(groupRemoval.group, tabRemovals.length > 0)
+  }
+  for (const removal of tabRemovals) {
+    finishTabRemoval(removal.tabId, removal.removeInfo)
+  }
+
+  pendingRemovedGroups.delete(groupId)
+  pendingGroupedTabRemovals.delete(groupId)
+  pendingGroupRemovalTimers.delete(groupId)
 }
 
 /**
@@ -280,6 +380,12 @@ function tabsOnUpdated(
   }
 
   Tree.updateTab({ windowId: tab.windowId, tabId: tab.id }, tabContents)
+  const groupId = (changeInfo as { groupId?: number }).groupId
+  if (groupId !== undefined) {
+    void Tree.tabGroupMembershipChanged(tabId, groupId).catch((error) => {
+      console.error('Error updating tab group membership:', error)
+    })
+  }
 }
 
 /**
@@ -344,7 +450,7 @@ async function tabsOnMoved(
       window.children.findLastIndex(
         (t) => t.type === TreeItemType.TAB && t.pinned,
       ) + 1
-    Tree.addTab(
+    const tabUid = Tree.addTab(
       tab.active ?? false,
       window.uid,
       tab.id,
@@ -357,6 +463,9 @@ async function tabsOnMoved(
       undefined,
       tab.uid,
     )
+    if (tabUid && tab.tabGroup) {
+      Tree.updateTab({ tabUid }, { tabGroup: tab.tabGroup })
+    }
   } else {
     // move to the position immediately before the tab to the right in the browser
     const rightTabId = openBrowserTabs[moveInfo.toIndex + 1].id
@@ -371,7 +480,7 @@ async function tabsOnMoved(
         ) + 1
     }
 
-    Tree.addTab(
+    const tabUid = Tree.addTab(
       tab.active ?? false,
       window.uid,
       tab.id,
@@ -384,6 +493,9 @@ async function tabsOnMoved(
       undefined,
       tab.uid,
     )
+    if (tabUid && tab.tabGroup) {
+      Tree.updateTab({ tabUid }, { tabGroup: tab.tabGroup })
+    }
   }
   Tree.recomputeSessionTree()
 }
@@ -503,6 +615,11 @@ function tabsOnDetached(
   if (index === -1) {
     return
   }
+  const detachedTab = window.children[index]
+  detachedTabGroups.set(
+    tabId,
+    detachedTab.type === TreeItemType.TAB ? detachedTab.tabGroup : undefined,
+  )
   Tree.removeTab(window.children[index].uid)
 }
 
@@ -557,7 +674,7 @@ async function tabsOnAttached(
           (t) => t.type === TreeItemType.TAB && t.pinned,
         ) + 1
       : undefined
-    Tree.addTab(
+    const tabUid = Tree.addTab(
       tab.active,
       window.uid,
       tabId,
@@ -568,6 +685,14 @@ async function tabsOnAttached(
       tab.pinned || false,
       targetTabIndex,
     )
+    const detachedGroup = detachedTabGroups.get(tabId)
+    if (tabUid && detachedGroup) {
+      Tree.updateTab({ tabUid }, { tabGroup: detachedGroup })
+    }
+    detachedTabGroups.delete(tabId)
+    if (tabUid && (tab.groupId ?? -1) !== -1) {
+      await Tree.tabGroupMembershipChanged(tabId, tab.groupId!)
+    }
     return
   } else {
     // if there is a tab to the right, insert it to the left of that tab
@@ -578,7 +703,7 @@ async function tabsOnAttached(
       window.children.findLastIndex(
         (t) => t.type === TreeItemType.TAB && t.pinned,
       ) + 1
-    Tree.addTab(
+    const tabUid = Tree.addTab(
       tab.active,
       window.uid,
       tabId,
@@ -591,6 +716,14 @@ async function tabsOnAttached(
         ? lastPinnedIndex
         : tabToRightIndex,
     )
+    const detachedGroup = detachedTabGroups.get(tabId)
+    if (tabUid && detachedGroup) {
+      Tree.updateTab({ tabUid }, { tabGroup: detachedGroup })
+    }
+    detachedTabGroups.delete(tabId)
+    if (tabUid && (tab.groupId ?? -1) !== -1) {
+      await Tree.tabGroupMembershipChanged(tabId, tab.groupId!)
+    }
   }
 }
 

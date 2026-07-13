@@ -15,3 +15,8 @@ The WDIO suite packages the Firefox extension with `pnpm run zip:firefox`, start
 The first smoke test verifies that the extension page loads and the SessionTree Vue root exists. Workflow specs seed local `data:text/html` tabs so background snapshots and browser tab events are deterministic and network-free.
 
 The context-menu workflow captures `browser.menus.create` inside the extension page and invokes the captured SessionFlow command handler. This validates the extension menu-command path; it does not assert native Firefox context-menu rendering.
+
+The tab-group workflow uses Firefox's real `tabs.group`, `tabs.move`,
+`tabGroups.move`, `tabs.remove`, and group-restoration behavior. It covers
+singleton and destination grouping, within-window and cross-window group moves,
+group removal (including the last-tab ambiguity), and saved-window restoration.

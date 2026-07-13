@@ -120,6 +120,72 @@ describe('background browser API interactions', () => {
     expectTreeInvariants()
   })
 
+  it('restores a saved grouped tab in its open session window instead of the popup', async () => {
+    const openTab = createTab('open-tab' as UID, {
+      id: 10,
+      state: State.OPEN,
+    })
+    const savedGroupedTab = createTab('saved-grouped-tab' as UID, {
+      id: -1,
+      state: State.SAVED,
+      tabGroup: {
+        uid: 'stable-group' as UID,
+        id: -1,
+        title: 'Research',
+        color: 'blue',
+        collapsed: false,
+      },
+    })
+    const window = createWindow('window-1' as UID, [openTab, savedGroupedTab], {
+      id: 20,
+      state: State.OPEN,
+    })
+    Tree.sessionTreeWindowId = 99
+    vi.spyOn(OnCreatedQueue, 'createTabAndWait').mockResolvedValue({
+      id: 30,
+      windowId: window.id,
+      index: 1,
+      active: true,
+      discarded: false,
+      pinned: false,
+    } as browser.tabs.Tab)
+    vi.mocked(browser.tabs.group).mockResolvedValue(7)
+    vi.mocked(browser.tabGroups.update).mockResolvedValue({
+      id: 7,
+      windowId: window.id,
+      title: 'Research',
+      color: 'blue',
+      collapsed: false,
+    })
+    vi.mocked(browser.tabs.query).mockResolvedValue([
+      {
+        id: 30,
+        windowId: window.id,
+        groupId: 7,
+      } as browser.tabs.Tab,
+    ])
+
+    await Tree.openTab({
+      tabUid: savedGroupedTab.uid,
+      windowUid: window.uid,
+    })
+
+    expect(OnCreatedQueue.createTabAndWait).toHaveBeenCalledWith(
+      expect.objectContaining({ windowId: window.id }),
+    )
+    expect(browser.tabs.group).toHaveBeenCalledWith({
+      tabIds: [30],
+      createProperties: { windowId: window.id },
+    })
+    expect(browser.tabs.group).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        createProperties: { windowId: Tree.sessionTreeWindowId },
+      }),
+    )
+    expect(savedGroupedTab.tabGroup?.id).toBe(7)
+    expectTreeInvariants()
+  })
+
   it('removes a saved note-only window from the tree without calling browser.windows.remove', () => {
     const note = createNote('note-1' as UID)
     const childNote = createNote('note-child' as UID, {

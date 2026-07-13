@@ -18,6 +18,7 @@ export default defineConfig({
       'menus.overrideContext',
       'scripting',
       'storage',
+      'tabGroups',
       'tabs',
     ],
     optional_host_permissions: ['http://*/*', 'https://*/*'],
@@ -26,6 +27,7 @@ export default defineConfig({
     browser_specific_settings: {
       gecko: {
         id: '6b9a5897787af169ae058e65c75ac90a98506c61@temporary-addon',
+        strict_min_version: '139.0',
       },
     },
   },

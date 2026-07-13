@@ -43,6 +43,24 @@ import { STRINGS } from '@/types/strings'
       :options="OPTIONS.doubleClickOnSavedTab"
       @update="Settings.saveSettingsToStorage()"
     />
+    <ToggleButton
+      label="Show Tab Title On Hover"
+      v-model="Settings.values.showTabTitleOnHover"
+      :options="OPTIONS.boolean"
+      @update="Settings.saveSettingsToStorage()"
+    />
+    <ToggleButton
+      label="Show Tab URL On Hover"
+      v-model="Settings.values.showTabUrlOnHover"
+      :options="OPTIONS.boolean"
+      @update="Settings.saveSettingsToStorage()"
+    />
+    <ToggleButton
+      label="Show Tab Group On Hover"
+      v-model="Settings.values.tabGroupInfoOnHover"
+      :options="OPTIONS.tabGroupInfoOnHover"
+      @update="Settings.saveSettingsToStorage()"
+    />
   </section>
 </template>
 

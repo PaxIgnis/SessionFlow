@@ -26,6 +26,14 @@ export const DEFAULT_SETTINGS: Settings = {
   saveTabOnCloseIfPreviouslySaved: true,
   doubleClickOnOpenTab: 'focus',
   doubleClickOnSavedTab: 'open',
+  showTabTitleOnHover: true,
+  showTabUrlOnHover: true,
+  tabGroupInfoOnHover: 'grouped-only',
+
+  // Tab Groups
+  tabGroupDropBehavior: 'same-group-both-adjacent',
+  tabGroupColorIndicator: 'right',
+  saveTabsWhenTabGroupDeleted: true,
 
   // Drag and Drop
   enableDragAndDrop: true,

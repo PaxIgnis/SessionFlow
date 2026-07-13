@@ -426,6 +426,62 @@ describe('window actions', () => {
     })
     expectTreeInvariants()
   })
+
+  it('recreates saved tab groups after opening an entire saved window', async () => {
+    vi.useFakeTimers()
+    Settings.values.openWindowWithTabsDiscarded = false
+    Settings.values.openWindowsInSameLocation = false
+    const tabGroup = {
+      uid: 'stable-group' as UID,
+      id: -1,
+      title: 'Research',
+      color: 'blue' as const,
+      collapsed: false,
+    }
+    const firstTab = createTab('tab-first' as UID, {
+      id: -1,
+      state: State.SAVED,
+      tabGroup: { ...tabGroup },
+    })
+    const secondTab = createTab('tab-second' as UID, {
+      id: -1,
+      state: State.SAVED,
+      tabGroup: { ...tabGroup },
+    })
+    const window = createWindow('window-1' as UID, [firstTab, secondTab], {
+      id: -1,
+      state: State.SAVED,
+    })
+    vi.mocked(browser.windows.create).mockResolvedValue({
+      id: 30,
+      tabs: [{ id: 101 }, { id: 102 }],
+    } as browser.windows.Window)
+    vi.mocked(browser.tabs.group).mockResolvedValue(23)
+    vi.mocked(browser.tabGroups.update).mockResolvedValue({
+      id: 23,
+      windowId: 30,
+      title: 'Research',
+      color: 'blue',
+      collapsed: false,
+    })
+    vi.mocked(browser.tabs.query).mockResolvedValue([
+      { id: 101, windowId: 30, groupId: 23 },
+      { id: 102, windowId: 30, groupId: 23 },
+    ] as browser.tabs.Tab[])
+
+    const result = Tree.openWindow({ windowUid: window.uid })
+    await flushMicrotasks()
+    await resolveCreatedWindowAndTabs(30, [101, 102])
+    await result
+
+    expect(browser.tabs.group).toHaveBeenCalledWith({
+      tabIds: [101, 102],
+      createProperties: { windowId: 30 },
+    })
+    expect(firstTab.tabGroup?.id).toBe(23)
+    expect(secondTab.tabGroup?.id).toBe(23)
+    expectTreeInvariants()
+  })
 })
 
 async function resolveCreatedWindowAndTabs(

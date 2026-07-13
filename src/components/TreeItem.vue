@@ -421,6 +421,43 @@ const childrenOpen = computed(() => {
   return false
 })
 
+const tabGroupIndicator = computed(() => {
+  if (!isTab(props.item) || !props.item.tabGroup) return undefined
+  if (Settings.values.tabGroupColorIndicator === 'hidden') return undefined
+
+  return {
+    color: `var(--tab-group-color-${props.item.tabGroup.color})`,
+    position: Settings.values.tabGroupColorIndicator,
+    title: props.item.tabGroup.title?.trim() || 'Unnamed tab group',
+  }
+})
+
+const tabHoverDetails = computed(() => {
+  if (!isTab(props.item)) return undefined
+
+  const details: string[] = []
+  if (Settings.values.showTabTitleOnHover) {
+    details.push(`Title: ${props.item.title}`)
+  }
+  if (Settings.values.showTabUrlOnHover) {
+    details.push(`URL: ${props.item.url}`)
+  }
+  if (
+    Settings.values.tabGroupInfoOnHover === 'always' ||
+    (Settings.values.tabGroupInfoOnHover === 'grouped-only' &&
+      props.item.tabGroup)
+  ) {
+    details.push(
+      `Tab group: ${
+        props.item.tabGroup?.title?.trim() ||
+        (props.item.tabGroup ? 'Unnamed tab group' : 'None')
+      }`,
+    )
+  }
+
+  return details.length > 0 ? details.join('\n') : undefined
+})
+
 function flatDescendantsHaveOpenTab(item: TreeItem): boolean {
   const list = getContainingList(item)
   const parentIndex = list.findIndex((child) => child.uid === item.uid)
@@ -466,6 +503,7 @@ function flatDescendantsHaveOpenTab(item: TreeItem): boolean {
     :style="{
       '--indent-level': item.indentLevel ?? 0,
     }"
+    :title="tabHoverDetails"
     @click.stop="Selection.selectItem(item, getType(item), $event)"
     @contextmenu.stop="
       ContextMenu.handleContextMenuClick(
@@ -488,6 +526,14 @@ function flatDescendantsHaveOpenTab(item: TreeItem): boolean {
   >
     <span class="tree-item-overlay"></span>
     <span class="tree-item-underlay"></span>
+    <span
+      v-if="tabGroupIndicator"
+      class="tree-item-tab-group-indicator"
+      :class="`tree-item-tab-group-indicator-${tabGroupIndicator.position}`"
+      :style="{ backgroundColor: tabGroupIndicator.color }"
+      :title="tabGroupIndicator.title"
+      :aria-label="tabGroupIndicator.title"
+    ></span>
     <span
       class="tree-item-hover-menu"
       @dblclick.stop
@@ -713,6 +759,23 @@ function flatDescendantsHaveOpenTab(item: TreeItem): boolean {
 
 .tree-item-underlay {
   position: absolute;
+}
+
+.tree-item-tab-group-indicator {
+  position: absolute;
+  z-index: 3;
+  top: 2px;
+  bottom: 2px;
+  width: 3px;
+  border-radius: 2px;
+}
+
+.tree-item-tab-group-indicator-right {
+  right: 1px;
+}
+
+.tree-item-tab-group-indicator-left {
+  left: 1px;
 }
 
 .tree-item:not(.tree-item-selected):hover > .tree-item-overlay {

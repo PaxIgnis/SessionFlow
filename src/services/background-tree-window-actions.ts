@@ -30,6 +30,7 @@ export function saveWindow(windowUid: UID): void {
       tab.id = -1
       tab.savedTime = Date.now()
       tab.active = false
+      tab.tabGroup = Tree.savedTabGroup(tab.tabGroup)
     })
     emitTreeDelta({
       op: 'windowUpdated',
@@ -116,6 +117,7 @@ export async function updateWindowTabs(windowId: number): Promise<void> {
         op: 'windowUpdated',
         window: structuredClone(window),
       })
+      await Tree.syncOpenTabGroups()
     }
   } catch (error) {
     console.error('Error updating window tabs:', error)
@@ -365,7 +367,8 @@ export async function openWindow(message: { windowUid: UID }): Promise<void> {
     }
     const urls: string[] = []
     const pinnedTabs: UID[] = []
-    for (const tab of Tree.getTabs(sessionTreeWindow.children)) {
+    const sessionTabs = Tree.getTabs(sessionTreeWindow.children)
+    for (const tab of sessionTabs) {
       let url = String(tab.url)
       // if the URL is a privileged URL, open a redirect page instead
       if (Utils.isPrivilegedUrl(url)) {
@@ -407,23 +410,26 @@ export async function openWindow(message: { windowUid: UID }): Promise<void> {
 
     // then update the saved window object id to represent the newly opened window
     Tree.updateWindowId(message.windowUid, window.id)
-    window.tabs.forEach((tab, index) => {
-      Tree.updateTabId(sessionTreeWindow?.children[index].uid, tab.id!)
-      Tree.updateTabState(sessionTreeWindow?.children[index].uid, State.OPEN)
+    for (const [index, tab] of window.tabs.entries()) {
+      const sessionTab = sessionTabs[index]
+      if (!sessionTab) continue
+      Tree.updateTabId(sessionTab.uid, tab.id!)
+      Tree.updateTabState(sessionTab.uid, State.OPEN)
       // need to manually pin tab because pinned state is not preserved when creating window with URLs
-      if (pinnedTabs.includes(sessionTreeWindow?.children[index].uid))
-        Browser.pinTab(tab.id!)
-    })
+      if (pinnedTabs.includes(sessionTab.uid)) Browser.pinTab(tab.id!)
+    }
+    await Tree.restoreWindowTabGroups(message.windowUid)
     if (Settings.values.openWindowWithTabsDiscarded && urls.length > 1) {
-      for (const tab of Tree.getTabs(sessionTreeWindow.children)) {
+      for (const tab of sessionTabs) {
         if (tab.state === State.SAVED) {
-          Tree.openTab({
+          await Tree.openTab({
             tabUid: tab.uid,
             windowUid: message.windowUid,
             discarded: true,
           })
         }
       }
+      await Tree.restoreWindowTabGroups(message.windowUid)
     }
   } catch (error) {
     console.error('Error opening window:', error)

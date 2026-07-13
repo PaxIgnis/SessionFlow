@@ -92,6 +92,88 @@ describe('TreeItem indent guide rendering', () => {
     expect(countClass(markup, 'indent-line-end')).toBe(1)
   })
 
+  it('renders a named Firefox group color indicator on grouped tabs', async () => {
+    const tab = makeForegroundTab('grouped-tab' as UID, {
+      tabGroup: {
+        uid: 'group-uid' as UID,
+        id: 7,
+        title: 'Research',
+        color: 'blue',
+        collapsed: false,
+      },
+    })
+
+    const markup = await renderTreeItem(tab)
+
+    expect(markup).toContain('tree-item-tab-group-indicator-right')
+    expect(markup).toContain('var(--tab-group-color-blue)')
+    expect(markup).toContain('Title: grouped-tab')
+    expect(markup).toContain('URL: https://example.test/grouped-tab')
+    expect(markup).toContain('Tab group: Research')
+  })
+
+  it('supports left and hidden group color indicators while retaining the group tooltip', async () => {
+    const tab = makeForegroundTab('grouped-tab' as UID, {
+      tabGroup: {
+        uid: 'group-uid' as UID,
+        id: -1,
+        title: 'Saved research',
+        color: 'purple',
+        collapsed: true,
+      },
+    })
+    Settings.values.tabGroupColorIndicator = 'left'
+
+    const leftMarkup = await renderTreeItem(tab)
+
+    expect(leftMarkup).toContain('tree-item-tab-group-indicator-left')
+    Settings.values.tabGroupColorIndicator = 'hidden'
+
+    const hiddenMarkup = await renderTreeItem(tab)
+
+    expect(hiddenMarkup).not.toContain('tree-item-tab-group-indicator-left')
+    expect(hiddenMarkup).toContain('Tab group: Saved research')
+  })
+
+  it('configures which tab details are included in the hover text', async () => {
+    const tab = makeForegroundTab('hovered-tab' as UID)
+    Settings.values.showTabUrlOnHover = false
+    Settings.values.tabGroupInfoOnHover = 'never'
+
+    const titleOnlyMarkup = await renderTreeItem(tab)
+
+    expect(titleOnlyMarkup).toContain('Title: hovered-tab')
+    expect(titleOnlyMarkup).not.toContain('URL:')
+    expect(titleOnlyMarkup).not.toContain('Tab group:')
+
+    Settings.values.showTabTitleOnHover = false
+    const hiddenMarkup = await renderTreeItem(tab)
+
+    expect(hiddenMarkup).not.toContain('title=')
+  })
+
+  it('hides group hover information only for ungrouped tabs when configured', async () => {
+    Settings.values.showTabTitleOnHover = false
+    Settings.values.showTabUrlOnHover = false
+    Settings.values.tabGroupInfoOnHover = 'grouped-only'
+    const ungrouped = makeForegroundTab('ungrouped' as UID)
+    const grouped = makeForegroundTab('grouped' as UID, {
+      tabGroup: {
+        uid: 'group-uid' as UID,
+        id: 7,
+        title: 'Research',
+        color: 'blue',
+        collapsed: false,
+      },
+    })
+
+    const ungroupedMarkup = await renderTreeItem(ungrouped)
+    const groupedMarkup = await renderTreeItem(grouped)
+
+    expect(ungroupedMarkup).not.toContain('Tab group: None')
+    expect(groupedMarkup).toContain('Tab group: Research')
+  })
+
   it('uses a terminal connector when no later direct sibling exists', async () => {
     const first = makeForegroundTab('first' as UID, {
       indentLevel: 1,

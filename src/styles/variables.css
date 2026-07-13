@@ -33,6 +33,16 @@
   --drag-and-drop-hover: rgba(255, 255, 255, 0.03);
   --pin-icon-foreground: rgb(204, 204, 204);
   --note-text-foreground: rgb(20, 120, 0);
+  /* Firefox tab group colors */
+  --tab-group-color-blue: #b5d3ff;
+  --tab-group-color-cyan: #aaf2ff;
+  --tab-group-color-grey: #99a6b4;
+  --tab-group-color-green: #b3ffe3;
+  --tab-group-color-orange: #ffd5b2;
+  --tab-group-color-pink: #ffdef0;
+  --tab-group-color-purple: #e7dfff;
+  --tab-group-color-red: #ffbdc5;
+  --tab-group-color-yellow: #ffea80;
 
   /* Options */
   --nav-panel-active-background: rgb(4, 57, 94);

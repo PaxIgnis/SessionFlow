@@ -109,6 +109,7 @@ export async function initializeWindows(): Promise<void> {
     rebuildUIDMaps()
     Tree.recomputeSessionTree()
     Tree.initialized = true
+    await Tree.syncOpenTabGroups()
     // Open tabs for any saved windows that were not matched to open windows, if the setting is enabled.
     if (Settings.values.restorePreviousSessionOnStartup) {
       for (const tabUid of tabUIDsToOpenOnStartup) {
@@ -675,6 +676,7 @@ function markWindowSavedAfterStartup(window: Window): void {
     tab.active = false
     tab.selected = false
     tab.id = 0
+    tab.tabGroup = Tree.savedTabGroup(tab.tabGroup)
   })
 }
 
@@ -697,6 +699,7 @@ function normalizeWindowChildren(window: Window): void {
     child.id = 0
     child.selected = false
     child.state = State.SAVED
+    child.tabGroup = Tree.savedTabGroup(child.tabGroup)
     if (!child.savedTime) child.savedTime = Date.now()
     if (!child.uid) child.uid = Utils.createUid(Tree.existingUidsSet)
     Tree.tabsByUid.set(child.uid, child)
@@ -732,7 +735,10 @@ function indexTreeItem(item: TreeItem): void {
   else if (item.type === TreeItemType.NOTE) Tree.notesByUid.set(item.uid, item)
   else if (item.type === TreeItemType.SEPARATOR)
     Tree.separatorsByUid.set(item.uid, item)
-  else Tree.tabsByUid.set(item.uid, item)
+  else {
+    Tree.tabsByUid.set(item.uid, item)
+    if (item.tabGroup) Tree.existingUidsSet.add(item.tabGroup.uid)
+  }
 }
 
 export function printSessionTree(): void {
@@ -938,13 +944,30 @@ export async function moveTreeItems(
     return
   }
 
-  moveNonTabTreeItems(
+  const moveBlocks = buildMoveBlocks(itemUIDs)
+  const requestedItems = moveBlocks.flatMap((block) =>
+    includeDescendants ? block.items : [block.root],
+  )
+  const movedItemUids = new Set(requestedItems.map((item) => item.uid))
+  const movedTabUids = requestedItems
+    .filter((item): item is Tab => item.type === TreeItemType.TAB)
+    .map((tab) => tab.uid)
+  const targetWindow = targetWindowUid
+    ? Tree.windowsByUid.get(targetWindowUid)
+    : undefined
+  const targetTabGroup = targetWindow
+    ? Tree.getDropTabGroup(targetWindow.children, targetIndex, movedItemUids)
+    : undefined
+  const moved = moveNonTabTreeItems(
     itemUIDs,
     targetIndex,
     parentUid,
     targetWindowUid,
     includeDescendants,
   )
+  if (moved && targetWindowUid && movedTabUids.length > 0) {
+    await Tree.applyDropTabGroup(movedTabUids, targetWindowUid, targetTabGroup)
+  }
 }
 
 /**
@@ -1097,11 +1120,11 @@ function moveNonTabTreeItems(
   parentUid?: UID,
   targetWindowUid?: UID,
   includeDescendants: boolean = true,
-): void {
+): boolean {
   let effectiveParentUid = parentUid
   let destination = getContainerForParent(effectiveParentUid, targetWindowUid)
   const moveBlocks = buildMoveBlocks(itemUIDs)
-  if (moveBlocks.length === 0) return
+  if (moveBlocks.length === 0) return false
   const movingToTopLevel = !destination.parent && !targetWindowUid
   const destinationParent = destination.parent
   const blocksDroppedOntoDescendants = destinationParent
@@ -1114,7 +1137,7 @@ function moveNonTabTreeItems(
     blocksDroppedOntoDescendants.length > 0 &&
     !Settings.values.allowDropOntoDescendantItems
   ) {
-    return
+    return false
   }
 
   if (!includeDescendants) {
@@ -1142,7 +1165,7 @@ function moveNonTabTreeItems(
     }
   }
   destination = getContainerForParent(effectiveParentUid, targetWindowUid)
-  if (!isValidDestination(destination.parent, moveBlocks)) return
+  if (!isValidDestination(destination.parent, moveBlocks)) return false
 
   let adjustedTargetIndex = Math.max(
     0,
@@ -1197,6 +1220,7 @@ function moveNonTabTreeItems(
     op: 'treeReplaced',
     treeItems: structuredClone(Tree.Items),
   })
+  return true
 }
 
 /**
@@ -1237,6 +1261,11 @@ async function moveTreeItemsIncludingTabs(
   }
 
   const movedItemUids = new Set(requestedItems.map((item) => item.uid))
+  const targetTabGroup = Tree.getDropTabGroup(
+    targetWindow.children,
+    tabTargetIndex,
+    movedItemUids,
+  )
   const originalParentUidByUid = new Map(
     requestedItems.map((item) => [item.uid, item.parentUid] as const),
   )
@@ -1246,6 +1275,15 @@ async function moveTreeItemsIncludingTabs(
   const tabs = requestedItems
     .filter((item): item is Tab => item.type === TreeItemType.TAB)
     .sort(compareTabsByTreeOrder)
+  const originalTabGroupsByUid = new Map(
+    tabs.map(
+      (tab) =>
+        [
+          tab.uid,
+          tab.tabGroup ? structuredClone(tab.tabGroup) : undefined,
+        ] as const,
+    ),
+  )
   const nonTabItems = requestedItems.filter(
     (item) => item.type !== TreeItemType.TAB,
   )
@@ -1349,6 +1387,20 @@ async function moveTreeItemsIncludingTabs(
       false,
     )
   })
+
+  const movedTabUids = tabs.map((tab) => newUidMapping.get(tab.uid) ?? tab.uid)
+  const movedTabSourceGroups = new Map(
+    tabs.map(
+      (tab, index) =>
+        [movedTabUids[index], originalTabGroupsByUid.get(tab.uid)] as const,
+    ),
+  )
+  await Tree.applyDropTabGroup(
+    movedTabUids,
+    targetWindowUid,
+    targetTabGroup,
+    movedTabSourceGroups,
+  )
 
   for (const windowUid of updatedWindows) {
     const window = Tree.windowsByUid.get(windowUid)

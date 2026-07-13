@@ -2,6 +2,7 @@ import * as Actions from '@/services/background-tree-actions'
 import * as NoteActions from '@/services/background-tree-note-actions'
 import * as SeparatorActions from '@/services/background-tree-separator-actions'
 import * as TabActions from '@/services/background-tree-tab-actions'
+import * as TabGroupActions from '@/services/background-tab-group-actions'
 import * as WindowActions from '@/services/background-tree-window-actions'
 import * as TreeUtils from '@/services/tree-utils'
 import {
@@ -27,6 +28,7 @@ export const Tree = {
   ...NoteActions,
   ...SeparatorActions,
   ...TabActions,
+  ...TabGroupActions,
   ...WindowActions,
   ...TreeUtils,
 }

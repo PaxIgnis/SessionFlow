@@ -78,6 +78,19 @@ export interface FakeBrowser {
     duplicate: ReturnType<typeof vi.fn>
     reload: ReturnType<typeof vi.fn>
     create: ReturnType<typeof vi.fn>
+    group: ReturnType<typeof vi.fn>
+    ungroup: ReturnType<typeof vi.fn>
+    update: ReturnType<typeof vi.fn>
+  }
+  tabGroups: {
+    onCreated: FakeEvent<[browser.tabGroups.TabGroup]>
+    onMoved: FakeEvent<[browser.tabGroups.TabGroup]>
+    onRemoved: FakeEvent<
+      [browser.tabGroups.TabGroup, browser.tabGroups._RemoveInfo]
+    >
+    onUpdated: FakeEvent<[browser.tabGroups.TabGroup]>
+    get: ReturnType<typeof vi.fn>
+    query: ReturnType<typeof vi.fn>
     update: ReturnType<typeof vi.fn>
   }
   windows: {
@@ -161,7 +174,20 @@ export function installFakeBrowser(): FakeBrowser {
       duplicate: vi.fn().mockResolvedValue({ id: 2 }),
       reload: vi.fn().mockResolvedValue(undefined),
       create: vi.fn().mockResolvedValue({ id: 3 }),
+      group: vi.fn().mockResolvedValue(1),
+      ungroup: vi.fn().mockResolvedValue(undefined),
       update: vi.fn().mockResolvedValue({ id: 1 }),
+    },
+    tabGroups: {
+      onCreated: new FakeEvent<[browser.tabGroups.TabGroup]>(),
+      onMoved: new FakeEvent<[browser.tabGroups.TabGroup]>(),
+      onRemoved: new FakeEvent<
+        [browser.tabGroups.TabGroup, browser.tabGroups._RemoveInfo]
+      >(),
+      onUpdated: new FakeEvent<[browser.tabGroups.TabGroup]>(),
+      get: vi.fn(),
+      query: vi.fn().mockResolvedValue([]),
+      update: vi.fn(),
     },
     windows: {
       onCreated: new FakeEvent<[browser.windows.Window]>(),

@@ -119,6 +119,12 @@ describe('settings actions', () => {
         includeChildrenOfSelectedItems: 'always',
         includeChildrenOfSelectedItemsWhenIndenting: 'never',
         allowDropOntoDescendantItems: false,
+        tabGroupDropBehavior: 'any-adjacent-group',
+        tabGroupColorIndicator: 'left',
+        saveTabsWhenTabGroupDeleted: true,
+        showTabTitleOnHover: false,
+        showTabUrlOnHover: false,
+        tabGroupInfoOnHover: 'grouped-only',
       },
     })
     const { loadSettingsFromStorage } =
@@ -135,5 +141,11 @@ describe('settings actions', () => {
       'never',
     )
     expect(Settings.values.allowDropOntoDescendantItems).toBe(false)
+    expect(Settings.values.tabGroupDropBehavior).toBe('any-adjacent-group')
+    expect(Settings.values.tabGroupColorIndicator).toBe('left')
+    expect(Settings.values.saveTabsWhenTabGroupDeleted).toBe(true)
+    expect(Settings.values.showTabTitleOnHover).toBe(false)
+    expect(Settings.values.showTabUrlOnHover).toBe(false)
+    expect(Settings.values.tabGroupInfoOnHover).toBe('grouped-only')
   })
 })

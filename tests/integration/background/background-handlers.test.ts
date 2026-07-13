@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { DEFAULT_SETTINGS } from '@/defaults/settings'
+import { Settings } from '@/services/settings'
 import { installFakeBrowser } from '../../helpers/fake-browser'
 import type { SessionTreeMessage } from '@/types/messages'
 import {
@@ -57,6 +59,13 @@ async function loadBackgroundHandlers() {
     unpinTab: vi.fn(),
     pinTabInTree: vi.fn(),
     unpinTabInTree: vi.fn(),
+    setTabSaved: vi.fn(),
+    syncOpenTabGroups: vi.fn(),
+    tabGroupMembershipChanged: vi.fn(),
+    tabGroupMoved: vi.fn(),
+    tabGroupRemoved: vi.fn(),
+    tabGroupWindowClosed: vi.fn(),
+    tabGroupUpdated: vi.fn(),
     printSessionTree: vi.fn(),
   }
   const windowsByUid = new Map<UID, object>()
@@ -93,10 +102,12 @@ async function loadBackgroundHandlers() {
     },
   }))
 
+  const { Settings: handlerSettings } = await import('@/services/settings')
   const { initializeListeners } = await import('@/services/background-handlers')
 
   return {
     fakeBrowser,
+    settings: handlerSettings,
     initializeListeners,
     mocks: {
       clearSelection,
@@ -127,6 +138,7 @@ function getDispatchCommand(
 
 describe('background handlers', () => {
   beforeEach(() => {
+    Object.assign(Settings.values, structuredClone(DEFAULT_SETTINGS))
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
     vi.doUnmock('@/services/background-actions')
@@ -165,6 +177,99 @@ describe('background handlers', () => {
       0,
     )
     expect(fakeBrowser.windows.onRemoved.listeners.length).toBeGreaterThan(0)
+  })
+
+  it('saves a deleted group when its grouped tab removals arrive in either event order', async () => {
+    vi.useFakeTimers()
+    const { fakeBrowser, initializeListeners, mocks, settings } =
+      await loadBackgroundHandlers()
+    settings.values.saveTabsWhenTabGroupDeleted = true
+    const group = {
+      id: 7,
+      windowId: 20,
+      title: 'Research',
+      color: 'blue',
+      collapsed: false,
+    } satisfies browser.tabGroups.TabGroup
+    mocks.Items.push({
+      type: TreeItemType.WINDOW,
+      uid: 'window-1' as UID,
+      id: 20,
+      selected: false,
+      state: State.OPEN,
+      indentLevel: 0,
+      children: [
+        {
+          type: TreeItemType.TAB,
+          uid: 'tab-1' as UID,
+          id: 10,
+          title: 'Grouped',
+          url: 'https://example.test/grouped',
+          windowUid: 'window-1' as UID,
+          selected: false,
+          state: State.OPEN,
+          indentLevel: 1,
+          pinned: false,
+          tabGroup: {
+            uid: 'group-uid' as UID,
+            id: 7,
+            title: 'Research',
+            color: 'blue',
+            collapsed: false,
+          },
+        },
+      ],
+    })
+    initializeListeners()
+
+    fakeBrowser.tabGroups.onRemoved.emit(group, { isWindowClosing: false })
+    fakeBrowser.tabs.onRemoved.emit(10, {
+      windowId: 20,
+      isWindowClosing: false,
+    })
+    await vi.advanceTimersByTimeAsync(100)
+
+    expect(mocks.tabGroupRemoved).toHaveBeenCalledWith(group, true)
+    vi.useRealTimers()
+  })
+
+  it('does not save tabs when a group disappears without tab removals', async () => {
+    vi.useFakeTimers()
+    const { fakeBrowser, initializeListeners, mocks, settings } =
+      await loadBackgroundHandlers()
+    settings.values.saveTabsWhenTabGroupDeleted = true
+    const group = {
+      id: 7,
+      windowId: 20,
+      title: 'Research',
+      color: 'blue',
+      collapsed: false,
+    } satisfies browser.tabGroups.TabGroup
+    initializeListeners()
+
+    fakeBrowser.tabGroups.onRemoved.emit(group, { isWindowClosing: false })
+    await vi.advanceTimersByTimeAsync(100)
+
+    expect(mocks.tabGroupRemoved).toHaveBeenCalledWith(group, false)
+    vi.useRealTimers()
+  })
+
+  it('preserves group metadata when Firefox removes a group while closing its window', async () => {
+    const { fakeBrowser, initializeListeners, mocks } =
+      await loadBackgroundHandlers()
+    const group = {
+      id: 7,
+      windowId: 20,
+      title: 'Research',
+      color: 'blue',
+      collapsed: false,
+    } satisfies browser.tabGroups.TabGroup
+    initializeListeners()
+
+    fakeBrowser.tabGroups.onRemoved.emit(group, { isWindowClosing: true })
+
+    expect(mocks.tabGroupWindowClosed).toHaveBeenCalledWith(group)
+    expect(mocks.tabGroupRemoved).not.toHaveBeenCalled()
   })
 
   it('clears selection and restores browser action menu when context menus are hidden', async () => {
