@@ -1,5 +1,24 @@
 import { PRIVILEGED_URLS } from '@/defaults/constants'
 
+type IncognitoAccessApi = {
+  isAllowedIncognitoAccess?: () => Promise<boolean>
+}
+
+/** Checks whether Firefox currently lets Session Flow access private windows. */
+export async function isPrivateWindowAccessAllowed(): Promise<boolean> {
+  const extensionApi = (
+    browser as unknown as { extension?: IncognitoAccessApi }
+  ).extension
+  if (!extensionApi?.isAllowedIncognitoAccess) return false
+
+  try {
+    return await extensionApi.isAllowedIncognitoAccess()
+  } catch (error) {
+    console.error('Failed to check private-window access:', error)
+    return false
+  }
+}
+
 /**
  * Checks if a url can be discarded without error.
  *

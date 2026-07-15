@@ -14,6 +14,7 @@ import {
   DropPosition,
   DropType,
   SelectionType,
+  State,
   TreeItem,
   TreeItemType,
   Window,
@@ -1032,8 +1033,87 @@ function updateDropTarget(
     return
   }
 
+  if (!copyRequested) {
+    const targetWindow = getTargetWindowForDrop(
+      DragAndDrop.dragState.destinationType,
+      id as UID,
+      dropPosition,
+    )
+    if (
+      targetWindow &&
+      draggedItemsCrossPrivateWindowBoundary(
+        draggedItems,
+        targetWindow,
+        includeDescendants,
+      )
+    ) {
+      return
+    }
+  }
+
   DragAndDrop.dragState.dropPosition = dropPosition
   DragAndDrop.dragState.isValidDropTarget = true
+}
+
+function getTargetWindowForDrop(
+  destinationType: DropType,
+  destinationUid: UID,
+  dropPosition: DropPosition,
+): Window | undefined {
+  if (destinationType === DropType.WINDOW) {
+    return dropPosition === DropPosition.MID
+      ? SessionTree.windowsByUid.get(destinationUid)
+      : undefined
+  }
+  if (destinationType === DropType.TAB) {
+    const tab = SessionTree.tabsByUid.get(destinationUid)
+    return tab ? SessionTree.windowsByUid.get(tab.windowUid) : undefined
+  }
+  if (destinationType === DropType.NOTE) {
+    const note = SessionTree.notesByUid.get(destinationUid)
+    return note?.windowUid
+      ? SessionTree.windowsByUid.get(note.windowUid)
+      : undefined
+  }
+  if (destinationType === DropType.SEPARATOR) {
+    const separator = SessionTree.separatorsByUid.get(destinationUid)
+    return separator?.windowUid
+      ? SessionTree.windowsByUid.get(separator.windowUid)
+      : undefined
+  }
+  if (destinationType === DropType.TREE_END) return getLastLogicalWindow()
+  return undefined
+}
+
+function draggedItemsCrossPrivateWindowBoundary(
+  draggedItems: TreeItem[],
+  targetWindow: Window,
+  includeDescendants: boolean,
+): boolean {
+  const candidates = new Map(draggedItems.map((item) => [item.uid, item]))
+  if (includeDescendants) {
+    for (const item of draggedItems) {
+      for (const descendantUid of itemDescendantUids(item)) {
+        const descendant = getTreeItem(descendantUid)
+        if (descendant) candidates.set(descendant.uid, descendant)
+      }
+    }
+  }
+
+  return [...candidates.values()].some((item) => {
+    if (
+      item.type !== TreeItemType.TAB ||
+      (item.state !== State.OPEN && item.state !== State.DISCARDED)
+    ) {
+      return false
+    }
+
+    const sourceWindow = SessionTree.windowsByUid.get(item.windowUid)
+    return (
+      sourceWindow !== undefined &&
+      sourceWindow.incognito !== targetWindow.incognito
+    )
+  })
 }
 
 function getDropPositionForTarget(

@@ -124,6 +124,7 @@ describe('runtime port service', () => {
         type: TreeItemType.WINDOW,
         uid: 'window-1' as UID,
         id: 1,
+        incognito: false,
         selected: false,
         state: State.SAVED,
         children: [],

@@ -54,12 +54,14 @@ export interface FakeBrowser {
   }
   browserAction: {
     onClicked: FakeEvent<[]>
+    openPopup: ReturnType<typeof vi.fn>
     setBadgeText: ReturnType<typeof vi.fn>
+    setPopup: ReturnType<typeof vi.fn>
     setTitle: ReturnType<typeof vi.fn>
   }
   runtime: {
     onConnect: FakeEvent<[FakePort]>
-    onInstalled: FakeEvent<[]>
+    onInstalled: FakeEvent<[browser.runtime._OnInstalledDetails?]>
     onMessage: FakeEvent<[Record<string, unknown>]>
     onStartup: FakeEvent<[]>
     connect: ReturnType<typeof vi.fn>
@@ -126,6 +128,7 @@ export interface FakeBrowser {
   }
   extension: {
     getViews: ReturnType<typeof vi.fn>
+    isAllowedIncognitoAccess?: ReturnType<typeof vi.fn>
   }
   __ports: {
     clients: FakePort[]
@@ -143,12 +146,14 @@ export function installFakeBrowser(): FakeBrowser {
     },
     browserAction: {
       onClicked: new FakeEvent<[]>(),
+      openPopup: vi.fn().mockResolvedValue(undefined),
       setBadgeText: vi.fn().mockResolvedValue(undefined),
+      setPopup: vi.fn().mockResolvedValue(undefined),
       setTitle: vi.fn().mockResolvedValue(undefined),
     },
     runtime: {
       onConnect,
-      onInstalled: new FakeEvent<[]>(),
+      onInstalled: new FakeEvent<[browser.runtime._OnInstalledDetails?]>(),
       onMessage: new FakeEvent<[Record<string, unknown>]>(),
       onStartup: new FakeEvent<[]>(),
       connect: vi.fn((options?: { name?: string }) => {
@@ -203,9 +208,16 @@ export function installFakeBrowser(): FakeBrowser {
       onCreated: new FakeEvent<[browser.windows.Window]>(),
       onFocusChanged: new FakeEvent<[number]>(),
       onRemoved: new FakeEvent<[number]>(),
-      get: vi.fn().mockResolvedValue({ id: 1, tabs: [] }),
+      get: vi.fn().mockResolvedValue({
+        id: 1,
+        incognito: false,
+        focused: false,
+        tabs: [],
+      }),
       getAll: vi.fn().mockResolvedValue([]),
-      create: vi.fn().mockResolvedValue({ id: 2, tabs: [{ id: 1 }] }),
+      create: vi
+        .fn()
+        .mockResolvedValue({ id: 2, incognito: false, tabs: [{ id: 1 }] }),
       remove: vi.fn().mockResolvedValue(undefined),
       update: vi.fn().mockResolvedValue({ id: 1 }),
     },
@@ -227,6 +239,7 @@ export function installFakeBrowser(): FakeBrowser {
     },
     extension: {
       getViews: vi.fn().mockReturnValue([]),
+      isAllowedIncognitoAccess: vi.fn().mockResolvedValue(true),
     },
     __ports: {
       clients: [],

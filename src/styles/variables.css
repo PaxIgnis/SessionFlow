@@ -28,6 +28,12 @@
   --list-item-saved-foreground: rgb(140, 140, 140);
   --list-item-custom-label-foreground: rgb(214, 169, 85);
   --list-item-selected-background: rgb(27, 54, 82);
+  --window-item-background: rgba(93, 116, 140, 0.2);
+  --window-item-border: rgba(156, 183, 211, 0.28);
+  --private-window-item-background: rgba(104, 65, 151, 0.34);
+  --private-window-item-border: rgba(205, 174, 255, 0.5);
+  --private-window-item-accent: rgb(177, 123, 255);
+  --private-window-item-foreground: rgb(225, 207, 255);
   --drag-and-drop-foreground: rgba(40, 190, 0, 0.8);
   --drag-and-drop-background: rgba(106, 255, 0, 0.1);
   --drag-and-drop-hover: rgba(255, 255, 255, 0.03);

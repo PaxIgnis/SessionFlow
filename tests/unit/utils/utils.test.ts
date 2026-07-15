@@ -3,13 +3,46 @@ import {
   createUid,
   discardedUrlPrecheck,
   getRedirectUrl,
+  isPrivateWindowAccessAllowed,
   isPrivilegedUrl,
 } from '@/services/utils'
 import { installFakeBrowser } from '../../helpers/fake-browser'
 
 describe('utils', () => {
   beforeEach(() => {
+    vi.restoreAllMocks()
     installFakeBrowser()
+  })
+
+  it('returns Firefox private-window access state', async () => {
+    const fakeBrowser = installFakeBrowser()
+    fakeBrowser.extension.isAllowedIncognitoAccess?.mockResolvedValueOnce(false)
+
+    expect(await isPrivateWindowAccessAllowed()).toBe(false)
+
+    fakeBrowser.extension.isAllowedIncognitoAccess?.mockResolvedValueOnce(true)
+
+    expect(await isPrivateWindowAccessAllowed()).toBe(true)
+  })
+
+  it('returns false when the private-window access API is unavailable', async () => {
+    const fakeBrowser = installFakeBrowser()
+    delete fakeBrowser.extension.isAllowedIncognitoAccess
+
+    expect(await isPrivateWindowAccessAllowed()).toBe(false)
+  })
+
+  it('returns false and logs when checking private-window access fails', async () => {
+    const fakeBrowser = installFakeBrowser()
+    const error = new Error('private access unavailable')
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    fakeBrowser.extension.isAllowedIncognitoAccess?.mockRejectedValue(error)
+
+    expect(await isPrivateWindowAccessAllowed()).toBe(false)
+    expect(consoleError).toHaveBeenCalledWith(
+      'Failed to check private-window access:',
+      error,
+    )
   })
 
   it.each([

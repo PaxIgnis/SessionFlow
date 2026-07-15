@@ -366,25 +366,8 @@ function hasFollowingDirectSibling(): boolean {
 }
 
 function itemDblClickAction() {
-  if (isWindow(props.item)) {
-    Messages.windowDoubleClick(props.item.uid, props.item.id, props.item.state)
-  } else if (isTab(props.item)) {
-    const window = SessionTree.windowsByUid.get((props.item as Tab).windowUid)
-    if (!window) {
-      console.warn(
-        'Could not find parent window for tab double-click action',
-        props.item,
-      )
-      return
-    }
-    Messages.tabDoubleClick(
-      props.item.id,
-      window.id,
-      props.item.uid,
-      props.item.windowUid,
-      props.item.state,
-      props.item.url,
-    )
+  if (isWindow(props.item) || isTab(props.item)) {
+    void Messages.treeItemDoubleClick(props.item)
   } else if (isNote(props.item)) {
     import('@/services/modal-state').then(({ openEditNoteModal }) =>
       openEditNoteModal(props.item as Note),
@@ -467,6 +450,11 @@ const tabHoverDetails = computed(() => {
   return details.length > 0 ? details.join('\n') : undefined
 })
 
+const itemHoverDetails = computed(() => {
+  if (isWindow(props.item) && props.item.incognito) return 'Private window'
+  return tabHoverDetails.value
+})
+
 function flatDescendantsHaveOpenTab(item: TreeItem): boolean {
   const list = getContainingList(item)
   const parentIndex = list.findIndex((child) => child.uid === item.uid)
@@ -507,12 +495,14 @@ function flatDescendantsHaveOpenTab(item: TreeItem): boolean {
             true,
         'tree-item-note': isNote(item),
         'tree-item-separator': isSeparator(item),
+        'tree-item-window': isWindow(item),
+        'tree-item-window-private': isWindow(item) && item.incognito,
       },
     ]"
     :style="{
       '--indent-level': item.indentLevel ?? 0,
     }"
-    :title="tabHoverDetails"
+    :title="itemHoverDetails"
     @click.stop="Selection.selectItem(item, getType(item), $event)"
     @contextmenu.stop="
       ContextMenu.handleContextMenuClick(
@@ -627,24 +617,47 @@ function flatDescendantsHaveOpenTab(item: TreeItem): boolean {
         <use :xlink:href="'#pinned'" />
       </svg>
       <img
-        v-if="isTab(item) || isWindow(item)"
+        v-if="isTab(item)"
         class="tree-item-favicon"
-        :src="isTab(item) ? getTabFavicon(item) : '/icon/16.png'"
+        :src="getTabFavicon(item)"
       />
       <div class="tree-item-spacer"></div>
     </div>
     <div class="tree-item-content">
       <template v-if="isWindow(props.item)">
         <div
-          class="tree-item-title"
+          class="tree-item-window-label"
           :class="{
-            'tree-item-text-open': props.item.state === State.OPEN,
-            'tree-item-text-saved': props.item.state === State.SAVED,
-            'tree-item-text-discarded': props.item.state === State.DISCARDED,
-            'tree-item-text-active': props.item.active === true,
+            'tree-item-window-label-private': props.item.incognito,
           }"
+          :aria-label="
+            props.item.incognito
+              ? `Private window: ${props.item.title || 'Window'}`
+              : props.item.title || 'Window'
+          "
         >
-          {{ props.item.title || 'Window' }}
+          <img
+            class="tree-item-favicon tree-item-window-favicon"
+            src="/icon/16.png"
+            alt=""
+          />
+          <div
+            class="tree-item-title"
+            :class="{
+              'tree-item-text-open': props.item.state === State.OPEN,
+              'tree-item-text-saved': props.item.state === State.SAVED,
+              'tree-item-text-discarded': props.item.state === State.DISCARDED,
+              'tree-item-text-active': props.item.active === true,
+            }"
+          >
+            {{ props.item.title || 'Window' }}
+          </div>
+          <span
+            v-if="props.item.incognito"
+            class="tree-item-window-private-badge"
+          >
+            Private
+          </span>
         </div>
       </template>
       <template v-else-if="isTab(props.item)">
@@ -834,6 +847,10 @@ function flatDescendantsHaveOpenTab(item: TreeItem): boolean {
   max-height: 18px;
 }
 
+.tree-item-window .tree-item-content {
+  max-height: 20px;
+}
+
 .tree-item-prepend {
   align-items: center;
   align-self: center;
@@ -841,6 +858,10 @@ function flatDescendantsHaveOpenTab(item: TreeItem): boolean {
   grid-area: prepend;
   height: 100%;
   width: 48px;
+}
+
+.tree-item-window .tree-item-prepend {
+  width: 24px;
 }
 
 .tree-item-note .tree-item-prepend {
@@ -947,6 +968,46 @@ function flatDescendantsHaveOpenTab(item: TreeItem): boolean {
   min-width: 1em;
   height: 1em;
   width: 1em;
+}
+
+.tree-item-window-label {
+  align-items: center;
+  background: var(--window-item-background);
+  border: 1px solid var(--window-item-border);
+  border-radius: 4px;
+  display: inline-flex;
+  gap: 5px;
+  max-width: 100%;
+  min-width: 0;
+  padding: 0 6px 0 4px;
+  position: relative;
+  z-index: 2;
+}
+
+.tree-item-window-label-private {
+  background: var(--private-window-item-background);
+  border-color: var(--private-window-item-border);
+  padding-inline-start: 6px;
+}
+
+.tree-item-window-favicon {
+  flex: 0 0 auto;
+}
+
+.tree-item-window-label .tree-item-title {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.tree-item-window-private-badge {
+  color: var(--private-window-item-foreground);
+  flex: 0 0 auto;
+  font-family: var(--font-family-session-tree);
+  font-size: var(--font-size-xxs);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  text-transform: uppercase;
 }
 
 .tree-item-pinned {

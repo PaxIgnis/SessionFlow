@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0"
+    />
+    <title>Private windows in Session Flow</title>
+    <link
+      rel="stylesheet"
+      href="./style.css"
+    />
+  </head>
+  <body>
+    <main>
+      <header>
+        <img
+          src="/icon/32.png"
+          alt=""
+        />
+        <div>
+          <p class="eyebrow">Welcome to Session Flow</p>
+          <h1>Include private windows?</h1>
+        </div>
+      </header>
+
+      <p>
+        Session Flow can save and restore private windows only when Firefox
+        allows the extension to access them. This is optional.
+      </p>
+
+      <div class="status-row">
+        <span>Firefox private-window access</span>
+        <strong
+          id="private-access-status"
+          data-status="checking"
+          aria-live="polite"
+        >
+          Checking…
+        </strong>
+      </div>
+
+      <section aria-labelledby="enable-private-access">
+        <h2 id="enable-private-access">To enable access</h2>
+        <ol>
+          <li>Open Firefox Add-ons and Themes.</li>
+          <li>Select Extensions, then Session Flow.</li>
+          <li>Set “Run in Private Windows” to “Allow”.</li>
+        </ol>
+        <button
+          id="check-again"
+          class="button button-secondary"
+          type="button"
+        >
+          Check again
+        </button>
+      </section>
+
+      <button
+        id="continue"
+        class="button button-primary"
+        type="button"
+      >
+        Continue to Session Flow
+      </button>
+      <div class="quiet-actions">
+        <button
+          id="hide"
+          type="button"
+        >
+          Hide for now
+        </button>
+        <button
+          id="dismiss"
+          type="button"
+        >
+          Don't show again
+        </button>
+      </div>
+    </main>
+
+    <script
+      type="module"
+      src="./main.ts"
+    ></script>
+  </body>
+</html>

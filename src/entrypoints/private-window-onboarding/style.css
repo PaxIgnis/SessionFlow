@@ -1,0 +1,146 @@
+:root {
+  color-scheme: dark;
+  font-family:
+    Inter,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background: rgb(24, 24, 24);
+  color: rgb(224, 224, 224);
+  margin: 0;
+  width: 340px;
+}
+
+main {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+}
+
+header {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
+header img {
+  height: 32px;
+  width: 32px;
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+h2 {
+  font-size: 14px;
+}
+
+p,
+li,
+.status-row,
+button {
+  font-size: 13px;
+}
+
+p,
+li {
+  line-height: 1.45;
+}
+
+.eyebrow {
+  color: rgb(160, 160, 160);
+  font-size: 11px;
+  margin-bottom: 2px;
+  text-transform: uppercase;
+}
+
+.status-row {
+  align-items: center;
+  background: rgb(35, 35, 35);
+  border: 1px solid rgb(62, 62, 62);
+  border-radius: 5px;
+  display: flex;
+  justify-content: space-between;
+  padding: 9px 10px;
+}
+
+#private-access-status[data-status='allowed'] {
+  color: rgb(110, 210, 135);
+}
+
+#private-access-status[data-status='not-allowed'] {
+  color: rgb(225, 185, 105);
+}
+
+section {
+  display: grid;
+  gap: 8px;
+}
+
+ol {
+  margin: 0;
+  padding-left: 22px;
+}
+
+.button {
+  border: 1px solid transparent;
+  border-radius: 5px;
+  cursor: pointer;
+  min-height: 32px;
+  padding: 6px 10px;
+}
+
+.button-primary {
+  background: rgb(27, 91, 151);
+  color: white;
+  width: 100%;
+}
+
+.button-secondary {
+  background: rgb(48, 48, 48);
+  border-color: rgb(76, 76, 76);
+  color: rgb(232, 232, 232);
+  justify-self: start;
+}
+
+.button:hover,
+.quiet-actions button:hover {
+  filter: brightness(1.12);
+}
+
+button:focus-visible {
+  outline: 2px solid rgb(105, 175, 240);
+  outline-offset: 2px;
+}
+
+.quiet-actions {
+  display: flex;
+  justify-content: space-between;
+}
+
+.quiet-actions button {
+  background: none;
+  border: 0;
+  color: rgb(175, 175, 175);
+  cursor: pointer;
+  padding: 4px 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}

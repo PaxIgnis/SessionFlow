@@ -38,6 +38,7 @@ export function createWindow(
     type: TreeItemType.WINDOW,
     uid,
     id: nextWindowId++,
+    incognito: false,
     selected: false,
     state: State.SAVED,
     children,

@@ -131,6 +131,7 @@ describe('moveTab', () => {
     const targetNote = createNote('note-target' as UID)
     const targetWindow = createWindow('window-target' as UID, [targetNote], {
       id: 200,
+      incognito: true,
       state: State.OPEN,
     })
 
@@ -156,6 +157,33 @@ describe('moveTab', () => {
     })
     expect(fakeBrowser.tabs.move).not.toHaveBeenCalled()
     expect(fakeBrowser.tabs.duplicate).not.toHaveBeenCalled()
+    expectTreeInvariants()
+  })
+
+  it('does not move an open tab across the normal and private window boundary', async () => {
+    const fakeBrowser = installFakeBrowser()
+    const tab = createTab('tab-open' as UID, {
+      id: 10,
+      state: State.OPEN,
+    })
+    const sourceWindow = createWindow('window-normal' as UID, [tab], {
+      id: 100,
+      incognito: false,
+      state: State.OPEN,
+    })
+    const targetWindow = createWindow('window-private' as UID, [], {
+      id: 200,
+      incognito: true,
+      state: State.OPEN,
+    })
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await Tree.moveTab(tab.uid, targetWindow.uid, 0, undefined, false, false)
+
+    expect(sourceWindow.children).toEqual([tab])
+    expect(targetWindow.children).toEqual([])
+    expect(tab.windowUid).toBe(sourceWindow.uid)
+    expect(fakeBrowser.tabs.move).not.toHaveBeenCalled()
     expectTreeInvariants()
   })
 })
@@ -217,6 +245,42 @@ describe('moveTreeItems tab moves', () => {
     expect(movedChild?.parentUid).toBe(parent.uid)
     expect(movedChild?.indentLevel).toBe(3)
     expect(targetNote.isParent).toBe(true)
+    expectTreeInvariants()
+  })
+
+  it('rejects a cross-private-boundary subtree move before moving its parent note', async () => {
+    installFakeBrowser()
+    const note = createNote('note-parent' as UID, { isParent: true })
+    const tab = createTab('tab-open' as UID, {
+      id: 10,
+      indentLevel: 2,
+      parentUid: note.uid,
+      state: State.OPEN,
+    })
+    const sourceWindow = createWindow('window-normal' as UID, [note, tab], {
+      id: 100,
+      incognito: false,
+      state: State.OPEN,
+    })
+    const targetWindow = createWindow('window-private' as UID, [], {
+      id: 200,
+      incognito: true,
+      state: State.OPEN,
+    })
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await Tree.moveTreeItems(
+      [note.uid],
+      0,
+      undefined,
+      targetWindow.uid,
+      false,
+      true,
+    )
+
+    expect(sourceWindow.children).toEqual([note, tab])
+    expect(targetWindow.children).toEqual([])
+    expect(tab.windowUid).toBe(sourceWindow.uid)
     expectTreeInvariants()
   })
 

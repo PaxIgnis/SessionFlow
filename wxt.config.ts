@@ -12,6 +12,7 @@ export default defineConfig({
       },
       default_title: 'Session Flow',
     },
+    incognito: 'spanning',
     permissions: [
       'activeTab',
       'alarms',

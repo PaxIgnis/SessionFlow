@@ -57,6 +57,7 @@ export async function initializeWindows(): Promise<void> {
           state: State.OPEN,
           active: win.focused,
           activeTabId: win.tabs?.find((tab) => tab.active)?.id,
+          incognito: win.incognito,
           indentLevel: 0,
           type: TreeItemType.WINDOW,
           children: win.tabs!.map((tab) => ({
@@ -175,6 +176,8 @@ function scoreWindowMatch(
   savedWindow: Window,
   openWindow: browser.windows.Window,
 ): number {
+  if (savedWindow.incognito !== openWindow.incognito) return -1
+
   const openTabs = openWindow.tabs ?? []
   const candidateTabs = Tree.getTabs(savedWindow.children).filter(
     (tab) => tab.state !== State.SAVED,
@@ -226,6 +229,7 @@ function reconcileSavedWindowWithOpenWindow(
   savedWindow.state = State.OPEN
   savedWindow.active = openWindow.focused
   savedWindow.activeTabId = openTabs.find((tab) => tab.active)?.id
+  savedWindow.incognito = openWindow.incognito
   savedWindow.selected = false
 
   // Only tabs that were open at shutdown participate in matching.
@@ -519,6 +523,7 @@ export async function loadSessionTreeFromStorage(): Promise<void> {
         window.id = 0
         window.active = false
         window.activeTabId = undefined
+        window.incognito ??= false
         window.selected = false
         if (!window.savedTime) window.savedTime = Date.now()
         if (!window.uid) window.uid = Utils.createUid(Tree.existingUidsSet)
@@ -908,6 +913,23 @@ export async function moveTreeItems(
     return
   }
 
+  const privateBoundaryTargetWindow = targetWindowUid
+    ? Tree.windowsByUid.get(targetWindowUid)
+    : undefined
+  if (
+    privateBoundaryTargetWindow &&
+    moveCrossesPrivateWindowBoundary(
+      itemUIDs,
+      privateBoundaryTargetWindow,
+      includeDescendants,
+    )
+  ) {
+    console.error(
+      'moveTreeItems: Firefox cannot move open tabs between normal and private windows',
+    )
+    return
+  }
+
   if (moveIncludesBrowserBackedTabs(itemUIDs, includeDescendants)) {
     const preparedMove = prepareItemsForBrowserBackedTreeMove(
       itemUIDs,
@@ -957,6 +979,33 @@ export async function moveTreeItems(
   if (moved && targetWindowUid && movedTabUids.length > 0) {
     await Tree.applyDropTabGroup(movedTabUids, targetWindowUid, targetTabGroup)
   }
+}
+
+/**
+ * Checks whether a move would ask Firefox to move a live tab across the
+ * normal/private window boundary. Firefox rejects those native tab moves.
+ */
+function moveCrossesPrivateWindowBoundary(
+  itemUIDs: UID[],
+  targetWindow: Window,
+  includeDescendants: boolean,
+): boolean {
+  return buildMoveBlocks(itemUIDs, includeDescendants).some((block) =>
+    block.items.some((item) => {
+      if (
+        item.type !== TreeItemType.TAB ||
+        (item.state !== State.OPEN && item.state !== State.DISCARDED)
+      ) {
+        return false
+      }
+
+      const sourceWindow = Tree.windowsByUid.get(item.windowUid)
+      return (
+        sourceWindow !== undefined &&
+        sourceWindow.incognito !== targetWindow.incognito
+      )
+    }),
+  )
 }
 
 /**

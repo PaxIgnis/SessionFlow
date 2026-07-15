@@ -4,6 +4,7 @@ export interface Window {
   active?: boolean
   activeTabId?: number
   id: number
+  incognito: boolean
   savedTime?: number
   selected: boolean
   state: State

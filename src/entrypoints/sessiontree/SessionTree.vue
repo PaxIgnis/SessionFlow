@@ -2,6 +2,7 @@
 import IconChevronRight from '@/assets/chevron-right.svg'
 import IconPinned from '@/assets/pinned.svg'
 import EditTextModal from '@/components/EditTextModal.vue'
+import SessionTreeNotification from '@/components/SessionTreeNotification.vue'
 import SessionTreeToolbar from '@/components/SessionTreeToolbar.vue'
 import TreeItem from '@/components/TreeItem.vue'
 import { DragAndDrop } from '@/services/drag-and-drop'
@@ -258,6 +259,8 @@ function runToolbarAction(action: () => void | Promise<void>): void {
         aria-hidden="true"
       ></div>
     </div>
+
+    <SessionTreeNotification />
 
     <SessionTreeToolbar
       @add-note="runToolbarAction(ToolbarActions.addRootNote)"

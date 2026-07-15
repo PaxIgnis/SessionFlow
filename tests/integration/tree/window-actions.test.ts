@@ -32,6 +32,26 @@ describe('window actions', () => {
     vi.unstubAllGlobals()
   })
 
+  it('records private identity when Firefox creates a private window', async () => {
+    vi.mocked(browser.windows.get).mockResolvedValue({
+      id: 20,
+      alwaysOnTop: false,
+      incognito: true,
+      focused: false,
+      tabs: [],
+    } as browser.windows.Window)
+
+    await Tree.addWindow(20)
+
+    const window = Tree.Items.find(Tree.isWindow)
+    expect(window).toMatchObject({
+      id: 20,
+      incognito: true,
+      state: State.OPEN,
+    })
+    expectTreeInvariants()
+  })
+
   it('saves a window and descendant tabs while preserving notes and indexes', () => {
     const rootTab = createTab('tab-root' as UID, {
       active: true,
@@ -260,6 +280,7 @@ describe('window actions', () => {
     })
     const source = createWindow('window-source' as UID, [tab], {
       id: 10,
+      incognito: true,
       state: State.OPEN,
     })
 
@@ -270,6 +291,7 @@ describe('window actions', () => {
     const copy = Tree.Items[1] as Window
     expect(copy.uid).not.toBe(source.uid)
     expect(copy.id).toBe(-1)
+    expect(copy.incognito).toBe(true)
     expect(copy.state).toBe(State.SAVED)
     expect(copy.children[0].uid).not.toBe(tab.uid)
     expect(copy.children[0]).toMatchObject({
@@ -422,6 +444,7 @@ describe('window actions', () => {
     })
     const window = createWindow('window-1' as UID, [firstTab, secondTab], {
       id: -1,
+      incognito: true,
       state: State.SAVED,
     })
     vi.mocked(browser.windows.create).mockResolvedValue({
@@ -433,6 +456,7 @@ describe('window actions', () => {
     await flushMicrotasks()
 
     expect(browser.windows.create).toHaveBeenCalledWith({
+      incognito: true,
       url: ['https://example.test/first', 'https://example.test/second'],
     })
     await resolveCreatedWindowAndTabs(30, [101, 102])

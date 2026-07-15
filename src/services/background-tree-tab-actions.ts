@@ -505,6 +505,19 @@ export async function openTab(message: {
   if (!sessionTreeTab) {
     throw new Error('Saved tab not found')
   }
+  const containingWindow = Tree.windowsByUid.get(sessionTreeTab.windowUid)
+  if (!containingWindow) {
+    throw new Error('Saved tab parent window not found')
+  }
+  if (
+    containingWindow.incognito &&
+    !(await Utils.isPrivateWindowAccessAllowed())
+  ) {
+    console.warn(
+      'Cannot open saved private tab without Firefox private-window access',
+    )
+    return
+  }
   const pinned = sessionTreeTab.pinned || false
   if (pinned) message.discarded = false // pinned tabs cannot be opened as discarded with firefox api
   let url = message.url
@@ -529,6 +542,7 @@ export async function openTab(message: {
     // if the window is saved, open the window first
     Tree.updateWindowState(message.windowUid, State.OPEN)
     const properties: browser.windows._CreateCreateData = {}
+    properties.incognito = sessionTreeWindow.incognito
     if (url) properties.url = url
     if (
       Settings.values.openWindowsInSameLocation &&
@@ -1182,6 +1196,21 @@ export async function moveTab(
     return
   }
 
+  const sourceWindow = Tree.windowsByUid.get(tab.windowUid)
+  const tabIsBrowserBacked =
+    tab.state === State.OPEN || tab.state === State.DISCARDED
+  if (
+    !copy &&
+    tabIsBrowserBacked &&
+    sourceWindow &&
+    sourceWindow.incognito !== targetWindow.incognito
+  ) {
+    console.error(
+      'moveTab: Firefox cannot move an open tab between normal and private windows',
+    )
+    return
+  }
+
   const parentItem = effectiveParentUid
     ? (Tree.tabsByUid.get(effectiveParentUid) ??
       Tree.notesByUid.get(effectiveParentUid))
@@ -1287,6 +1316,7 @@ export async function moveTab(
     Tree.updateWindowState(targetWindowUid, State.OPEN)
     const properties: browser.windows._CreateCreateData = {}
     properties.tabId = tab.id
+    properties.incognito = targetWindow.incognito
     // TODO: use window position from saved window if setting is enabled
 
     try {

@@ -4,7 +4,7 @@ import { DragAndDrop } from '@/services/drag-and-drop'
 import { SessionTree } from '@/services/foreground-tree'
 import { Selection } from '@/services/selection'
 import { Settings } from '@/services/settings'
-import { DragType, DropPosition, TreeItem } from '@/types/session-tree'
+import { DragType, DropPosition, State, TreeItem } from '@/types/session-tree'
 import {
   createFakeDragEvent,
   createFakeDragTarget,
@@ -108,6 +108,91 @@ describe('drag-and-drop onDrop command path', () => {
       true,
       false,
     )
+  })
+
+  it('marks an open-tab move across the normal/private boundary invalid', () => {
+    const tab = makeForegroundTab('tab-1' as UID, { state: State.OPEN })
+    const sourceWindow = makeForegroundWindow('window-normal' as UID, [tab], {
+      incognito: false,
+      state: State.OPEN,
+    })
+    const targetWindow = makeForegroundWindow('window-private' as UID, [], {
+      incognito: true,
+      state: State.OPEN,
+    })
+    resetForegroundTree([sourceWindow, targetWindow])
+    DragAndDrop.dragInfo = { dragType: DragType.TAB, items: [tab] }
+    const target = createFakeDragTarget({
+      id: targetWindow.uid,
+      type: 'window',
+    })
+    const event = createFakeDragEvent({ target, yRatio: 0.5 })
+
+    DragAndDrop.onDragMove(event)
+
+    expect(event.dataTransfer?.dropEffect).toBe('none')
+    expect(DragAndDrop.dragState.isValidDropTarget).toBe(false)
+  })
+
+  it('allows an Alt-copy of an open tab across the normal/private boundary', () => {
+    const tab = makeForegroundTab('tab-1' as UID, { state: State.OPEN })
+    const sourceWindow = makeForegroundWindow('window-normal' as UID, [tab], {
+      incognito: false,
+      state: State.OPEN,
+    })
+    const targetWindow = makeForegroundWindow('window-private' as UID, [], {
+      incognito: true,
+      state: State.OPEN,
+    })
+    resetForegroundTree([sourceWindow, targetWindow])
+    DragAndDrop.dragInfo = { dragType: DragType.TAB, items: [tab] }
+    const target = createFakeDragTarget({
+      id: targetWindow.uid,
+      type: 'window',
+    })
+    const event = createFakeDragEvent({
+      target,
+      yRatio: 0.5,
+      altKey: true,
+    })
+
+    DragAndDrop.onDragMove(event)
+
+    expect(event.dataTransfer?.dropEffect).toBe('copy')
+    expect(DragAndDrop.dragState.isValidDropTarget).toBe(true)
+  })
+
+  it('marks a note subtree with an open tab invalid across the private boundary', () => {
+    Settings.values.includeChildrenOfSelectedItems = 'always'
+    const note = makeForegroundNote('note-parent' as UID, {
+      isParent: true,
+    })
+    const tab = makeForegroundTab('tab-child' as UID, {
+      indentLevel: 2,
+      parentUid: note.uid,
+      state: State.OPEN,
+    })
+    const sourceWindow = makeForegroundWindow(
+      'window-normal' as UID,
+      [note, tab],
+      { incognito: false, state: State.OPEN },
+    )
+    const targetWindow = makeForegroundWindow('window-private' as UID, [], {
+      incognito: true,
+      state: State.OPEN,
+    })
+    resetForegroundTree([sourceWindow, targetWindow])
+    DragAndDrop.dragInfo = { dragType: DragType.NOTE, items: [note] }
+    const target = createFakeDragTarget({
+      id: targetWindow.uid,
+      type: 'window',
+    })
+    const event = createFakeDragEvent({ target, yRatio: 0.5 })
+
+    DragAndDrop.onDragMove(event)
+
+    expect(event.dataTransfer?.dropEffect).toBe('none')
+    expect(DragAndDrop.dragState.isValidDropTarget).toBe(false)
   })
 
   it('ignores Alt when drag-and-drop copying is disabled', () => {

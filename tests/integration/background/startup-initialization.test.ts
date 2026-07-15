@@ -20,6 +20,40 @@ describe('startup initialization', () => {
     vi.mocked(browser.windows.getAll).mockResolvedValue([])
   })
 
+  it('records private identity for windows already open at startup', async () => {
+    vi.mocked(browser.windows.getAll).mockResolvedValue([
+      {
+        id: 20,
+        alwaysOnTop: false,
+        incognito: true,
+        focused: true,
+        tabs: [
+          {
+            id: 21,
+            windowId: 20,
+            index: 0,
+            active: true,
+            discarded: false,
+            pinned: false,
+            title: 'Private tab',
+            url: 'https://example.test/private',
+          } as browser.tabs.Tab,
+        ],
+      } as browser.windows.Window,
+    ])
+
+    await Tree.initializeWindows()
+
+    const window = Tree.Items.find(Tree.isWindow)
+    expect(window).toMatchObject({
+      id: 20,
+      incognito: true,
+      state: State.OPEN,
+    })
+    expect(window?.children).toHaveLength(1)
+    expectTreeInvariants()
+  })
+
   it('saves an unmatched previously-open window when it has only saved tabs to restore', async () => {
     const storedWindow = makeStoredWindow({
       uid: 'window-open-saved-tab' as UID,
@@ -149,6 +183,7 @@ function makeStoredWindow(overrides: Partial<Window>): Window {
     active: true,
     activeTabId: 1,
     id: 1,
+    incognito: false,
     selected: true,
     state: State.OPEN,
     children: [],

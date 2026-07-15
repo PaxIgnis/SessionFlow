@@ -1,7 +1,10 @@
 import { sendTreeCommand } from '@/services/runtime-port-service'
+import { showPrivateWindowAccessRequired } from '@/services/notification-state'
+import { SessionTree } from '@/services/foreground-tree'
 import { Settings } from '@/services/settings'
+import { isPrivateWindowAccessAllowed } from '@/services/utils'
 import * as Messages from '@/types/messages'
-import { State, Tab, Window } from '@/types/session-tree'
+import { State, Tab, TreeItemType, Window } from '@/types/session-tree'
 
 // ==============================
 // Tab Messages
@@ -80,14 +83,15 @@ export function saveTabs(tabs: Array<Tab>) {
   })
 }
 
-export function tabDoubleClick(
+export async function tabDoubleClick(
   tabId: number,
   windowId: number,
   tabUid: UID,
   windowUid: UID,
   state: State,
   url: string,
-) {
+  incognito = false,
+): Promise<void> {
   if (state === State.OPEN || state === State.DISCARDED) {
     const tabDoubleClickAction = Settings.values.doubleClickOnOpenTab
 
@@ -107,6 +111,9 @@ export function tabDoubleClick(
     const tabDoubleClickAction = Settings.values.doubleClickOnSavedTab
 
     if (tabDoubleClickAction === 'open') {
+      if (incognito && !(await canOpenPrivateItem('tab'))) {
+        return
+      }
       openTab(tabUid, windowUid, url)
     } else if (tabDoubleClickAction === 'remove') {
       closeTab(tabId, tabUid)
@@ -114,6 +121,32 @@ export function tabDoubleClick(
       duplicateTreeItems([tabUid])
     }
   }
+}
+
+export async function treeItemDoubleClick(item: Tab | Window): Promise<void> {
+  if (item.type === TreeItemType.WINDOW) {
+    await windowDoubleClick(item.uid, item.id, item.state, item.incognito)
+    return
+  }
+
+  const window = SessionTree.windowsByUid.get(item.windowUid)
+  if (!window) {
+    console.warn(
+      'Could not find parent window for tab double-click action',
+      item,
+    )
+    return
+  }
+
+  await tabDoubleClick(
+    item.id,
+    window.id,
+    item.uid,
+    item.windowUid,
+    item.state,
+    item.url,
+    window.incognito,
+  )
 }
 
 export function toggleCollapseTab(tabUid: UID) {
@@ -177,13 +210,17 @@ export function saveWindows(windows: Array<Window>) {
   })
 }
 
-export function windowDoubleClick(
+export async function windowDoubleClick(
   windowUid: UID,
   windowId: number,
   state: State,
-) {
+  incognito = false,
+): Promise<void> {
   console.log('Window double clicked. Window ID: ', windowId)
   if (state === State.SAVED) {
+    if (incognito && !(await canOpenPrivateItem('window'))) {
+      return
+    }
     void sendTreeCommand({
       action: 'openWindow',
       windowUid: windowUid,
@@ -194,6 +231,12 @@ export function windowDoubleClick(
       windowId: windowId,
     })
   }
+}
+
+async function canOpenPrivateItem(itemType: 'tab' | 'window') {
+  if (await isPrivateWindowAccessAllowed()) return true
+  showPrivateWindowAccessRequired(itemType)
+  return false
 }
 
 export function toggleCollapseWindow(windowUid: UID) {

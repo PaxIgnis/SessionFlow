@@ -12,9 +12,11 @@ import {
 import { expectTreeInvariants } from '../../helpers/tree-invariants'
 
 describe('background browser API interactions', () => {
+  let fakeBrowser: ReturnType<typeof installFakeBrowser>
+
   beforeEach(() => {
     vi.restoreAllMocks()
-    installFakeBrowser()
+    fakeBrowser = installFakeBrowser()
     resetTree()
   })
 
@@ -186,6 +188,139 @@ describe('background browser API interactions', () => {
     expectTreeInvariants()
   })
 
+  it('creates a private window when opening a tab from a saved private window', async () => {
+    const tab = createTab('saved-private-tab' as UID, {
+      id: -1,
+      state: State.SAVED,
+      url: 'https://example.test/private',
+    })
+    const window = createWindow('window-private' as UID, [tab], {
+      id: -1,
+      incognito: true,
+      state: State.SAVED,
+    })
+    vi.spyOn(OnCreatedQueue, 'createWindowAndWait').mockResolvedValue({
+      id: 30,
+      alwaysOnTop: false,
+      focused: false,
+      incognito: true,
+      tabs: [{ id: 31 } as browser.tabs.Tab],
+    } as browser.windows.Window)
+
+    await Tree.openTab({ tabUid: tab.uid, windowUid: window.uid })
+
+    expect(OnCreatedQueue.createWindowAndWait).toHaveBeenCalledWith({
+      incognito: true,
+      url: tab.url,
+    })
+    expect(window.id).toBe(30)
+    expect(window.incognito).toBe(true)
+    expect(tab.id).toBe(31)
+    expect(tab.state).toBe(State.OPEN)
+    expectTreeInvariants()
+  })
+
+  it('does not open a saved private tab when Firefox private access is denied', async () => {
+    const tab = createTab('saved-private-tab' as UID, {
+      id: -1,
+      state: State.SAVED,
+      url: 'https://example.test/private',
+    })
+    const window = createWindow('window-private' as UID, [tab], {
+      id: -1,
+      incognito: true,
+      state: State.SAVED,
+    })
+    fakeBrowser.extension.isAllowedIncognitoAccess?.mockResolvedValue(false)
+    const createWindowAndWait = vi
+      .spyOn(OnCreatedQueue, 'createWindowAndWait')
+      .mockResolvedValue({
+        id: 30,
+        tabs: [{ id: 31 } as browser.tabs.Tab],
+      } as browser.windows.Window)
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    await Tree.openTab({ tabUid: tab.uid, windowUid: window.uid })
+
+    expect(createWindowAndWait).not.toHaveBeenCalled()
+    expect(browser.windows.create).not.toHaveBeenCalled()
+    expect(browser.tabs.create).not.toHaveBeenCalled()
+    expect(window).toMatchObject({ id: -1, state: State.SAVED })
+    expect(tab).toMatchObject({ id: -1, state: State.SAVED })
+    expect(consoleWarn).toHaveBeenCalledWith(
+      'Cannot open saved private tab without Firefox private-window access',
+    )
+    expectTreeInvariants()
+  })
+
+  it('checks a saved tab actual private window when the command window is stale', async () => {
+    const tab = createTab('saved-private-tab' as UID, {
+      id: -1,
+      state: State.SAVED,
+      url: 'https://example.test/private',
+    })
+    createWindow('window-private' as UID, [tab], {
+      id: -1,
+      incognito: true,
+      state: State.SAVED,
+    })
+    const staleWindow = createWindow('window-normal' as UID, [], {
+      id: -1,
+      incognito: false,
+      state: State.SAVED,
+    })
+    fakeBrowser.extension.isAllowedIncognitoAccess?.mockResolvedValue(false)
+    const createWindowAndWait = vi
+      .spyOn(OnCreatedQueue, 'createWindowAndWait')
+      .mockResolvedValue({
+        id: 30,
+        tabs: [{ id: 31 } as browser.tabs.Tab],
+      } as browser.windows.Window)
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    await Tree.openTab({
+      tabUid: tab.uid,
+      windowUid: staleWindow.uid,
+    })
+
+    expect(createWindowAndWait).not.toHaveBeenCalled()
+    expect(tab).toMatchObject({ id: -1, state: State.SAVED })
+    expectTreeInvariants()
+  })
+
+  it('does not open a saved private window when Firefox private access is denied', async () => {
+    const tab = createTab('saved-private-tab' as UID, {
+      id: -1,
+      state: State.SAVED,
+      url: 'https://example.test/private',
+    })
+    const window = createWindow('window-private' as UID, [tab], {
+      id: -1,
+      incognito: true,
+      state: State.SAVED,
+    })
+    fakeBrowser.extension.isAllowedIncognitoAccess?.mockResolvedValue(false)
+    const createWindowAndWait = vi
+      .spyOn(OnCreatedQueue, 'createWindowAndWait')
+      .mockResolvedValue({
+        id: 30,
+        tabs: [{ id: 31 } as browser.tabs.Tab],
+      } as browser.windows.Window)
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    await Tree.openWindow({ windowUid: window.uid })
+
+    expect(createWindowAndWait).not.toHaveBeenCalled()
+    expect(browser.windows.create).not.toHaveBeenCalled()
+    expect(browser.tabs.create).not.toHaveBeenCalled()
+    expect(window).toMatchObject({ id: -1, state: State.SAVED })
+    expect(tab).toMatchObject({ id: -1, state: State.SAVED })
+    expect(consoleWarn).toHaveBeenCalledWith(
+      'Cannot open saved private window without Firefox private-window access',
+    )
+    expectTreeInvariants()
+  })
+
   it('removes a saved note-only window from the tree without calling browser.windows.remove', () => {
     const note = createNote('note-1' as UID)
     const childNote = createNote('note-child' as UID, {
@@ -298,6 +433,7 @@ describe('background browser API interactions', () => {
       })
 
       expect(OnCreatedQueue.createWindowAndWait).toHaveBeenCalledWith({
+        incognito: false,
         url: tab.url,
       })
       if (loggedError) {

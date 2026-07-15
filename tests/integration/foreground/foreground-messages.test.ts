@@ -2,16 +2,34 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '@/defaults/settings'
 import { Settings } from '@/services/settings'
 import { State } from '@/types/session-tree'
+import {
+  makeForegroundTab,
+  makeForegroundWindow,
+  resetForegroundTree,
+} from '../../helpers/foreground-tree-fixtures'
 
 const sendTreeCommand = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+const isPrivateWindowAccessAllowed = vi.hoisted(() =>
+  vi.fn().mockResolvedValue(true),
+)
+const showPrivateWindowAccessRequired = vi.hoisted(() => vi.fn())
 
 vi.mock('@/services/runtime-port-service', () => ({
   sendTreeCommand,
+}))
+vi.mock('@/services/utils', () => ({
+  isPrivateWindowAccessAllowed,
+}))
+vi.mock('@/services/notification-state', () => ({
+  showPrivateWindowAccessRequired,
 }))
 
 describe('foreground message helpers', () => {
   beforeEach(() => {
     sendTreeCommand.mockClear()
+    isPrivateWindowAccessAllowed.mockReset().mockResolvedValue(true)
+    showPrivateWindowAccessRequired.mockReset()
+    resetForegroundTree()
     Object.assign(Settings.values, structuredClone(DEFAULT_SETTINGS))
   })
 
@@ -226,6 +244,151 @@ describe('foreground message helpers', () => {
       )
     },
   )
+
+  it('shows instructions instead of opening a denied private saved tab', async () => {
+    const { tabDoubleClick } = await import('@/services/foreground-messages')
+    Settings.values.doubleClickOnSavedTab = 'open'
+    isPrivateWindowAccessAllowed.mockResolvedValue(false)
+
+    await tabDoubleClick(
+      -1,
+      -1,
+      'tab-private' as UID,
+      'window-private' as UID,
+      State.SAVED,
+      'https://example.test/private',
+      true,
+    )
+
+    expect(showPrivateWindowAccessRequired).toHaveBeenCalledWith('tab')
+    expect(sendTreeCommand).not.toHaveBeenCalled()
+  })
+
+  it('shows instructions instead of opening a denied private saved window', async () => {
+    const { windowDoubleClick } = await import('@/services/foreground-messages')
+    isPrivateWindowAccessAllowed.mockResolvedValue(false)
+
+    await windowDoubleClick('window-private' as UID, -1, State.SAVED, true)
+
+    expect(showPrivateWindowAccessRequired).toHaveBeenCalledWith('window')
+    expect(sendTreeCommand).not.toHaveBeenCalled()
+  })
+
+  it('opens saved private tabs and windows when Firefox access is allowed', async () => {
+    const { tabDoubleClick, windowDoubleClick } =
+      await import('@/services/foreground-messages')
+    Settings.values.doubleClickOnSavedTab = 'open'
+
+    await tabDoubleClick(
+      -1,
+      -1,
+      'tab-private' as UID,
+      'window-private' as UID,
+      State.SAVED,
+      'https://example.test/private',
+      true,
+    )
+    await windowDoubleClick('window-private' as UID, -1, State.SAVED, true)
+
+    expect(sendTreeCommand).toHaveBeenNthCalledWith(1, {
+      action: 'openTab',
+      tabUid: 'tab-private',
+      windowUid: 'window-private',
+      url: 'https://example.test/private',
+    })
+    expect(sendTreeCommand).toHaveBeenNthCalledWith(2, {
+      action: 'openWindow',
+      windowUid: 'window-private',
+    })
+    expect(showPrivateWindowAccessRequired).not.toHaveBeenCalled()
+  })
+
+  it('derives a saved tab private identity from its actual parent window', async () => {
+    const { treeItemDoubleClick } =
+      await import('@/services/foreground-messages')
+    const tab = makeForegroundTab('tab-private' as UID)
+    const window = makeForegroundWindow('window-private' as UID, [tab], {
+      incognito: true,
+    })
+    resetForegroundTree([window])
+    Settings.values.doubleClickOnSavedTab = 'open'
+    isPrivateWindowAccessAllowed.mockResolvedValue(false)
+
+    await treeItemDoubleClick(tab)
+
+    expect(showPrivateWindowAccessRequired).toHaveBeenCalledWith('tab')
+    expect(sendTreeCommand).not.toHaveBeenCalled()
+  })
+
+  it('passes a saved window private identity through the tree-item helper', async () => {
+    const { treeItemDoubleClick } =
+      await import('@/services/foreground-messages')
+    const window = makeForegroundWindow('window-private' as UID, [], {
+      incognito: true,
+    })
+    isPrivateWindowAccessAllowed.mockResolvedValue(false)
+
+    await treeItemDoubleClick(window)
+
+    expect(showPrivateWindowAccessRequired).toHaveBeenCalledWith('window')
+    expect(sendTreeCommand).not.toHaveBeenCalled()
+  })
+
+  it('keeps denied-access checks out of open private item actions', async () => {
+    const { treeItemDoubleClick } =
+      await import('@/services/foreground-messages')
+    const tab = makeForegroundTab('tab-private' as UID, {
+      id: 10,
+      state: State.OPEN,
+    })
+    const window = makeForegroundWindow('window-private' as UID, [tab], {
+      id: 20,
+      incognito: true,
+      state: State.OPEN,
+    })
+    resetForegroundTree([window])
+    Settings.values.doubleClickOnOpenTab = 'focus'
+    isPrivateWindowAccessAllowed.mockResolvedValue(false)
+
+    await treeItemDoubleClick(tab)
+    await treeItemDoubleClick(window)
+
+    expect(isPrivateWindowAccessAllowed).not.toHaveBeenCalled()
+    expect(sendTreeCommand).toHaveBeenNthCalledWith(1, {
+      action: 'focusTab',
+      tabId: 10,
+      windowId: 20,
+    })
+    expect(sendTreeCommand).toHaveBeenNthCalledWith(2, {
+      action: 'focusWindow',
+      windowId: 20,
+    })
+  })
+
+  it('keeps denied-access checks out of normal saved item actions', async () => {
+    const { treeItemDoubleClick } =
+      await import('@/services/foreground-messages')
+    const tab = makeForegroundTab('tab-normal' as UID)
+    const window = makeForegroundWindow('window-normal' as UID, [tab], {
+      incognito: false,
+    })
+    resetForegroundTree([window])
+    Settings.values.doubleClickOnSavedTab = 'open'
+    isPrivateWindowAccessAllowed.mockResolvedValue(false)
+
+    await treeItemDoubleClick(tab)
+    await treeItemDoubleClick(window)
+
+    expect(isPrivateWindowAccessAllowed).not.toHaveBeenCalled()
+    expect(sendTreeCommand).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ action: 'openTab', tabUid: 'tab-normal' }),
+    )
+    expect(sendTreeCommand).toHaveBeenNthCalledWith(2, {
+      action: 'openWindow',
+      windowUid: 'window-normal',
+    })
+  })
 
   it('sends multi-tab helper commands in item order', async () => {
     const { closeTabs, openTabs, unpinTabs } =

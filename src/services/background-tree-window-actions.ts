@@ -59,6 +59,7 @@ export async function addWindow(windowId: number): Promise<void> {
       active: win.focused,
       activeTabId: win.tabs?.find((tab) => tab.active)?.id,
       id: windowId,
+      incognito: win.incognito,
       selected: false,
       state: State.OPEN,
       children: [],
@@ -358,13 +359,22 @@ export function closeWindow(message: {
  * @param {UID} message.windowUid - The UID of the window to be opened from sessionTree.
  */
 export async function openWindow(message: { windowUid: UID }): Promise<void> {
-  // First change the state of the window in sessionTree to from SAVED to OPEN
-  Tree.updateWindowState(message.windowUid, State.OPEN)
   try {
     const sessionTreeWindow = Tree.windowsByUid.get(message.windowUid)
     if (!sessionTreeWindow) {
       throw new Error('Saved window not found')
     }
+    if (
+      sessionTreeWindow.incognito &&
+      !(await Utils.isPrivateWindowAccessAllowed())
+    ) {
+      console.warn(
+        'Cannot open saved private window without Firefox private-window access',
+      )
+      return
+    }
+    // First change the state of the window in sessionTree from SAVED to OPEN
+    Tree.updateWindowState(message.windowUid, State.OPEN)
     const urls: string[] = []
     const pinnedTabs: UID[] = []
     const sessionTabs = Tree.getTabs(sessionTreeWindow.children)
@@ -385,6 +395,7 @@ export async function openWindow(message: { windowUid: UID }): Promise<void> {
       if (tab.pinned) pinnedTabs.push(tab.uid)
     }
     const properties: browser.windows._CreateCreateData = {}
+    properties.incognito = sessionTreeWindow.incognito
     if (urls.length > 0) properties.url = urls
     if (Settings.values.openWindowWithTabsDiscarded) {
       if (urls.length > 1) {

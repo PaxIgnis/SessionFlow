@@ -98,6 +98,24 @@ describe('storage load note-heavy trees', () => {
     expect(loadedTab.windowUid).toBe(loadedWindow.uid)
     expectTreeInvariants()
   })
+
+  it('defaults legacy windows to normal while preserving saved private identity', async () => {
+    const legacyWindow = makeStoredWindow({
+      uid: 'window-legacy' as UID,
+    })
+    delete (legacyWindow as Partial<Window>).incognito
+    const privateWindow = makeStoredWindow({
+      uid: 'window-private' as UID,
+      incognito: true,
+    })
+    mockStoredTree([legacyWindow, privateWindow])
+
+    await Tree.loadSessionTreeFromStorage()
+
+    expect(Tree.windowsByUid.get(legacyWindow.uid)?.incognito).toBe(false)
+    expect(Tree.windowsByUid.get(privateWindow.uid)?.incognito).toBe(true)
+    expectTreeInvariants()
+  })
 })
 
 function mockStoredTree(treeItems: TopLevelTreeItem[]): void {
@@ -113,6 +131,7 @@ function makeStoredWindow(overrides: Partial<Window>): Window {
     active: false,
     activeTabId: undefined,
     id: 1,
+    incognito: false,
     selected: false,
     state: State.SAVED,
     children: [],
