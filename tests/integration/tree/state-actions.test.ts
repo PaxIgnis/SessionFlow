@@ -102,4 +102,42 @@ describe('state actions', () => {
     expect(tab.pinned).toBe(false)
     expectTreeInvariants()
   })
+
+  it('pins a saved tab without copying it', () => {
+    const firstTab = createTab('tab-1' as UID)
+    const tabToPin = createTab('tab-2' as UID)
+    const window = createWindow('window-1' as UID, [firstTab, tabToPin])
+
+    Tree.pinTabInTree(tabToPin.uid)
+
+    expect(window.children.map((item) => item.uid)).toEqual([
+      tabToPin.uid,
+      firstTab.uid,
+    ])
+    expect(tabToPin.pinned).toBe(true)
+    expect(Tree.tabsByUid.size).toBe(2)
+    expectTreeInvariants()
+  })
+
+  it('unpins a saved tab without copying it', () => {
+    const tabToUnpin = createTab('tab-1' as UID, { pinned: true })
+    const secondPinnedTab = createTab('tab-2' as UID, { pinned: true })
+    const unpinnedTab = createTab('tab-3' as UID)
+    const window = createWindow('window-1' as UID, [
+      tabToUnpin,
+      secondPinnedTab,
+      unpinnedTab,
+    ])
+
+    Tree.unpinTabInTree(tabToUnpin.uid)
+
+    expect(window.children.map((item) => item.uid)).toEqual([
+      secondPinnedTab.uid,
+      tabToUnpin.uid,
+      unpinnedTab.uid,
+    ])
+    expect(tabToUnpin.pinned).toBe(false)
+    expect(Tree.tabsByUid.size).toBe(3)
+    expectTreeInvariants()
+  })
 })

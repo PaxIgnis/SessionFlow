@@ -730,6 +730,7 @@ export function pinTabInTree(tabUid: UID, emitDelta: boolean = true): void {
     window.uid,
     lastPinnedIndex + 1,
     lastPinnedIndex + 1 === index ? tab.parentUid : undefined,
+    false,
     emitDelta,
   )
   return
@@ -783,6 +784,7 @@ export function unpinTabInTree(tabUid: UID, emitDelta: boolean = true): void {
     window.uid,
     Math.max(lastPinnedIndex, 0),
     lastPinnedIndex === index ? tab.parentUid : undefined,
+    false,
     emitDelta,
   )
   return
