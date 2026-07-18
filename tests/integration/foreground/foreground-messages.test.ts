@@ -100,6 +100,21 @@ describe('foreground message helpers', () => {
     })
   })
 
+  it('shows a notification when duplicate state restoration fails', async () => {
+    const error = new Error('could not restore duplicated tab')
+    sendTreeCommand.mockRejectedValueOnce(error)
+    const { duplicateTreeItems } =
+      await import('@/services/foreground-messages')
+
+    duplicateTreeItems(['tab-1' as UID])
+
+    await vi.waitFor(() => {
+      expect(showNotification).toHaveBeenCalledWith(
+        `Session Flow could not duplicate the selected items: ${error}`,
+      )
+    })
+  })
+
   it('does not expose item-specific foreground duplicate helpers', async () => {
     const messages = await import('@/services/foreground-messages')
 

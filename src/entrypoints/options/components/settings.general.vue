@@ -47,5 +47,17 @@ import { STRINGS } from '@/types/strings'
       :options="OPTIONS.includeChildrenOfSelectedItemsWhenIndenting"
       @update="Settings.saveSettingsToStorage()"
     />
+    <ToggleButton
+      label="When Duplicating Tabs or Notes"
+      v-model="Settings.values.duplicateTreeItemDescendants"
+      :options="OPTIONS.duplicateTreeItemDescendants"
+      @update="Settings.saveSettingsToStorage()"
+    />
+    <ToggleButton
+      label="Duplicated Item State"
+      v-model="Settings.values.duplicatedItemState"
+      :options="OPTIONS.duplicatedItemState"
+      @update="Settings.saveSettingsToStorage()"
+    />
   </section>
 </template>

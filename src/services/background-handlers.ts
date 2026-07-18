@@ -857,7 +857,7 @@ async function dispatchCommand(
   } else if (message.action === 'moveWindows') {
     Tree.moveWindows(message.windowUIDs, message.targetIndex, message.copy)
   } else if (message.action === 'duplicateTreeItems') {
-    Tree.duplicateTreeItems(message.itemUIDs)
+    await Tree.duplicateTreeItems(message.itemUIDs)
   } else if (message.action === 'treeItemIndentIncrease') {
     await Tree.treeItemIndentIncrease(message.itemUIDs)
   } else if (message.action === 'treeItemIndentDecrease') {

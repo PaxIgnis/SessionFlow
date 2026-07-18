@@ -533,7 +533,11 @@ export function duplicateTreeItems(itemUIDs: Array<UID>) {
   void sendTreeCommand({
     action: 'duplicateTreeItems',
     itemUIDs,
-  } as Messages.DuplicateTreeItemsMessage)
+  } as Messages.DuplicateTreeItemsMessage).catch((error) => {
+    showNotification(
+      `Session Flow could not duplicate the selected items: ${error}`,
+    )
+  })
 }
 
 export function treeItemIndentIncrease(itemUIDs: Array<UID>) {

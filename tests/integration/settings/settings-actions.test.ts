@@ -176,6 +176,8 @@ describe('settings actions', () => {
         openWindowsInSameLocationUpdateIntervalUnit: 'minutes',
         includeChildrenOfSelectedItems: 'always',
         includeChildrenOfSelectedItemsWhenIndenting: 'never',
+        duplicateTreeItemDescendants: 'complete-subtree',
+        duplicatedItemState: 'match-original',
         allowDropOntoDescendantItems: false,
         enableCopyOnDragAndDrop: false,
         tabGroupDropBehavior: 'any-adjacent-group',
@@ -204,6 +206,10 @@ describe('settings actions', () => {
     expect(Settings.values.includeChildrenOfSelectedItemsWhenIndenting).toBe(
       'never',
     )
+    expect(Settings.values.duplicateTreeItemDescendants).toBe(
+      'complete-subtree',
+    )
+    expect(Settings.values.duplicatedItemState).toBe('match-original')
     expect(Settings.values.allowDropOntoDescendantItems).toBe(false)
     expect(Settings.values.enableCopyOnDragAndDrop).toBe(false)
     expect(Settings.values.tabGroupDropBehavior).toBe('any-adjacent-group')
@@ -217,6 +223,11 @@ describe('settings actions', () => {
     expect(Settings.values.tabGroupInfoOnHover).toBe('grouped-only')
     expect(Settings.values.refreshFaviconsAfterPeriodOfTimeUnit).toBe('hours')
     expect(Settings.values.faviconRefreshTiming).toBe('expiration-and-startup')
+  })
+
+  it('defaults duplication to selected items saved in the tree', () => {
+    expect(DEFAULT_SETTINGS.duplicateTreeItemDescendants).toBe('selected-only')
+    expect(DEFAULT_SETTINGS.duplicatedItemState).toBe('saved')
   })
 
   it('loads container presentation settings', async () => {

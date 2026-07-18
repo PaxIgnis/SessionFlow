@@ -6,6 +6,8 @@ export interface Settings {
   restorePreviousSessionOnStartup: boolean
   showIndentLinesWithoutChildren: boolean
   includeChildrenOfSelectedItemsWhenIndenting: (typeof SETTINGS_TYPES.includeChildrenOfSelectedItemsWhenIndenting)[number]
+  duplicateTreeItemDescendants: (typeof SETTINGS_TYPES.duplicateTreeItemDescendants)[number]
+  duplicatedItemState: (typeof SETTINGS_TYPES.duplicatedItemState)[number]
 
   // Windows
   focusWindowOnOpen: boolean
@@ -61,6 +63,8 @@ export const SETTINGS_TYPES = {
   doubleClickOnSavedTab: ['open', 'remove', 'duplicate'],
   includeChildrenOfSelectedItems: ['always', 'collapsed', 'never'],
   includeChildrenOfSelectedItemsWhenIndenting: ['always', 'collapsed', 'never'],
+  duplicateTreeItemDescendants: ['selected-only', 'complete-subtree'],
+  duplicatedItemState: ['saved', 'match-original'],
   tabGroupDropBehavior: ['same-group-both-adjacent', 'any-adjacent-group'],
   tabGroupColorIndicator: ['right', 'left', 'hidden'],
   tabGroupInfoOnHover: ['always', 'grouped-only', 'never'],
@@ -88,6 +92,17 @@ export const OPTIONS = {
     { label: 'Open', value: 'open' },
     { label: 'Remove', value: 'remove' },
     { label: 'Duplicate', value: 'duplicate' },
+  ],
+  duplicateTreeItemDescendants: [
+    { label: 'Selected Items Only', value: 'selected-only' },
+    {
+      label: 'Selected Items and Complete Subtree',
+      value: 'complete-subtree',
+    },
+  ],
+  duplicatedItemState: [
+    { label: 'Always Saved', value: 'saved' },
+    { label: 'Match Original Items', value: 'match-original' },
   ],
   tabGroupDropBehavior: [
     {

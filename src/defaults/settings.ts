@@ -8,6 +8,8 @@ export const DEFAULT_SETTINGS: Settings = {
   restorePreviousSessionOnStartup: false,
   showIndentLinesWithoutChildren: false,
   includeChildrenOfSelectedItemsWhenIndenting: 'always',
+  duplicateTreeItemDescendants: 'selected-only',
+  duplicatedItemState: 'saved',
 
   // Windows
   focusWindowOnOpen: true,

@@ -902,13 +902,15 @@ describe('critical Firefox UI workflows', () => {
     await sessionTree.openTabContextMenu(SESSION_FIXTURE_TITLES.alpha)
     await sessionTree.clickCapturedContextMenuItem('Duplicate')
 
-    await expectSingleOpenWindowWithRootTabCounts([
-      { title: SESSION_FIXTURE_TITLES.initial, count: 1 },
-      { title: SESSION_FIXTURE_TITLES.alpha, count: 2 },
+    await expectSingleOpenWindowWithRootTabsByState([
+      { title: SESSION_FIXTURE_TITLES.initial, state: TreeItemState.Open },
+      { title: SESSION_FIXTURE_TITLES.alpha, state: TreeItemState.Open },
+      { title: SESSION_FIXTURE_TITLES.alpha, state: TreeItemState.Saved },
     ])
-    await expectBrowserTabCountByTitle(SESSION_FIXTURE_TITLES.alpha, 2)
+    await expectBrowserTabCountByTitle(SESSION_FIXTURE_TITLES.alpha, 1)
 
-    await removeFixtureTabs(SESSION_FIXTURE_TITLES.alpha, 2)
+    await removeSavedFixtureTab(SESSION_FIXTURE_TITLES.alpha)
+    await removeFixtureTab(SESSION_FIXTURE_TITLES.alpha)
     await waitForBrowserTitleCount(SESSION_FIXTURE_TITLES.alpha, 0)
     await waitForBrowserHandleClosed(alphaHandle, SESSION_FIXTURE_TITLES.alpha)
     await expectSingleOpenWindowWithRootTabs([SESSION_FIXTURE_TITLES.initial])
@@ -1360,15 +1362,19 @@ function treeHasRootTabsWithState(tree, expectedTabs) {
   const rootTabs = rootTabsInWindow(windowItem)
   if (rootTabs.length !== expectedTabs.length) return false
 
-  return expectedTabs.every((expected) =>
-    rootTabs.some(
+  const unmatchedTabs = [...rootTabs]
+  return expectedTabs.every((expected) => {
+    const matchingIndex = unmatchedTabs.findIndex(
       (tab) =>
         tab.title === expected.title &&
         tab.state === expected.state &&
         tab.parentUid === undefined &&
         tab.indentLevel === 1,
-    ),
-  )
+    )
+    if (matchingIndex === -1) return false
+    unmatchedTabs.splice(matchingIndex, 1)
+    return true
+  })
 }
 
 function treeHasRootTabsWithPinned(tree, expectedTabs) {

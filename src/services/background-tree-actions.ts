@@ -1729,42 +1729,179 @@ function compareTabsByTreeOrder(a: Tab, b: Tab): number {
   return indexA - indexB
 }
 
-export function duplicateTreeItems(itemUIDs: UID[]): void {
-  const openTabUids = new Set(
-    itemUIDs.filter((uid) => {
-      const tab = Tree.tabsByUid.get(uid)
-      return tab?.state === State.OPEN
-    }),
-  )
-  for (const uid of openTabUids) {
-    const tab = Tree.tabsByUid.get(uid)
-    if (tab) Tree.duplicateTab({ tabId: tab.id, tabUid: tab.uid })
-  }
-
-  const moveBlocks = buildMoveBlocks(
-    itemUIDs.filter((uid) => !openTabUids.has(uid)),
-  )
+export async function duplicateTreeItems(itemUIDs: UID[]): Promise<void> {
+  const includeDescendants =
+    Settings.values.duplicateTreeItemDescendants === 'complete-subtree'
+  const moveBlocks = buildMoveBlocks(itemUIDs, includeDescendants)
   if (moveBlocks.length === 0) return
 
   const insertionBlocks = [...moveBlocks].sort((a, b) => {
     if (a.children === b.children) return b.startIndex - a.startIndex
     return 0
   })
+  const clonedBlocks = cloneIndependentTreeItemBlocks(
+    insertionBlocks.map((block) => block.items),
+  )
+  const clonedTabPairs: ClonedTabPair[] = []
 
-  for (const block of insertionBlocks) {
-    const duplicates = cloneTreeItemBlock(block.items)
-    block.children.splice(
-      block.startIndex + block.items.length,
-      0,
-      ...duplicates,
-    )
-  }
+  insertionBlocks.forEach((block, blockIndex) => {
+    const insertionIndex =
+      includeDescendants || block.root.type === TreeItemType.WINDOW
+        ? block.startIndex + block.items.length
+        : getSubtreeEndIndex(block.children, block.startIndex)
+    const duplicates = clonedBlocks[blockIndex]
+    if (!includeDescendants && block.root.type !== TreeItemType.WINDOW) {
+      duplicates[0].isParent = false
+      duplicates[0].collapsed = false
+    }
+    block.children.splice(insertionIndex, 0, ...duplicates)
+    block.items.forEach((source, index) => {
+      collectClonedTabPairs(source, duplicates[index], clonedTabPairs)
+    })
+  })
 
   Tree.recomputeSessionTree(false)
   emitTreeDelta({
     op: 'treeReplaced',
     treeItems: structuredClone(Tree.Items),
   })
+
+  if (Settings.values.duplicatedItemState === 'match-original') {
+    await restoreClonedTabStates(clonedTabPairs)
+  }
+}
+
+interface ClonedTabPair {
+  source: Tab
+  clone: Tab
+  fromDuplicatedWindow: boolean
+}
+
+function collectClonedTabPairs(
+  source: TreeItem,
+  clone: TreeItem,
+  pairs: ClonedTabPair[],
+  fromDuplicatedWindow: boolean = false,
+): void {
+  if (source.type === TreeItemType.TAB && clone.type === TreeItemType.TAB) {
+    pairs.push({ source, clone, fromDuplicatedWindow })
+    return
+  }
+  if (
+    source.type !== TreeItemType.WINDOW ||
+    clone.type !== TreeItemType.WINDOW
+  ) {
+    return
+  }
+
+  source.children.forEach((sourceChild, index) => {
+    collectClonedTabPairs(sourceChild, clone.children[index], pairs, true)
+  })
+}
+
+async function restoreClonedTabStates(pairs: ClonedTabPair[]): Promise<void> {
+  const orderedPairs = [...pairs].sort((a, b) => {
+    if (
+      a.fromDuplicatedWindow &&
+      b.fromDuplicatedWindow &&
+      a.clone.windowUid === b.clone.windowUid
+    ) {
+      const statePriority =
+        clonedWindowRestorePriority(a.source) -
+        clonedWindowRestorePriority(b.source)
+      if (statePriority !== 0) return statePriority
+    }
+    return compareTabsByTreeOrder(a.clone, b.clone)
+  })
+  const restoredDuplicatedWindowUids = new Set<UID>()
+  const blockedDuplicatedWindowUids = new Set<UID>()
+  let firstError: unknown
+
+  for (const { source, clone, fromDuplicatedWindow } of orderedPairs) {
+    if (source.state !== State.OPEN && source.state !== State.DISCARDED) {
+      continue
+    }
+    if (
+      fromDuplicatedWindow &&
+      blockedDuplicatedWindowUids.has(clone.windowUid)
+    ) {
+      continue
+    }
+    if (
+      fromDuplicatedWindow &&
+      source.state === State.DISCARDED &&
+      !restoredDuplicatedWindowUids.has(clone.windowUid)
+    ) {
+      blockedDuplicatedWindowUids.add(clone.windowUid)
+      firstError ??= new Error(
+        'Could not restore discarded tabs because the duplicated window was not opened',
+      )
+      continue
+    }
+    try {
+      await Tree.openTab({
+        tabUid: clone.uid,
+        windowUid: clone.windowUid,
+        url: clone.url,
+        discarded: source.state === State.DISCARDED,
+        active: isActiveOpenTab(source),
+      })
+      if (clone.state !== source.state) {
+        throw new Error(
+          `Duplicated tab ${clone.uid} did not match its original state`,
+        )
+      }
+      if (fromDuplicatedWindow && source.state === State.OPEN) {
+        restoredDuplicatedWindowUids.add(clone.windowUid)
+      }
+    } catch (error) {
+      await rollbackFailedClonedTabOpen(clone)
+      firstError ??= error
+    }
+  }
+
+  if (firstError) throw firstError
+}
+
+function clonedWindowRestorePriority(tab: Tab): number {
+  if (isActiveOpenTab(tab)) return 0
+  if (tab.state === State.OPEN) return 1
+  if (tab.state === State.DISCARDED) return 2
+  return 3
+}
+
+async function rollbackFailedClonedTabOpen(tab: Tab): Promise<void> {
+  if (tab.state === State.SAVED) return
+  const tabId = tab.id
+  const window = Tree.windowsByUid.get(tab.windowUid)
+  const liveTabs = window
+    ? Tree.getTabs(window.children).filter(
+        (candidate) =>
+          candidate.state === State.OPEN || candidate.state === State.DISCARDED,
+      )
+    : []
+
+  if (window && liveTabs.length === 1) {
+    const windowId = window.id
+    Tree.saveWindow(window.uid)
+    if (windowId >= 0) {
+      await browser.windows.remove(windowId).catch((error) => {
+        console.error('Failed to close a partially duplicated window:', error)
+      })
+    }
+    return
+  }
+
+  Tree.setTabSaved(tab.uid)
+  if (tabId >= 0) {
+    await browser.tabs.remove(tabId).catch((error) => {
+      console.error('Failed to close a partially duplicated tab:', error)
+    })
+  }
+}
+
+function isActiveOpenTab(tab: Tab): boolean {
+  return tab.state === State.OPEN && tab.active === true
 }
 
 export async function treeItemIndentIncrease(itemUIDs: UID[]): Promise<void> {
@@ -1843,10 +1980,6 @@ interface TreeItemCloneContext {
   tabGroupUidMap: Map<UID, UID>
 }
 
-function cloneTreeItemBlock(items: TreeItem[]): TreeItem[] {
-  return cloneTreeItemBlocks([items])[0]
-}
-
 function cloneTreeItemBlocks(blocks: TreeItem[][]): TreeItem[][] {
   const context: TreeItemCloneContext = {
     itemUidMap: new Map(),
@@ -1856,6 +1989,18 @@ function cloneTreeItemBlocks(blocks: TreeItem[][]): TreeItem[][] {
   return blocks.map((items) =>
     items.map((item) => cloneTreeItem(item, context)),
   )
+}
+
+function cloneIndependentTreeItemBlocks(blocks: TreeItem[][]): TreeItem[][] {
+  const tabGroupUidMap = new Map<UID, UID>()
+  return blocks.map((items) => {
+    const context: TreeItemCloneContext = {
+      itemUidMap: new Map(),
+      tabGroupUidMap,
+    }
+    for (const item of items) reserveCloneIdentity(item, context)
+    return items.map((item) => cloneTreeItem(item, context))
+  })
 }
 
 function reserveCloneIdentity(
@@ -1907,6 +2052,9 @@ function applyClonedTreeItemIdentity(
     clone.state = State.SAVED
     clone.active = false
     clone.activeTabId = undefined
+    clone.savedActiveTabUid = source.savedActiveTabUid
+      ? context.itemUidMap.get(source.savedActiveTabUid)
+      : undefined
     clone.children.forEach((child, index) => {
       applyClonedTreeItemIdentity(child, source.children[index], context)
       child.windowUid = clone.uid
@@ -2022,6 +2170,7 @@ function buildMoveBlocks(
   const locations = [...selected]
     .map((uid) => findItemLocation(uid))
     .filter((location): location is ItemLocation => Boolean(location))
+    .filter((location) => !isInsideSelectedWindow(location.item, selected))
     .filter(
       (location) =>
         !includeDescendants || !hasSelectedAncestor(location.item, selected),
@@ -2043,6 +2192,14 @@ function buildMoveBlocks(
       items: location.children.slice(location.index, endIndex),
     }
   })
+}
+
+function isInsideSelectedWindow(item: TreeItem, selected: Set<UID>): boolean {
+  return (
+    item.type !== TreeItemType.WINDOW &&
+    item.windowUid !== undefined &&
+    selected.has(item.windowUid)
+  )
 }
 
 /**

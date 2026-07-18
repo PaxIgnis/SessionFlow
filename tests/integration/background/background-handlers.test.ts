@@ -1323,6 +1323,33 @@ describe('background handlers', () => {
     expect(mocks.updateWindowPositionInterval).toHaveBeenCalledTimes(1)
   })
 
+  it('waits for duplicate state restoration before completing the command', async () => {
+    const { initializeListeners, mocks } = await loadBackgroundHandlers()
+    initializeListeners()
+    const dispatchCommand = getDispatchCommand(mocks.initializeSessionTreePort)
+    let finishDuplication: (() => void) | undefined
+    mocks.duplicateTreeItems.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finishDuplication = resolve
+      }),
+    )
+    let commandCompleted = false
+
+    const command = dispatchCommand({
+      action: 'duplicateTreeItems',
+      itemUIDs: ['tab-1' as UID],
+    })
+    void command?.then(() => {
+      commandCompleted = true
+    })
+    await Promise.resolve()
+
+    expect(commandCompleted).toBe(false)
+    finishDuplication?.()
+    await command
+    expect(commandCompleted).toBe(true)
+  })
+
   it('does not dispatch the legacy moveTabs command', async () => {
     const { initializeListeners, mocks } = await loadBackgroundHandlers()
     initializeListeners()
