@@ -156,6 +156,29 @@ describe('generic tree item structural actions', () => {
     expectTreeInvariants()
   })
 
+  it('preserves container metadata in the direct saved-tab duplicate branch', () => {
+    const container = {
+      cookieStoreId: 'firefox-container-work',
+      name: 'Work',
+      color: 'blue',
+      colorCode: '#37adff',
+      icon: 'briefcase',
+    }
+    const tab = createTab('tab-saved' as UID, {
+      state: State.SAVED,
+      id: -1,
+      container,
+    })
+    const window = createWindow('window-1' as UID, [tab])
+
+    Tree.duplicateTab({ tabId: tab.id, tabUid: tab.uid })
+
+    expect(window.children).toHaveLength(2)
+    const duplicate = window.children[1] as Tab
+    expect(duplicate.container).toEqual(container)
+    expect(duplicate.container).not.toBe(container)
+  })
+
   it('increases and decreases a note indent using adjacent structural siblings', () => {
     const parent = createTab('tab-parent' as UID)
     const note = createNote('note-child' as UID)

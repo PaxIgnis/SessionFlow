@@ -31,6 +31,10 @@ export class SessionTreePage {
     return $(`.tree-item*=${text}`)
   }
 
+  treeItemByUid(uid) {
+    return $(`.tree-item[drag-and-drop-id="${uid}"]`)
+  }
+
   treeItemByTypeAndText(type, text) {
     return $(`.tree-item[drag-and-drop-type="${type}"]*=${text}`)
   }
@@ -275,6 +279,34 @@ export class SessionTreePage {
     await okButton.click()
   }
 
+  containerRecoveryModal() {
+    return $('.container-recovery-modal')
+  }
+
+  async recreateMissingContainersAndOpen() {
+    const button = await $(
+      '//section[contains(@class,"container-recovery-modal")]//button[contains(normalize-space(),"Recreate")]',
+    )
+    await expect(button).toBeDisplayed()
+    await button.click()
+  }
+
+  async openWithoutMissingContainers() {
+    const button = await $(
+      '//section[contains(@class,"container-recovery-modal")]//button[contains(normalize-space(),"Open Without")]',
+    )
+    await expect(button).toBeDisplayed()
+    await button.click()
+  }
+
+  async cancelContainerRecovery() {
+    const button = await $(
+      '//section[contains(@class,"container-recovery-modal")]//button[normalize-space()="Cancel"]',
+    )
+    await expect(button).toBeDisplayed()
+    await button.click()
+  }
+
   async backgroundTreeSnapshot() {
     const response = await browser.executeAsync((done) => {
       const requestId = `e2e-${Date.now()}-${Math.random().toString(16).slice(2)}`
@@ -392,16 +424,23 @@ export class SessionTreePage {
 
   async waitForBackgroundTree(predicate, timeoutMsg) {
     let lastTree = []
-    await browser.waitUntil(
-      async () => {
-        lastTree = await this.backgroundTreeSnapshot()
-        return predicate(lastTree)
-      },
-      {
-        timeout: 10_000,
-        timeoutMsg: `${timeoutMsg} Last tree: ${JSON.stringify(summarizeTree(lastTree))}`,
-      },
-    )
+    try {
+      await browser.waitUntil(
+        async () => {
+          lastTree = await this.backgroundTreeSnapshot()
+          return predicate(lastTree)
+        },
+        {
+          timeout: 10_000,
+          timeoutMsg,
+        },
+      )
+    } catch (error) {
+      throw new Error(
+        `${timeoutMsg} Last tree: ${JSON.stringify(summarizeTree(lastTree))}`,
+        { cause: error },
+      )
+    }
   }
 
   async updateSettings(settingsPatch) {

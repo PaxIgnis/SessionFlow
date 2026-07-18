@@ -5,6 +5,7 @@ import { onMounted, onUnmounted, ref } from 'vue'
 import SettingsDragAndDrop from './components/settings.drag-and-drop.vue'
 import Favicons from './components/settings.favicons.vue'
 import SettingsGeneral from './components/settings.general.vue'
+import SettingsContainers from './components/settings.containers.vue'
 import SettingsTabs from './components/settings.tabs.vue'
 import SettingsTabGroups from './components/settings.tab-groups.vue'
 import SettingsWindows from './components/settings.windows.vue'
@@ -13,6 +14,7 @@ const sections = [
   { id: 'settings_general', level: 0 },
   { id: 'settings_windows', level: 0 },
   { id: 'settings_tabs', level: 0 },
+  { id: 'settings_containers', level: 0 },
   { id: 'settings_tab_groups', level: 0 },
   { id: 'settings_drag_and_drop', level: 0 },
   { id: 'settings_favicons', level: 0 },
@@ -102,6 +104,7 @@ onUnmounted(() => {
       <SettingsGeneral />
       <SettingsWindows />
       <SettingsTabs />
+      <SettingsContainers />
       <SettingsTabGroups />
       <SettingsDragAndDrop />
       <Favicons />

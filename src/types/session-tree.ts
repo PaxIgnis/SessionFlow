@@ -3,6 +3,7 @@ export interface Window {
   uid: UID
   active?: boolean
   activeTabId?: number
+  savedActiveTabUid?: UID
   id: number
   incognito: boolean
   savedTime?: number
@@ -38,6 +39,16 @@ export interface Tab {
   isVisible?: boolean
   customLabel?: string
   tabGroup?: TabGroupMetadata
+  container?: ContainerMetadata
+}
+
+export interface ContainerMetadata {
+  cookieStoreId: string
+  name: string
+  color: string
+  colorCode: string
+  icon: string
+  iconUrl?: string
 }
 
 export type TabGroupColor =

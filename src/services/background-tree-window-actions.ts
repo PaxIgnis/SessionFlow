@@ -5,6 +5,7 @@ import { Tree } from '@/services/background-tree'
 import { emitTreeDelta } from '@/services/runtime-port-service'
 import { Settings } from '@/services/settings'
 import * as Utils from '@/services/utils'
+import type { OpenWindowMessage } from '@/types/messages'
 import {
   State,
   TreeItemType,
@@ -20,12 +21,16 @@ import {
 export function saveWindow(windowUid: UID): void {
   const window = Tree.windowsByUid.get(windowUid)
   if (window) {
+    const tabs = Tree.getTabs(window.children)
+    window.savedActiveTabUid = tabs.find(
+      (tab) => tab.active || tab.id === window.activeTabId,
+    )?.uid
     window.state = State.SAVED
     window.id = -1
     window.savedTime = Date.now()
     window.active = false
     window.activeTabId = undefined
-    Tree.getTabs(window.children).forEach((tab) => {
+    tabs.forEach((tab) => {
       tab.state = State.SAVED
       tab.id = -1
       tab.savedTime = Date.now()
@@ -109,6 +114,7 @@ export async function updateWindowTabs(windowId: number): Promise<void> {
         url: tab.url!,
         pinned: tab.pinned || false,
         indentLevel: 1,
+        container: Tree.containerForCookieStore(tab.cookieStoreId),
       }))
       for (const tab of Tree.getTabs(window.children)) {
         Tree.tabsByUid.set(tab.uid, tab)
@@ -358,7 +364,9 @@ export function closeWindow(message: {
  * @param {Object} message - The message object containing window information.
  * @param {UID} message.windowUid - The UID of the window to be opened from sessionTree.
  */
-export async function openWindow(message: { windowUid: UID }): Promise<void> {
+export async function openWindow(
+  message: Omit<OpenWindowMessage, 'action'>,
+): Promise<void> {
   try {
     const sessionTreeWindow = Tree.windowsByUid.get(message.windowUid)
     if (!sessionTreeWindow) {
@@ -373,11 +381,31 @@ export async function openWindow(message: { windowUid: UID }): Promise<void> {
       )
       return
     }
-    // First change the state of the window in sessionTree from SAVED to OPEN
-    Tree.updateWindowState(message.windowUid, State.OPEN)
     const urls: string[] = []
     const pinnedTabs: UID[] = []
     const sessionTabs = Tree.getTabs(sessionTreeWindow.children)
+    const windowSnapshot = {
+      id: sessionTreeWindow.id,
+      state: sessionTreeWindow.state,
+      active: sessionTreeWindow.active,
+      activeTabId: sessionTreeWindow.activeTabId,
+    }
+    const tabSnapshots = new Map(
+      sessionTabs.map((tab) => [
+        tab.uid,
+        {
+          id: tab.id,
+          state: tab.state,
+          active: tab.active,
+          container: tab.container ? structuredClone(tab.container) : undefined,
+        },
+      ]),
+    )
+    const containerRecovery = await Tree.resolveContainerRecovery(
+      sessionTabs,
+      message.containerRecovery,
+      message.containerRecoveryStoreIds,
+    )
     for (const tab of sessionTabs) {
       let url = String(tab.url)
       // if the URL is a privileged URL, open a redirect page instead
@@ -394,56 +422,88 @@ export async function openWindow(message: { windowUid: UID }): Promise<void> {
       urls.push(url)
       if (tab.pinned) pinnedTabs.push(tab.uid)
     }
-    const properties: browser.windows._CreateCreateData = {}
-    properties.incognito = sessionTreeWindow.incognito
-    if (urls.length > 0) properties.url = urls
-    if (Settings.values.openWindowWithTabsDiscarded) {
-      if (urls.length > 1) {
-        properties.url = urls[0]
+    let createdWindowId: number | undefined
+    try {
+      // First change the state of the window in sessionTree from SAVED to OPEN
+      Tree.updateWindowState(message.windowUid, State.OPEN)
+      const properties: browser.windows._CreateCreateData = {}
+      properties.incognito = sessionTreeWindow.incognito
+      if (urls[0]) properties.url = urls[0]
+      if (sessionTabs[0]?.container?.cookieStoreId) {
+        properties.cookieStoreId = sessionTabs[0].container.cookieStoreId
       }
-    }
-    if (
-      Settings.values.openWindowsInSameLocation &&
-      sessionTreeWindow.windowPosition
-    ) {
-      properties.left = sessionTreeWindow.windowPosition.left
-      properties.top = sessionTreeWindow.windowPosition.top
-      properties.width = sessionTreeWindow.windowPosition.width
-      properties.height = sessionTreeWindow.windowPosition.height
-    }
-    const window = await OnCreatedQueue.createWindowAndWait(properties)
-    if (!Settings.values.focusWindowOnOpen && Tree.sessionTreeWindowId) {
-      Browser.focusWindow({ windowId: Tree.sessionTreeWindowId })
-    }
-    if (!window.id || !window.tabs) {
-      throw new Error('Window ID is undefined')
-    }
+      if (
+        Settings.values.openWindowsInSameLocation &&
+        sessionTreeWindow.windowPosition
+      ) {
+        properties.left = sessionTreeWindow.windowPosition.left
+        properties.top = sessionTreeWindow.windowPosition.top
+        properties.width = sessionTreeWindow.windowPosition.width
+        properties.height = sessionTreeWindow.windowPosition.height
+      }
+      const window = await OnCreatedQueue.createWindowAndWait(properties)
+      createdWindowId = window?.id
+      const firstBrowserTab = window?.tabs?.[0]
+      const firstSessionTab = sessionTabs[0]
+      if (
+        window?.id === undefined ||
+        (firstSessionTab && firstBrowserTab?.id === undefined)
+      ) {
+        throw new Error('Window creation returned no window or tab ID')
+      }
+      if (!Settings.values.focusWindowOnOpen && Tree.sessionTreeWindowId) {
+        Browser.focusWindow({ windowId: Tree.sessionTreeWindowId })
+      }
 
-    // then update the saved window object id to represent the newly opened window
-    Tree.updateWindowId(message.windowUid, window.id)
-    for (const [index, tab] of window.tabs.entries()) {
-      const sessionTab = sessionTabs[index]
-      if (!sessionTab) continue
-      Tree.updateTabId(sessionTab.uid, tab.id!)
-      Tree.updateTabState(sessionTab.uid, State.OPEN)
-      // need to manually pin tab because pinned state is not preserved when creating window with URLs
-      if (pinnedTabs.includes(sessionTab.uid)) Browser.pinTab(tab.id!)
-    }
-    await Tree.restoreWindowTabGroups(message.windowUid)
-    if (Settings.values.openWindowWithTabsDiscarded && urls.length > 1) {
-      for (const tab of sessionTabs) {
-        if (tab.state === State.SAVED) {
-          await Tree.openTab({
-            tabUid: tab.uid,
-            windowUid: message.windowUid,
-            discarded: true,
-          })
+      // then update the saved window object id to represent the newly opened window
+      Tree.updateWindowId(message.windowUid, window.id)
+      if (firstBrowserTab?.id !== undefined && firstSessionTab) {
+        Tree.updateTabId(firstSessionTab.uid, firstBrowserTab.id)
+        Tree.updateTabState(firstSessionTab.uid, State.OPEN)
+        if (pinnedTabs.includes(firstSessionTab.uid)) {
+          Browser.pinTab(firstBrowserTab.id)
         }
       }
+
+      for (const tab of sessionTabs.slice(1)) {
+        await Tree.openTab({
+          tabUid: tab.uid,
+          windowUid: message.windowUid,
+          discarded: Settings.values.openWindowWithTabsDiscarded,
+          active: false,
+          containerRecovery: message.containerRecovery,
+          containerRecoveryStoreIds: message.containerRecoveryStoreIds,
+        })
+      }
       await Tree.restoreWindowTabGroups(message.windowUid)
+      const savedActiveTab = sessionTreeWindow.savedActiveTabUid
+        ? Tree.tabsByUid.get(sessionTreeWindow.savedActiveTabUid)
+        : undefined
+      if (savedActiveTab?.id !== undefined && savedActiveTab.id >= 0) {
+        for (const tab of sessionTabs) {
+          Tree.updateTab(
+            { tabUid: tab.uid },
+            { active: tab.uid === savedActiveTab.uid },
+          )
+        }
+        Tree.updateWindow(message.windowUid, { activeTabId: savedActiveTab.id })
+        Browser.focusTab({ tabId: savedActiveTab.id })
+      }
+    } catch (error) {
+      if (createdWindowId !== undefined) {
+        await browser.windows.remove(createdWindowId).catch(() => undefined)
+      }
+      await containerRecovery.rollback()
+      Tree.updateWindow(message.windowUid, windowSnapshot)
+      for (const tab of sessionTabs) {
+        const snapshot = tabSnapshots.get(tab.uid)
+        if (snapshot) Tree.updateTab({ tabUid: tab.uid }, snapshot)
+      }
+      throw error
     }
   } catch (error) {
     console.error('Error opening window:', error)
+    throw error
   }
 }
 

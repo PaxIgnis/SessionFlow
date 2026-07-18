@@ -217,4 +217,28 @@ describe('on-created queue', () => {
     expect(fakeBrowser.tabs.update).toHaveBeenCalledWith(7, { pinned: true })
     expect(OnCreatedQueue.pendingTabs.get(7)?.complete).toBe(true)
   })
+
+  it('removes a created window when post-creation position update fails', async () => {
+    const error = new Error('position update failed')
+    const createdWindow = {
+      id: 9,
+      tabs: [{ id: 101 }],
+    }
+    fakeBrowser.windows.create.mockResolvedValue(createdWindow)
+    fakeBrowser.windows.update.mockRejectedValue(error)
+
+    await expect(
+      OnCreatedQueue.createWindowAndWait({
+        url: 'https://example.test',
+        left: 111,
+        top: 222,
+      }),
+    ).rejects.toBe(error)
+
+    expect(fakeBrowser.windows.remove).toHaveBeenCalledWith(9)
+    expect(OnCreatedQueue.pendingWindowCount).toBe(0)
+    expect(OnCreatedQueue.pendingTabCount).toBe(0)
+    expect(OnCreatedQueue.pendingWindows.has(9)).toBe(false)
+    expect(OnCreatedQueue.pendingTabs.has(101)).toBe(false)
+  })
 })

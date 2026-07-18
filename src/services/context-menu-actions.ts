@@ -232,3 +232,51 @@ export function handleContextMenuClick(
   }
   ContextMenu.open(type)
 }
+
+export function getTreeItemContextMenuArgs(
+  item: TreeItem,
+  event: MouseEvent,
+): Parameters<typeof handleContextMenuClick> {
+  if (item.type === TreeItemType.WINDOW) {
+    return [
+      ContextMenuType.Window,
+      event,
+      item,
+      undefined,
+      undefined,
+      undefined,
+      SelectionType.WINDOW,
+    ]
+  }
+  if (item.type === TreeItemType.TAB) {
+    return [
+      ContextMenuType.Tab,
+      event,
+      undefined,
+      item,
+      undefined,
+      undefined,
+      SelectionType.TAB,
+    ]
+  }
+  if (item.type === TreeItemType.NOTE) {
+    return [
+      ContextMenuType.Note,
+      event,
+      undefined,
+      undefined,
+      item,
+      undefined,
+      SelectionType.NOTE,
+    ]
+  }
+  return [
+    ContextMenuType.Separator,
+    event,
+    undefined,
+    undefined,
+    undefined,
+    item,
+    SelectionType.SEPARATOR,
+  ]
+}

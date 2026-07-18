@@ -22,6 +22,14 @@ async function loadBackgroundHandlers() {
   const tabOnActivated = vi.fn()
   const setActiveWindow = vi.fn()
   const openSessionTree = vi.fn().mockResolvedValue(undefined)
+  const containerMetadata = {
+    cookieStoreId: 'firefox-container-1',
+    name: 'Work',
+    color: 'blue',
+    colorCode: '#37adff',
+    icon: 'briefcase',
+    iconUrl: 'resource://usercontext-content/briefcase.svg',
+  }
   const Items: object[] = []
   const treeMethods = {
     addTab: vi.fn(),
@@ -67,6 +75,14 @@ async function loadBackgroundHandlers() {
     tabGroupRemoved: vi.fn(),
     tabGroupWindowClosed: vi.fn(),
     tabGroupUpdated: vi.fn(),
+    containerCreated: vi.fn(),
+    containerRemoved: vi.fn(),
+    containerUpdated: vi.fn(),
+    containerForCookieStore: vi.fn((cookieStoreId?: string) =>
+      cookieStoreId === containerMetadata.cookieStoreId
+        ? structuredClone(containerMetadata)
+        : undefined,
+    ),
     printSessionTree: vi.fn(),
   }
   const windowsByUid = new Map<UID, object>()
@@ -178,6 +194,19 @@ describe('background handlers', () => {
       0,
     )
     expect(fakeBrowser.windows.onRemoved.listeners.length).toBeGreaterThan(0)
+  })
+
+  it('continues registering unrelated listeners when contextual identities are unavailable', async () => {
+    const { fakeBrowser, initializeListeners, mocks } =
+      await loadBackgroundHandlers()
+    delete (fakeBrowser as Partial<typeof fakeBrowser>).contextualIdentities
+
+    expect(() => initializeListeners()).not.toThrow()
+    expect(mocks.initializeSessionTreePort).toHaveBeenCalledOnce()
+    expect(
+      fakeBrowser.browserAction.onClicked.listeners.length,
+    ).toBeGreaterThan(0)
+    expect(fakeBrowser.tabs.onCreated.listeners.length).toBeGreaterThan(0)
   })
 
   it('saves a deleted group when its grouped tab removals arrive in either event order', async () => {
@@ -296,6 +325,107 @@ describe('background handlers', () => {
     fakeBrowser.tabs.onRemoved.emit(1, {} as browser.tabs._OnRemovedRemoveInfo)
 
     expect(mocks.updateBadge).toHaveBeenCalledTimes(4)
+  })
+
+  it('registers container listeners and captures a created tab container', async () => {
+    const { fakeBrowser, initializeListeners, mocks } =
+      await loadBackgroundHandlers()
+    mocks.Items.push({
+      type: TreeItemType.WINDOW,
+      uid: 'window-1' as UID,
+      id: 20,
+      selected: false,
+      state: State.OPEN,
+      indentLevel: 0,
+      children: [],
+    })
+    mocks.addTab.mockReturnValue('tab-1' as UID)
+    initializeListeners()
+
+    expect(fakeBrowser.contextualIdentities.onCreated.listeners).toContain(
+      mocks.containerCreated,
+    )
+    expect(fakeBrowser.contextualIdentities.onUpdated.listeners).toContain(
+      mocks.containerUpdated,
+    )
+    expect(fakeBrowser.contextualIdentities.onRemoved.listeners).toContain(
+      mocks.containerRemoved,
+    )
+
+    fakeBrowser.tabs.onCreated.emit({
+      id: 10,
+      windowId: 20,
+      index: 0,
+      active: true,
+      discarded: false,
+      pinned: false,
+      title: 'Work tab',
+      url: 'https://example.test/work',
+      cookieStoreId: 'firefox-container-1',
+    } as browser.tabs.Tab)
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(mocks.updateTab).toHaveBeenCalledWith(
+      { tabUid: 'tab-1' },
+      { container: expect.objectContaining({ name: 'Work' }) },
+    )
+  })
+
+  it('preserves a container snapshot when a browser move rebuilds a tab', async () => {
+    const { fakeBrowser, initializeListeners, mocks } =
+      await loadBackgroundHandlers()
+    const container = {
+      cookieStoreId: 'firefox-container-1',
+      name: 'Work',
+      color: 'blue',
+      colorCode: '#37adff',
+      icon: 'briefcase',
+    }
+    const movedTab: SessionTab = {
+      type: TreeItemType.TAB,
+      uid: 'tab-work' as UID,
+      id: 10,
+      title: 'Work',
+      url: 'https://example.test/work',
+      windowUid: 'window-1' as UID,
+      selected: false,
+      state: State.OPEN,
+      indentLevel: 1,
+      pinned: false,
+      container,
+    }
+    const otherTab: SessionTab = {
+      ...movedTab,
+      uid: 'tab-other' as UID,
+      id: 11,
+      title: 'Other',
+      container: undefined,
+    }
+    mocks.Items.push({
+      type: TreeItemType.WINDOW,
+      uid: 'window-1' as UID,
+      id: 20,
+      selected: false,
+      state: State.OPEN,
+      indentLevel: 0,
+      children: [otherTab, movedTab],
+    })
+    vi.mocked(fakeBrowser.tabs.query).mockResolvedValueOnce([
+      { id: 10, pinned: false },
+      { id: 11, pinned: false },
+    ] as browser.tabs.Tab[])
+    initializeListeners()
+
+    fakeBrowser.tabs.onMoved.emit(10, {
+      windowId: 20,
+      fromIndex: 1,
+      toIndex: 0,
+    })
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(mocks.addTab.mock.calls[0]?.[13]).toEqual(container)
   })
 
   it('routes tab activation events to the tree with the activation depth', async () => {

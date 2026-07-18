@@ -188,6 +188,123 @@ describe('background browser API interactions', () => {
     expectTreeInvariants()
   })
 
+  it('opens a saved tab in its Firefox container', async () => {
+    const identity = {
+      cookieStoreId: 'firefox-container-1',
+      name: 'Work',
+      color: 'blue',
+      colorCode: '#37adff',
+      icon: 'briefcase',
+      iconUrl: 'resource://usercontext-content/briefcase.svg',
+    }
+    vi.mocked(fakeBrowser.contextualIdentities.query).mockResolvedValue([
+      identity,
+    ])
+    await Tree.initializeContainers()
+    const openTab = createTab('open-tab' as UID, {
+      id: 10,
+      state: State.OPEN,
+    })
+    const savedTab = createTab('saved-tab' as UID, {
+      container: identity,
+      id: -1,
+      state: State.SAVED,
+    })
+    const window = createWindow('window-1' as UID, [openTab, savedTab], {
+      id: 20,
+      state: State.OPEN,
+    })
+    vi.spyOn(OnCreatedQueue, 'createTabAndWait').mockResolvedValue({
+      id: 30,
+      windowId: window.id,
+      index: 1,
+      active: true,
+      discarded: false,
+      pinned: false,
+      cookieStoreId: identity.cookieStoreId,
+    } as browser.tabs.Tab)
+
+    await Tree.openTab({ tabUid: savedTab.uid, windowUid: window.uid })
+
+    expect(OnCreatedQueue.createTabAndWait).toHaveBeenCalledWith(
+      expect.objectContaining({ cookieStoreId: identity.cookieStoreId }),
+    )
+  })
+
+  it('rejects and restores saved state when browser tab creation fails', async () => {
+    const openTab = createTab('open-tab' as UID, {
+      id: 10,
+      state: State.OPEN,
+    })
+    const savedTab = createTab('saved-tab' as UID, {
+      id: -1,
+      state: State.SAVED,
+    })
+    const window = createWindow('window-1' as UID, [openTab, savedTab], {
+      id: 20,
+      state: State.OPEN,
+    })
+    vi.spyOn(OnCreatedQueue, 'createTabAndWait').mockRejectedValue(
+      new Error('Firefox refused tab creation'),
+    )
+
+    await expect(
+      Tree.openTab({ tabUid: savedTab.uid, windowUid: window.uid }),
+    ).rejects.toThrow('Firefox refused tab creation')
+    expect(savedTab.state).toBe(State.SAVED)
+    expect(savedTab.id).toBe(-1)
+  })
+
+  it('rolls back recreated container metadata when browser tab creation fails', async () => {
+    const oldContainer = {
+      cookieStoreId: 'firefox-container-missing',
+      name: 'Work',
+      color: 'blue',
+      colorCode: '#37adff',
+      icon: 'briefcase',
+      iconUrl: 'resource://usercontext-content/briefcase.svg',
+    }
+    const replacement = {
+      ...oldContainer,
+      cookieStoreId: 'firefox-container-new',
+    }
+    vi.mocked(fakeBrowser.contextualIdentities.query).mockResolvedValue([])
+    vi.mocked(fakeBrowser.contextualIdentities.create).mockResolvedValue(
+      replacement,
+    )
+    const openTab = createTab('open-tab' as UID, {
+      id: 10,
+      state: State.OPEN,
+    })
+    const savedTab = createTab('saved-tab' as UID, {
+      container: oldContainer,
+      id: -1,
+      state: State.SAVED,
+    })
+    const window = createWindow('window-1' as UID, [openTab, savedTab], {
+      id: 20,
+      state: State.OPEN,
+    })
+    vi.spyOn(OnCreatedQueue, 'createTabAndWait').mockRejectedValue(
+      new Error('Firefox refused tab creation'),
+    )
+
+    await expect(
+      Tree.openTab({
+        tabUid: savedTab.uid,
+        windowUid: window.uid,
+        containerRecovery: 'recreate',
+        containerRecoveryStoreIds: [oldContainer.cookieStoreId],
+      }),
+    ).rejects.toThrow('Firefox refused tab creation')
+
+    expect(savedTab.container).toEqual(oldContainer)
+    expect(savedTab.state).toBe(State.SAVED)
+    expect(fakeBrowser.contextualIdentities.remove).toHaveBeenCalledWith(
+      replacement.cookieStoreId,
+    )
+  })
+
   it('creates a private window when opening a tab from a saved private window', async () => {
     const tab = createTab('saved-private-tab' as UID, {
       id: -1,
@@ -398,7 +515,7 @@ describe('background browser API interactions', () => {
         vi.spyOn(OnCreatedQueue, 'createWindowAndWait').mockRejectedValue(error)
         return error
       },
-      expectedLog: 'Error creating window:',
+      expectedError: 'create failed',
     },
     {
       scenario: 'returns undefined',
@@ -408,11 +525,11 @@ describe('background browser API interactions', () => {
         )
         return undefined
       },
-      expectedLog: 'Window is undefined',
+      expectedError: 'Window creation returned no window or tab ID',
     },
   ])(
     'rolls back saved tab and window state when opening a saved tab $scenario',
-    async ({ setupCreateWindow, expectedLog }) => {
+    async ({ setupCreateWindow, expectedError }) => {
       const tab = createTab('tab-1' as UID, {
         id: -1,
         state: State.SAVED,
@@ -422,25 +539,19 @@ describe('background browser API interactions', () => {
         id: -1,
         state: State.SAVED,
       })
-      const loggedError = setupCreateWindow()
-      const consoleError = vi
-        .spyOn(console, 'error')
-        .mockImplementation(() => {})
+      setupCreateWindow()
 
-      await Tree.openTab({
-        tabUid: tab.uid,
-        windowUid: window.uid,
-      })
+      await expect(
+        Tree.openTab({
+          tabUid: tab.uid,
+          windowUid: window.uid,
+        }),
+      ).rejects.toThrow(expectedError)
 
       expect(OnCreatedQueue.createWindowAndWait).toHaveBeenCalledWith({
         incognito: false,
         url: tab.url,
       })
-      if (loggedError) {
-        expect(consoleError).toHaveBeenCalledWith(expectedLog, loggedError)
-      } else {
-        expect(consoleError).toHaveBeenCalledWith(expectedLog)
-      }
       expect(window.state).toBe(State.SAVED)
       expect(window.id).toBe(-1)
       expect(tab.state).toBe(State.SAVED)

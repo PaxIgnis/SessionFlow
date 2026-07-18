@@ -10,6 +10,7 @@ import { expectTreeInvariants } from '../../helpers/tree-invariants'
 
 describe('startup initialization', () => {
   beforeEach(() => {
+    vi.restoreAllMocks()
     installFakeBrowser()
     resetTree()
     Object.assign(Settings.values, structuredClone(DEFAULT_SETTINGS), {
@@ -52,6 +53,274 @@ describe('startup initialization', () => {
     })
     expect(window?.children).toHaveLength(1)
     expectTreeInvariants()
+  })
+
+  it('captures container metadata for tabs already open at startup', async () => {
+    const identity = {
+      cookieStoreId: 'firefox-container-work',
+      name: 'Work',
+      color: 'blue',
+      colorCode: '#37adff',
+      icon: 'briefcase',
+      iconUrl: 'resource://usercontext-content/briefcase.svg',
+    }
+    vi.mocked(browser.contextualIdentities.query).mockResolvedValue([identity])
+    vi.mocked(browser.windows.getAll).mockResolvedValue([
+      {
+        id: 20,
+        alwaysOnTop: false,
+        incognito: false,
+        focused: true,
+        tabs: [
+          {
+            id: 21,
+            windowId: 20,
+            index: 0,
+            active: true,
+            discarded: false,
+            pinned: false,
+            title: 'Work tab',
+            url: 'https://example.test/work',
+            cookieStoreId: identity.cookieStoreId,
+          } as browser.tabs.Tab,
+        ],
+      } as browser.windows.Window,
+    ])
+    await Tree.initializeContainers()
+    await Tree.initializeWindows()
+
+    const window = Tree.Items.find(Tree.isWindow)!
+    expect(Tree.getTabs(window.children)[0].container).toEqual(identity)
+    expectTreeInvariants()
+  })
+
+  it('refreshes saved container snapshots from live Firefox metadata at startup', async () => {
+    const savedContainer = {
+      cookieStoreId: 'firefox-container-work',
+      name: 'Old Work',
+      color: 'blue',
+      colorCode: '#37adff',
+      icon: 'briefcase',
+      iconUrl: 'resource://usercontext-content/briefcase.svg',
+    }
+    const liveContainer = {
+      ...savedContainer,
+      name: 'Renamed Work',
+      color: 'purple',
+      colorCode: '#af51f5',
+      icon: 'fingerprint',
+      iconUrl: 'resource://usercontext-content/fingerprint.svg',
+    }
+    mockStoredTree([
+      makeStoredWindow({
+        uid: 'window-saved' as UID,
+        state: State.SAVED,
+        children: [
+          makeStoredTab({
+            uid: 'tab-saved' as UID,
+            container: savedContainer,
+            state: State.SAVED,
+          }),
+        ],
+      }),
+    ])
+    vi.mocked(browser.contextualIdentities.query).mockResolvedValue([
+      liveContainer,
+    ])
+
+    await Tree.initializeContainers()
+    await Tree.initializeWindows()
+
+    expect(Tree.tabsByUid.get('tab-saved' as UID)?.container).toEqual(
+      liveContainer,
+    )
+  })
+
+  it('matches same-URL startup tabs by container and captures unmatched containers', async () => {
+    const work = {
+      cookieStoreId: 'firefox-container-work',
+      name: 'Work',
+      color: 'blue',
+      colorCode: '#37adff',
+      icon: 'briefcase',
+      iconUrl: 'resource://usercontext-content/briefcase.svg',
+    }
+    const personal = {
+      ...work,
+      cookieStoreId: 'firefox-container-personal',
+      name: 'Personal',
+      color: 'green',
+      colorCode: '#51cd00',
+      icon: 'fence',
+      iconUrl: 'resource://usercontext-content/fence.svg',
+    }
+    vi.mocked(browser.contextualIdentities.query).mockResolvedValue([
+      work,
+      personal,
+    ])
+    const storedWindow = makeStoredWindow({
+      uid: 'window-matched' as UID,
+      state: State.OPEN,
+      children: [
+        makeStoredTab({
+          uid: 'tab-work' as UID,
+          container: work,
+          title: 'Same URL',
+          url: 'https://example.test/same',
+        }),
+        makeStoredTab({
+          uid: 'tab-personal' as UID,
+          container: personal,
+          title: 'Same URL',
+          url: 'https://example.test/same',
+        }),
+      ],
+    })
+    mockStoredTree([storedWindow])
+    vi.mocked(browser.windows.getAll).mockResolvedValue([
+      {
+        id: 20,
+        incognito: false,
+        focused: true,
+        tabs: [
+          {
+            id: 31,
+            windowId: 20,
+            active: true,
+            discarded: false,
+            pinned: false,
+            title: 'Same URL',
+            url: 'https://example.test/same',
+            cookieStoreId: personal.cookieStoreId,
+          },
+          {
+            id: 30,
+            windowId: 20,
+            active: false,
+            discarded: false,
+            pinned: false,
+            title: 'Same URL',
+            url: 'https://example.test/same',
+            cookieStoreId: work.cookieStoreId,
+          },
+          {
+            id: 32,
+            windowId: 20,
+            active: false,
+            discarded: false,
+            pinned: false,
+            title: 'Personal extra',
+            url: 'https://example.test/extra',
+            cookieStoreId: personal.cookieStoreId,
+          },
+        ],
+      } as browser.windows.Window,
+    ])
+
+    await Tree.initializeContainers()
+    await Tree.initializeWindows()
+
+    expect(Tree.tabsByUid.get('tab-work' as UID)).toMatchObject({
+      id: 30,
+      container: work,
+    })
+    expect(Tree.tabsByUid.get('tab-personal' as UID)).toMatchObject({
+      id: 31,
+      container: personal,
+    })
+    const extra = [...Tree.tabsByUid.values()].find((tab) => tab.id === 32)
+    expect(extra?.container).toEqual(personal)
+    expectTreeInvariants()
+  })
+
+  it('treats missing legacy container metadata as unknown during startup matching', async () => {
+    const work = {
+      cookieStoreId: 'firefox-container-work',
+      name: 'Work',
+      color: 'blue',
+      colorCode: '#37adff',
+      icon: 'briefcase',
+      iconUrl: 'resource://usercontext-content/briefcase.svg',
+    }
+    mockStoredTree([
+      makeStoredWindow({
+        uid: 'window-legacy' as UID,
+        state: State.OPEN,
+        children: [
+          makeStoredTab({
+            uid: 'tab-legacy' as UID,
+            title: 'Legacy work tab',
+            url: 'https://example.test/work',
+            container: undefined,
+          }),
+        ],
+      }),
+    ])
+    vi.mocked(browser.contextualIdentities.query).mockResolvedValue([work])
+    vi.mocked(browser.windows.getAll).mockResolvedValue([
+      {
+        id: 20,
+        incognito: false,
+        focused: true,
+        tabs: [
+          {
+            id: 21,
+            windowId: 20,
+            index: 0,
+            active: true,
+            discarded: false,
+            pinned: false,
+            title: 'Legacy work tab',
+            url: 'https://example.test/work',
+            cookieStoreId: work.cookieStoreId,
+          },
+        ],
+      } as browser.windows.Window,
+    ])
+    vi.spyOn(Tree, 'openTab').mockResolvedValue(undefined)
+
+    await Tree.initializeContainers()
+    await Tree.initializeWindows()
+
+    expect(Tree.Items.filter(Tree.isWindow)).toHaveLength(1)
+    expect(Tree.windowsByUid.get('window-legacy' as UID)).toMatchObject({
+      id: 20,
+      state: State.OPEN,
+    })
+    expect(Tree.tabsByUid.get('tab-legacy' as UID)).toMatchObject({
+      id: 21,
+      container: work,
+    })
+  })
+
+  it('restores a previously open legacy tab after assigning its missing UID', async () => {
+    const legacyTab = makeStoredTab({
+      uid: undefined as unknown as UID,
+      state: State.OPEN,
+      title: 'Legacy tab without UID',
+      url: 'https://example.test/legacy',
+    })
+    mockStoredTree([
+      makeStoredWindow({
+        uid: 'window-legacy' as UID,
+        state: State.OPEN,
+        children: [legacyTab],
+      }),
+    ])
+    const openTab = vi.spyOn(Tree, 'openTab').mockResolvedValue(undefined)
+
+    await Tree.initializeWindows()
+
+    const normalizedTab = Tree.getTabs(
+      Tree.windowsByUid.get('window-legacy' as UID)!.children,
+    )[0]
+    expect(normalizedTab.uid).toBeTruthy()
+    expect(openTab).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tabUid: normalizedTab.uid,
+        windowUid: 'window-legacy',
+      }),
+    )
   })
 
   it('saves an unmatched previously-open window when it has only saved tabs to restore', async () => {

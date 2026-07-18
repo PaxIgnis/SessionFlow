@@ -1,9 +1,12 @@
 import TreeItemComponent from '@/components/TreeItem.vue'
 import { DEFAULT_SETTINGS } from '@/defaults/settings'
+import { getTreeItemContextMenuArgs } from '@/services/context-menu-actions'
 import { Settings } from '@/services/settings'
-import { State, TreeItem } from '@/types/session-tree'
+import { ContextMenuType } from '@/types/context-menu'
+import { SelectionType, State, TreeItem } from '@/types/session-tree'
 import {
   makeForegroundNote,
+  makeForegroundSeparator,
   makeForegroundTab,
   makeForegroundWindow,
   resetForegroundTree,
@@ -57,6 +60,7 @@ describe('TreeItem indent guide rendering', () => {
   })
 
   afterEach(() => {
+    vi.restoreAllMocks()
     resetForegroundTree()
   })
 
@@ -133,6 +137,223 @@ describe('TreeItem indent guide rendering', () => {
 
     expect(hiddenMarkup).not.toContain('tree-item-tab-group-indicator-left')
     expect(hiddenMarkup).toContain('Tab group: Saved research')
+  })
+
+  it('renders independently configurable container fades and icon positions', async () => {
+    const tab = makeForegroundTab('work-tab' as UID, {
+      container: {
+        cookieStoreId: 'firefox-container-1',
+        name: 'Work',
+        color: 'blue',
+        colorCode: '#37adff',
+        icon: 'briefcase',
+        iconUrl: 'resource://usercontext-content/briefcase.svg',
+      },
+      tabGroup: {
+        uid: 'group-uid' as UID,
+        id: 7,
+        title: 'Research',
+        color: 'purple',
+        collapsed: false,
+      },
+    })
+
+    const defaultMarkup = await renderTreeItem(tab)
+    expect(defaultMarkup).toContain(
+      'tree-item-container-indicator-soft-fade-right',
+    )
+    expect(defaultMarkup).toContain('tree-item-container-fade-title-after-icon')
+    expect(defaultMarkup).toContain('--container-color:#37adff')
+    expect(defaultMarkup).toContain('tree-item-container-icon-left')
+    expect(defaultMarkup).toContain('/icons/usercontext.svg#briefcase')
+    expect(defaultMarkup).toContain('color:#37adff')
+    expect(defaultMarkup).toContain('Container: Work')
+
+    Settings.values.containerColorIndicator = 'strong-fade'
+    Settings.values.containerFadeSide = 'left'
+    Settings.values.containerIconPosition = 'right'
+    const strongLeftMarkup = await renderTreeItem(tab)
+    expect(strongLeftMarkup).toContain(
+      'tree-item-container-indicator-strong-fade-left',
+    )
+    expect(strongLeftMarkup).toContain('tree-item-container-icon-right')
+
+    Settings.values.containerIconPosition = 'left'
+    const leftIconFadeMarkup = await renderTreeItem(tab)
+    expect(leftIconFadeMarkup).toContain(
+      'tree-item-container-fade-start-after-icon',
+    )
+
+    Settings.values.containerColorIndicator = 'off'
+    Settings.values.containerIconPosition = 'off'
+    const hiddenMarkup = await renderTreeItem(tab)
+    expect(hiddenMarkup).not.toContain('tree-item-container-indicator')
+    expect(hiddenMarkup).not.toContain('tree-item-container-icon')
+    expect(hiddenMarkup).toContain('Container: Work')
+    expect(hiddenMarkup).toContain('tree-item-container-description')
+  })
+
+  it('uses exact Firefox icon fragments and falls back only for unknown icons', async () => {
+    const knownIcon = makeForegroundTab('work-tab' as UID, {
+      container: {
+        cookieStoreId: 'firefox-container-1',
+        name: 'Work',
+        color: 'blue',
+        colorCode: '#37adff',
+        icon: 'briefcase',
+        iconUrl: 'resource://usercontext-content/briefcase.svg',
+      },
+    })
+    const unknownIcon = makeForegroundTab('future-tab' as UID, {
+      container: {
+        cookieStoreId: 'firefox-container-2',
+        name: 'Future',
+        color: 'green',
+        colorCode: '#51cd00',
+        icon: 'future-firefox-icon',
+      },
+    })
+
+    const knownMarkup = await renderTreeItem(knownIcon)
+    const unknownMarkup = await renderTreeItem(unknownIcon)
+
+    expect(knownMarkup).toContain('/icons/usercontext.svg#briefcase')
+    expect(knownMarkup).not.toContain('tree-item-container-icon-fallback')
+    expect(unknownMarkup).toContain('tree-item-container-icon-fallback')
+    expect(unknownMarkup).not.toContain(
+      '/icons/usercontext.svg#future-firefox-icon',
+    )
+    expect(unknownMarkup).toContain('Container: Future')
+  })
+
+  it('uses the same right fade endpoint with and without a group marker', async () => {
+    const groupedTab = makeForegroundTab('grouped-container-tab' as UID, {
+      container: {
+        cookieStoreId: 'firefox-container-1',
+        name: 'Work',
+        color: 'blue',
+        colorCode: '#37adff',
+        icon: 'briefcase',
+      },
+      tabGroup: {
+        uid: 'group-uid' as UID,
+        id: 7,
+        title: 'Research',
+        color: 'purple',
+        collapsed: false,
+      },
+    })
+    const ungroupedTab = makeForegroundTab('ungrouped-container-tab' as UID, {
+      container: groupedTab.container,
+    })
+
+    const groupedMarkup = await renderTreeItem(groupedTab)
+    const ungroupedMarkup = await renderTreeItem(ungroupedTab)
+
+    expect(groupedMarkup).toContain('tree-item-container-fade-end-inset')
+    expect(ungroupedMarkup).toContain('tree-item-container-fade-end-inset')
+  })
+
+  it('keeps container fades inset from interaction lines and behind tab content', async () => {
+    const source = await import('node:fs/promises').then((fs) =>
+      fs.readFile(
+        new URL('../../../src/components/TreeItem.vue', import.meta.url),
+        'utf8',
+      ),
+    )
+
+    expect(source).toMatch(
+      /\.tree-item-container-indicator\s*\{[^}]*z-index:\s*0;/s,
+    )
+    expect(source).not.toMatch(/\.tree-item-overlay\s*\{[^}]*z-index:/s)
+    expect(source).toMatch(/\.tree-item-container-icon[^}]*z-index:\s*2;/s)
+    expect(source).toMatch(
+      /\.tree-item-tab-content\s*>\s*\.tree-item-title[^}]*z-index:\s*2;/s,
+    )
+
+    const rightFadeBounds = source.match(
+      /\.tree-item-container-indicator-soft-fade-right,\s*\.tree-item-container-indicator-strong-fade-right\s*\{([^}]*)\}/s,
+    )?.[1]
+    const leftFadeBounds = source.match(
+      /\.tree-item-container-indicator-soft-fade-left,\s*\.tree-item-container-indicator-strong-fade-left\s*\{([^}]*)\}/s,
+    )?.[1]
+    expect(rightFadeBounds).toContain('bottom: 2px;')
+    expect(rightFadeBounds).toContain('left: var(--tree-item-title-start);')
+    expect(rightFadeBounds).toContain('top: 2px;')
+    expect(leftFadeBounds).toContain('bottom: 2px;')
+    expect(leftFadeBounds).toContain('top: 2px;')
+    expect(source).toMatch(
+      /--tree-item-title-start:\s*calc\(\s*64px\s*\+\s*\(var\(--prepend-width, 16px\)\s*\*\s*var\(--indent-level, 0\)\)\s*\);/s,
+    )
+    expect(source).toMatch(
+      /\.tree-item-container-fade-title-after-icon\s*\{[^}]*left:\s*calc\(var\(--tree-item-title-start\) \+ 18px\);/s,
+    )
+    expect(source).toMatch(
+      /\.tree-item-container-indicator-soft-fade-right\s*\{[^}]*transparent 48%,/s,
+    )
+    expect(source).toMatch(
+      /\.tree-item-container-indicator-strong-fade-right\s*\{[^}]*transparent 48%,/s,
+    )
+  })
+
+  it('binds the script-side handler and maps each context-menu item type', async () => {
+    const source = await import('node:fs/promises').then((fs) =>
+      fs.readFile(
+        new URL('../../../src/components/TreeItem.vue', import.meta.url),
+        'utf8',
+      ),
+    )
+
+    expect(source).toContain('@contextmenu.stop="openItemContextMenu"')
+    expect(source).toMatch(
+      /ContextMenu\.handleContextMenuClick\(\s*\.\.\.getTreeItemContextMenuArgs\(props\.item, event\),\s*\)/s,
+    )
+
+    const event = {} as MouseEvent
+    const items = [
+      {
+        item: makeForegroundWindow('window-menu' as UID),
+        menuType: ContextMenuType.Window,
+        selectionType: SelectionType.WINDOW,
+        argumentIndex: 2,
+      },
+      {
+        item: makeForegroundTab('tab-menu' as UID),
+        menuType: ContextMenuType.Tab,
+        selectionType: SelectionType.TAB,
+        argumentIndex: 3,
+      },
+      {
+        item: makeForegroundNote('note-menu' as UID),
+        menuType: ContextMenuType.Note,
+        selectionType: SelectionType.NOTE,
+        argumentIndex: 4,
+      },
+      {
+        item: makeForegroundSeparator('separator-menu' as UID),
+        menuType: ContextMenuType.Separator,
+        selectionType: SelectionType.SEPARATOR,
+        argumentIndex: 5,
+      },
+    ]
+    for (const { item, menuType, selectionType, argumentIndex } of items) {
+      const args = getTreeItemContextMenuArgs(item, event)
+      expect(args[0]).toBe(menuType)
+      expect(args[1]).toBe(event)
+      expect(args.slice(2, 6).filter(Boolean)).toEqual([item])
+      expect(args[argumentIndex]).toBe(item)
+      expect(args[6]).toBe(selectionType)
+    }
+  })
+
+  it('does not render container presentation for ordinary tabs', async () => {
+    const markup = await renderTreeItem(
+      makeForegroundTab('ordinary-tab' as UID),
+    )
+
+    expect(markup).not.toContain('tree-item-container-indicator')
+    expect(markup).not.toContain('tree-item-container-icon')
+    expect(markup).not.toContain('Container:')
   })
 
   it('configures which tab details are included in the hover text', async () => {

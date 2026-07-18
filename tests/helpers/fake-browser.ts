@@ -2,6 +2,10 @@ import { vi } from 'vitest'
 
 type Listener<T extends unknown[]> = (...args: T) => void
 
+type ContextualIdentityChangeInfo = {
+  contextualIdentity: browser.contextualIdentities.ContextualIdentity
+}
+
 class FakeEvent<T extends unknown[]> {
   listeners: Array<Listener<T>> = []
 
@@ -58,6 +62,14 @@ export interface FakeBrowser {
     setBadgeText: ReturnType<typeof vi.fn>
     setPopup: ReturnType<typeof vi.fn>
     setTitle: ReturnType<typeof vi.fn>
+  }
+  contextualIdentities: {
+    onCreated: FakeEvent<[ContextualIdentityChangeInfo]>
+    onRemoved: FakeEvent<[ContextualIdentityChangeInfo]>
+    onUpdated: FakeEvent<[ContextualIdentityChangeInfo]>
+    create: ReturnType<typeof vi.fn>
+    query: ReturnType<typeof vi.fn>
+    remove: ReturnType<typeof vi.fn>
   }
   runtime: {
     onConnect: FakeEvent<[FakePort]>
@@ -150,6 +162,21 @@ export function installFakeBrowser(): FakeBrowser {
       setBadgeText: vi.fn().mockResolvedValue(undefined),
       setPopup: vi.fn().mockResolvedValue(undefined),
       setTitle: vi.fn().mockResolvedValue(undefined),
+    },
+    contextualIdentities: {
+      onCreated: new FakeEvent<[ContextualIdentityChangeInfo]>(),
+      onRemoved: new FakeEvent<[ContextualIdentityChangeInfo]>(),
+      onUpdated: new FakeEvent<[ContextualIdentityChangeInfo]>(),
+      create: vi.fn().mockResolvedValue({
+        cookieStoreId: 'firefox-container-new',
+        name: 'Container',
+        color: 'blue',
+        colorCode: '#37adff',
+        icon: 'circle',
+        iconUrl: 'resource://usercontext-content/circle.svg',
+      }),
+      query: vi.fn().mockResolvedValue([]),
+      remove: vi.fn().mockResolvedValue(undefined),
     },
     runtime: {
       onConnect,

@@ -238,63 +238,93 @@ export async function createWindowAndWait(
     .create(properties || {})
     .catch((error) => {
       console.error('Error creating window:', error)
-      OnCreatedQueue.pendingTabCount -= tabCount
+      OnCreatedQueue.pendingWindowCount = Math.max(
+        0,
+        OnCreatedQueue.pendingWindowCount - 1,
+      )
+      OnCreatedQueue.pendingTabCount = Math.max(
+        0,
+        OnCreatedQueue.pendingTabCount - tabCount,
+      )
       throw error
     })
-  // Update window position if provided. This is necessary
-  // because top/left are ignored before Firefox 109.
-  if (properties?.left && properties?.top) {
-    await browser.windows.update(window.id!, {
-      left: properties.left,
-      top: properties.top,
-    })
-  }
+  try {
+    // Update window position if provided. This is necessary
+    // because top/left are ignored before Firefox 109.
+    if (properties?.left && properties?.top) {
+      await browser.windows.update(window.id!, {
+        left: properties.left,
+        top: properties.top,
+      })
+    }
 
-  const waitForWindowId = (windowId: number): Promise<void> => {
-    return new Promise((resolve) => {
-      const interval = setInterval(() => {
-        const window = OnCreatedQueue.pendingWindows.get(windowId)
-        if (window && window.listenerResolved) {
-          window.complete = true
-          clearInterval(interval)
-          resolve()
-        }
-      }, 100)
-    })
-  }
-  if (!window.id || !window.tabs) {
-    throw new Error('Window creation failed: ID or tabs undefined')
-  }
-  addPendingWindowToQueue(window.id, true, false)
-  await waitForWindowId(window.id)
-  if (tabCount > 0) {
-    const promises: Promise<void>[] = []
-    const waitForTabId = (tabId: number): Promise<void> => {
+    const waitForWindowId = (windowId: number): Promise<void> => {
       return new Promise((resolve) => {
         const interval = setInterval(() => {
-          const tab = OnCreatedQueue.pendingTabs.get(tabId)
-          if (tab && tab.listenerResolved) {
-            tab.complete = true
+          const window = OnCreatedQueue.pendingWindows.get(windowId)
+          if (window && window.listenerResolved) {
+            window.complete = true
             clearInterval(interval)
             resolve()
           }
         }, 100)
       })
     }
-    for (const tab of window.tabs) {
-      if (!tab.id) {
-        throw new Error('Tab ID is undefined')
-      }
-      addPendingTabToQueue(tab.id, true, false)
-      promises.push(waitForTabId(tab.id))
+    if (!window.id || !window.tabs) {
+      throw new Error('Window creation failed: ID or tabs undefined')
     }
-    await Promise.all(promises)
-    // then pin tabs that were previously pinned
-    for (const tab of window.tabs) {
-      if ((tab.id && pinnedTabIds.has(tab.id)) || tab.pinned) {
-        await browser.tabs.update(tab.id!, { pinned: true })
+    addPendingWindowToQueue(window.id, true, false)
+    await waitForWindowId(window.id)
+    if (tabCount > 0) {
+      const promises: Promise<void>[] = []
+      const waitForTabId = (tabId: number): Promise<void> => {
+        return new Promise((resolve) => {
+          const interval = setInterval(() => {
+            const tab = OnCreatedQueue.pendingTabs.get(tabId)
+            if (tab && tab.listenerResolved) {
+              tab.complete = true
+              clearInterval(interval)
+              resolve()
+            }
+          }, 100)
+        })
+      }
+      for (const tab of window.tabs) {
+        if (!tab.id) {
+          throw new Error('Tab ID is undefined')
+        }
+        addPendingTabToQueue(tab.id, true, false)
+        promises.push(waitForTabId(tab.id))
+      }
+      await Promise.all(promises)
+      // then pin tabs that were previously pinned
+      for (const tab of window.tabs) {
+        if ((tab.id && pinnedTabIds.has(tab.id)) || tab.pinned) {
+          await browser.tabs.update(tab.id!, { pinned: true })
+        }
       }
     }
+    return window
+  } catch (error) {
+    if (window.id !== undefined) {
+      OnCreatedQueue.pendingWindows.delete(window.id)
+    }
+    for (const tab of window.tabs ?? []) {
+      if (tab.id !== undefined) OnCreatedQueue.pendingTabs.delete(tab.id)
+    }
+    OnCreatedQueue.pendingWindowCount = Math.max(
+      0,
+      OnCreatedQueue.pendingWindowCount - 1,
+    )
+    OnCreatedQueue.pendingTabCount = Math.max(
+      0,
+      OnCreatedQueue.pendingTabCount - tabCount,
+    )
+    if (window.id !== undefined) {
+      await browser.windows.remove(window.id).catch((removeError) => {
+        console.error('Error removing partially created window:', removeError)
+      })
+    }
+    throw error
   }
-  return window
 }

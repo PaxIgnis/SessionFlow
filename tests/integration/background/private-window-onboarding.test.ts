@@ -306,6 +306,7 @@ describe('private-window onboarding', () => {
     installFakeBrowser()
     const initializePrivateWindowOnboarding = vi.fn()
     const initializeSettings = vi.fn(() => new Promise<void>(() => undefined))
+    const initializeContainerListeners = vi.fn()
 
     vi.doMock('@/services/background-private-window-onboarding', () => ({
       initializePrivateWindowOnboarding,
@@ -321,6 +322,7 @@ describe('private-window onboarding', () => {
       },
     }))
     vi.doMock('@/services/background-handlers', () => ({
+      initializeContainerListeners,
       initializeListeners: vi.fn(),
     }))
     vi.doMock('@/services/background-tree', () => ({
@@ -347,6 +349,9 @@ describe('private-window onboarding', () => {
     expect(initializePrivateWindowOnboarding).toHaveBeenCalledTimes(1)
     expect(
       initializePrivateWindowOnboarding.mock.invocationCallOrder[0],
+    ).toBeLessThan(initializeSettings.mock.invocationCallOrder[0])
+    expect(
+      initializeContainerListeners.mock.invocationCallOrder[0],
     ).toBeLessThan(initializeSettings.mock.invocationCallOrder[0])
   })
 })

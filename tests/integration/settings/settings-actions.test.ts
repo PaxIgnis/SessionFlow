@@ -180,6 +180,9 @@ describe('settings actions', () => {
         enableCopyOnDragAndDrop: false,
         tabGroupDropBehavior: 'any-adjacent-group',
         tabGroupColorIndicator: 'left',
+        containerColorIndicator: 'strong-fade',
+        containerFadeSide: 'left',
+        containerIconPosition: 'right',
         saveTabsWhenTabGroupDeleted: true,
         showTabTitleOnHover: false,
         showTabUrlOnHover: false,
@@ -205,11 +208,53 @@ describe('settings actions', () => {
     expect(Settings.values.enableCopyOnDragAndDrop).toBe(false)
     expect(Settings.values.tabGroupDropBehavior).toBe('any-adjacent-group')
     expect(Settings.values.tabGroupColorIndicator).toBe('left')
+    expect(Settings.values.containerColorIndicator).toBe('strong-fade')
+    expect(Settings.values.containerFadeSide).toBe('left')
+    expect(Settings.values.containerIconPosition).toBe('right')
     expect(Settings.values.saveTabsWhenTabGroupDeleted).toBe(true)
     expect(Settings.values.showTabTitleOnHover).toBe(false)
     expect(Settings.values.showTabUrlOnHover).toBe(false)
     expect(Settings.values.tabGroupInfoOnHover).toBe('grouped-only')
     expect(Settings.values.refreshFaviconsAfterPeriodOfTimeUnit).toBe('hours')
     expect(Settings.values.faviconRefreshTiming).toBe('expiration-and-startup')
+  })
+
+  it('loads container presentation settings', async () => {
+    vi.mocked(browser.storage.local.get).mockResolvedValue({
+      settings: {
+        containerColorIndicator: 'strong-fade',
+        containerFadeSide: 'left',
+        containerIconPosition: 'right',
+      },
+    })
+    const { loadSettingsFromStorage } =
+      await import('@/services/settings-actions')
+
+    await loadSettingsFromStorage()
+
+    expect(Settings.values.containerColorIndicator).toBe('strong-fade')
+    expect(Settings.values.containerFadeSide).toBe('left')
+    expect(Settings.values.containerIconPosition).toBe('right')
+  })
+
+  it('retains new container defaults for obsolete prototype settings', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.mocked(browser.storage.local.get).mockResolvedValue({
+      settings: {
+        containerColorIndicator: 'top',
+        showContainerIcon: false,
+      },
+    })
+    const { loadSettingsFromStorage } =
+      await import('@/services/settings-actions')
+
+    await loadSettingsFromStorage()
+
+    expect(Settings.values.containerColorIndicator).toBe('soft-fade')
+    expect(Settings.values.containerFadeSide).toBe('right')
+    expect(Settings.values.containerIconPosition).toBe('left')
+    expect(consoleError).toHaveBeenCalledWith(
+      'Invalid settings key: showContainerIcon',
+    )
   })
 })

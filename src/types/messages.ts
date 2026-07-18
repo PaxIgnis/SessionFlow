@@ -5,6 +5,10 @@ export interface Message {
   [key: string]: unknown
 }
 
+export type ContainerRecoveryStrategy = 'recreate' | 'without-container'
+export const CONTAINER_RECOVERY_STALE_ERROR =
+  'Missing Firefox containers changed after recovery choices were shown'
+
 // ==============================
 // Tab Messages
 // ==============================
@@ -27,6 +31,9 @@ export interface OpenTabMessage {
   windowUid: UID
   url?: string | undefined
   discarded?: boolean | undefined
+  active?: boolean | undefined
+  containerRecovery?: ContainerRecoveryStrategy
+  containerRecoveryStoreIds?: string[]
 }
 
 export interface PinTabMessage {
@@ -119,6 +126,8 @@ export interface TreeItemIndentDecreaseMessage {
 export interface OpenWindowMessage {
   action: 'openWindow'
   windowUid: UID
+  containerRecovery?: ContainerRecoveryStrategy
+  containerRecoveryStoreIds?: string[]
 }
 
 export interface OpenWindowsInSameLocationUpdatedMessage {

@@ -30,6 +30,11 @@ export const DEFAULT_SETTINGS: Settings = {
   showTabUrlOnHover: true,
   tabGroupInfoOnHover: 'grouped-only',
 
+  // Containers
+  containerColorIndicator: 'soft-fade',
+  containerFadeSide: 'right',
+  containerIconPosition: 'left',
+
   // Tab Groups
   tabGroupDropBehavior: 'same-group-both-adjacent',
   tabGroupColorIndicator: 'right',

@@ -94,6 +94,7 @@ describe('window actions', () => {
     expect(window.id).toBe(-1)
     expect(window.active).toBe(false)
     expect(window.activeTabId).toBeUndefined()
+    expect(window.savedActiveTabUid).toBe(rootTab.uid)
     expect(rootTab.state).toBe(State.SAVED)
     expect(rootTab.id).toBe(-1)
     expect(rootTab.active).toBe(false)
@@ -427,7 +428,6 @@ describe('window actions', () => {
   })
 
   it('opens a saved window with tab URLs, assigns browser ids, and pins saved pinned tabs', async () => {
-    vi.useFakeTimers()
     Settings.values.openWindowWithTabsDiscarded = false
     Settings.values.openWindowsInSameLocation = false
     const firstTab = createTab('tab-first' as UID, {
@@ -447,21 +447,32 @@ describe('window actions', () => {
       incognito: true,
       state: State.SAVED,
     })
-    vi.mocked(browser.windows.create).mockResolvedValue({
+    vi.spyOn(OnCreatedQueue, 'createWindowAndWait').mockResolvedValue({
       id: 30,
-      tabs: [{ id: 101 }, { id: 102 }],
+      tabs: [{ id: 101 }],
     } as browser.windows.Window)
+    vi.spyOn(OnCreatedQueue, 'createTabAndWait').mockResolvedValue({
+      id: 102,
+      windowId: 30,
+      index: 1,
+      active: false,
+      discarded: false,
+      pinned: false,
+    } as browser.tabs.Tab)
 
-    const result = Tree.openWindow({ windowUid: window.uid })
-    await flushMicrotasks()
+    await Tree.openWindow({ windowUid: window.uid })
 
-    expect(browser.windows.create).toHaveBeenCalledWith({
+    expect(OnCreatedQueue.createWindowAndWait).toHaveBeenCalledWith({
       incognito: true,
-      url: ['https://example.test/first', 'https://example.test/second'],
+      url: 'https://example.test/first',
     })
-    await resolveCreatedWindowAndTabs(30, [101, 102])
-
-    await result
+    expect(OnCreatedQueue.createTabAndWait).toHaveBeenCalledWith(
+      expect.objectContaining({
+        active: false,
+        url: 'https://example.test/second',
+        windowId: 30,
+      }),
+    )
 
     expect(window.id).toBe(30)
     expect(window.state).toBe(State.OPEN)
@@ -478,8 +489,219 @@ describe('window actions', () => {
     expectTreeInvariants()
   })
 
+  it('restores a mixed-container window one tab at a time', async () => {
+    Settings.values.openWindowWithTabsDiscarded = false
+    Settings.values.openWindowsInSameLocation = false
+    const work = {
+      cookieStoreId: 'firefox-container-work',
+      name: 'Work',
+      color: 'blue',
+      colorCode: '#37adff',
+      icon: 'briefcase',
+      iconUrl: 'resource://usercontext-content/briefcase.svg',
+    }
+    const banking = {
+      cookieStoreId: 'firefox-container-banking',
+      name: 'Banking',
+      color: 'green',
+      colorCode: '#51cd00',
+      icon: 'dollar',
+      iconUrl: 'resource://usercontext-content/dollar.svg',
+    }
+    vi.mocked(browser.contextualIdentities.query).mockResolvedValue([
+      work,
+      banking,
+    ])
+    await Tree.initializeContainers()
+    const firstTab = createTab('tab-first' as UID, {
+      container: work,
+      id: -1,
+      pinned: true,
+      state: State.SAVED,
+      url: 'https://example.test/work',
+    })
+    const secondTab = createTab('tab-second' as UID, {
+      container: banking,
+      id: -1,
+      state: State.SAVED,
+      url: 'https://example.test/banking',
+    })
+    const window = createWindow('window-1' as UID, [firstTab, secondTab], {
+      id: -1,
+      state: State.SAVED,
+    })
+    vi.spyOn(OnCreatedQueue, 'createWindowAndWait').mockResolvedValue({
+      id: 30,
+      tabs: [{ id: 101, cookieStoreId: work.cookieStoreId }],
+    } as browser.windows.Window)
+    vi.spyOn(OnCreatedQueue, 'createTabAndWait').mockResolvedValue({
+      id: 102,
+      windowId: 30,
+      index: 1,
+      active: false,
+      discarded: false,
+      pinned: false,
+      cookieStoreId: banking.cookieStoreId,
+    } as browser.tabs.Tab)
+
+    await Tree.openWindow({ windowUid: window.uid })
+
+    expect(OnCreatedQueue.createWindowAndWait).toHaveBeenCalledWith({
+      incognito: false,
+      url: firstTab.url,
+      cookieStoreId: work.cookieStoreId,
+    })
+    expect(OnCreatedQueue.createTabAndWait).toHaveBeenCalledWith(
+      expect.objectContaining({
+        active: false,
+        cookieStoreId: banking.cookieStoreId,
+        url: secondTab.url,
+        windowId: 30,
+      }),
+    )
+    expect(firstTab.id).toBe(101)
+    expect(secondTab.id).toBe(102)
+  })
+
+  it('restores the saved active tab after incremental window creation', async () => {
+    Settings.values.openWindowWithTabsDiscarded = false
+    Settings.values.openWindowsInSameLocation = false
+    const firstTab = createTab('tab-first' as UID, {
+      id: -1,
+      state: State.SAVED,
+    })
+    const secondTab = createTab('tab-second' as UID, {
+      id: -1,
+      state: State.SAVED,
+    })
+    const window = createWindow('window-1' as UID, [firstTab, secondTab], {
+      id: -1,
+      savedActiveTabUid: secondTab.uid,
+      state: State.SAVED,
+    })
+    vi.spyOn(OnCreatedQueue, 'createWindowAndWait').mockResolvedValue({
+      id: 30,
+      tabs: [{ id: 101, active: true }],
+    } as browser.windows.Window)
+    vi.spyOn(OnCreatedQueue, 'createTabAndWait').mockResolvedValue({
+      id: 102,
+      windowId: 30,
+      index: 1,
+      active: false,
+      discarded: false,
+      pinned: false,
+    } as browser.tabs.Tab)
+
+    await Tree.openWindow({ windowUid: window.uid })
+
+    await vi.waitFor(() => {
+      expect(browser.tabs.update).toHaveBeenCalledWith(102, { active: true })
+    })
+    expect(window.activeTabId).toBe(102)
+    expect(firstTab.active).toBe(false)
+    expect(secondTab.active).toBe(true)
+  })
+
+  it('rejects when a later tab fails during incremental window restoration', async () => {
+    Settings.values.openWindowWithTabsDiscarded = false
+    Settings.values.openWindowsInSameLocation = false
+    const firstTab = createTab('tab-first' as UID, {
+      id: -1,
+      state: State.SAVED,
+      url: 'https://example.test/first',
+    })
+    const secondTab = createTab('tab-second' as UID, {
+      id: -1,
+      state: State.SAVED,
+      url: 'https://example.test/second',
+    })
+    const window = createWindow('window-1' as UID, [firstTab, secondTab], {
+      id: -1,
+      state: State.SAVED,
+    })
+    vi.spyOn(OnCreatedQueue, 'createWindowAndWait').mockResolvedValue({
+      id: 30,
+      tabs: [{ id: 101 }],
+    } as browser.windows.Window)
+    vi.spyOn(OnCreatedQueue, 'createTabAndWait').mockRejectedValue(
+      new Error('Firefox refused the second tab'),
+    )
+
+    await expect(Tree.openWindow({ windowUid: window.uid })).rejects.toThrow(
+      'Firefox refused the second tab',
+    )
+    expect(window.state).toBe(State.SAVED)
+    expect(window.id).toBe(-1)
+    expect(firstTab.state).toBe(State.SAVED)
+    expect(firstTab.id).toBe(-1)
+    expect(secondTab.state).toBe(State.SAVED)
+    expect(secondTab.id).toBe(-1)
+    expect(browser.windows.remove).toHaveBeenCalledWith(30)
+    expect(browser.tabs.group).not.toHaveBeenCalled()
+  })
+
+  it('restores a missing snapshot when open-without-container window creation fails', async () => {
+    const missingContainer = {
+      cookieStoreId: 'firefox-container-missing',
+      name: 'Work',
+      color: 'blue',
+      colorCode: '#37adff',
+      icon: 'briefcase',
+      iconUrl: 'resource://usercontext-content/briefcase.svg',
+    }
+    vi.mocked(browser.contextualIdentities.query).mockResolvedValue([])
+    const tab = createTab('tab-work' as UID, {
+      container: missingContainer,
+      id: -1,
+      state: State.SAVED,
+    })
+    const window = createWindow('window-1' as UID, [tab], {
+      id: -1,
+      state: State.SAVED,
+    })
+    vi.spyOn(OnCreatedQueue, 'createWindowAndWait').mockRejectedValue(
+      new Error('Firefox refused window creation'),
+    )
+
+    await expect(
+      Tree.openWindow({
+        windowUid: window.uid,
+        containerRecovery: 'without-container',
+        containerRecoveryStoreIds: [missingContainer.cookieStoreId],
+      }),
+    ).rejects.toThrow('Firefox refused window creation')
+
+    expect(window.state).toBe(State.SAVED)
+    expect(window.id).toBe(-1)
+    expect(tab.state).toBe(State.SAVED)
+    expect(tab.id).toBe(-1)
+    expect(tab.container).toEqual(missingContainer)
+  })
+
+  it('rejects a saved window open before browser creation when its container is missing', async () => {
+    const tab = createTab('tab-work' as UID, {
+      container: {
+        cookieStoreId: 'firefox-container-missing',
+        name: 'Work',
+        color: 'blue',
+        colorCode: '#37adff',
+        icon: 'briefcase',
+      },
+      state: State.SAVED,
+    })
+    const window = createWindow('window-1' as UID, [tab], {
+      id: -1,
+      state: State.SAVED,
+    })
+
+    await expect(Tree.openWindow({ windowUid: window.uid })).rejects.toThrow(
+      'Firefox container "Work" no longer exists',
+    )
+    expect(browser.windows.create).not.toHaveBeenCalled()
+    expect(window.state).toBe(State.SAVED)
+  })
+
   it('recreates saved tab groups after opening an entire saved window', async () => {
-    vi.useFakeTimers()
     Settings.values.openWindowWithTabsDiscarded = false
     Settings.values.openWindowsInSameLocation = false
     const tabGroup = {
@@ -503,10 +725,18 @@ describe('window actions', () => {
       id: -1,
       state: State.SAVED,
     })
-    vi.mocked(browser.windows.create).mockResolvedValue({
+    vi.spyOn(OnCreatedQueue, 'createWindowAndWait').mockResolvedValue({
       id: 30,
-      tabs: [{ id: 101 }, { id: 102 }],
+      tabs: [{ id: 101 }],
     } as browser.windows.Window)
+    vi.spyOn(OnCreatedQueue, 'createTabAndWait').mockResolvedValue({
+      id: 102,
+      windowId: 30,
+      index: 1,
+      active: false,
+      discarded: false,
+      pinned: false,
+    } as browser.tabs.Tab)
     vi.mocked(browser.tabs.group).mockResolvedValue(23)
     vi.mocked(browser.tabGroups.update).mockResolvedValue({
       id: 23,
@@ -520,10 +750,7 @@ describe('window actions', () => {
       { id: 102, windowId: 30, groupId: 23 },
     ] as browser.tabs.Tab[])
 
-    const result = Tree.openWindow({ windowUid: window.uid })
-    await flushMicrotasks()
-    await resolveCreatedWindowAndTabs(30, [101, 102])
-    await result
+    await Tree.openWindow({ windowUid: window.uid })
 
     expect(browser.tabs.group).toHaveBeenCalledWith({
       tabIds: [101, 102],

@@ -6,6 +6,7 @@ import {
   openEditCustomLabelModal,
   openEditNoteModal,
   openEditWindowTitleModal,
+  openContainerRecoveryModal,
   openModal,
 } from '@/services/modal-state'
 import {
@@ -57,6 +58,37 @@ describe('modal state', () => {
     expect(ModalState.active).toEqual({
       kind: 'editNote',
       note,
+    })
+  })
+
+  it('stores a serializable missing-container recovery target', () => {
+    const container = {
+      cookieStoreId: 'firefox-container-1',
+      name: 'Work',
+      color: 'blue',
+      colorCode: '#37adff',
+      icon: 'briefcase',
+    }
+
+    openContainerRecoveryModal(
+      {
+        type: 'tab',
+        tabUid: 'tab-1' as UID,
+        windowUid: 'window-1' as UID,
+        url: 'https://example.test/work',
+      },
+      [container],
+    )
+
+    expect(ModalState.active).toEqual({
+      kind: 'containerRecovery',
+      target: {
+        type: 'tab',
+        tabUid: 'tab-1',
+        windowUid: 'window-1',
+        url: 'https://example.test/work',
+      },
+      missingContainers: [container],
     })
   })
 })

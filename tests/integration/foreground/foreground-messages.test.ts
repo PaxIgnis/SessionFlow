@@ -1,18 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '@/defaults/settings'
 import { Settings } from '@/services/settings'
+import { closeModal, ModalState } from '@/services/modal-state'
 import { State } from '@/types/session-tree'
 import {
   makeForegroundTab,
   makeForegroundWindow,
   resetForegroundTree,
 } from '../../helpers/foreground-tree-fixtures'
+import { installFakeBrowser } from '../../helpers/fake-browser'
 
 const sendTreeCommand = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 const isPrivateWindowAccessAllowed = vi.hoisted(() =>
   vi.fn().mockResolvedValue(true),
 )
 const showPrivateWindowAccessRequired = vi.hoisted(() => vi.fn())
+const showNotification = vi.hoisted(() => vi.fn())
 
 vi.mock('@/services/runtime-port-service', () => ({
   sendTreeCommand,
@@ -21,14 +24,18 @@ vi.mock('@/services/utils', () => ({
   isPrivateWindowAccessAllowed,
 }))
 vi.mock('@/services/notification-state', () => ({
+  showNotification,
   showPrivateWindowAccessRequired,
 }))
 
 describe('foreground message helpers', () => {
   beforeEach(() => {
+    installFakeBrowser()
     sendTreeCommand.mockClear()
     isPrivateWindowAccessAllowed.mockReset().mockResolvedValue(true)
     showPrivateWindowAccessRequired.mockReset()
+    showNotification.mockReset()
+    closeModal()
     resetForegroundTree()
     Object.assign(Settings.values, structuredClone(DEFAULT_SETTINGS))
   })
@@ -318,6 +325,349 @@ describe('foreground message helpers', () => {
 
     expect(showPrivateWindowAccessRequired).toHaveBeenCalledWith('tab')
     expect(sendTreeCommand).not.toHaveBeenCalled()
+  })
+
+  it('coalesces concurrent recovery clicks and scopes consent to shown containers', async () => {
+    const { openContainerRecoveryModal } =
+      await import('@/services/modal-state')
+    const { resolveContainerRecoveryModal } =
+      await import('@/services/foreground-messages')
+    let releaseCommand: () => void = () => undefined
+    sendTreeCommand.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseCommand = resolve
+        }),
+    )
+    openContainerRecoveryModal(
+      {
+        type: 'tab',
+        tabUid: 'tab-work' as UID,
+        windowUid: 'window-1' as UID,
+        url: 'https://example.test/work',
+      },
+      [
+        {
+          cookieStoreId: 'firefox-container-work',
+          name: 'Work',
+          color: 'blue',
+          colorCode: '#37adff',
+          icon: 'briefcase',
+        },
+      ],
+    )
+
+    const first = resolveContainerRecoveryModal('recreate')
+    const second = resolveContainerRecoveryModal('recreate')
+
+    expect(sendTreeCommand).toHaveBeenCalledTimes(1)
+    expect(sendTreeCommand).toHaveBeenCalledWith({
+      action: 'openTab',
+      tabUid: 'tab-work',
+      windowUid: 'window-1',
+      url: 'https://example.test/work',
+      containerRecovery: 'recreate',
+      containerRecoveryStoreIds: ['firefox-container-work'],
+    })
+    releaseCommand()
+    await Promise.all([first, second])
+  })
+
+  it('keeps every selected tab in one bulk container recovery request', async () => {
+    const { openTabs, resolveContainerRecoveryModal } =
+      await import('@/services/foreground-messages')
+    const work = {
+      cookieStoreId: 'firefox-container-work',
+      name: 'Work',
+      color: 'blue',
+      colorCode: '#37adff',
+      icon: 'briefcase',
+    }
+    const personal = {
+      ...work,
+      cookieStoreId: 'firefox-container-personal',
+      name: 'Personal',
+    }
+    const first = makeForegroundTab('tab-work' as UID, { container: work })
+    const second = makeForegroundTab('tab-personal' as UID, {
+      container: personal,
+    })
+    const window = makeForegroundWindow('window-1' as UID, [first, second])
+    resetForegroundTree([window])
+
+    await openTabs([first, second])
+    await vi.waitFor(() => {
+      expect(ModalState.active?.kind).toBe('containerRecovery')
+    })
+
+    expect(ModalState.active).toMatchObject({
+      kind: 'containerRecovery',
+      target: {
+        type: 'tabs',
+        tabs: [
+          {
+            tabUid: 'tab-work',
+            windowUid: 'window-1',
+            url: first.url,
+            containerStoreId: 'firefox-container-work',
+          },
+          {
+            tabUid: 'tab-personal',
+            windowUid: 'window-1',
+            url: second.url,
+            containerStoreId: 'firefox-container-personal',
+          },
+        ],
+      },
+      missingContainers: [work, personal],
+    })
+    expect(sendTreeCommand).not.toHaveBeenCalled()
+
+    await resolveContainerRecoveryModal('without-container')
+
+    expect(sendTreeCommand).toHaveBeenNthCalledWith(1, {
+      action: 'openTab',
+      tabUid: 'tab-work',
+      windowUid: 'window-1',
+      url: first.url,
+      containerRecovery: 'without-container',
+      containerRecoveryStoreIds: ['firefox-container-work'],
+    })
+    expect(sendTreeCommand).toHaveBeenNthCalledWith(2, {
+      action: 'openTab',
+      tabUid: 'tab-personal',
+      windowUid: 'window-1',
+      url: second.url,
+      containerRecovery: 'without-container',
+      containerRecoveryStoreIds: ['firefox-container-personal'],
+    })
+  })
+
+  it('refreshes stale recovery choices when the missing set changes', async () => {
+    const { openContainerRecoveryModal } =
+      await import('@/services/modal-state')
+    const { resolveContainerRecoveryModal } =
+      await import('@/services/foreground-messages')
+    const work = {
+      cookieStoreId: 'firefox-container-work',
+      name: 'Work',
+      color: 'blue',
+      colorCode: '#37adff',
+      icon: 'briefcase',
+    }
+    const personal = {
+      ...work,
+      cookieStoreId: 'firefox-container-personal',
+      name: 'Personal',
+    }
+    const first = makeForegroundTab('tab-work' as UID, { container: work })
+    const second = makeForegroundTab('tab-personal' as UID, {
+      container: personal,
+    })
+    const window = makeForegroundWindow('window-1' as UID, [first, second])
+    resetForegroundTree([window])
+    openContainerRecoveryModal({ type: 'window', windowUid: window.uid }, [
+      work,
+    ])
+    sendTreeCommand.mockRejectedValueOnce(
+      new Error(
+        'Missing Firefox containers changed after recovery choices were shown',
+      ),
+    )
+
+    await resolveContainerRecoveryModal('recreate')
+
+    expect(ModalState.active).toMatchObject({
+      kind: 'containerRecovery',
+      target: { type: 'window', windowUid: 'window-1' },
+      missingContainers: [work, personal],
+    })
+    expect(showNotification).not.toHaveBeenCalled()
+  })
+
+  it('reports a failed normal retry after stale recovery choices clear', async () => {
+    const { openContainerRecoveryModal } =
+      await import('@/services/modal-state')
+    const { resolveContainerRecoveryModal } =
+      await import('@/services/foreground-messages')
+    const work = {
+      cookieStoreId: 'firefox-container-work',
+      name: 'Work',
+      color: 'blue',
+      colorCode: '#37adff',
+      icon: 'briefcase',
+    }
+    const tab = makeForegroundTab('tab-work' as UID, { container: work })
+    const window = makeForegroundWindow('window-1' as UID, [tab])
+    resetForegroundTree([window])
+    vi.mocked(browser.contextualIdentities.query).mockResolvedValue([
+      {
+        ...work,
+        iconUrl: 'resource://usercontext-content/briefcase.svg',
+      },
+    ])
+    openContainerRecoveryModal(
+      {
+        type: 'tab',
+        tabUid: tab.uid,
+        windowUid: window.uid,
+        url: tab.url,
+      },
+      [work],
+    )
+    sendTreeCommand
+      .mockRejectedValueOnce(
+        new Error(
+          'Missing Firefox containers changed after recovery choices were shown',
+        ),
+      )
+      .mockRejectedValueOnce(new Error('normal retry failed'))
+
+    await expect(
+      resolveContainerRecoveryModal('recreate'),
+    ).resolves.toBeUndefined()
+
+    expect(showNotification).toHaveBeenCalledWith(
+      expect.stringContaining('normal retry failed'),
+    )
+    expect(ModalState.active?.kind).toBe('containerRecovery')
+  })
+
+  it('retries only the remaining tabs after a partial bulk recovery failure', async () => {
+    const { openContainerRecoveryModal } =
+      await import('@/services/modal-state')
+    const { resolveContainerRecoveryModal } =
+      await import('@/services/foreground-messages')
+    const work = {
+      cookieStoreId: 'firefox-container-work',
+      name: 'Work',
+      color: 'blue',
+      colorCode: '#37adff',
+      icon: 'briefcase',
+    }
+    const personal = {
+      ...work,
+      cookieStoreId: 'firefox-container-personal',
+      name: 'Personal',
+    }
+    const first = makeForegroundTab('tab-work' as UID, { container: work })
+    const second = makeForegroundTab('tab-personal' as UID, {
+      container: personal,
+    })
+    const window = makeForegroundWindow('window-1' as UID, [first, second])
+    resetForegroundTree([window])
+    openContainerRecoveryModal(
+      {
+        type: 'tabs',
+        tabs: [
+          {
+            type: 'tab',
+            tabUid: first.uid,
+            windowUid: window.uid,
+            url: first.url,
+            containerStoreId: work.cookieStoreId,
+          },
+          {
+            type: 'tab',
+            tabUid: second.uid,
+            windowUid: window.uid,
+            url: second.url,
+            containerStoreId: personal.cookieStoreId,
+          },
+        ],
+      },
+      [work, personal],
+    )
+    sendTreeCommand
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('second tab failed'))
+
+    await resolveContainerRecoveryModal('without-container')
+
+    expect(ModalState.active).toMatchObject({
+      kind: 'containerRecovery',
+      target: {
+        type: 'tabs',
+        tabs: [{ tabUid: 'tab-personal' }],
+      },
+      missingContainers: [personal],
+    })
+    expect(showNotification).toHaveBeenCalledWith(
+      expect.stringContaining('second tab failed'),
+    )
+
+    sendTreeCommand.mockResolvedValueOnce(undefined)
+    await resolveContainerRecoveryModal('without-container')
+
+    expect(sendTreeCommand.mock.calls).toHaveLength(3)
+    expect(sendTreeCommand.mock.calls[0][0]).toMatchObject({
+      tabUid: 'tab-work',
+    })
+    expect(sendTreeCommand.mock.calls[1][0]).toMatchObject({
+      tabUid: 'tab-personal',
+    })
+    expect(sendTreeCommand.mock.calls[2][0]).toMatchObject({
+      tabUid: 'tab-personal',
+    })
+  })
+
+  it('closes recovery when a remaining failed tab has no missing container', async () => {
+    const { openContainerRecoveryModal } =
+      await import('@/services/modal-state')
+    const { resolveContainerRecoveryModal } =
+      await import('@/services/foreground-messages')
+    const work = {
+      cookieStoreId: 'firefox-container-work',
+      name: 'Work',
+      color: 'blue',
+      colorCode: '#37adff',
+      icon: 'briefcase',
+    }
+    const personal = {
+      ...work,
+      cookieStoreId: 'firefox-container-personal',
+      name: 'Personal',
+      iconUrl: 'resource://usercontext-content/briefcase.svg',
+    }
+    const first = makeForegroundTab('tab-work' as UID, { container: work })
+    const second = makeForegroundTab('tab-personal' as UID, {
+      container: personal,
+    })
+    const window = makeForegroundWindow('window-1' as UID, [first, second])
+    resetForegroundTree([window])
+    vi.mocked(browser.contextualIdentities.query).mockResolvedValue([personal])
+    openContainerRecoveryModal(
+      {
+        type: 'tabs',
+        tabs: [
+          {
+            type: 'tab',
+            tabUid: first.uid,
+            windowUid: window.uid,
+            url: first.url,
+            containerStoreId: work.cookieStoreId,
+          },
+          {
+            type: 'tab',
+            tabUid: second.uid,
+            windowUid: window.uid,
+            url: second.url,
+            containerStoreId: personal.cookieStoreId,
+          },
+        ],
+      },
+      [work],
+    )
+    sendTreeCommand
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('live tab failed'))
+
+    await resolveContainerRecoveryModal('recreate')
+
+    expect(ModalState.active).toBeNull()
+    expect(showNotification).toHaveBeenCalledWith(
+      expect.stringContaining('live tab failed'),
+    )
   })
 
   it('passes a saved window private identity through the tree-item helper', async () => {

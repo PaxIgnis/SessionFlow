@@ -14,6 +14,8 @@ import {
 } from '@/types/session-tree'
 import { emitTreeDelta } from './runtime-port-service'
 
+const startupOpenTabUids = new Set<UID>()
+
 /**
  * Initializes the session tree by first loading the save tree from storage,
  * and then updating it with the current state of the browser.
@@ -23,6 +25,7 @@ import { emitTreeDelta } from './runtime-port-service'
 export async function initializeWindows(): Promise<void> {
   try {
     await Tree.loadSessionTreeFromStorage()
+    Tree.refreshTreeContainerSnapshots()
     const currentWindows = await browser.windows.getAll({ populate: true })
     const matchedWindowUids = new Set<UID>()
     const openWindowUIDs = new Set<UID>()
@@ -72,6 +75,7 @@ export async function initializeWindows(): Promise<void> {
             windowUid: windowUid,
             indentLevel: 1,
             pinned: tab.pinned || false,
+            container: Tree.containerForCookieStore(tab.cookieStoreId),
           })),
         }
         Tree.Items.push(newWindow)
@@ -89,8 +93,8 @@ export async function initializeWindows(): Promise<void> {
       }
 
       if (Settings.values.restorePreviousSessionOnStartup) {
-        const tabsToOpen = Tree.getTabs(orphanedWindow.children).filter(
-          (tab) => tab.state !== State.SAVED,
+        const tabsToOpen = Tree.getTabs(orphanedWindow.children).filter((tab) =>
+          startupOpenTabUids.has(tab.uid),
         )
 
         if (tabsToOpen.length === 0) {
@@ -106,6 +110,7 @@ export async function initializeWindows(): Promise<void> {
         markWindowSavedAfterStartup(orphanedWindow)
       }
     }
+    startupOpenTabUids.clear()
     rebuildUIDMaps()
     Tree.recomputeSessionTree()
     Tree.initialized = true
@@ -117,11 +122,13 @@ export async function initializeWindows(): Promise<void> {
         if (!tab) {
           continue
         }
-        Tree.openTab({
+        await Tree.openTab({
           tabUid: tab.uid,
           windowUid: tab.windowUid,
           discarded: Settings.values.openWindowWithTabsDiscarded,
           url: tab.url,
+        }).catch((error) => {
+          console.error('Error restoring startup tab:', error)
         })
       }
     }
@@ -179,8 +186,8 @@ function scoreWindowMatch(
   if (savedWindow.incognito !== openWindow.incognito) return -1
 
   const openTabs = openWindow.tabs ?? []
-  const candidateTabs = Tree.getTabs(savedWindow.children).filter(
-    (tab) => tab.state !== State.SAVED,
+  const candidateTabs = Tree.getTabs(savedWindow.children).filter((tab) =>
+    startupOpenTabUids.has(tab.uid),
   )
   if (candidateTabs.length === 0) {
     return -1
@@ -206,7 +213,30 @@ function scoreWindowMatch(
     }
   }
 
+  score += scoreWindowContainerMatch(candidateTabs, openTabs)
   score -= Math.abs(candidateTabs.length - openTabs.length) * 2
+  return score
+}
+
+function scoreWindowContainerMatch(
+  savedTabs: Tab[],
+  openTabs: browser.tabs.Tab[],
+): number {
+  const remainingOpenStoreIds = openTabs.map(
+    (tab) => Tree.containerForCookieStore(tab.cookieStoreId)?.cookieStoreId,
+  )
+  let score = 0
+  for (const savedTab of savedTabs) {
+    const savedStoreId = savedTab.container?.cookieStoreId
+    if (!savedStoreId) continue
+    const matchIndex = remainingOpenStoreIds.indexOf(savedStoreId)
+    if (matchIndex === -1) {
+      score -= 6
+      continue
+    }
+    remainingOpenStoreIds.splice(matchIndex, 1)
+    score += 4
+  }
   return score
 }
 
@@ -235,8 +265,8 @@ function reconcileSavedWindowWithOpenWindow(
   // Only tabs that were open at shutdown participate in matching.
   const usedOpenTabIds = new Set<number>()
   const tabsToOpen: UID[] = []
-  const candidateTabs = Tree.getTabs(savedWindow.children).filter(
-    (tab) => tab.state !== State.SAVED,
+  const candidateTabs = Tree.getTabs(savedWindow.children).filter((tab) =>
+    startupOpenTabUids.has(tab.uid),
   )
   for (const savedTab of candidateTabs) {
     // Try to pair each saved open tab with a browser tab that looks like the same tab.
@@ -277,6 +307,9 @@ function reconcileSavedWindowWithOpenWindow(
     savedTab.url = matchedOpenTab.url || savedTab.url || ''
     savedTab.pinned = matchedOpenTab.pinned || false
     savedTab.windowUid = savedWindow.uid
+    savedTab.container = Tree.containerForCookieStore(
+      matchedOpenTab.cookieStoreId,
+    )
   }
 
   // Any browser tabs that were not matched to saved tabs are treated as new open tabs.
@@ -298,6 +331,7 @@ function reconcileSavedWindowWithOpenWindow(
       windowUid: savedWindow.uid,
       indentLevel: 1,
       pinned: openTab.pinned || false,
+      container: Tree.containerForCookieStore(openTab.cookieStoreId),
     })
   }
   if (tabsToOpen.length > 0) {
@@ -343,6 +377,9 @@ function findBestOpenTabMatch(
  * @returns {number} A higher score indicates a better match.
  */
 function scoreTabMatch(savedTab: Tab, openTab: browser.tabs.Tab): number {
+  if (!tabContainersMatch(savedTab, openTab)) {
+    return -1
+  }
   let score = 0
   if (savedTab.url && openTab.url && savedTab.url === openTab.url) {
     score += 3
@@ -354,6 +391,15 @@ function scoreTabMatch(savedTab: Tab, openTab: browser.tabs.Tab): number {
     score += 1
   }
   return score
+}
+
+function tabContainersMatch(savedTab: Tab, openTab: browser.tabs.Tab): boolean {
+  const savedStoreId = savedTab.container?.cookieStoreId
+  if (!savedStoreId) return true
+  const openStoreId = Tree.containerForCookieStore(
+    openTab.cookieStoreId,
+  )?.cookieStoreId
+  return savedStoreId === openStoreId
 }
 
 /**
@@ -506,6 +552,7 @@ function updateItemIndentLevel(
  * @returns {Promise<void>} A promise that resolves when the session tree has been loaded.
  */
 export async function loadSessionTreeFromStorage(): Promise<void> {
+  startupOpenTabUids.clear()
   try {
     const sessionTree = await browser.storage.local.get(STORAGE_KEY)
     console.debug('Session Tree from storage:', sessionTree)
@@ -527,8 +574,12 @@ export async function loadSessionTreeFromStorage(): Promise<void> {
         window.selected = false
         if (!window.savedTime) window.savedTime = Date.now()
         if (!window.uid) window.uid = Utils.createUid(Tree.existingUidsSet)
+        const startupOpenTabs = Tree.getTabs(window.children).filter(
+          (tab) => tab.state !== State.SAVED,
+        )
         Tree.windowsByUid.set(window.uid, window)
         normalizeWindowChildren(window)
+        startupOpenTabs.forEach((tab) => startupOpenTabUids.add(tab.uid))
       })
       rebuildUIDMaps()
     }

@@ -22,6 +22,7 @@ export function resetTree(): void {
   Tree.separatorsByUid = new Map<UID, Separator>()
   Tree.windowsByUid = new Map<UID, Window>()
   Tree.resetTabGroupState()
+  Tree.resetContainerState()
   Tree.initialized = true
   DeferredEventsQueue.windows = new Map()
   DeferredEventsQueue.tabs = new Map()

@@ -1,5 +1,15 @@
 import { sendTreeCommand } from '@/services/runtime-port-service'
-import { showPrivateWindowAccessRequired } from '@/services/notification-state'
+import { missingContainers } from '@/services/foreground-container-actions'
+import {
+  closeModal,
+  type ContainerRecoveryTarget,
+  ModalState,
+  openContainerRecoveryModal,
+} from '@/services/modal-state'
+import {
+  showNotification,
+  showPrivateWindowAccessRequired,
+} from '@/services/notification-state'
 import { SessionTree } from '@/services/foreground-tree'
 import { Settings } from '@/services/settings'
 import { isPrivateWindowAccessAllowed } from '@/services/utils'
@@ -32,19 +42,64 @@ export function focusTab(tabId: number, windowId: number) {
   } as Messages.FocusTabMessage)
 }
 
-export function openTab(tabUid: UID, windowUid: UID, url: string) {
-  void sendTreeCommand({
+type TabRecoveryTarget = Extract<ContainerRecoveryTarget, { type: 'tab' }>
+
+function tabRecoveryTarget(tab: Tab): TabRecoveryTarget {
+  return {
+    type: 'tab',
+    tabUid: tab.uid,
+    windowUid: tab.windowUid,
+    url: tab.url,
+    containerStoreId: tab.container?.cookieStoreId,
+  }
+}
+
+async function sendOpenTabTarget(
+  target: TabRecoveryTarget,
+  recovery?: {
+    strategy: Messages.ContainerRecoveryStrategy
+    storeIds: string[]
+  },
+): Promise<void> {
+  await sendTreeCommand({
     action: 'openTab',
-    tabUid: tabUid,
-    windowUid: windowUid,
-    url: url,
+    tabUid: target.tabUid,
+    windowUid: target.windowUid,
+    url: target.url,
+    ...(recovery
+      ? {
+          containerRecovery: recovery.strategy,
+          containerRecoveryStoreIds: recovery.storeIds,
+        }
+      : {}),
   })
 }
 
-export function openTabs(tabs: Array<Tab>) {
-  tabs.forEach((tab) => {
-    openTab(tab.uid, tab.windowUid, tab.url)
-  })
+export async function openTab(tabUid: UID, windowUid: UID, url: string) {
+  const target: TabRecoveryTarget = { type: 'tab', tabUid, windowUid, url }
+  const tab = SessionTree.tabsByUid.get(tabUid)
+  if (tab) {
+    const missing = await missingContainers([tab])
+    if (missing.length > 0) {
+      openContainerRecoveryModal(target, missing)
+      return
+    }
+  }
+  await sendOpenTabTarget(target)
+}
+
+export async function openTabs(tabs: Array<Tab>): Promise<void> {
+  const targets = tabs.map(tabRecoveryTarget)
+  if (!tabs.some((tab) => tab.container)) {
+    await Promise.all(targets.map((target) => sendOpenTabTarget(target)))
+    return
+  }
+  const missing = await missingContainers(tabs)
+  if (missing.length > 0) {
+    openContainerRecoveryModal({ type: 'tabs', tabs: targets }, missing)
+    return
+  }
+  await Promise.all(targets.map((target) => sendOpenTabTarget(target)))
 }
 
 export function pinTabs(tabs: Array<Tab>) {
@@ -114,7 +169,7 @@ export async function tabDoubleClick(
       if (incognito && !(await canOpenPrivateItem('tab'))) {
         return
       }
-      openTab(tabUid, windowUid, url)
+      await openTab(tabUid, windowUid, url)
     } else if (tabDoubleClickAction === 'remove') {
       closeTab(tabId, tabUid)
     } else if (tabDoubleClickAction === 'duplicate') {
@@ -221,9 +276,21 @@ export async function windowDoubleClick(
     if (incognito && !(await canOpenPrivateItem('window'))) {
       return
     }
+    const window = SessionTree.windowsByUid.get(windowUid)
+    if (window) {
+      const missing = await missingContainers(
+        window.children.filter(
+          (item): item is Tab => item.type === TreeItemType.TAB,
+        ),
+      )
+      if (missing.length > 0) {
+        openContainerRecoveryModal({ type: 'window', windowUid }, missing)
+        return
+      }
+    }
     void sendTreeCommand({
       action: 'openWindow',
-      windowUid: windowUid,
+      windowUid,
     })
   } else if (state === State.OPEN) {
     void sendTreeCommand({
@@ -231,6 +298,151 @@ export async function windowDoubleClick(
       windowId: windowId,
     })
   }
+}
+
+export async function resolveContainerRecoveryModal(
+  strategy: Messages.ContainerRecoveryStrategy,
+): Promise<void> {
+  if (containerRecoveryRequest) return containerRecoveryRequest
+  const modal = ModalState.active
+  if (modal?.kind !== 'containerRecovery') return
+  const target = copyContainerRecoveryTarget(modal.target)
+  const shownMissingContainers = modal.missingContainers.map((container) => ({
+    ...container,
+  }))
+  const consentedStoreIds = shownMissingContainers.map(
+    (container) => container.cookieStoreId,
+  )
+  containerRecoveryRequest = (async () => {
+    try {
+      await sendContainerRecoveryTarget(target, {
+        strategy,
+        storeIds: consentedStoreIds,
+      })
+      closeModal()
+    } catch (error) {
+      if (String(error).includes(Messages.CONTAINER_RECOVERY_STALE_ERROR)) {
+        try {
+          await refreshContainerRecoveryModal(target)
+        } catch (refreshError) {
+          await retainRemainingBulkRecoveryTarget(target)
+          showNotification(
+            `Session Flow could not recover the container: ${refreshError}`,
+          )
+        }
+      } else {
+        await retainRemainingBulkRecoveryTarget(target)
+        showNotification(
+          `Session Flow could not recover the container: ${error}`,
+        )
+      }
+    }
+  })()
+  try {
+    await containerRecoveryRequest
+  } finally {
+    containerRecoveryRequest = undefined
+  }
+}
+
+let containerRecoveryRequest: Promise<void> | undefined
+
+function copyContainerRecoveryTarget(
+  target: ContainerRecoveryTarget,
+): ContainerRecoveryTarget {
+  if (target.type === 'tab') return { ...target }
+  if (target.type === 'tabs') {
+    return { type: 'tabs', tabs: target.tabs.map((tab) => ({ ...tab })) }
+  }
+  return { ...target }
+}
+
+async function sendContainerRecoveryTarget(
+  target: ContainerRecoveryTarget,
+  recovery?: {
+    strategy: Messages.ContainerRecoveryStrategy
+    storeIds: string[]
+  },
+): Promise<void> {
+  if (target.type === 'tab') {
+    await sendOpenTabTarget(target, recovery)
+    return
+  }
+  if (target.type === 'tabs') {
+    while (target.tabs.length > 0) {
+      const tab = target.tabs[0]
+      await sendOpenTabTarget(
+        tab,
+        recovery
+          ? {
+              ...recovery,
+              storeIds: tab.containerStoreId
+                ? recovery.storeIds.filter(
+                    (storeId) => storeId === tab.containerStoreId,
+                  )
+                : [],
+            }
+          : undefined,
+      )
+      target.tabs.shift()
+    }
+    return
+  }
+  await sendTreeCommand({
+    action: 'openWindow',
+    windowUid: target.windowUid,
+    ...(recovery
+      ? {
+          containerRecovery: recovery.strategy,
+          containerRecoveryStoreIds: recovery.storeIds,
+        }
+      : {}),
+  })
+}
+
+async function retainRemainingBulkRecoveryTarget(
+  target: ContainerRecoveryTarget,
+): Promise<void> {
+  if (target.type !== 'tabs' || target.tabs.length === 0) return
+  const remainingMissingContainers = await missingContainers(
+    recoveryTargetTabs(target),
+  )
+  if (remainingMissingContainers.length === 0) {
+    closeModal()
+    return
+  }
+  openContainerRecoveryModal(target, remainingMissingContainers)
+}
+
+function recoveryTargetTabs(target: ContainerRecoveryTarget): Tab[] {
+  if (target.type === 'tab') {
+    const tab = SessionTree.tabsByUid.get(target.tabUid)
+    return tab ? [tab] : []
+  }
+  if (target.type === 'tabs') {
+    return target.tabs.flatMap((item) => {
+      const tab = SessionTree.tabsByUid.get(item.tabUid)
+      return tab ? [tab] : []
+    })
+  }
+  const window = SessionTree.windowsByUid.get(target.windowUid)
+  return (
+    window?.children.filter(
+      (item): item is Tab => item.type === TreeItemType.TAB,
+    ) ?? []
+  )
+}
+
+async function refreshContainerRecoveryModal(
+  target: ContainerRecoveryTarget,
+): Promise<void> {
+  const missing = await missingContainers(recoveryTargetTabs(target))
+  if (missing.length > 0) {
+    openContainerRecoveryModal(target, missing)
+    return
+  }
+  await sendContainerRecoveryTarget(target)
+  closeModal()
 }
 
 async function canOpenPrivateItem(itemType: 'tab' | 'window') {

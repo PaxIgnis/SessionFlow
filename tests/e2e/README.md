@@ -20,3 +20,9 @@ The tab-group workflow uses Firefox's real `tabs.group`, `tabs.move`,
 `tabGroups.move`, `tabs.remove`, and group-restoration behavior. It covers
 singleton and destination grouping, within-window and cross-window group moves,
 group removal (including the last-tab ambiguity), and saved-window restoration.
+
+The container workflow uses Firefox's real `contextualIdentities.create`,
+`contextualIdentities.update`, `contextualIdentities.remove`,
+`tabs.create({ cookieStoreId })`, mixed-window restoration, and missing-container
+modal recovery. It also verifies that container presentation settings coexist
+with native tab-group markers.

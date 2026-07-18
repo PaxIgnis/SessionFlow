@@ -28,6 +28,11 @@ export interface Settings {
   showTabUrlOnHover: boolean
   tabGroupInfoOnHover: (typeof SETTINGS_TYPES.tabGroupInfoOnHover)[number]
 
+  // Containers
+  containerColorIndicator: (typeof SETTINGS_TYPES.containerColorIndicator)[number]
+  containerFadeSide: (typeof SETTINGS_TYPES.containerFadeSide)[number]
+  containerIconPosition: (typeof SETTINGS_TYPES.containerIconPosition)[number]
+
   // Tab Groups
   tabGroupDropBehavior: (typeof SETTINGS_TYPES.tabGroupDropBehavior)[number]
   tabGroupColorIndicator: (typeof SETTINGS_TYPES.tabGroupColorIndicator)[number]
@@ -59,6 +64,9 @@ export const SETTINGS_TYPES = {
   tabGroupDropBehavior: ['same-group-both-adjacent', 'any-adjacent-group'],
   tabGroupColorIndicator: ['right', 'left', 'hidden'],
   tabGroupInfoOnHover: ['always', 'grouped-only', 'never'],
+  containerColorIndicator: ['soft-fade', 'strong-fade', 'off'],
+  containerFadeSide: ['left', 'right'],
+  containerIconPosition: ['left', 'right', 'off'],
   refreshFaviconsAfterPeriodOfTimeUnit: ['hours', 'days', 'weeks'],
   faviconRefreshTiming: ['startup-only', 'expiration-and-startup'],
   openWindowsInSameLocationUpdateIntervalUnit: ['seconds', 'minutes'],
@@ -100,6 +108,20 @@ export const OPTIONS = {
     { label: 'Always', value: 'always' },
     { label: 'Grouped Tabs Only', value: 'grouped-only' },
     { label: 'Hidden', value: 'never' },
+  ],
+  containerColorIndicator: [
+    { label: 'Soft Fade', value: 'soft-fade' },
+    { label: 'Strong Fade', value: 'strong-fade' },
+    { label: 'Off', value: 'off' },
+  ],
+  containerFadeSide: [
+    { label: 'Left', value: 'left' },
+    { label: 'Right', value: 'right' },
+  ],
+  containerIconPosition: [
+    { label: 'Left', value: 'left' },
+    { label: 'Right', value: 'right' },
+    { label: 'Off', value: 'off' },
   ],
   includeChildrenOfSelectedItems: [
     { label: 'Always', value: 'always' },

@@ -1,4 +1,4 @@
-import { Note, Window } from '@/types/session-tree'
+import { ContainerMetadata, Note, Window } from '@/types/session-tree'
 import { reactive } from 'vue'
 
 export type ActiveModal =
@@ -15,7 +15,28 @@ export type ActiveModal =
       kind: 'editNote'
       note: Note
     }
+  | {
+      kind: 'containerRecovery'
+      target: ContainerRecoveryTarget
+      missingContainers: ContainerMetadata[]
+    }
   | null
+
+export type ContainerRecoveryTabTarget = {
+  type: 'tab'
+  tabUid: UID
+  windowUid: UID
+  url: string
+  containerStoreId?: string
+}
+
+export type ContainerRecoveryTarget =
+  | ContainerRecoveryTabTarget
+  | {
+      type: 'tabs'
+      tabs: ContainerRecoveryTabTarget[]
+    }
+  | { type: 'window'; windowUid: UID }
 
 export const ModalState = reactive<{
   active: ActiveModal
@@ -45,4 +66,15 @@ export function openEditCustomLabelModal(uid: UID, customLabel?: string) {
 
 export function openEditNoteModal(note: Note) {
   openModal({ kind: 'editNote', note })
+}
+
+export function openContainerRecoveryModal(
+  target: ContainerRecoveryTarget,
+  missingContainers: ContainerMetadata[],
+) {
+  openModal({
+    kind: 'containerRecovery',
+    target: structuredClone(target),
+    missingContainers: structuredClone(missingContainers),
+  })
 }

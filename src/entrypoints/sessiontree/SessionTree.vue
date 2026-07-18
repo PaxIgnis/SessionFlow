@@ -1,6 +1,7 @@
 <script lang="ts" setup>
 import IconChevronRight from '@/assets/chevron-right.svg'
 import IconPinned from '@/assets/pinned.svg'
+import ContainerRecoveryModal from '@/components/ContainerRecoveryModal.vue'
 import EditTextModal from '@/components/EditTextModal.vue'
 import SessionTreeNotification from '@/components/SessionTreeNotification.vue'
 import SessionTreeToolbar from '@/components/SessionTreeToolbar.vue'
@@ -19,6 +20,7 @@ import { Selection } from '@/services/selection'
 import * as ToolbarActions from '@/services/session-tree-toolbar-actions'
 import { Settings } from '@/services/settings'
 import '@/styles/variables.css'
+import type { ContainerRecoveryStrategy } from '@/types/messages'
 import { TreeItem as SessionTreeItem, TreeItemType } from '@/types/session-tree'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 
@@ -61,6 +63,10 @@ window.onbeforeunload = () => {
 
 const faviconService = Favicons
 const faviconRevision = ref(0)
+const containerRecoveryPending = ref(false)
+const containerRecoveryActive = computed(
+  () => ModalState.active?.kind === 'containerRecovery',
+)
 
 const visibleTreeItems = computed<SessionTreeItem[]>(() => {
   const items: SessionTreeItem[] = []
@@ -208,6 +214,16 @@ function handleEditCustomLabelCancel() {
   closeModal()
 }
 
+async function handleContainerRecovery(strategy: ContainerRecoveryStrategy) {
+  if (containerRecoveryPending.value) return
+  containerRecoveryPending.value = true
+  try {
+    await Messages.resolveContainerRecoveryModal(strategy)
+  } finally {
+    containerRecoveryPending.value = false
+  }
+}
+
 function runToolbarAction(action: () => void | Promise<void>): void {
   Selection.clearSelection()
   Promise.resolve(action()).catch((error) => {
@@ -224,6 +240,8 @@ function runToolbarAction(action: () => void | Promise<void>): void {
   >
     <div
       class="sessiontree-content"
+      :inert="containerRecoveryActive"
+      :aria-hidden="containerRecoveryActive"
       @dragend="DragAndDrop.onDragEnd"
       @dragenter.stop.prevent="DragAndDrop.onDragEnter"
       @dragleave="DragAndDrop.onDragLeave"
@@ -260,9 +278,14 @@ function runToolbarAction(action: () => void | Promise<void>): void {
       ></div>
     </div>
 
-    <SessionTreeNotification />
+    <SessionTreeNotification
+      :inert="containerRecoveryActive"
+      :aria-hidden="containerRecoveryActive"
+    />
 
     <SessionTreeToolbar
+      :inert="containerRecoveryActive"
+      :aria-hidden="containerRecoveryActive"
       @add-note="runToolbarAction(ToolbarActions.addRootNote)"
       @add-separator="runToolbarAction(ToolbarActions.addRootSeparator)"
       @new-window="runToolbarAction(ToolbarActions.createNewWindow)"
@@ -295,6 +318,15 @@ function runToolbarAction(action: () => void | Promise<void>): void {
       placeholder="Enter note text"
       @confirm="handleEditNoteConfirm"
       @cancel="handleEditNoteCancel"
+    />
+
+    <ContainerRecoveryModal
+      v-if="ModalState.active?.kind === 'containerRecovery'"
+      :containers="ModalState.active.missingContainers"
+      :pending="containerRecoveryPending"
+      @recreate="handleContainerRecovery('recreate')"
+      @without-container="handleContainerRecovery('without-container')"
+      @cancel="closeModal()"
     />
   </div>
 </template>

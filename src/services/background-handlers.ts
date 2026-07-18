@@ -40,7 +40,20 @@ const pendingGroupRemovalTimers = new Map<
 // ==============================
 // Event Listeners
 // ==============================
+let containerListenersInitialized = false
+
+export function initializeContainerListeners(): void {
+  const contextualIdentities = browser.contextualIdentities
+  if (containerListenersInitialized || !contextualIdentities) return
+
+  contextualIdentities.onCreated.addListener(Tree.containerCreated)
+  contextualIdentities.onRemoved.addListener(Tree.containerRemoved)
+  contextualIdentities.onUpdated.addListener(Tree.containerUpdated)
+  containerListenersInitialized = true
+}
+
 export function initializeListeners() {
+  initializeContainerListeners()
   initializeSessionTreePort({
     dispatchCommand,
     getSnapshot: () => Tree.Items,
@@ -215,10 +228,20 @@ async function tabsOnCreated(tab: browser.tabs.Tab): Promise<void> {
       tab.pinned || false,
       tabToLeft ? tabToLeftIndex + 1 : undefined,
     )
+    updateTabContainerFromBrowserTab(tabUid, tab)
     if (tabUid && (tab.groupId ?? -1) !== -1) {
       await Tree.tabGroupMembershipChanged(tab.id, tab.groupId!)
     }
   }
+}
+
+function updateTabContainerFromBrowserTab(
+  tabUid: UID | void,
+  tab: browser.tabs.Tab,
+): void {
+  if (!tabUid) return
+  const container = Tree.containerForCookieStore(tab.cookieStoreId)
+  if (container) Tree.updateTab({ tabUid }, { container })
 }
 
 /**
@@ -450,7 +473,7 @@ async function tabsOnMoved(
       window.children.findLastIndex(
         (t) => t.type === TreeItemType.TAB && t.pinned,
       ) + 1
-    const tabUid = Tree.addTab(
+    Tree.addTab(
       tab.active ?? false,
       window.uid,
       tab.id,
@@ -462,10 +485,10 @@ async function tabsOnMoved(
       tab.pinned ? targetTabIndex : undefined,
       undefined,
       tab.uid,
+      true,
+      tab.tabGroup,
+      tab.container,
     )
-    if (tabUid && tab.tabGroup) {
-      Tree.updateTab({ tabUid }, { tabGroup: tab.tabGroup })
-    }
   } else {
     // move to the position immediately before the tab to the right in the browser
     const rightTabId = openBrowserTabs[moveInfo.toIndex + 1].id
@@ -480,7 +503,7 @@ async function tabsOnMoved(
         ) + 1
     }
 
-    const tabUid = Tree.addTab(
+    Tree.addTab(
       tab.active ?? false,
       window.uid,
       tab.id,
@@ -492,10 +515,10 @@ async function tabsOnMoved(
       targetTabIndex,
       undefined,
       tab.uid,
+      true,
+      tab.tabGroup,
+      tab.container,
     )
-    if (tabUid && tab.tabGroup) {
-      Tree.updateTab({ tabUid }, { tabGroup: tab.tabGroup })
-    }
   }
   Tree.recomputeSessionTree()
 }
@@ -685,6 +708,7 @@ async function tabsOnAttached(
       tab.pinned || false,
       targetTabIndex,
     )
+    updateTabContainerFromBrowserTab(tabUid, tab)
     const detachedGroup = detachedTabGroups.get(tabId)
     if (tabUid && detachedGroup) {
       Tree.updateTab({ tabUid }, { tabGroup: detachedGroup })
@@ -716,6 +740,7 @@ async function tabsOnAttached(
         ? lastPinnedIndex
         : tabToRightIndex,
     )
+    updateTabContainerFromBrowserTab(tabUid, tab)
     const detachedGroup = detachedTabGroups.get(tabId)
     if (tabUid && detachedGroup) {
       Tree.updateTab({ tabUid }, { tabGroup: detachedGroup })

@@ -5,7 +5,9 @@ import { Tree } from '@/services/background-tree'
 import { emitTreeDelta } from '@/services/runtime-port-service'
 import { Settings } from '@/services/settings'
 import * as Utils from '@/services/utils'
+import type { OpenTabMessage } from '@/types/messages'
 import {
+  ContainerMetadata,
   Note,
   State,
   Tab,
@@ -43,6 +45,7 @@ export function addTab(
   tabUid?: UID,
   emitDelta: boolean = true,
   tabGroup?: TabGroupMetadata,
+  container?: ContainerMetadata,
 ): UID | void {
   console.log('Tab Added in background.ts', windowUID, tabId, title, url)
   const tabExists = Tree.tabsByUid.get(tabUid ?? '')
@@ -72,6 +75,7 @@ export function addTab(
     indentLevel: 1,
     pinned: pinned,
     tabGroup: tabGroup ? structuredClone(tabGroup) : undefined,
+    container: container ? structuredClone(container) : undefined,
   }
   if (index !== undefined) {
     // if not pinned but index before last pinned tab, change index to
@@ -478,6 +482,7 @@ export function duplicateTab(message: { tabId: number; tabUid: UID }): void {
       undefined,
       true,
       tab.tabGroup,
+      tab.container,
     )
   }
 }
@@ -491,12 +496,9 @@ export function duplicateTab(message: { tabId: number; tabUid: UID }): void {
  * @param {string} message.url - The URL to be opened in the tab.
  * @param {boolean} message.discarded - Whether the tab should be opened as discarded.
  */
-export async function openTab(message: {
-  tabUid: UID
-  windowUid: UID
-  url?: string
-  discarded?: boolean
-}): Promise<void> {
+export async function openTab(
+  message: Omit<OpenTabMessage, 'action'>,
+): Promise<void> {
   const sessionTreeWindow = Tree.windowsByUid.get(message.windowUid)
   if (!sessionTreeWindow) {
     throw new Error('Saved window not found')
@@ -518,6 +520,12 @@ export async function openTab(message: {
     )
     return
   }
+  const containerRecovery = await Tree.resolveContainerRecovery(
+    [sessionTreeTab],
+    message.containerRecovery,
+    message.containerRecoveryStoreIds,
+  )
+  const cookieStoreId = sessionTreeTab.container?.cookieStoreId
   const pinned = sessionTreeTab.pinned || false
   if (pinned) message.discarded = false // pinned tabs cannot be opened as discarded with firefox api
   let url = message.url
@@ -543,6 +551,7 @@ export async function openTab(message: {
     Tree.updateWindowState(message.windowUid, State.OPEN)
     const properties: browser.windows._CreateCreateData = {}
     properties.incognito = sessionTreeWindow.incognito
+    if (cookieStoreId) properties.cookieStoreId = cookieStoreId
     if (url) properties.url = url
     if (
       Settings.values.openWindowsInSameLocation &&
@@ -553,39 +562,37 @@ export async function openTab(message: {
       properties.width = sessionTreeWindow.windowPosition.width
       properties.height = sessionTreeWindow.windowPosition.height
     }
+    let windowId: number
+    let tabId: number
+    let createdWindowId: number | undefined
     try {
-      const window = await OnCreatedQueue.createWindowAndWait(properties).catch(
-        (error) => {
-          console.error('Error creating window:', error)
-          // revert changes since window wasn't created
-          Tree.updateWindowState(message.windowUid, State.SAVED)
-          Tree.updateTabState(message.tabUid, State.SAVED)
-          return
-        },
-      )
-      if (!window) {
-        console.error('Window is undefined')
-        Tree.updateWindowState(message.windowUid, State.SAVED)
-        Tree.updateTabState(message.tabUid, State.SAVED)
-        return
+      const createdWindow = await OnCreatedQueue.createWindowAndWait(properties)
+      createdWindowId = createdWindow?.id
+      const createdTab = createdWindow?.tabs?.[0]
+      if (createdWindow?.id === undefined || createdTab?.id === undefined) {
+        throw new Error('Window creation returned no window or tab ID')
       }
-      // because Firefox doesn't support opening unfocused windows, we send focus back
-      if (!Settings.values.focusWindowOnOpen && Tree.sessionTreeWindowId) {
-        Browser.focusWindow({ windowId: Tree.sessionTreeWindowId })
-      }
-      if (!window.id) {
-        throw new Error('Window ID is undefined')
-      }
-      // then update the saved window object id to represent the newly opened window
-      Tree.updateWindowId(message.windowUid, window.id)
-      const tab = window.tabs![0]
-      Tree.updateTabId(message.tabUid, tab.id!)
-      Tree.updateTabState(message.tabUid, State.OPEN)
-      if (pinned) Browser.pinTab(tab.id!)
-      await Tree.restoreTabGroup(message.tabUid)
+      windowId = createdWindow.id
+      tabId = createdTab.id
     } catch (error) {
-      console.error('Error opening window:', error)
+      if (createdWindowId !== undefined) {
+        await browser.windows.remove(createdWindowId).catch(() => undefined)
+      }
+      await containerRecovery.rollback()
+      Tree.updateWindowState(message.windowUid, State.SAVED)
+      Tree.updateTabState(message.tabUid, State.SAVED)
+      throw error
     }
+    // because Firefox doesn't support opening unfocused windows, we send focus back
+    if (!Settings.values.focusWindowOnOpen && Tree.sessionTreeWindowId) {
+      Browser.focusWindow({ windowId: Tree.sessionTreeWindowId })
+    }
+    // then update the saved window object id to represent the newly opened window
+    Tree.updateWindowId(message.windowUid, windowId)
+    Tree.updateTabId(message.tabUid, tabId)
+    Tree.updateTabState(message.tabUid, State.OPEN)
+    if (pinned) Browser.pinTab(tabId)
+    await Tree.restoreTabGroup(message.tabUid)
   } else {
     const properties: browser.tabs._CreateCreateProperties = {}
     if (url) properties.url = url
@@ -602,8 +609,9 @@ export async function openTab(message: {
         properties.discarded = false
       }
     } else {
-      properties.active = true
+      properties.active = message.active ?? true
     }
+    if (cookieStoreId) properties.cookieStoreId = cookieStoreId
     if (sessionTreeTab.pinned) properties.pinned = true
 
     // find id of first open tab to the right
@@ -617,28 +625,21 @@ export async function openTab(message: {
     if (tabToRightIndex !== -1) {
       properties.index = tabToRightIndex - 1
     }
+    let tab: browser.tabs.Tab
     try {
-      const tab = await OnCreatedQueue.createTabAndWait(properties).catch(
-        (error) => {
-          console.error('Error creating tab:', error)
-          // revert changes since window wasn't created
-          Tree.updateTabState(message.tabUid, State.SAVED)
-          return
-        },
-      )
-      if (!tab) {
-        console.error('Tab is undefined')
-        return
-      }
-      Tree.updateTabId(message.tabUid, tab.id!)
-      Tree.updateTabState(
-        message.tabUid,
-        tab.discarded ? State.DISCARDED : State.OPEN,
-      )
-      await Tree.restoreTabGroup(message.tabUid)
+      tab = await OnCreatedQueue.createTabAndWait(properties)
+      if (tab.id === undefined) throw new Error('Tab creation returned no ID')
     } catch (error) {
-      console.error('Error opening tab:', error)
+      await containerRecovery.rollback()
+      Tree.updateTabState(message.tabUid, State.SAVED)
+      throw error
     }
+    Tree.updateTabId(message.tabUid, tab.id)
+    Tree.updateTabState(
+      message.tabUid,
+      tab.discarded ? State.DISCARDED : State.OPEN,
+    )
+    await Tree.restoreTabGroup(message.tabUid)
   }
 }
 
@@ -1300,6 +1301,7 @@ export async function moveTab(
     tab.uid,
     emitDelta,
     tab.tabGroup,
+    tab.container,
   )
 
   const targetIndexInBrowser = targetWindow.children.filter(

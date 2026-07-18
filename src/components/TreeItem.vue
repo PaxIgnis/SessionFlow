@@ -1,6 +1,8 @@
 <script lang="ts" setup>
 import { TAB_LOADING } from '@/defaults/favicons'
+import { isKnownFirefoxContainerIcon } from '@/defaults/container-icons'
 import { ContextMenu } from '@/services/context-menu'
+import { getTreeItemContextMenuArgs } from '@/services/context-menu-actions'
 import { DragAndDrop } from '@/services/drag-and-drop'
 import { collectDraggedItemsWithIncludedChildren } from '@/services/drag-and-drop-actions'
 import { FaviconService } from '@/services/favicons'
@@ -9,7 +11,6 @@ import { SessionTree } from '@/services/foreground-tree'
 import { Selection } from '@/services/selection'
 import { Settings } from '@/services/settings'
 import { countTreeItemDescendants } from '@/services/tree-utils'
-import { ContextMenuType } from '@/types/context-menu'
 import {
   DragInfo,
   DragType,
@@ -249,6 +250,12 @@ function getType(item: TreeItem): SelectionType {
   return SelectionType.SEPARATOR
 }
 
+function openItemContextMenu(event: MouseEvent): void {
+  ContextMenu.handleContextMenuClick(
+    ...getTreeItemContextMenuArgs(props.item, event),
+  )
+}
+
 function getDragType(item: TreeItem): DragType {
   if (isWindow(item)) return DragType.WINDOW
   if (isTab(item)) return DragType.TAB
@@ -424,6 +431,23 @@ const tabGroupIndicator = computed(() => {
   }
 })
 
+const containerDisplay = computed(() => {
+  if (!isTab(props.item) || !props.item.container) return undefined
+  return {
+    metadata: props.item.container,
+    treatment: Settings.values.containerColorIndicator,
+    fadeSide: Settings.values.containerFadeSide,
+    iconPosition: Settings.values.containerIconPosition,
+    knownIcon: isKnownFirefoxContainerIcon(props.item.container.icon),
+  }
+})
+
+const containerDescriptionId = computed(() =>
+  containerDisplay.value
+    ? `container-description-${props.item.uid}`
+    : undefined,
+)
+
 const tabHoverDetails = computed(() => {
   if (!isTab(props.item)) return undefined
 
@@ -445,6 +469,9 @@ const tabHoverDetails = computed(() => {
         (props.item.tabGroup ? 'Unnamed tab group' : 'None')
       }`,
     )
+  }
+  if (props.item.container) {
+    details.push(`Container: ${props.item.container.name}`)
   }
 
   return details.length > 0 ? details.join('\n') : undefined
@@ -502,29 +529,21 @@ function flatDescendantsHaveOpenTab(item: TreeItem): boolean {
     :style="{
       '--indent-level': item.indentLevel ?? 0,
     }"
+    :aria-describedby="containerDescriptionId"
     :title="itemHoverDetails"
     @click.stop="Selection.selectItem(item, getType(item), $event)"
-    @contextmenu.stop="
-      ContextMenu.handleContextMenuClick(
-        isTab(item)
-          ? ContextMenuType.Tab
-          : isWindow(item)
-            ? ContextMenuType.Window
-            : isNote(item)
-              ? ContextMenuType.Note
-              : ContextMenuType.Separator,
-        $event,
-        isWindow(item) ? item : undefined,
-        isTab(item) ? item : undefined,
-        isNote(item) ? item : undefined,
-        isSeparator(item) ? item : undefined,
-        getType(item),
-      )
-    "
+    @contextmenu.stop="openItemContextMenu"
     @dblclick="itemDblClickAction()"
   >
     <span class="tree-item-overlay"></span>
     <span class="tree-item-underlay"></span>
+    <span
+      v-if="containerDisplay"
+      :id="containerDescriptionId"
+      class="tree-item-container-description"
+    >
+      Container: {{ containerDisplay.metadata.name }}
+    </span>
     <span
       v-if="tabGroupIndicator"
       class="tree-item-tab-group-indicator"
@@ -532,6 +551,26 @@ function flatDescendantsHaveOpenTab(item: TreeItem): boolean {
       :style="{ backgroundColor: tabGroupIndicator.color }"
       :title="tabGroupIndicator.title"
       :aria-label="tabGroupIndicator.title"
+    ></span>
+    <span
+      v-if="
+        containerDisplay &&
+        containerDisplay.treatment !== 'off' &&
+        containerDisplay.fadeSide === 'right'
+      "
+      class="tree-item-container-indicator"
+      :class="[
+        `tree-item-container-indicator-${containerDisplay.treatment}-right`,
+        'tree-item-container-fade-end-inset',
+        {
+          'tree-item-container-fade-title-after-icon':
+            containerDisplay.iconPosition === 'left',
+        },
+      ]"
+      :style="{
+        '--container-color': containerDisplay.metadata.colorCode,
+      }"
+      aria-hidden="true"
     ></span>
     <span
       class="tree-item-hover-menu"
@@ -661,22 +700,85 @@ function flatDescendantsHaveOpenTab(item: TreeItem): boolean {
         </div>
       </template>
       <template v-else-if="isTab(props.item)">
-        <div
-          class="tree-item-title"
-          :class="{
-            'tree-item-text-open': props.item.state === State.OPEN,
-            'tree-item-text-saved': props.item.state === State.SAVED,
-            'tree-item-text-discarded': props.item.state === State.DISCARDED,
-            'tree-item-text-active': props.item.active === true,
-          }"
-        >
-          <template v-if="props.item.customLabel">
-            <span class="tree-item-custom-label">{{
-              props.item.customLabel
-            }}</span>
-            <span class="tree-item-custom-label-separator"> ~ </span>
-          </template>
-          <span>{{ props.item.title }}</span>
+        <div class="tree-item-tab-content">
+          <span
+            v-if="
+              containerDisplay &&
+              containerDisplay.treatment !== 'off' &&
+              containerDisplay.fadeSide === 'left'
+            "
+            class="tree-item-container-indicator"
+            :class="[
+              `tree-item-container-indicator-${containerDisplay.treatment}-left`,
+              {
+                'tree-item-container-fade-start-after-icon':
+                  containerDisplay.iconPosition === 'left',
+              },
+            ]"
+            :style="{
+              '--container-color': containerDisplay.metadata.colorCode,
+            }"
+            aria-hidden="true"
+          ></span>
+          <span
+            v-if="containerDisplay?.iconPosition === 'left'"
+            class="tree-item-container-icon tree-item-container-icon-left"
+            :style="{ color: containerDisplay.metadata.colorCode }"
+            aria-hidden="true"
+          >
+            <svg
+              v-if="containerDisplay.knownIcon"
+              viewBox="0 0 32 32"
+              aria-hidden="true"
+            >
+              <use
+                :href="`/icons/usercontext.svg#${containerDisplay.metadata.icon}`"
+              />
+            </svg>
+            <span
+              v-else
+              class="tree-item-container-icon-fallback"
+              aria-hidden="true"
+            ></span>
+          </span>
+          <div
+            class="tree-item-title"
+            :class="{
+              'tree-item-text-open': props.item.state === State.OPEN,
+              'tree-item-text-saved': props.item.state === State.SAVED,
+              'tree-item-text-discarded': props.item.state === State.DISCARDED,
+              'tree-item-text-active': props.item.active === true,
+            }"
+          >
+            <template v-if="props.item.customLabel">
+              <span class="tree-item-custom-label">{{
+                props.item.customLabel
+              }}</span>
+              <span class="tree-item-custom-label-separator"> ~ </span>
+            </template>
+            <span>{{ props.item.title }}</span>
+          </div>
+          <span
+            v-if="containerDisplay?.iconPosition === 'right'"
+            class="tree-item-container-icon tree-item-container-icon-right"
+            :style="{ color: containerDisplay.metadata.colorCode }"
+            aria-hidden="true"
+          >
+            <svg
+              v-if="containerDisplay.knownIcon"
+              viewBox="0 0 32 32"
+              aria-hidden="true"
+            >
+              <use
+                :href="`/icons/usercontext.svg#${containerDisplay.metadata.icon}`"
+              />
+            </svg>
+            <span
+              v-else
+              class="tree-item-container-icon-fallback"
+              aria-hidden="true"
+            ></span>
+          </span>
         </div>
       </template>
       <template v-else-if="isNote(props.item)">
@@ -696,6 +798,9 @@ function flatDescendantsHaveOpenTab(item: TreeItem): boolean {
 
 <style scoped>
 .tree-item {
+  --tree-item-title-start: calc(
+    64px + (var(--prepend-width, 16px) * var(--indent-level, 0))
+  );
   align-items: center;
   position: relative;
   display: grid;
@@ -743,7 +848,7 @@ function flatDescendantsHaveOpenTab(item: TreeItem): boolean {
   padding-right: 4px;
   background: rgba(75, 75, 75, 0.5);
   background-clip: border-box, border-box, content-box;
-  z-index: 1;
+  z-index: 4;
   visibility: hidden;
 }
 
@@ -792,6 +897,71 @@ function flatDescendantsHaveOpenTab(item: TreeItem): boolean {
 
 .tree-item-tab-group-indicator-left {
   left: 1px;
+}
+
+.tree-item-container-indicator {
+  pointer-events: none;
+  position: absolute;
+  z-index: 0;
+}
+
+.tree-item-container-indicator-soft-fade-right,
+.tree-item-container-indicator-strong-fade-right {
+  bottom: 2px;
+  left: var(--tree-item-title-start);
+  top: 2px;
+}
+
+.tree-item-container-fade-title-after-icon {
+  left: calc(var(--tree-item-title-start) + 18px);
+}
+
+.tree-item-container-indicator-soft-fade-left,
+.tree-item-container-indicator-strong-fade-left {
+  bottom: 2px;
+  left: 0;
+  right: 48%;
+  top: 2px;
+}
+
+.tree-item-container-indicator-soft-fade-left {
+  background: linear-gradient(
+    to right,
+    color-mix(in srgb, var(--container-color) 28%, transparent),
+    transparent
+  );
+}
+
+.tree-item-container-indicator-strong-fade-left {
+  background: linear-gradient(
+    to right,
+    color-mix(in srgb, var(--container-color) 48%, transparent),
+    transparent
+  );
+}
+
+.tree-item-container-fade-start-after-icon {
+  left: 18px;
+}
+
+.tree-item-container-indicator-soft-fade-right {
+  background: linear-gradient(
+    to right,
+    transparent 48%,
+    color-mix(in srgb, var(--container-color) 28%, transparent)
+  );
+}
+
+.tree-item-container-indicator-strong-fade-right {
+  background: linear-gradient(
+    to right,
+    transparent 48%,
+    color-mix(in srgb, var(--container-color) 48%, transparent)
+  );
+}
+
+.tree-item-container-fade-end-inset {
+  right: 8px;
 }
 
 .tree-item:not(.tree-item-selected):hover > .tree-item-overlay {
@@ -845,6 +1015,55 @@ function flatDescendantsHaveOpenTab(item: TreeItem): boolean {
   overflow: hidden;
   min-width: 40px;
   max-height: 18px;
+}
+
+.tree-item-tab-content {
+  align-items: center;
+  display: flex;
+  gap: 4px;
+  min-width: 0;
+  position: relative;
+  width: 100%;
+}
+
+.tree-item-container-icon {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 14px;
+  height: 14px;
+  justify-content: center;
+  position: relative;
+  width: 14px;
+  z-index: 2;
+}
+
+.tree-item-container-icon svg {
+  fill: currentColor;
+  height: 100%;
+  width: 100%;
+}
+
+.tree-item-container-icon-fallback {
+  background: currentColor;
+  border-radius: 50%;
+  height: 8px;
+  width: 8px;
+}
+
+.tree-item-tab-content > .tree-item-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  z-index: 2;
+}
+
+.tree-item-container-description {
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
 }
 
 .tree-item-window .tree-item-content {

@@ -30,7 +30,9 @@ export default defineBackground(() => {
 })
 
 async function initializeBackground(): Promise<void> {
+  BackgroundHandlers.initializeContainerListeners()
   await Actions.initializeSettings()
+  await Tree.initializeContainers()
   await Tree.initializeWindows()
 
   BackgroundHandlers.initializeListeners()
