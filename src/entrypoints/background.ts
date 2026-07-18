@@ -5,6 +5,7 @@ import { initializePrivateWindowOnboarding } from '@/services/background-private
 import { Tree } from '@/services/background-tree'
 import { FaviconRefresh } from '@/services/favicon-refresh'
 import { Settings } from '@/services/settings'
+import { stampOpenTreeIdentities } from '@/services/background-session-restore'
 
 const SAVE_SESSION_TREE_INTERVAL_MS = 60 * 1000 // 1 minute
 
@@ -34,6 +35,7 @@ async function initializeBackground(): Promise<void> {
   await Actions.initializeSettings()
   await Tree.initializeContainers()
   await Tree.initializeWindows()
+  await stampOpenTreeIdentities()
 
   BackgroundHandlers.initializeListeners()
   Settings.setupSettingsUpdatedListener(FaviconRefresh.handleSettingsUpdated)

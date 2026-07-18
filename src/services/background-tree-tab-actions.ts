@@ -4,6 +4,7 @@ import { OnCreatedQueue } from '@/services/background-on-created-queue'
 import { Tree } from '@/services/background-tree'
 import { emitTreeDelta } from '@/services/runtime-port-service'
 import { Settings } from '@/services/settings'
+import { writeTabUid } from '@/services/background-session-identity'
 import * as Utils from '@/services/utils'
 import type { OpenTabMessage } from '@/types/messages'
 import {
@@ -137,6 +138,7 @@ export function addTab(
     window.children[window.children.indexOf(tab)] as Tab,
   )
   Tree.existingUidsSet.add(tab.uid)
+  if (tab.id >= 0) void writeTabUid(tab.id, tab.uid)
   Tree.recomputeSessionTree(emitDelta)
   if (emitDelta) {
     emitTreeDelta({
@@ -284,6 +286,7 @@ export function updateTabId(tabUid: UID, newTabId: number): void {
   const tab = Tree.tabsByUid.get(tabUid)
   if (tab) {
     Tree.updateTab({ tabUid: tabUid }, { id: newTabId })
+    if (newTabId >= 0) void writeTabUid(newTabId, tabUid)
   }
   DeferredEventsQueue.processDeferredTabEvents(newTabId)
 }

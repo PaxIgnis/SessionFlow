@@ -19,6 +19,13 @@ async function loadBackgroundHandlers() {
   const initializeSessionTreePort = vi.fn()
   const clearSelection = vi.fn()
   const isNewTabExtensionGenerated = vi.fn().mockResolvedValue(false)
+  const isNewWindowExtensionGenerated = vi.fn().mockResolvedValue(false)
+  const beginWindowClassification = vi.fn()
+  const handleCreatedTab = vi.fn().mockResolvedValue(false)
+  const handleCreatedWindow = vi.fn().mockResolvedValue(false)
+  const finishWindowClassification = vi.fn()
+  const isTabRelocating = vi.fn().mockReturnValue(false)
+  const waitForWindowClassification = vi.fn().mockResolvedValue(undefined)
   const tabOnActivated = vi.fn()
   const setActiveWindow = vi.fn()
   const openSessionTree = vi.fn().mockResolvedValue(undefined)
@@ -32,6 +39,7 @@ async function loadBackgroundHandlers() {
   }
   const Items: object[] = []
   const treeMethods = {
+    addWindow: vi.fn().mockResolvedValue(undefined),
     addTab: vi.fn(),
     closeTab: vi.fn(),
     saveTab: vi.fn(),
@@ -108,10 +116,19 @@ async function loadBackgroundHandlers() {
   vi.doMock('@/services/background-on-created-queue', () => ({
     OnCreatedQueue: {
       isNewTabExtensionGenerated,
+      isNewWindowExtensionGenerated,
     },
   }))
   vi.doMock('@/services/runtime-port-service', () => ({
     initializeSessionTreePort,
+  }))
+  vi.doMock('@/services/background-session-restore', () => ({
+    beginWindowClassification,
+    finishWindowClassification,
+    handleCreatedTab,
+    handleCreatedWindow,
+    isTabRelocating,
+    waitForWindowClassification,
   }))
   vi.doMock('@/services/selection', () => ({
     Selection: {
@@ -128,13 +145,20 @@ async function loadBackgroundHandlers() {
     initializeListeners,
     mocks: {
       clearSelection,
+      beginWindowClassification,
+      finishWindowClassification,
+      handleCreatedTab,
+      handleCreatedWindow,
       isNewTabExtensionGenerated,
+      isNewWindowExtensionGenerated,
+      isTabRelocating,
       initializeSessionTreePort,
       openSessionTree,
       setActiveWindow,
       setupBrowserActionMenu,
       tabOnActivated,
       updateBadge,
+      waitForWindowClassification,
       Items,
       windowsByUid,
       tabsByUid,
@@ -363,13 +387,443 @@ describe('background handlers', () => {
       url: 'https://example.test/work',
       cookieStoreId: 'firefox-container-1',
     } as browser.tabs.Tab)
-    await Promise.resolve()
+    await vi.waitFor(() => {
+      expect(mocks.updateTab).toHaveBeenCalledWith(
+        { tabUid: 'tab-1' },
+        { container: expect.objectContaining({ name: 'Work' }) },
+      )
+    })
+  })
+
+  it('does not add a restored tab that the restoration coordinator handled', async () => {
+    const { fakeBrowser, initializeListeners, mocks } =
+      await loadBackgroundHandlers()
+    const tab = {
+      id: 10,
+      windowId: 20,
+      index: 0,
+      active: true,
+      discarded: false,
+      pinned: false,
+      title: 'Restored',
+      url: 'https://example.test/restored',
+    } as browser.tabs.Tab
+    mocks.handleCreatedTab.mockResolvedValueOnce(true)
+    initializeListeners()
+
+    fakeBrowser.tabs.onCreated.emit(tab)
+
+    await vi.waitFor(() => {
+      expect(mocks.handleCreatedTab).toHaveBeenCalledWith(tab)
+    })
+    expect(mocks.addTab).not.toHaveBeenCalled()
+  })
+
+  it('ignores attach, detach, and move events claimed by restoration', async () => {
+    const { fakeBrowser, initializeListeners, mocks } =
+      await loadBackgroundHandlers()
+    mocks.isTabRelocating.mockReturnValue(true)
+    mocks.Items.push({
+      type: TreeItemType.WINDOW,
+      uid: 'window-1' as UID,
+      id: 20,
+      selected: false,
+      state: State.OPEN,
+      indentLevel: 0,
+      children: [
+        {
+          type: TreeItemType.TAB,
+          uid: 'tab-1' as UID,
+          id: 10,
+          title: 'Restored',
+          url: 'https://example.test/restored',
+          windowUid: 'window-1' as UID,
+          selected: false,
+          state: State.OPEN,
+          indentLevel: 1,
+          pinned: false,
+        },
+      ],
+    })
+    initializeListeners()
+
+    fakeBrowser.tabs.onDetached.emit(10, { oldWindowId: 20, oldPosition: 0 })
+    fakeBrowser.tabs.onAttached.emit(10, { newWindowId: 20, newPosition: 0 })
+    fakeBrowser.tabs.onMoved.emit(10, {
+      windowId: 20,
+      fromIndex: 0,
+      toIndex: 1,
+    })
     await Promise.resolve()
 
-    expect(mocks.updateTab).toHaveBeenCalledWith(
-      { tabUid: 'tab-1' },
-      { container: expect.objectContaining({ name: 'Work' }) },
+    expect(mocks.removeTab).not.toHaveBeenCalled()
+    expect(browser.tabs.get).not.toHaveBeenCalled()
+    expect(browser.tabs.query).not.toHaveBeenCalled()
+  })
+
+  it('lets the window restoration coordinator own a restored window', async () => {
+    const { fakeBrowser, initializeListeners, mocks } =
+      await loadBackgroundHandlers()
+    const restoredWindow = { id: 30 } as browser.windows.Window
+    mocks.handleCreatedWindow.mockResolvedValueOnce(true)
+    initializeListeners()
+
+    fakeBrowser.windows.onCreated.emit(restoredWindow)
+
+    expect(mocks.beginWindowClassification).toHaveBeenCalledWith(30)
+    await vi.waitFor(() => {
+      expect(mocks.handleCreatedWindow).toHaveBeenCalledWith(restoredWindow)
+    })
+    expect(mocks.addWindow).not.toHaveBeenCalled()
+    expect(mocks.finishWindowClassification).toHaveBeenCalledWith(
+      30,
+      'restored-window',
     )
+  })
+
+  it('does not add tab events owned by a newly classified window', async () => {
+    const { fakeBrowser, initializeListeners, mocks } =
+      await loadBackgroundHandlers()
+    mocks.waitForWindowClassification.mockResolvedValueOnce('new-window')
+    initializeListeners()
+
+    fakeBrowser.tabs.onCreated.emit({
+      id: 10,
+      windowId: 30,
+      index: 0,
+    } as browser.tabs.Tab)
+
+    await vi.waitFor(() => {
+      expect(mocks.waitForWindowClassification).toHaveBeenCalledWith(30)
+    })
+    expect(mocks.isNewTabExtensionGenerated).toHaveBeenCalledWith(10)
+    expect(mocks.addTab).not.toHaveBeenCalled()
+  })
+
+  it('lets a late child of a restored window reconnect by identity', async () => {
+    const { fakeBrowser, initializeListeners, mocks } =
+      await loadBackgroundHandlers()
+    mocks.Items.push({
+      type: TreeItemType.WINDOW,
+      uid: 'window-restored' as UID,
+      id: 30,
+      selected: false,
+      state: State.OPEN,
+      indentLevel: 0,
+      children: [],
+    })
+    mocks.waitForWindowClassification.mockResolvedValueOnce('restored-window')
+    mocks.handleCreatedTab.mockResolvedValueOnce(true)
+    initializeListeners()
+
+    const tab = {
+      id: 10,
+      windowId: 30,
+      index: 0,
+      active: true,
+      discarded: false,
+      pinned: false,
+      title: 'Restored child',
+      url: 'https://example.test/restored-child',
+    } as browser.tabs.Tab
+    fakeBrowser.tabs.onCreated.emit(tab)
+
+    await vi.waitFor(() => {
+      expect(mocks.handleCreatedTab).toHaveBeenCalledWith(tab)
+    })
+    expect(mocks.addTab).not.toHaveBeenCalled()
+  })
+
+  it('acknowledges an extension-generated tab before duplicate suppression', async () => {
+    const { fakeBrowser, initializeListeners, mocks } =
+      await loadBackgroundHandlers()
+    mocks.Items.push({
+      type: TreeItemType.WINDOW,
+      uid: 'window-1' as UID,
+      id: 30,
+      selected: false,
+      state: State.OPEN,
+      indentLevel: 0,
+      children: [
+        {
+          type: TreeItemType.TAB,
+          uid: 'tab-existing' as UID,
+          id: 10,
+          title: 'Existing',
+          url: 'https://example.test/existing',
+          windowUid: 'window-1' as UID,
+          selected: false,
+          state: State.OPEN,
+          indentLevel: 1,
+          pinned: false,
+        },
+      ],
+    })
+    mocks.isNewTabExtensionGenerated.mockResolvedValueOnce(true)
+    initializeListeners()
+
+    fakeBrowser.tabs.onCreated.emit({
+      id: 10,
+      windowId: 30,
+      index: 0,
+    } as browser.tabs.Tab)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(mocks.isNewTabExtensionGenerated).toHaveBeenCalledWith(10)
+    expect(mocks.addTab).not.toHaveBeenCalled()
+  })
+
+  it('adds a late child tab omitted from a newly classified window snapshot', async () => {
+    const { fakeBrowser, initializeListeners, mocks } =
+      await loadBackgroundHandlers()
+    mocks.Items.push({
+      type: TreeItemType.WINDOW,
+      uid: 'window-1' as UID,
+      id: 30,
+      selected: false,
+      state: State.OPEN,
+      indentLevel: 0,
+      children: [],
+    })
+    mocks.addTab.mockReturnValue('tab-late' as UID)
+    mocks.waitForWindowClassification.mockResolvedValueOnce('new-window')
+    vi.mocked(browser.tabs.get).mockResolvedValue({
+      id: 10,
+      windowId: 30,
+      index: 1,
+      active: false,
+      discarded: false,
+      pinned: false,
+      groupId: 7,
+      title: 'Late child',
+      url: 'https://example.test/late',
+    } as browser.tabs.Tab)
+    initializeListeners()
+
+    fakeBrowser.tabs.onCreated.emit({
+      id: 10,
+      windowId: 30,
+      index: 1,
+      active: false,
+      discarded: false,
+      pinned: false,
+      groupId: -1,
+      title: 'Late child',
+      url: 'https://example.test/late',
+    } as browser.tabs.Tab)
+
+    await vi.waitFor(() => {
+      expect(mocks.addTab).toHaveBeenCalledWith(
+        false,
+        'window-1',
+        10,
+        false,
+        State.OPEN,
+        'Late child',
+        'https://example.test/late',
+        false,
+        undefined,
+      )
+    })
+    await vi.waitFor(() => {
+      expect(mocks.tabGroupMembershipChanged).toHaveBeenCalledWith(10, 7)
+    })
+    expect(mocks.handleCreatedTab).not.toHaveBeenCalled()
+  })
+
+  it('inserts a late first browser tab at the first tree position', async () => {
+    const { fakeBrowser, initializeListeners, mocks } =
+      await loadBackgroundHandlers()
+    mocks.Items.push({
+      type: TreeItemType.WINDOW,
+      uid: 'window-1' as UID,
+      id: 30,
+      selected: false,
+      state: State.OPEN,
+      indentLevel: 0,
+      children: [
+        {
+          type: TreeItemType.TAB,
+          uid: 'tab-second' as UID,
+          id: 11,
+          title: 'Second',
+          url: 'https://example.test/second',
+          windowUid: 'window-1' as UID,
+          selected: false,
+          state: State.OPEN,
+          indentLevel: 1,
+          pinned: false,
+        },
+      ],
+    })
+    mocks.addTab.mockReturnValue('tab-first' as UID)
+    mocks.waitForWindowClassification.mockResolvedValueOnce('new-window')
+    vi.mocked(browser.tabs.get).mockResolvedValue({
+      id: 10,
+      windowId: 30,
+      index: 0,
+      active: true,
+      discarded: false,
+      pinned: false,
+      title: 'First',
+      url: 'https://example.test/first',
+    } as browser.tabs.Tab)
+    initializeListeners()
+
+    fakeBrowser.tabs.onCreated.emit({
+      id: 10,
+      windowId: 30,
+      index: 0,
+    } as browser.tabs.Tab)
+
+    await vi.waitFor(() => {
+      expect(mocks.addTab).toHaveBeenCalledWith(
+        true,
+        'window-1',
+        10,
+        false,
+        State.OPEN,
+        'First',
+        'https://example.test/first',
+        false,
+        0,
+      )
+    })
+  })
+
+  it('ignores a delayed created event for a tab already captured in its window snapshot', async () => {
+    const { fakeBrowser, initializeListeners, mocks } =
+      await loadBackgroundHandlers()
+    mocks.Items.push({
+      type: TreeItemType.WINDOW,
+      uid: 'window-1' as UID,
+      id: 30,
+      selected: false,
+      state: State.OPEN,
+      indentLevel: 0,
+      children: [
+        {
+          type: TreeItemType.TAB,
+          uid: 'tab-existing' as UID,
+          id: 10,
+          title: 'Navigated title',
+          url: 'https://example.test/navigated',
+          windowUid: 'window-1' as UID,
+          selected: false,
+          state: State.OPEN,
+          indentLevel: 1,
+          pinned: false,
+        },
+      ],
+    })
+    initializeListeners()
+
+    fakeBrowser.tabs.onCreated.emit({
+      id: 10,
+      windowId: 30,
+      index: 0,
+      active: true,
+      discarded: false,
+      pinned: false,
+      title: 'New Tab',
+      url: 'about:blank',
+    } as browser.tabs.Tab)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(mocks.addTab).not.toHaveBeenCalled()
+    expect(mocks.handleCreatedTab).not.toHaveBeenCalled()
+  })
+
+  it('rechecks for a captured tab after refreshing a late created event', async () => {
+    const { fakeBrowser, initializeListeners, mocks } =
+      await loadBackgroundHandlers()
+    const window = {
+      type: TreeItemType.WINDOW,
+      uid: 'window-1' as UID,
+      id: 30,
+      selected: false,
+      state: State.OPEN,
+      indentLevel: 0,
+      children: [] as SessionTab[],
+    }
+    mocks.Items.push(window)
+    mocks.waitForWindowClassification.mockResolvedValueOnce('new-window')
+    let finishRefresh: ((tab: browser.tabs.Tab) => void) | undefined
+    vi.mocked(browser.tabs.get).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishRefresh = resolve
+        }),
+    )
+    initializeListeners()
+
+    fakeBrowser.tabs.onCreated.emit({
+      id: 10,
+      windowId: 30,
+      index: 0,
+      active: true,
+      discarded: false,
+      pinned: false,
+      title: 'New Tab',
+      url: 'about:blank',
+    } as browser.tabs.Tab)
+    await vi.waitFor(() => {
+      expect(browser.tabs.get).toHaveBeenCalledWith(10)
+    })
+
+    window.children.push({
+      type: TreeItemType.TAB,
+      uid: 'tab-existing' as UID,
+      id: 10,
+      title: 'Navigated title',
+      url: 'https://example.test/navigated',
+      windowUid: window.uid,
+      selected: false,
+      state: State.OPEN,
+      indentLevel: 1,
+      pinned: false,
+    })
+    finishRefresh?.({
+      id: 10,
+      windowId: 30,
+      index: 0,
+      active: true,
+      discarded: false,
+      pinned: false,
+      title: 'New Tab',
+      url: 'about:blank',
+    } as browser.tabs.Tab)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(mocks.addTab).not.toHaveBeenCalled()
+  })
+
+  it('starts window classification when a restored child tab event arrives first', async () => {
+    const { fakeBrowser, initializeListeners, mocks } =
+      await loadBackgroundHandlers()
+    let resolveClassification: ((disposition: 'new-window') => void) | undefined
+    mocks.waitForWindowClassification.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveClassification = resolve
+      }),
+    )
+    initializeListeners()
+
+    fakeBrowser.tabs.onCreated.emit({
+      id: 10,
+      windowId: 30,
+      index: 0,
+    } as browser.tabs.Tab)
+    await Promise.resolve()
+
+    expect(mocks.beginWindowClassification).toHaveBeenCalledWith(30)
+    expect(mocks.handleCreatedTab).not.toHaveBeenCalled()
+
+    resolveClassification?.('new-window')
+    await vi.waitFor(() => {
+      expect(mocks.waitForWindowClassification).toHaveBeenCalledWith(30)
+    })
+    expect(mocks.handleCreatedTab).not.toHaveBeenCalled()
   })
 
   it('preserves a container snapshot when a browser move rebuilds a tab', async () => {

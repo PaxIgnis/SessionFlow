@@ -4,6 +4,10 @@ import { OnCreatedQueue } from '@/services/background-on-created-queue'
 import { Tree } from '@/services/background-tree'
 import { emitTreeDelta } from '@/services/runtime-port-service'
 import { Settings } from '@/services/settings'
+import {
+  writeTabUid,
+  writeWindowUid,
+} from '@/services/background-session-identity'
 import * as Utils from '@/services/utils'
 import type { OpenWindowMessage } from '@/types/messages'
 import {
@@ -77,6 +81,7 @@ export async function addWindow(windowId: number): Promise<void> {
       newWindow.uid,
       Tree.Items[Tree.Items.length - 1] as Window,
     )
+    void writeWindowUid(windowId, newWindow.uid)
     emitTreeDelta({
       op: 'windowCreated',
       window: structuredClone(newWindow),
@@ -118,6 +123,7 @@ export async function updateWindowTabs(windowId: number): Promise<void> {
       }))
       for (const tab of Tree.getTabs(window.children)) {
         Tree.tabsByUid.set(tab.uid, tab)
+        if (tab.id >= 0) void writeTabUid(tab.id, tab.uid)
       }
       Tree.recomputeSessionTree()
       emitTreeDelta({
@@ -220,6 +226,7 @@ export function updateWindowId(windowUid: UID, newWindowId: number): void {
   const window = Tree.windowsByUid.get(windowUid)
   if (window) {
     window.id = newWindowId
+    if (newWindowId >= 0) void writeWindowUid(newWindowId, windowUid)
     emitTreeDelta({
       op: 'windowUpdated',
       window: structuredClone(window),

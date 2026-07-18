@@ -8,6 +8,7 @@ export interface Settings {
   includeChildrenOfSelectedItemsWhenIndenting: (typeof SETTINGS_TYPES.includeChildrenOfSelectedItemsWhenIndenting)[number]
   duplicateTreeItemDescendants: (typeof SETTINGS_TYPES.duplicateTreeItemDescendants)[number]
   duplicatedItemState: (typeof SETTINGS_TYPES.duplicatedItemState)[number]
+  reconnectFirefoxRestoredItems: boolean
 
   // Windows
   focusWindowOnOpen: boolean

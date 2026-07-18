@@ -1017,6 +1017,124 @@ describe('critical Firefox UI workflows', () => {
         savedTabs[0].state === TreeItemState.Saved
       )
     }, 'Expected one open window/tab and one saved window/tab after enabling save-on-close.')
+    await removeOnlySavedWindow()
+    await expectSingleOpenWindowWithRootTabs([SESSION_FIXTURE_TITLES.initial])
+  })
+
+  it('reconnects a Firefox-restored tab to its saved tree location', async () => {
+    await openSeededSessionTree()
+    await sessionTree.updateSettings({
+      reconnectFirefoxRestoredItems: true,
+      saveTabOnClose: true,
+    })
+    await switchToPrimaryBrowserWindow()
+    await openFixtureTab(seed, SESSION_FIXTURE_TITLES.alpha)
+    await browser.switchToWindow(popup.popupHandle)
+    await expectSingleOpenWindowWithRootTabs([
+      SESSION_FIXTURE_TITLES.initial,
+      SESSION_FIXTURE_TITLES.alpha,
+    ])
+    await sessionTree.captureContextMenuItems()
+    await sessionTree.openTabContextMenu(SESSION_FIXTURE_TITLES.alpha)
+    await sessionTree.clickCapturedContextMenuItem('Increase Indent')
+    await expectTabNestedUnder(
+      SESSION_FIXTURE_TITLES.initial,
+      SESSION_FIXTURE_TITLES.alpha,
+    )
+    const beforeClose = await sessionTree.backgroundTreeSnapshot()
+    const beforeWindow = onlyOpenWindow(beforeClose)
+    const beforeTabs = tabsInWindow(beforeWindow)
+    const beforeInitial = beforeTabs.find(
+      (tab) => tab.title === SESSION_FIXTURE_TITLES.initial,
+    )
+    const beforeAlpha = beforeTabs.find(
+      (tab) => tab.title === SESSION_FIXTURE_TITLES.alpha,
+    )
+    await expectFirefoxSessionIdentity('tab', beforeAlpha?.id, beforeAlpha?.uid)
+
+    await closeSeededTab(seed, SESSION_FIXTURE_TITLES.alpha)
+    await browser.switchToWindow(popup.popupHandle)
+    await sessionTree.waitForBackgroundTree((tree) => {
+      const alpha = windowsInTree(tree)
+        .flatMap((windowItem) => tabsInWindow(windowItem))
+        .find((tab) => tab.uid === beforeAlpha?.uid)
+      return alpha?.state === TreeItemState.Saved
+    }, 'Expected the closed nested tab to remain saved before Firefox restoration.')
+
+    await restoreMostRecentFirefoxSession()
+    await browser.switchToWindow(popup.popupHandle)
+    await sessionTree.waitForBackgroundTree((tree) => {
+      const matchingTabs = windowsInTree(tree)
+        .flatMap((windowItem) => tabsInWindow(windowItem))
+        .filter((tab) => tab.title === SESSION_FIXTURE_TITLES.alpha)
+      return (
+        matchingTabs.length === 1 &&
+        matchingTabs[0].uid === beforeAlpha?.uid &&
+        matchingTabs[0].state === TreeItemState.Open &&
+        matchingTabs[0].parentUid === beforeInitial?.uid &&
+        matchingTabs[0].indentLevel === 2
+      )
+    }, 'Expected Firefox restoration to reconnect the saved nested tab UID without a duplicate.')
+
+    await sessionTree.updateSettings({ saveTabOnClose: false })
+    await removeFixtureTab(SESSION_FIXTURE_TITLES.alpha)
+    await expectSingleOpenWindowWithRootTabs([SESSION_FIXTURE_TITLES.initial])
+  })
+
+  it('reconnects a Firefox-restored window and its saved tab UIDs', async () => {
+    await openSeededSessionTree()
+    await sessionTree.updateSettings({
+      reconnectFirefoxRestoredItems: true,
+      saveWindowOnClose: true,
+    })
+    await switchToPrimaryBrowserWindow()
+    await openFixtureWindow(seed, SESSION_FIXTURE_TITLES.gamma)
+    await browser.switchToWindow(popup.popupHandle)
+    const beforeClose = await sessionTree.backgroundTreeSnapshot()
+    const beforeWindow = windowsInTree(beforeClose).find((windowItem) =>
+      tabsInWindow(windowItem).some(
+        (tab) => tab.title === SESSION_FIXTURE_TITLES.gamma,
+      ),
+    )
+    const beforeTab = beforeWindow
+      ? tabsInWindow(beforeWindow).find(
+          (tab) => tab.title === SESSION_FIXTURE_TITLES.gamma,
+        )
+      : undefined
+    await expectFirefoxSessionIdentity(
+      'window',
+      beforeWindow?.id,
+      beforeWindow?.uid,
+    )
+    await expectFirefoxSessionIdentity('tab', beforeTab?.id, beforeTab?.uid)
+
+    await closeSeededTab(seed, SESSION_FIXTURE_TITLES.gamma)
+    await browser.switchToWindow(popup.popupHandle)
+    await sessionTree.waitForBackgroundTree((tree) => {
+      const savedWindow = savedWindowsInTree(tree).find(
+        (windowItem) => windowItem.uid === beforeWindow?.uid,
+      )
+      return savedWindow?.children.some(
+        (item) =>
+          item.uid === beforeTab?.uid && item.state === TreeItemState.Saved,
+      )
+    }, 'Expected the closed Firefox window to remain saved before restoration.')
+
+    await restoreMostRecentFirefoxSession()
+    await browser.switchToWindow(popup.popupHandle)
+    await sessionTree.waitForBackgroundTree((tree) => {
+      const restoredWindow = openWindowsInTree(tree).find(
+        (windowItem) => windowItem.uid === beforeWindow?.uid,
+      )
+      return restoredWindow?.children.some(
+        (item) =>
+          item.uid === beforeTab?.uid && item.state === TreeItemState.Open,
+      )
+    }, 'Expected Firefox restoration to reconnect the saved window and child UIDs.')
+
+    await sessionTree.updateSettings({ saveWindowOnClose: false })
+    await closeWindowContainingTab(SESSION_FIXTURE_TITLES.gamma)
+    await expectSingleOpenWindowWithRootTabs([SESSION_FIXTURE_TITLES.initial])
   })
 })
 
@@ -1295,6 +1413,66 @@ async function removeOnlySavedWindow() {
     windowId: savedWindow.id,
     windowUid: savedWindow.uid,
   })
+}
+
+async function closeWindowContainingTab(title) {
+  const tree = await sessionTree.backgroundTreeSnapshot()
+  const windowItem = windowsInTree(tree).find((candidate) =>
+    tabsInWindow(candidate).some((tab) => tab.title === title),
+  )
+  if (!windowItem) {
+    throw new Error(`Expected a window containing fixture tab "${title}".`)
+  }
+  await sessionTree.sendTreeCommand({
+    action: 'closeWindow',
+    windowId: windowItem.id,
+    windowUid: windowItem.uid,
+  })
+}
+
+async function restoreMostRecentFirefoxSession() {
+  const response = await browser.executeAsync((done) => {
+    window.browser.sessions
+      .getRecentlyClosed({ maxResults: 1 })
+      .then((sessions) => {
+        const session = sessions[0]
+        const sessionId = session?.tab?.sessionId ?? session?.window?.sessionId
+        if (!sessionId) throw new Error('No recently closed Firefox session')
+        return window.browser.sessions.restore(sessionId)
+      })
+      .then(() => done({ ok: true }))
+      .catch((error) => done({ ok: false, error: String(error) }))
+  })
+  if (!response.ok) {
+    throw new Error(response.error || 'Failed to restore Firefox session')
+  }
+}
+
+async function expectFirefoxSessionIdentity(type, browserId, expectedUid) {
+  if (browserId === undefined || expectedUid === undefined) {
+    throw new Error(`Cannot inspect missing ${type} identity.`)
+  }
+  const key =
+    type === 'tab' ? 'session-flow-tab-uid' : 'session-flow-window-uid'
+  const value = await browser.executeAsync(
+    (kind, id, identityKey, done) => {
+      const getter =
+        kind === 'tab'
+          ? window.browser.sessions.getTabValue(id, identityKey)
+          : window.browser.sessions.getWindowValue(id, identityKey)
+      getter
+        .then((identity) => done({ ok: true, identity }))
+        .catch((error) => done({ ok: false, error: String(error) }))
+    },
+    type,
+    browserId,
+    key,
+  )
+  if (!value.ok || value.identity?.uid !== expectedUid) {
+    throw new Error(
+      `Expected Firefox ${type} ${browserId} identity ${expectedUid}, received ${JSON.stringify(value)}.`,
+    )
+  }
 }
 
 async function onlySavedWindow() {

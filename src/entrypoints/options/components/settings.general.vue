@@ -59,5 +59,11 @@ import { STRINGS } from '@/types/strings'
       :options="OPTIONS.duplicatedItemState"
       @update="Settings.saveSettingsToStorage()"
     />
+    <ToggleButton
+      label="Reconnect Firefox-Restored Tabs and Windows"
+      v-model="Settings.values.reconnectFirefoxRestoredItems"
+      :options="OPTIONS.boolean"
+      @update="Settings.saveSettingsToStorage()"
+    />
   </section>
 </template>

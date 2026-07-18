@@ -10,6 +10,7 @@ export const DEFAULT_SETTINGS: Settings = {
   includeChildrenOfSelectedItemsWhenIndenting: 'always',
   duplicateTreeItemDescendants: 'selected-only',
   duplicatedItemState: 'saved',
+  reconnectFirefoxRestoredItems: true,
 
   // Windows
   focusWindowOnOpen: true,

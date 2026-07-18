@@ -178,6 +178,7 @@ describe('settings actions', () => {
         includeChildrenOfSelectedItemsWhenIndenting: 'never',
         duplicateTreeItemDescendants: 'complete-subtree',
         duplicatedItemState: 'match-original',
+        reconnectFirefoxRestoredItems: false,
         allowDropOntoDescendantItems: false,
         enableCopyOnDragAndDrop: false,
         tabGroupDropBehavior: 'any-adjacent-group',
@@ -210,6 +211,7 @@ describe('settings actions', () => {
       'complete-subtree',
     )
     expect(Settings.values.duplicatedItemState).toBe('match-original')
+    expect(Settings.values.reconnectFirefoxRestoredItems).toBe(false)
     expect(Settings.values.allowDropOntoDescendantItems).toBe(false)
     expect(Settings.values.enableCopyOnDragAndDrop).toBe(false)
     expect(Settings.values.tabGroupDropBehavior).toBe('any-adjacent-group')
@@ -228,6 +230,10 @@ describe('settings actions', () => {
   it('defaults duplication to selected items saved in the tree', () => {
     expect(DEFAULT_SETTINGS.duplicateTreeItemDescendants).toBe('selected-only')
     expect(DEFAULT_SETTINGS.duplicatedItemState).toBe('saved')
+  })
+
+  it('reconnects Firefox-restored items by default', () => {
+    expect(DEFAULT_SETTINGS.reconnectFirefoxRestoredItems).toBe(true)
   })
 
   it('loads container presentation settings', async () => {

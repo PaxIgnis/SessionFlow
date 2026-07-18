@@ -4,7 +4,7 @@ import process from 'node:process'
 import { browser } from '@wdio/globals'
 
 export const FIREFOX_EXTENSION_ID =
-  '6b9a5897787af169ae058e65c75ac90a98506c61@temporary-addon'
+  '6b9a5897787af169ae058e65c75ac90a98506c61@session-flow'
 export const FIREFOX_EXTENSION_UUID = '11111111-1111-4111-8111-111111111111'
 export const SESSION_TREE_URL = `moz-extension://${FIREFOX_EXTENSION_UUID}/sessiontree.html`
 

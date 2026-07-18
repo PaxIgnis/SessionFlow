@@ -4,6 +4,7 @@ import { Browser } from '@/services/background-browser'
 import { OnCreatedQueue } from '@/services/background-on-created-queue'
 import { Tree } from '@/services/background-tree'
 import { initializeSessionTreePort } from '@/services/runtime-port-service'
+import * as SessionRestore from '@/services/background-session-restore'
 import { Selection } from '@/services/selection'
 import { Settings } from '@/services/settings'
 import * as Messages from '@/types/messages'
@@ -120,11 +121,23 @@ async function windowsOnCreated(window: browser.windows.Window): Promise<void> {
     console.error('Window ID is undefined')
     return
   }
-  const extensionWindow = await OnCreatedQueue.isNewWindowExtensionGenerated(
-    window.id,
-  )
-  if (!extensionWindow) {
-    await Tree.addWindow(window.id)
+  SessionRestore.beginWindowClassification(window.id)
+  let disposition: SessionRestore.WindowCreationDisposition = 'new-window'
+  try {
+    const extensionWindow = await OnCreatedQueue.isNewWindowExtensionGenerated(
+      window.id,
+    )
+    if (extensionWindow) {
+      disposition = 'extension-generated'
+      return
+    }
+    if (await SessionRestore.handleCreatedWindow(window)) {
+      disposition = 'restored-window'
+    } else {
+      await Tree.addWindow(window.id)
+    }
+  } finally {
+    SessionRestore.finishWindowClassification(window.id, disposition)
   }
 }
 
@@ -199,8 +212,60 @@ async function tabsOnCreated(tab: browser.tabs.Tab): Promise<void> {
     console.error('Tab or Window ID is undefined')
     return
   }
+  const trackedWindow = Tree.Items.filter(Tree.isWindow).find(
+    (window) => window.id === tab.windowId,
+  )
+  if (!trackedWindow) {
+    SessionRestore.beginWindowClassification(tab.windowId)
+  }
+  const windowDisposition = await SessionRestore.waitForWindowClassification(
+    tab.windowId,
+  )
   const extensionTab = await OnCreatedQueue.isNewTabExtensionGenerated(tab.id)
-  if (!extensionTab) {
+  if (extensionTab) return
+  const currentWindow = Tree.Items.filter(Tree.isWindow).find(
+    (window) => window.id === tab.windowId,
+  )
+  if (
+    currentWindow &&
+    Tree.getTabs(currentWindow.children).some(
+      (treeTab) => treeTab.id === tab.id,
+    )
+  ) {
+    return
+  }
+  if (
+    windowDisposition === 'new-window' ||
+    windowDisposition === 'restored-window'
+  ) {
+    if (
+      windowDisposition === 'restored-window' &&
+      (await SessionRestore.handleCreatedTab(tab))
+    ) {
+      return
+    }
+    if (!currentWindow) return
+    let latestTab = tab
+    try {
+      latestTab = {
+        ...(await browser.tabs.get(tab.id)),
+        id: tab.id,
+        windowId: tab.windowId,
+      }
+    } catch (error) {
+      console.debug('Failed to refresh late-created tab state:', error)
+    }
+    if (
+      Tree.getTabs(currentWindow.children).some(
+        (treeTab) => treeTab.id === tab.id,
+      )
+    ) {
+      return
+    }
+    await addBrowserTabToTrackedWindow(latestTab, currentWindow)
+    return
+  }
+  if (!(await SessionRestore.handleCreatedTab(tab))) {
     const window = Tree.Items.filter(Tree.isWindow).find(
       (w) => w.id === tab.windowId,
     )
@@ -209,29 +274,41 @@ async function tabsOnCreated(tab: browser.tabs.Tab): Promise<void> {
     if (!window) {
       return
     }
-    // translate index from browser to session tree, as browser index includes all tabs, but session tree index only includes open and discarded tabs
-    const openSessionTreeTabs = Tree.getTabs(window.children).filter(
-      (tab) => tab.state === State.OPEN || tab.state === State.DISCARDED,
-    )
-    const tabToLeft = openSessionTreeTabs[Math.max(tab.index - 1, 0)]
-    const tabToLeftIndex = tabToLeft
-      ? window.children.findIndex((t) => t.uid === tabToLeft.uid)
-      : 0
-    const tabUid = Tree.addTab(
-      tab.active,
-      window.uid,
-      tab.id,
-      false,
-      tab.discarded ? State.DISCARDED : State.OPEN,
-      tab.title || 'Untitled',
-      tab.url || '',
-      tab.pinned || false,
-      tabToLeft ? tabToLeftIndex + 1 : undefined,
-    )
-    updateTabContainerFromBrowserTab(tabUid, tab)
-    if (tabUid && (tab.groupId ?? -1) !== -1) {
-      await Tree.tabGroupMembershipChanged(tab.id, tab.groupId!)
-    }
+    await addBrowserTabToTrackedWindow(tab, window)
+  }
+}
+
+async function addBrowserTabToTrackedWindow(
+  tab: browser.tabs.Tab & { id: number; windowId: number },
+  window: Window,
+): Promise<void> {
+  // Translate the browser index because saved tabs, notes, and separators do
+  // not consume positions in Firefox's live tab strip.
+  const openSessionTreeTabs = Tree.getTabs(window.children).filter(
+    (treeTab) =>
+      treeTab.state === State.OPEN || treeTab.state === State.DISCARDED,
+  )
+  const tabToLeft =
+    tab.index > 0 ? openSessionTreeTabs[tab.index - 1] : undefined
+  const tabToLeftIndex = tabToLeft
+    ? window.children.findIndex((item) => item.uid === tabToLeft.uid)
+    : 0
+  const targetIndex =
+    tab.index === 0 ? 0 : tabToLeft ? tabToLeftIndex + 1 : undefined
+  const tabUid = Tree.addTab(
+    tab.active,
+    window.uid,
+    tab.id,
+    false,
+    tab.discarded ? State.DISCARDED : State.OPEN,
+    tab.title || 'Untitled',
+    tab.url || '',
+    tab.pinned || false,
+    targetIndex,
+  )
+  updateTabContainerFromBrowserTab(tabUid, tab)
+  if (tabUid && (tab.groupId ?? -1) !== -1) {
+    await Tree.tabGroupMembershipChanged(tab.id, tab.groupId!)
   }
 }
 
@@ -419,6 +496,7 @@ async function tabsOnMoved(
   moveInfo: browser.tabs._OnMovedMoveInfo,
 ): Promise<void> {
   console.debug('Tab Moved:', tabId, moveInfo)
+  if (SessionRestore.isTabRelocating(tabId)) return
   if (
     moveInfo.windowId === undefined ||
     moveInfo.toIndex === undefined ||
@@ -622,6 +700,7 @@ function tabsOnDetached(
   detachInfo: browser.tabs._OnDetachedDetachInfo,
 ): void {
   console.debug('Tab Detached:', tabId, detachInfo)
+  if (SessionRestore.isTabRelocating(tabId)) return
   if (detachInfo.oldWindowId === undefined || tabId === undefined) {
     console.error('Tab or Window ID is undefined')
     return
@@ -655,6 +734,7 @@ async function tabsOnAttached(
   attachInfo: browser.tabs._OnAttachedAttachInfo,
 ): Promise<void> {
   console.debug('Tab Attached:', tabId, attachInfo)
+  if (SessionRestore.isTabRelocating(tabId)) return
   const extensionTab = await OnCreatedQueue.isNewTabExtensionGenerated(tabId)
   if (extensionTab) {
     console.log('tabsOnAttached: Tab created by extension, ignoring: ', tabId)

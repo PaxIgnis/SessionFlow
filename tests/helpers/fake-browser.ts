@@ -128,6 +128,12 @@ export interface FakeBrowser {
       set: ReturnType<typeof vi.fn>
     }
   }
+  sessions: {
+    getTabValue: ReturnType<typeof vi.fn>
+    getWindowValue: ReturnType<typeof vi.fn>
+    setTabValue: ReturnType<typeof vi.fn>
+    setWindowValue: ReturnType<typeof vi.fn>
+  }
   permissions: {
     contains: ReturnType<typeof vi.fn>
     request: ReturnType<typeof vi.fn>
@@ -253,6 +259,12 @@ export function installFakeBrowser(): FakeBrowser {
         get: vi.fn().mockResolvedValue({}),
         set: vi.fn().mockResolvedValue(undefined),
       },
+    },
+    sessions: {
+      getTabValue: vi.fn().mockResolvedValue(undefined),
+      getWindowValue: vi.fn().mockResolvedValue(undefined),
+      setTabValue: vi.fn().mockResolvedValue(undefined),
+      setWindowValue: vi.fn().mockResolvedValue(undefined),
     },
     permissions: {
       contains: vi.fn().mockResolvedValue(false),

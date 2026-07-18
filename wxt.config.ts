@@ -21,6 +21,7 @@ export default defineConfig({
       'menus',
       'menus.overrideContext',
       'scripting',
+      'sessions',
       'storage',
       'tabGroups',
       'tabs',
@@ -30,7 +31,7 @@ export default defineConfig({
     name: 'Session Flow',
     browser_specific_settings: {
       gecko: {
-        id: '6b9a5897787af169ae058e65c75ac90a98506c61@temporary-addon',
+        id: '6b9a5897787af169ae058e65c75ac90a98506c61@session-flow',
         strict_min_version: '139.0',
       },
     },
