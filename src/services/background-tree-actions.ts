@@ -2,10 +2,9 @@ import { STORAGE_KEY } from '@/defaults/constants'
 import { OnCreatedQueue } from '@/services/background-on-created-queue'
 import { Tree } from '@/services/background-tree'
 import { Settings } from '@/services/settings'
+import { normalizeStoredSessionTree } from '@/services/session-tree-storage'
 import * as Utils from '@/services/utils'
 import {
-  Note,
-  Separator,
   State,
   Tab,
   TreeItem,
@@ -193,50 +192,14 @@ function scoreWindowMatch(
     return -1
   }
 
-  const minLen = Math.min(candidateTabs.length, openTabs.length)
+  const matchedOpenTabs = matchSavedTabsToOpenTabs(candidateTabs, openTabs)
   let score = 0
-
-  for (let i = 0; i < minLen; i++) {
-    const savedTab = candidateTabs[i]
-    const openTab = openTabs[i]
-    const savedUrl = savedTab.url || ''
-    const openUrl = openTab.url || ''
-
-    if (savedUrl !== '' && savedUrl === openUrl) {
-      score += 4
-    }
-    if (savedTab.title && openTab.title && savedTab.title === openTab.title) {
-      score += 1
-    }
-    if ((savedTab.pinned || false) === (openTab.pinned || false)) {
-      score += 1
-    }
+  for (const savedTab of candidateTabs) {
+    const openTab = matchedOpenTabs.get(savedTab.uid)
+    if (openTab) score += scoreTabMatch(savedTab, openTab)
   }
 
-  score += scoreWindowContainerMatch(candidateTabs, openTabs)
   score -= Math.abs(candidateTabs.length - openTabs.length) * 2
-  return score
-}
-
-function scoreWindowContainerMatch(
-  savedTabs: Tab[],
-  openTabs: browser.tabs.Tab[],
-): number {
-  const remainingOpenStoreIds = openTabs.map(
-    (tab) => Tree.containerForCookieStore(tab.cookieStoreId)?.cookieStoreId,
-  )
-  let score = 0
-  for (const savedTab of savedTabs) {
-    const savedStoreId = savedTab.container?.cookieStoreId
-    if (!savedStoreId) continue
-    const matchIndex = remainingOpenStoreIds.indexOf(savedStoreId)
-    if (matchIndex === -1) {
-      score -= 6
-      continue
-    }
-    remainingOpenStoreIds.splice(matchIndex, 1)
-    score += 4
-  }
   return score
 }
 
@@ -263,19 +226,20 @@ function reconcileSavedWindowWithOpenWindow(
   savedWindow.selected = false
 
   // Only tabs that were open at shutdown participate in matching.
-  const usedOpenTabIds = new Set<number>()
   const tabsToOpen: UID[] = []
   const candidateTabs = Tree.getTabs(savedWindow.children).filter((tab) =>
     startupOpenTabUids.has(tab.uid),
   )
+  const matchedOpenTabs = matchSavedTabsToOpenTabs(candidateTabs, openTabs)
+  const usedOpenTabIds = new Set(
+    [...matchedOpenTabs.values()]
+      .map((tab) => tab.id)
+      .filter((id): id is number => id !== undefined),
+  )
   for (const savedTab of candidateTabs) {
     // Try to pair each saved open tab with a browser tab that looks like the same tab.
     // The match is intentionally conservative to avoid reusing the wrong tab.
-    const matchedOpenTab = findBestOpenTabMatch(
-      savedTab,
-      openTabs,
-      usedOpenTabIds,
-    )
+    const matchedOpenTab = matchedOpenTabs.get(savedTab.uid)
 
     if (!matchedOpenTab) {
       // If no match is found, keep the saved tab in the tree but leave it saved.
@@ -291,11 +255,6 @@ function reconcileSavedWindowWithOpenWindow(
         tabsToOpen.push(savedTab.uid)
       }
       continue
-    }
-
-    // Record the browser tab so we do not match it again to another saved tab.
-    if (matchedOpenTab.id !== undefined) {
-      usedOpenTabIds.add(matchedOpenTab.id)
     }
 
     // Rehydrate the saved tab with the live browser tab state.
@@ -367,6 +326,36 @@ function findBestOpenTabMatch(
   }
 
   return bestScore >= 2 ? bestMatch : undefined
+}
+
+function matchSavedTabsToOpenTabs(
+  savedTabs: Tab[],
+  openTabs: browser.tabs.Tab[],
+): Map<UID, browser.tabs.Tab> {
+  const orderedSavedTabs = savedTabs
+    .map((tab, index) => ({
+      tab,
+      index,
+      viableMatches: openTabs.filter(
+        (openTab) =>
+          openTab.id !== undefined && scoreTabMatch(tab, openTab) >= 2,
+      ).length,
+    }))
+    .sort(
+      (left, right) =>
+        left.viableMatches - right.viableMatches || left.index - right.index,
+    )
+  const matches = new Map<UID, browser.tabs.Tab>()
+  const usedOpenTabIds = new Set<number>()
+
+  for (const { tab } of orderedSavedTabs) {
+    const openTab = findBestOpenTabMatch(tab, openTabs, usedOpenTabIds)
+    if (!openTab || openTab.id === undefined) continue
+    matches.set(tab.uid, openTab)
+    usedOpenTabIds.add(openTab.id)
+  }
+
+  return matches
 }
 
 /**
@@ -556,33 +545,14 @@ export async function loadSessionTreeFromStorage(): Promise<void> {
   try {
     const sessionTree = await browser.storage.local.get(STORAGE_KEY)
     console.debug('Session Tree from storage:', sessionTree)
-    if (sessionTree[STORAGE_KEY]) {
-      Tree.Items.splice(0, Tree.Items.length, ...sessionTree[STORAGE_KEY])
-      Tree.Items.forEach((window) => {
-        if (window.type === TreeItemType.NOTE) {
-          normalizeNote(window, undefined)
-          return
-        }
-        if (window.type === TreeItemType.SEPARATOR) {
-          normalizeSeparator(window, undefined)
-          return
-        }
-        window.id = 0
-        window.active = false
-        window.activeTabId = undefined
-        window.incognito ??= false
-        window.selected = false
-        if (!window.savedTime) window.savedTime = Date.now()
-        if (!window.uid) window.uid = Utils.createUid(Tree.existingUidsSet)
-        const startupOpenTabs = Tree.getTabs(window.children).filter(
-          (tab) => tab.state !== State.SAVED,
-        )
-        Tree.windowsByUid.set(window.uid, window)
-        normalizeWindowChildren(window)
-        startupOpenTabs.forEach((tab) => startupOpenTabUids.add(tab.uid))
-      })
-      rebuildUIDMaps()
-    }
+    Tree.existingUidsSet.clear()
+    const normalized = normalizeStoredSessionTree(
+      sessionTree[STORAGE_KEY],
+      Tree.existingUidsSet,
+    )
+    Tree.Items.splice(0, Tree.Items.length, ...normalized.items)
+    normalized.startupOpenTabUids.forEach((uid) => startupOpenTabUids.add(uid))
+    rebuildUIDMaps()
   } catch (error) {
     console.error('Error loading session tree from storage:', error)
   }
@@ -594,13 +564,9 @@ export async function loadSessionTreeFromStorage(): Promise<void> {
  * @returns {Promise<void>} A promise that resolves when the session tree has been saved.
  */
 export async function saveSessionTreeToStorage(): Promise<void> {
-  try {
-    await browser.storage.local.set({
-      [STORAGE_KEY]: structuredClone(Tree.Items),
-    })
-  } catch (error) {
-    console.error('Error saving session tree to storage:', error)
-  }
+  await browser.storage.local.set({
+    [STORAGE_KEY]: structuredClone(Tree.Items),
+  })
 }
 
 /**
@@ -673,7 +639,9 @@ export function registerSessionTreeWindow(windowId: number): void {
     })
     Tree.windowsByUid.delete(existingWindow.uid)
     Tree.existingUidsSet.delete(existingWindow.uid)
-    saveSessionTreeToStorage()
+    void saveSessionTreeToStorage().catch((error) => {
+      console.error('Failed to persist session tree:', error)
+    })
   }
 }
 
@@ -719,55 +687,6 @@ function markWindowSavedAfterStartup(window: Window): void {
     tab.id = 0
     tab.tabGroup = Tree.savedTabGroup(tab.tabGroup)
   })
-}
-
-function normalizeWindowChildren(window: Window): void {
-  Tree.windowsByUid.set(window.uid, window)
-  window.children ??= []
-  window.children.forEach((child) => {
-    if (child.type === TreeItemType.NOTE) {
-      child.windowUid = window.uid
-      normalizeNote(child, window.uid)
-      return
-    }
-    if (child.type === TreeItemType.SEPARATOR) {
-      child.windowUid = window.uid
-      normalizeSeparator(child, window.uid)
-      return
-    }
-    child.type = TreeItemType.TAB
-    child.active = false
-    child.id = 0
-    child.selected = false
-    child.state = State.SAVED
-    child.tabGroup = Tree.savedTabGroup(child.tabGroup)
-    if (!child.savedTime) child.savedTime = Date.now()
-    if (!child.uid) child.uid = Utils.createUid(Tree.existingUidsSet)
-    Tree.tabsByUid.set(child.uid, child)
-    child.windowUid = window.uid
-    if (!child.pinned) child.pinned = false
-  })
-}
-
-function normalizeNote(note: Note, windowUid: UID | undefined): void {
-  note.type = TreeItemType.NOTE
-  note.selected = false
-  note.windowUid = windowUid
-  if (!note.uid) note.uid = Utils.createUid(Tree.existingUidsSet)
-  Tree.notesByUid.set(note.uid, note)
-}
-
-function normalizeSeparator(
-  separator: Separator,
-  windowUid: UID | undefined,
-): void {
-  separator.type = TreeItemType.SEPARATOR
-  separator.selected = false
-  separator.windowUid = windowUid
-  separator.isParent = false
-  separator.collapsed = false
-  if (!separator.uid) separator.uid = Utils.createUid(Tree.existingUidsSet)
-  Tree.separatorsByUid.set(separator.uid, separator)
 }
 
 function indexTreeItem(item: TreeItem): void {

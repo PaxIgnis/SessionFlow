@@ -15,7 +15,7 @@ const isHeadlessRun = process.env.WDIO_HEADLESS === 'true'
 export const config = {
   runner: 'local',
   specs: ['./tests/e2e/**/*.spec.mjs'],
-  exclude: [],
+  exclude: ['./tests/e2e/startup-persistence.spec.mjs'],
   maxInstances: 1,
   capabilities: [
     {
@@ -49,7 +49,9 @@ export const config = {
     timeout: 60_000,
   },
   onPrepare: async () => {
-    await resetE2eCoverage()
+    if (process.env.E2E_COVERAGE_APPEND !== 'true') {
+      await resetE2eCoverage()
+    }
   },
   before: async (capabilities) => {
     if (capabilities.browserName === 'firefox') {

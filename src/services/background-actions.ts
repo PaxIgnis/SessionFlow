@@ -3,6 +3,8 @@ import { openSessionTree } from '@/services/background-tree-actions'
 import { updateWindowPositionInterval } from '@/services/background-tree-window-actions'
 import { Settings } from '@/services/settings'
 
+export const SAVE_SESSION_TREE_INTERVAL_MS = 60 * 1000
+
 // Updates Extension badge Text and Title to show open tab/window count
 export async function updateBadge() {
   const tabs = await browser.tabs.query({})
@@ -39,6 +41,14 @@ export const initializeSettings = async () => {
   } catch (error) {
     console.error('Failed to initialize settings:', error)
   }
+}
+
+export function startSessionTreePersistence(): NodeJS.Timeout {
+  return setInterval(() => {
+    void Tree.saveSessionTreeToStorage().catch((error) => {
+      console.error('Failed to persist session tree:', error)
+    })
+  }, SAVE_SESSION_TREE_INTERVAL_MS)
 }
 
 export function setupBrowserActionMenu(): void {

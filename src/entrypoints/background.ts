@@ -7,8 +7,6 @@ import { FaviconRefresh } from '@/services/favicon-refresh'
 import { Settings } from '@/services/settings'
 import { stampOpenTreeIdentities } from '@/services/background-session-restore'
 
-const SAVE_SESSION_TREE_INTERVAL_MS = 60 * 1000 // 1 minute
-
 export default defineBackground(() => {
   console.log('Hello, SessionFlow Background has Started!', {
     id: browser.runtime.id,
@@ -40,9 +38,7 @@ async function initializeBackground(): Promise<void> {
   BackgroundHandlers.initializeListeners()
   Settings.setupSettingsUpdatedListener(FaviconRefresh.handleSettingsUpdated)
 
-  setInterval(() => {
-    void Tree.saveSessionTreeToStorage()
-  }, SAVE_SESSION_TREE_INTERVAL_MS)
+  Actions.startSessionTreePersistence()
 
   await FaviconRefresh.initialize()
 }

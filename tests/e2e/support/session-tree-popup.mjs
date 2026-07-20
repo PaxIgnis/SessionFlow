@@ -7,12 +7,19 @@ export async function openSessionTreePopup() {
   const handlesBeforeClick = await browser.getWindowHandles()
   const originalHandle = await browser.getWindowHandle()
 
-  await clickFirefoxExtensionAction(FIREFOX_EXTENSION_ID)
   await browser.waitUntil(
-    async () =>
-      (await browser.getWindowHandles()).length > handlesBeforeClick.length,
+    async () => {
+      if (
+        (await browser.getWindowHandles()).length > handlesBeforeClick.length
+      ) {
+        return true
+      }
+      await clickFirefoxExtensionAction(FIREFOX_EXTENSION_ID)
+      return false
+    },
     {
-      timeout: 10_000,
+      timeout: 20_000,
+      interval: 500,
       timeoutMsg:
         'Expected the extension action to open a session tree window.',
     },

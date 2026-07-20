@@ -10,7 +10,12 @@ This command runs Firefox headed by default because the workflow tests depend on
 Firefox extension window events that are unreliable in headless mode. To opt
 into the unstable headless path for diagnostics, set `WDIO_HEADLESS=true`.
 
-The WDIO suite packages the Firefox extension with `pnpm run zip:firefox`, starts Firefox through geckodriver, installs the generated XPI as a temporary add-on with `browser.installAddOn(..., true)`, and opens `sessiontree.html` through a deterministic `moz-extension://` URL.
+The WDIO suite packages the Firefox extension with `pnpm run zip:firefox`, starts Firefox through geckodriver, installs the generated XPI into the test profile with `browser.installAddOn(..., false)`, and opens `sessiontree.html` through a deterministic `moz-extension://` URL.
+
+The ordinary workflow configuration excludes `startup-persistence.spec.mjs`.
+That spec runs through `wdio.restart.conf.mjs`, which creates an isolated temporary
+Firefox profile and reuses it across `browser.reloadSession()` so process-restart
+and persisted-storage behavior can be tested without workstation-specific paths.
 
 The first smoke test verifies that the extension page loads and the SessionTree Vue root exists. Workflow specs seed local `data:text/html` tabs so background snapshots and browser tab events are deterministic and network-free.
 
