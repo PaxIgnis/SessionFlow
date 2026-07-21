@@ -198,6 +198,25 @@ describe('window actions', () => {
     }
   })
 
+  it('preserves the last active window while an unknown focus target retries (EV-26)', () => {
+    vi.useFakeTimers()
+    try {
+      const active = createWindow('window-active' as UID, [], {
+        active: true,
+        id: 10,
+      })
+
+      Tree.setActiveWindow(999, 1)
+      expect(active.active).toBe(true)
+
+      vi.advanceTimersByTime(100)
+      expect(active.active).toBe(true)
+      expectTreeInvariants()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('ignores invalid and session tree window ids when setting the active window', () => {
     const active = createWindow('window-1' as UID, [], {
       active: true,

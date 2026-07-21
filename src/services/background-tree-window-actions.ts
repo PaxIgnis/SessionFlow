@@ -312,26 +312,25 @@ export function setActiveWindow(windowId: number, tries: number = 0): void {
     return
   }
 
-  const previousActiveWindow = Tree.Items.filter(Tree.isWindow).find(
-    (w) => w.active,
-  )
-  if (previousActiveWindow) {
-    Tree.updateWindow(previousActiveWindow.uid, { active: false })
-  }
-
   const activeWindow = Tree.Items.filter(Tree.isWindow).find(
     (w) => w.id === windowId,
   )
-  // if activeWindow is undefined, wait and try again
-  if (activeWindow) {
-    Tree.updateWindow(activeWindow.uid, { active: true })
-  } else {
+  if (!activeWindow) {
     if (tries > 0) {
       setTimeout(() => {
         setActiveWindow(windowId, tries - 1)
       }, 100)
     }
+    return
   }
+
+  const previousActiveWindow = Tree.Items.filter(Tree.isWindow).find(
+    (w) => w.active,
+  )
+  if (previousActiveWindow && previousActiveWindow.uid !== activeWindow.uid) {
+    Tree.updateWindow(previousActiveWindow.uid, { active: false })
+  }
+  Tree.updateWindow(activeWindow.uid, { active: true })
 }
 
 /**

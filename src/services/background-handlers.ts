@@ -12,13 +12,17 @@ import {
   LoadingStatus,
   State,
   Tab,
-  TabGroupMetadata,
   TreeItemType,
   Window,
   WindowChild,
 } from '@/types/session-tree'
 
-const detachedTabGroups = new Map<number, TabGroupMetadata | undefined>()
+interface PendingDetachedTab {
+  tab: Tab
+  token: symbol
+}
+
+const pendingDetachedTabs = new Map<number, PendingDetachedTab>()
 const pendingGroupedTabRemovals = new Map<
   number,
   Array<{
@@ -35,8 +39,13 @@ const pendingRemovedGroups = new Map<
 >()
 const pendingGroupRemovalTimers = new Map<
   number,
-  ReturnType<typeof setTimeout>
+  {
+    timer: ReturnType<typeof setTimeout>
+    token: symbol
+  }
 >()
+const pendingTabCreations = new Map<number, symbol>()
+const pendingWindowMoves = new Map<number, symbol>()
 
 // ==============================
 // Event Listeners
@@ -75,10 +84,10 @@ export function initializeListeners() {
   browser.tabs.onRemoved.addListener(tabsOnRemoved)
   browser.tabs.onUpdated.addListener(tabsOnUpdated)
   browser.tabs.onUpdated.addListener(tabsOnUpdatedFavicon)
-  browser.tabGroups.onCreated.addListener(Tree.tabGroupUpdated)
+  browser.tabGroups.onCreated.addListener(tabGroupsOnCreatedOrUpdated)
   browser.tabGroups.onMoved.addListener(Tree.tabGroupMoved)
   browser.tabGroups.onRemoved.addListener(tabGroupsOnRemoved)
-  browser.tabGroups.onUpdated.addListener(Tree.tabGroupUpdated)
+  browser.tabGroups.onUpdated.addListener(tabGroupsOnCreatedOrUpdated)
   browser.windows.onCreated.addListener(windowsOnCreated)
   browser.windows.onFocusChanged.addListener(windowsOnFocusChanged)
   browser.windows.onRemoved.addListener(windowsOnRemoved)
@@ -90,26 +99,42 @@ export function initializeListeners() {
  * This is done in the SessionTree.vue file.
  *
  */
-function tabsOnUpdatedFavicon(
+async function tabsOnUpdatedFavicon(
   tabId: number,
   changeInfo: browser.tabs._OnUpdatedChangeInfo,
   tab: browser.tabs.Tab,
-): void {
-  if (
-    tab.favIconUrl &&
-    browser.extension.getViews().length > 0 &&
-    tab.status === 'complete'
-  ) {
-    window.browser.runtime
-      .sendMessage({
-        type: 'FAVICON_UPDATED',
-        favIconUrl: tab.favIconUrl,
-        tab: tab,
-      })
-      .catch(() => {
-        console.debug('No receivers for favicon update')
-      })
+): Promise<void> {
+  if (browser.extension.getViews().length === 0 || tab.status !== 'complete') {
+    return
   }
+
+  let authoritativeTab = tab
+  if (changeInfo.status === LoadingStatus.COMPLETE) {
+    try {
+      const currentTab = await browser.tabs.get(tabId)
+      if (currentTab.id !== tabId || currentTab.windowId !== tab.windowId) {
+        return
+      }
+      authoritativeTab = currentTab
+    } catch (error) {
+      console.debug('Failed to refresh completed favicon update:', error)
+    }
+  }
+  if (authoritativeTab.status !== 'complete') return
+
+  const message = authoritativeTab.favIconUrl
+    ? {
+        type: 'FAVICON_UPDATED',
+        favIconUrl: authoritativeTab.favIconUrl,
+        tab: authoritativeTab,
+      }
+    : {
+        type: 'FAVICON_CLEARED',
+        pageUrl: authoritativeTab.url,
+      }
+  window.browser.runtime.sendMessage(message).catch(() => {
+    console.debug('No receivers for favicon update')
+  })
 }
 
 /**
@@ -129,6 +154,10 @@ async function windowsOnCreated(window: browser.windows.Window): Promise<void> {
     )
     if (extensionWindow) {
       disposition = 'extension-generated'
+      return
+    }
+    if (window.type !== undefined && window.type !== 'normal') {
+      disposition = 'ignored-window'
       return
     }
     if (await SessionRestore.handleCreatedWindow(window)) {
@@ -212,69 +241,84 @@ async function tabsOnCreated(tab: browser.tabs.Tab): Promise<void> {
     console.error('Tab or Window ID is undefined')
     return
   }
-  const trackedWindow = Tree.Items.filter(Tree.isWindow).find(
-    (window) => window.id === tab.windowId,
-  )
-  if (!trackedWindow) {
-    SessionRestore.beginWindowClassification(tab.windowId)
-  }
-  const windowDisposition = await SessionRestore.waitForWindowClassification(
-    tab.windowId,
-  )
-  const extensionTab = await OnCreatedQueue.isNewTabExtensionGenerated(tab.id)
-  if (extensionTab) return
-  const currentWindow = Tree.Items.filter(Tree.isWindow).find(
-    (window) => window.id === tab.windowId,
-  )
-  if (
-    currentWindow &&
-    Tree.getTabs(currentWindow.children).some(
-      (treeTab) => treeTab.id === tab.id,
+  const creationToken = Symbol(`tab-created-${tab.id}`)
+  pendingDetachedTabs.delete(tab.id)
+  pendingTabCreations.set(tab.id, creationToken)
+  try {
+    const trackedWindow = Tree.Items.filter(Tree.isWindow).find(
+      (window) => window.id === tab.windowId,
     )
-  ) {
-    return
-  }
-  if (
-    windowDisposition === 'new-window' ||
-    windowDisposition === 'restored-window'
-  ) {
-    if (
-      windowDisposition === 'restored-window' &&
-      (await SessionRestore.handleCreatedTab(tab))
-    ) {
-      return
+    if (!trackedWindow) {
+      SessionRestore.beginWindowClassification(tab.windowId)
     }
-    if (!currentWindow) return
-    let latestTab = tab
-    try {
-      latestTab = {
-        ...(await browser.tabs.get(tab.id)),
-        id: tab.id,
-        windowId: tab.windowId,
-      }
-    } catch (error) {
-      console.debug('Failed to refresh late-created tab state:', error)
-    }
+    const windowDisposition = await SessionRestore.waitForWindowClassification(
+      tab.windowId,
+    )
+    if (pendingTabCreations.get(tab.id) !== creationToken) return
+    const extensionTab = await OnCreatedQueue.isNewTabExtensionGenerated(tab.id)
+    if (pendingTabCreations.get(tab.id) !== creationToken) return
+    if (extensionTab) return
+    const currentWindow = Tree.Items.filter(Tree.isWindow).find(
+      (window) => window.id === tab.windowId,
+    )
     if (
+      currentWindow &&
       Tree.getTabs(currentWindow.children).some(
         (treeTab) => treeTab.id === tab.id,
       )
     ) {
       return
     }
-    await addBrowserTabToTrackedWindow(latestTab, currentWindow)
-    return
-  }
-  if (!(await SessionRestore.handleCreatedTab(tab))) {
-    const window = Tree.Items.filter(Tree.isWindow).find(
-      (w) => w.id === tab.windowId,
-    )
-    // if Window ID is not in session tree, then the window was just opened,
-    // so window listener will handle adding the tab to the session tree.
-    if (!window) {
+    if (
+      windowDisposition === 'new-window' ||
+      windowDisposition === 'restored-window'
+    ) {
+      if (
+        windowDisposition === 'restored-window' &&
+        (await SessionRestore.handleCreatedTab(tab))
+      ) {
+        return
+      }
+      if (pendingTabCreations.get(tab.id) !== creationToken) return
+      if (!currentWindow) return
+      let latestTab = tab
+      try {
+        latestTab = {
+          ...(await browser.tabs.get(tab.id)),
+          id: tab.id,
+          windowId: tab.windowId,
+        }
+      } catch (error) {
+        console.debug('Failed to refresh late-created tab state:', error)
+      }
+      if (pendingTabCreations.get(tab.id) !== creationToken) return
+      if (
+        Tree.getTabs(currentWindow.children).some(
+          (treeTab) => treeTab.id === tab.id,
+        )
+      ) {
+        return
+      }
+      await addBrowserTabToTrackedWindow(latestTab, currentWindow)
       return
     }
-    await addBrowserTabToTrackedWindow(tab, window)
+    const restoredTabHandled = await SessionRestore.handleCreatedTab(tab)
+    if (pendingTabCreations.get(tab.id) !== creationToken) return
+    if (!restoredTabHandled) {
+      const window = Tree.Items.filter(Tree.isWindow).find(
+        (w) => w.id === tab.windowId,
+      )
+      // if Window ID is not in session tree, then the window was just opened,
+      // so window listener will handle adding the tab to the session tree.
+      if (!window) {
+        return
+      }
+      await addBrowserTabToTrackedWindow(tab, window)
+    }
+  } finally {
+    if (pendingTabCreations.get(tab.id) === creationToken) {
+      pendingTabCreations.delete(tab.id)
+    }
   }
 }
 
@@ -331,6 +375,8 @@ function tabsOnRemoved(
   removeInfo: browser.tabs._OnRemovedRemoveInfo,
 ): void {
   console.debug('Tab Removed:', tabId, removeInfo)
+  pendingTabCreations.delete(tabId)
+  pendingDetachedTabs.delete(tabId)
   if (removeInfo.windowId === undefined) {
     console.error('Window ID is undefined')
     return
@@ -409,17 +455,29 @@ function tabGroupsOnRemoved(
   scheduleGroupedTabRemoval(group.id)
 }
 
-function scheduleGroupedTabRemoval(groupId: number): void {
-  const existingTimer = pendingGroupRemovalTimers.get(groupId)
-  if (existingTimer) clearTimeout(existingTimer)
-
-  pendingGroupRemovalTimers.set(
-    groupId,
-    setTimeout(() => finalizeGroupedTabRemoval(groupId), 100),
-  )
+function tabGroupsOnCreatedOrUpdated(group: browser.tabGroups.TabGroup): void {
+  cancelPendingGroupedRemoval(group.id)
+  Tree.tabGroupUpdated(group)
 }
 
-function finalizeGroupedTabRemoval(groupId: number): void {
+function cancelPendingGroupedRemoval(groupId: number): void {
+  const pendingTimer = pendingGroupRemovalTimers.get(groupId)
+  if (!pendingTimer) return
+  clearTimeout(pendingTimer.timer)
+  finalizeGroupedTabRemoval(groupId, pendingTimer.token)
+}
+
+function scheduleGroupedTabRemoval(groupId: number): void {
+  const existingTimer = pendingGroupRemovalTimers.get(groupId)
+  if (existingTimer) clearTimeout(existingTimer.timer)
+
+  const token = Symbol(`group-removal-${groupId}`)
+  const timer = setTimeout(() => finalizeGroupedTabRemoval(groupId, token), 100)
+  pendingGroupRemovalTimers.set(groupId, { timer, token })
+}
+
+function finalizeGroupedTabRemoval(groupId: number, token: symbol): void {
+  if (pendingGroupRemovalTimers.get(groupId)?.token !== token) return
   const groupRemoval = pendingRemovedGroups.get(groupId)
   const tabRemovals = pendingGroupedTabRemovals.get(groupId) ?? []
 
@@ -438,44 +496,53 @@ function finalizeGroupedTabRemoval(groupId: number): void {
 /**
  * When a tab is updated, update the session tree to match the new tab state.
  */
-function tabsOnUpdated(
+async function tabsOnUpdated(
   tabId: number,
   changeInfo: browser.tabs._OnUpdatedChangeInfo,
   tab: browser.tabs.Tab,
-): void {
+): Promise<void> {
   if (tab.windowId === undefined || tab.id === undefined) {
     console.error('Tab or Window ID is undefined')
     return
   }
-  const tabContents: Partial<Tab> = {
-    state: tab.discarded ? State.DISCARDED : State.OPEN,
+  const indexedTab = Tree.Items.filter(Tree.isWindow)
+    .find((window) => window.id === tab.windowId)
+    ?.children.find(
+      (item): item is Tab =>
+        item.type === TreeItemType.TAB && item.id === tab.id,
+    )
+  if (!indexedTab) return
+
+  let authoritativeTab = tab
+  if (changeInfo.status === LoadingStatus.COMPLETE) {
+    try {
+      const currentTab = await browser.tabs.get(tabId)
+      if (currentTab.id !== tabId || currentTab.windowId !== tab.windowId) {
+        return
+      }
+      authoritativeTab = currentTab
+    } catch (error) {
+      console.debug('Failed to refresh completed tab update:', error)
+    }
   }
-  if (tab.status) tabContents.loadingStatus = tab.status as LoadingStatus
+  const tabContents: Partial<Tab> = {
+    state: authoritativeTab.discarded ? State.DISCARDED : State.OPEN,
+  }
+  if (authoritativeTab.status) {
+    tabContents.loadingStatus = authoritativeTab.status as LoadingStatus
+  }
   // only update title and url if the tab is complete
   // this is to prevent the tab from being updated with eroneous data such as new tab
-  if (tab.status === 'complete') {
-    if (tab.title) tabContents.title = tab.title
-    if (tab.url) tabContents.url = tab.url
+  if (authoritativeTab.status === 'complete') {
+    if (authoritativeTab.title) tabContents.title = authoritativeTab.title
+    if (authoritativeTab.url) tabContents.url = authoritativeTab.url
   }
   if (changeInfo.pinned !== undefined) {
-    tabContents.pinned = tab.pinned
-    const t = Tree.Items.filter(Tree.isWindow)
-      .find((t) => t.id === tab.windowId)
-      ?.children.find(
-        (t): t is Tab => t.type === TreeItemType.TAB && t.id === tab.id,
-      )
-    if (!t) {
-      console.error(
-        'Error updating pinned state, could not find tab in tree:',
-        tab.windowId,
-        tab.id,
-      )
-      return
-    }
-    if (tab.pinned) {
-      Tree.pinTabInTree(t.uid)
+    tabContents.pinned = authoritativeTab.pinned
+    if (authoritativeTab.pinned) {
+      Tree.pinTabInTree(indexedTab.uid)
     } else {
-      Tree.unpinTabInTree(t.uid)
+      Tree.unpinTabInTree(indexedTab.uid)
     }
   }
 
@@ -515,90 +582,99 @@ async function tabsOnMoved(
   const openSessionTreeTabs = Tree.getTabs(window.children).filter(
     (tab) => tab.state === State.OPEN || tab.state === State.DISCARDED,
   )
-  const openBrowserTabs = await browser.tabs.query({
-    windowId: moveInfo.windowId,
-  })
-  if (!openSessionTreeTabs || !openBrowserTabs) {
-    console.error('Error getting tabs')
-    return
-  }
-  const repairedChildrenPlacedBeforeParents =
-    repairChildrenPlacedBeforeParents(window)
-  // return if order matches
-  if (
-    openSessionTreeTabs.every(
-      (tab, index) => tab.id === openBrowserTabs[index].id,
-    )
-  ) {
-    if (repairedChildrenPlacedBeforeParents) {
-      Tree.recomputeSessionTree()
+  const moveToken = Symbol(`window-move-${moveInfo.windowId}`)
+  pendingWindowMoves.set(moveInfo.windowId, moveToken)
+  try {
+    const openBrowserTabs = await browser.tabs.query({
+      windowId: moveInfo.windowId,
+    })
+    if (pendingWindowMoves.get(moveInfo.windowId) !== moveToken) return
+    if (!openSessionTreeTabs || !openBrowserTabs) {
+      console.error('Error getting tabs')
+      return
     }
-    return
-  }
-  // if order doesn't match, update the sessionTree order to match the browser order
-  const movedTabIndex = window.children.findIndex(
-    (tab) => tab.type === TreeItemType.TAB && tab.id === tabId,
-  )
-  if (movedTabIndex === -1) {
-    console.warn('Moved tab not found in session tree:', tabId)
-    return
-  }
-  const tab = window.children[movedTabIndex] as Tab
-  Tree.removeTab(tab.uid)
-  if (moveInfo.toIndex + 1 >= openSessionTreeTabs.length) {
-    // place in last position, or if pinned, at end of pinned tabs
-    const targetTabIndex =
-      window.children.findLastIndex(
-        (t) => t.type === TreeItemType.TAB && t.pinned,
-      ) + 1
-    Tree.addTab(
-      tab.active ?? false,
-      window.uid,
-      tab.id,
-      false,
-      tab.state,
-      tab.title,
-      tab.url,
-      tab.pinned || false,
-      tab.pinned ? targetTabIndex : undefined,
-      undefined,
-      tab.uid,
-      true,
-      tab.tabGroup,
-      tab.container,
+    const repairedChildrenPlacedBeforeParents =
+      repairChildrenPlacedBeforeParents(window)
+    // return if order matches
+    if (
+      openSessionTreeTabs.every(
+        (tab, index) => tab.id === openBrowserTabs[index].id,
+      )
+    ) {
+      if (repairedChildrenPlacedBeforeParents) {
+        Tree.recomputeSessionTree()
+      }
+      return
+    }
+    // if order doesn't match, update the sessionTree order to match the browser order
+    const movedTabIndex = window.children.findIndex(
+      (tab) => tab.type === TreeItemType.TAB && tab.id === tabId,
     )
-  } else {
-    // move to the position immediately before the tab to the right in the browser
-    const rightTabId = openBrowserTabs[moveInfo.toIndex + 1].id
-    let targetTabIndex = window.children.findIndex(
-      (tab) => tab.type === TreeItemType.TAB && tab.id === rightTabId,
-    )
-    // if tab is pinned and the tab to the right is not pinned, adjust to place at end of pinned tabs
-    if (tab.pinned && !openBrowserTabs[moveInfo.toIndex + 1].pinned) {
-      targetTabIndex =
+    if (movedTabIndex === -1) {
+      console.warn('Moved tab not found in session tree:', tabId)
+      return
+    }
+    const tab = window.children[movedTabIndex] as Tab
+    Tree.removeTab(tab.uid)
+    if (moveInfo.toIndex + 1 >= openSessionTreeTabs.length) {
+      // place in last position, or if pinned, at end of pinned tabs
+      const targetTabIndex =
         window.children.findLastIndex(
           (t) => t.type === TreeItemType.TAB && t.pinned,
         ) + 1
-    }
+      Tree.addTab(
+        tab.active ?? false,
+        window.uid,
+        tab.id,
+        false,
+        tab.state,
+        tab.title,
+        tab.url,
+        tab.pinned || false,
+        tab.pinned ? targetTabIndex : undefined,
+        undefined,
+        tab.uid,
+        true,
+        tab.tabGroup,
+        tab.container,
+      )
+    } else {
+      // move to the position immediately before the tab to the right in the browser
+      const rightTabId = openBrowserTabs[moveInfo.toIndex + 1].id
+      let targetTabIndex = window.children.findIndex(
+        (tab) => tab.type === TreeItemType.TAB && tab.id === rightTabId,
+      )
+      // if tab is pinned and the tab to the right is not pinned, adjust to place at end of pinned tabs
+      if (tab.pinned && !openBrowserTabs[moveInfo.toIndex + 1].pinned) {
+        targetTabIndex =
+          window.children.findLastIndex(
+            (t) => t.type === TreeItemType.TAB && t.pinned,
+          ) + 1
+      }
 
-    Tree.addTab(
-      tab.active ?? false,
-      window.uid,
-      tab.id,
-      false,
-      tab.state,
-      tab.title,
-      tab.url,
-      tab.pinned || false,
-      targetTabIndex,
-      undefined,
-      tab.uid,
-      true,
-      tab.tabGroup,
-      tab.container,
-    )
+      Tree.addTab(
+        tab.active ?? false,
+        window.uid,
+        tab.id,
+        false,
+        tab.state,
+        tab.title,
+        tab.url,
+        tab.pinned || false,
+        targetTabIndex,
+        undefined,
+        tab.uid,
+        true,
+        tab.tabGroup,
+        tab.container,
+      )
+    }
+    Tree.recomputeSessionTree()
+  } finally {
+    if (pendingWindowMoves.get(moveInfo.windowId) === moveToken) {
+      pendingWindowMoves.delete(moveInfo.windowId)
+    }
   }
-  Tree.recomputeSessionTree()
 }
 
 /**
@@ -718,11 +794,12 @@ function tabsOnDetached(
     return
   }
   const detachedTab = window.children[index]
-  detachedTabGroups.set(
-    tabId,
-    detachedTab.type === TreeItemType.TAB ? detachedTab.tabGroup : undefined,
-  )
-  Tree.removeTab(window.children[index].uid)
+  if (detachedTab.type !== TreeItemType.TAB) return
+  pendingDetachedTabs.set(tabId, {
+    tab: structuredClone(detachedTab),
+    token: Symbol(`tab-detached-${tabId}`),
+  })
+  Tree.removeTab(detachedTab.uid)
 }
 
 /**
@@ -737,6 +814,7 @@ async function tabsOnAttached(
   if (SessionRestore.isTabRelocating(tabId)) return
   const extensionTab = await OnCreatedQueue.isNewTabExtensionGenerated(tabId)
   if (extensionTab) {
+    pendingDetachedTabs.delete(tabId)
     console.log('tabsOnAttached: Tab created by extension, ignoring: ', tabId)
     return
   }
@@ -745,14 +823,35 @@ async function tabsOnAttached(
     console.error('Tab or Window ID is undefined')
     return
   }
-  const window = Tree.Items.filter(Tree.isWindow).find(
+  const pendingDetachedTab = pendingDetachedTabs.get(tabId)
+  const transferToken = pendingDetachedTab?.token
+  let window = Tree.Items.filter(Tree.isWindow).find(
     (w) => w.id === attachInfo.newWindowId,
   )
   if (!window) {
-    console.error('Window not found in session tree')
-    return
+    SessionRestore.beginWindowClassification(attachInfo.newWindowId)
+    await SessionRestore.waitForWindowClassification(attachInfo.newWindowId)
+    if (
+      transferToken &&
+      pendingDetachedTabs.get(tabId)?.token !== transferToken
+    ) {
+      return
+    }
+    window = Tree.Items.filter(Tree.isWindow).find(
+      (w) => w.id === attachInfo.newWindowId,
+    )
+    if (!window) {
+      console.error('Window not found in session tree')
+      return
+    }
   }
   const tab = await browser.tabs.get(tabId)
+  if (
+    transferToken &&
+    pendingDetachedTabs.get(tabId)?.token !== transferToken
+  ) {
+    return
+  }
   if (!tab) {
     console.error('Tab not found in window')
     return
@@ -769,35 +868,20 @@ async function tabsOnAttached(
     windowId: attachInfo.newWindowId,
     index: tab.index + 1,
   })
+  if (
+    transferToken &&
+    pendingDetachedTabs.get(tabId)?.token !== transferToken
+  ) {
+    return
+  }
   const tabToRightId = tabToRight.length > 0 ? tabToRight[0].id : undefined
-  // if there is no tab to the right, add the tab to the end, if pinned, at end of pinned tabs
+  let targetTabIndex: number | undefined
   if (tabToRightId === undefined) {
-    const targetTabIndex = tab.pinned
+    targetTabIndex = tab.pinned
       ? window.children.findLastIndex(
           (t) => t.type === TreeItemType.TAB && t.pinned,
         ) + 1
       : undefined
-    const tabUid = Tree.addTab(
-      tab.active,
-      window.uid,
-      tabId,
-      false,
-      tab.discarded ? State.DISCARDED : State.OPEN,
-      tab.title || 'Untitled',
-      tab.url || '',
-      tab.pinned || false,
-      targetTabIndex,
-    )
-    updateTabContainerFromBrowserTab(tabUid, tab)
-    const detachedGroup = detachedTabGroups.get(tabId)
-    if (tabUid && detachedGroup) {
-      Tree.updateTab({ tabUid }, { tabGroup: detachedGroup })
-    }
-    detachedTabGroups.delete(tabId)
-    if (tabUid && (tab.groupId ?? -1) !== -1) {
-      await Tree.tabGroupMembershipChanged(tabId, tab.groupId!)
-    }
-    return
   } else {
     // if there is a tab to the right, insert it to the left of that tab
     const tabToRightIndex = window.children.findIndex(
@@ -807,28 +891,70 @@ async function tabsOnAttached(
       window.children.findLastIndex(
         (t) => t.type === TreeItemType.TAB && t.pinned,
       ) + 1
-    const tabUid = Tree.addTab(
-      tab.active,
-      window.uid,
-      tabId,
-      false,
-      tab.discarded ? State.DISCARDED : State.OPEN,
-      tab.title || 'Untitled',
-      tab.url || '',
-      tab.pinned || false,
+    targetTabIndex =
       tab.pinned && lastPinnedIndex < tabToRightIndex
         ? lastPinnedIndex
-        : tabToRightIndex,
+        : tabToRightIndex
+  }
+
+  const detachedSnapshot = pendingDetachedTab?.tab
+  const parentUid =
+    detachedSnapshot?.parentUid &&
+    window.children.some((child) => child.uid === detachedSnapshot.parentUid)
+      ? detachedSnapshot.parentUid
+      : undefined
+  const container =
+    Tree.containerForCookieStore(tab.cookieStoreId) ??
+    detachedSnapshot?.container
+  const tabUid = detachedSnapshot
+    ? Tree.addTab(
+        tab.active,
+        window.uid,
+        tabId,
+        false,
+        tab.discarded ? State.DISCARDED : State.OPEN,
+        tab.title || 'Untitled',
+        tab.url || '',
+        tab.pinned || false,
+        targetTabIndex,
+        parentUid,
+        detachedSnapshot.uid,
+        true,
+        detachedSnapshot.tabGroup,
+        container,
+      )
+    : Tree.addTab(
+        tab.active,
+        window.uid,
+        tabId,
+        false,
+        tab.discarded ? State.DISCARDED : State.OPEN,
+        tab.title || 'Untitled',
+        tab.url || '',
+        tab.pinned || false,
+        targetTabIndex,
+      )
+  if (!detachedSnapshot) updateTabContainerFromBrowserTab(tabUid, tab)
+  if (tabUid && detachedSnapshot) {
+    Tree.updateTab(
+      { tabUid },
+      {
+        collapsed: detachedSnapshot.collapsed,
+        customLabel: detachedSnapshot.customLabel,
+        isParent: detachedSnapshot.isParent,
+        isVisible: detachedSnapshot.isVisible,
+        savedTime: detachedSnapshot.savedTime,
+      },
     )
-    updateTabContainerFromBrowserTab(tabUid, tab)
-    const detachedGroup = detachedTabGroups.get(tabId)
-    if (tabUid && detachedGroup) {
-      Tree.updateTab({ tabUid }, { tabGroup: detachedGroup })
-    }
-    detachedTabGroups.delete(tabId)
-    if (tabUid && (tab.groupId ?? -1) !== -1) {
-      await Tree.tabGroupMembershipChanged(tabId, tab.groupId!)
-    }
+  }
+  if (
+    transferToken &&
+    pendingDetachedTabs.get(tabId)?.token === transferToken
+  ) {
+    pendingDetachedTabs.delete(tabId)
+  }
+  if (tabUid && (tab.groupId ?? -1) !== -1) {
+    await Tree.tabGroupMembershipChanged(tabId, tab.groupId!)
   }
 }
 

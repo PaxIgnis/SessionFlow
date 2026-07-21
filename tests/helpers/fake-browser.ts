@@ -1,6 +1,6 @@
 import { vi } from 'vitest'
 
-type Listener<T extends unknown[]> = (...args: T) => void
+type Listener<T extends unknown[]> = (...args: T) => unknown
 
 type ContextualIdentityChangeInfo = {
   contextualIdentity: browser.contextualIdentities.ContextualIdentity
@@ -21,6 +21,14 @@ class FakeEvent<T extends unknown[]> {
     for (const listener of [...this.listeners]) {
       listener(...args)
     }
+  }
+
+  async emitAsync(...args: T): Promise<void> {
+    const pending: Promise<unknown>[] = []
+    for (const listener of [...this.listeners]) {
+      pending.push(Promise.resolve(listener(...args)))
+    }
+    await Promise.all(pending)
   }
 }
 
@@ -113,6 +121,7 @@ export interface FakeBrowser {
     update: ReturnType<typeof vi.fn>
   }
   windows: {
+    WINDOW_ID_NONE: number
     onCreated: FakeEvent<[browser.windows.Window]>
     onFocusChanged: FakeEvent<[number]>
     onRemoved: FakeEvent<[number]>
@@ -238,6 +247,7 @@ export function installFakeBrowser(): FakeBrowser {
       update: vi.fn(),
     },
     windows: {
+      WINDOW_ID_NONE: -1,
       onCreated: new FakeEvent<[browser.windows.Window]>(),
       onFocusChanged: new FakeEvent<[number]>(),
       onRemoved: new FakeEvent<[number]>(),

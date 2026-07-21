@@ -75,6 +75,31 @@ describe('favicon service', () => {
     )
   })
 
+  it('suppresses a cached domain favicon only for a page known to have no icon (EV-09)', () => {
+    const service = new FaviconService(
+      undefined,
+      new Map([
+        [
+          'example.test',
+          {
+            url: 'example.test',
+            dataUrl: 'data:image/png;base64,cached',
+            timestamp: 1,
+          },
+        ],
+      ]),
+    )
+
+    service.markPageWithoutFavicon('https://example.test/no-icon')
+
+    expect(service.getFavicon('https://example.test/no-icon')).toBe(
+      '/icon/16.png',
+    )
+    expect(service.getFavicon('https://example.test/with-icon')).toBe(
+      'data:image/png;base64,cached',
+    )
+  })
+
   it('ignores malformed persisted cache JSON during initialization', async () => {
     vi.mocked(browser.storage.local.get).mockResolvedValue({
       favicons: 'not json',

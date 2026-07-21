@@ -113,6 +113,7 @@ onMounted(async () => {
   const faviconListener = (message: {
     type?: string
     favIconUrl?: string
+    pageUrl?: string
     tab?: unknown
   }) => {
     switch (message.type) {
@@ -125,6 +126,12 @@ onMounted(async () => {
             .then(() => {
               faviconRevision.value += 1
             })
+        }
+        break
+      case 'FAVICON_CLEARED':
+        if (message.pageUrl) {
+          faviconService.markPageWithoutFavicon(message.pageUrl)
+          faviconRevision.value += 1
         }
         break
       case 'FAVICON_CACHE_UPDATED':

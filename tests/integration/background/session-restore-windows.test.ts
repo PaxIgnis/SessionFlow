@@ -63,7 +63,7 @@ describe('Firefox-restored windows', () => {
     await expect(classification).resolves.toBe('new-window')
   })
 
-  it('reconnects matching children, adds unmatched tabs, and retains absent saved children', async () => {
+  it('reconnects matching children, adds unmatched tabs, and retains absent saved children (EV-29)', async () => {
     const parent = createNote('note-parent' as UID, { isParent: true })
     const matching = createTab('tab-matching' as UID, {
       id: -1,
@@ -182,11 +182,10 @@ describe('Firefox-restored windows', () => {
         id: -1,
         state: State.SAVED,
       })
-      const savedWindow = createWindow(
-        'window-saved' as UID,
-        [savedTab],
-        { id: -1, state: State.SAVED },
-      )
+      const savedWindow = createWindow('window-saved' as UID, [savedTab], {
+        id: -1,
+        state: State.SAVED,
+      })
       const restoredTab = browserTab(101, 0)
       vi.mocked(browser.sessions.getWindowValue).mockResolvedValue({
         version: 1,
@@ -309,7 +308,7 @@ describe('Firefox-restored windows', () => {
     ['setting disabled', false, State.SAVED],
     ['target already open', true, State.OPEN],
   ] as const)(
-    'uses the new-window path when %s',
+    'uses the new-window path when %s (EV-29)',
     async (_label, enabled, targetState) => {
       Settings.values.reconnectFirefoxRestoredItems = enabled
       const target = createWindow('window-saved' as UID, [], {
@@ -326,6 +325,28 @@ describe('Firefox-restored windows', () => {
       ).resolves.toBe(false)
 
       expect(target.state).toBe(targetState)
+    },
+  )
+
+  it.each([
+    ['identity missing', undefined],
+    ['identity malformed', { version: 2, uid: 'window-saved' }],
+    ['target missing', { version: 1, uid: 'window-missing' }],
+  ] as const)(
+    'uses the new-window path when %s (EV-29)',
+    async (_label, identity) => {
+      const target = createWindow('window-saved' as UID, [], {
+        id: -1,
+        state: State.SAVED,
+      })
+      vi.mocked(browser.sessions.getWindowValue).mockResolvedValue(identity)
+
+      await expect(
+        handleCreatedWindow({ id: 30 } as browser.windows.Window),
+      ).resolves.toBe(false)
+
+      expect(target).toMatchObject({ id: -1, state: State.SAVED })
+      expect(browser.windows.get).not.toHaveBeenCalled()
     },
   )
 

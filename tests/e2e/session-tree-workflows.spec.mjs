@@ -1,4 +1,5 @@
 import { browser } from '@wdio/globals'
+import { Key } from 'webdriverio'
 import {
   cleanupSeededTabs,
   closeSeededTab,
@@ -30,6 +31,7 @@ import {
   openSessionTreePopup,
 } from './support/session-tree-popup.mjs'
 import { closeOptionsPage, openOptionsPage } from './support/options-page.mjs'
+import { withFirefoxChromeContext } from './support/firefox-chrome-context.mjs'
 
 const NOTE_TEXT = 'New note'
 const EDITED_NOTE_TEXT = 'Updated note'
@@ -772,7 +774,7 @@ describe('critical Firefox UI workflows', () => {
     await expectSingleOpenWindowWithRootTabs([SESSION_FIXTURE_TITLES.initial])
   })
 
-  it('opens a saved tab from the session tree context menu', async () => {
+  it('opens a saved tab in the last normal window while the Session Flow popup is focused (EV-27)', async () => {
     await openSeededSessionTree()
     const alphaTitle = extensionFixtureTitle(SESSION_FIXTURE_TITLES.alpha)
 
@@ -806,6 +808,18 @@ describe('critical Firefox UI workflows', () => {
       alphaTitle,
     )
     await browser.switchToWindow(popup.popupHandle)
+    const reopenedTab = await browser.executeAsync((tabId, done) => {
+      window.browser.tabs
+        .get(tabId)
+        .then((tab) => done({ ok: true, windowId: tab.windowId }))
+        .catch((error) => done({ ok: false, error: String(error) }))
+    }, reopenedTabId)
+    if (!reopenedTab.ok || reopenedTab.windowId !== windowItem.id) {
+      throw new Error(
+        reopenedTab.error ||
+          `Expected reopened tab in normal window ${windowItem.id}, received ${reopenedTab.windowId}.`,
+      )
+    }
 
     await expectSingleOpenWindowWithRootTabs([
       SESSION_FIXTURE_TITLES.initial,
@@ -1021,7 +1035,7 @@ describe('critical Firefox UI workflows', () => {
     await expectSingleOpenWindowWithRootTabs([SESSION_FIXTURE_TITLES.initial])
   })
 
-  it('reconnects a Firefox-restored tab to its saved tree location', async () => {
+  it('reconnects a saved tab after Ctrl+Shift+T restoration (EV-29)', async () => {
     await openSeededSessionTree()
     await sessionTree.updateSettings({
       reconnectFirefoxRestoredItems: true,
@@ -1061,7 +1075,7 @@ describe('critical Firefox UI workflows', () => {
       return alpha?.state === TreeItemState.Saved
     }, 'Expected the closed nested tab to remain saved before Firefox restoration.')
 
-    await restoreMostRecentFirefoxSession()
+    await restoreMostRecentFirefoxSessionWithShortcut()
     await browser.switchToWindow(popup.popupHandle)
     await sessionTree.waitForBackgroundTree((tree) => {
       const matchingTabs = windowsInTree(tree)
@@ -1446,6 +1460,21 @@ async function restoreMostRecentFirefoxSession() {
   if (!response.ok) {
     throw new Error(response.error || 'Failed to restore Firefox session')
   }
+}
+
+async function restoreMostRecentFirefoxSessionWithShortcut() {
+  await switchToPrimaryBrowserWindow()
+  await withFirefoxChromeContext(async () => {
+    await browser
+      .action('key')
+      .down(Key.Ctrl)
+      .down(Key.Shift)
+      .down('t')
+      .up('t')
+      .up(Key.Shift)
+      .up(Key.Ctrl)
+      .perform()
+  })
 }
 
 async function expectFirefoxSessionIdentity(type, browserId, expectedUid) {

@@ -11,6 +11,7 @@ export class FaviconService {
   }
 
   private cache: Map<string, FaviconCacheEntry>
+  private faviconlessPages = new Set<string>()
   private config: FaviconStorageConfig
   private initialized = false
   private initPromise: Promise<void> | undefined
@@ -158,6 +159,7 @@ export class FaviconService {
    * @returns {Promise<string>} - A promise that resolves with the favicon data URL
    */
   public getFavicon(url: string): string {
+    if (this.faviconlessPages.has(url)) return '/icon/16.png'
     // extract the domain from the URL
     const domain = this.getDomainFromUrl(url)
     // check if the favicon is in the cache
@@ -167,6 +169,14 @@ export class FaviconService {
     }
     // TODO: Implement logic if favicon is missing, before setting default icon
     return '/icon/16.png'
+  }
+
+  /**
+   * Prevents a domain-level cached favicon from being shown for a specific page
+   * that Firefox has authoritatively reported as faviconless.
+   */
+  public markPageWithoutFavicon(url: string): void {
+    if (this.isWebUrl(url)) this.faviconlessPages.add(url)
   }
 
   /**
@@ -311,8 +321,10 @@ export class FaviconService {
     url?: string,
   ): Promise<void> {
     try {
+      const pageUrl = tab?.url || url
+      if (pageUrl) this.faviconlessPages.delete(pageUrl)
       // extract the domain from the URL
-      const domain = this.getDomainFromUrl(tab?.url || url!)
+      const domain = this.getDomainFromUrl(pageUrl!)
       if (!domain) return
 
       // If the favicon URL is a data URL, store it directly

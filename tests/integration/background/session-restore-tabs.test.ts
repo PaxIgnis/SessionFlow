@@ -44,7 +44,7 @@ describe('Firefox-restored tabs', () => {
     Object.assign(Settings.values, structuredClone(DEFAULT_SETTINGS))
   })
 
-  it('reconnects a restored browser tab to its saved tree item', async () => {
+  it('reconnects a restored browser tab to its saved tree item (EV-29)', async () => {
     const parent = createNote('note-parent' as UID, { isParent: true })
     const savedTab = createTab('tab-saved' as UID, {
       id: -1,
@@ -396,7 +396,7 @@ describe('Firefox-restored tabs', () => {
       State.DISCARDED,
     ],
   ] as const)(
-    'uses the new-item path when %s',
+    'uses the new-item path when %s (EV-29)',
     async (_label, enabled, identity, targetState) => {
       Settings.values.reconnectFirefoxRestoredItems = enabled
       const target = createTab('tab-saved' as UID, {

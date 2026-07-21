@@ -20,6 +20,7 @@ export type WindowCreationDisposition =
   | 'new-window'
   | 'restored-window'
   | 'extension-generated'
+  | 'ignored-window'
 
 interface PendingWindowClassification {
   promise: Promise<WindowCreationDisposition>
@@ -74,10 +75,7 @@ async function readRestoredTabUid(tabId: number): Promise<UID | undefined> {
     ])
     if (timeoutId !== undefined) clearTimeout(timeoutId)
     if (!result.timedOut && result.uid) return result.uid
-    if (
-      !result.timedOut &&
-      attempt < RESTORED_TAB_IDENTITY_ATTEMPTS - 1
-    ) {
+    if (!result.timedOut && attempt < RESTORED_TAB_IDENTITY_ATTEMPTS - 1) {
       await new Promise<void>((resolve) => {
         setTimeout(resolve, RESTORED_TAB_IDENTITY_TIMEOUT_MS)
       })
