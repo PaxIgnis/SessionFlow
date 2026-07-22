@@ -12,6 +12,7 @@ import {
   seedSingleSessionTab,
   SESSION_FIXTURE_TITLES,
   switchToSeededHandle,
+  trackFixtureHandleByTitle,
   trackExtensionFixtureTabByTitle,
   waitForExtensionTabClosed,
 } from './support/session-fixtures.mjs'
@@ -827,6 +828,143 @@ describe('critical Firefox UI workflows', () => {
     ])
     await removeFixtureTab(alphaTitle)
     await waitForExtensionTabClosed(reopenedTabId, alphaTitle)
+    await expectSingleOpenWindowWithRootTabs([SESSION_FIXTURE_TITLES.initial])
+  })
+
+  it('coalesces rapid saved-tab double clicks into one Firefox tab', async () => {
+    await openSeededSessionTree()
+    const alphaTitle = extensionFixtureTitle(SESSION_FIXTURE_TITLES.alpha)
+    const windowItem = await onlyTrackedOpenWindow()
+    const alphaTab = await openExtensionFixtureTab(
+      seed,
+      SESSION_FIXTURE_TITLES.alpha,
+      windowItem.id,
+    )
+    await browser.switchToWindow(popup.popupHandle)
+    await sessionTree.captureContextMenuItems()
+    await sessionTree.openTabContextMenu(alphaTitle)
+    await sessionTree.clickCapturedContextMenuItem('Save')
+    await waitForExtensionTabClosed(alphaTab.browserTabId, alphaTitle)
+    const savedTree = await sessionTree.backgroundTreeSnapshot()
+    const savedTab = windowsInTree(savedTree)
+      .flatMap((item) => tabsInWindow(item))
+      .find((tab) => tab.title === alphaTitle)
+    if (!savedTab) throw new Error('Expected the saved rapid-open tab fixture.')
+
+    await sessionTree.rapidDoubleClickTab(alphaTitle)
+
+    await sessionTree.waitForBackgroundTree((tree) => {
+      const matchingTabs = windowsInTree(tree)
+        .flatMap((item) => tabsInWindow(item))
+        .filter((tab) => tab.title === alphaTitle)
+      return (
+        matchingTabs.length === 1 &&
+        matchingTabs[0].uid === savedTab.uid &&
+        matchingTabs[0].state === TreeItemState.Open
+      )
+    }, 'Expected rapid saved-tab double clicks to open one stable tree item.')
+    const reopenedTabId = await trackExtensionFixtureTabByTitle(
+      seed,
+      alphaTitle,
+    )
+    await browser.switchToWindow(popup.popupHandle)
+    const matchingBrowserTabs = await browser.executeAsync((title, done) => {
+      window.browser.tabs
+        .query({})
+        .then((tabs) => done(tabs.filter((tab) => tab.title === title).length))
+        .catch((error) => done({ error: String(error) }))
+    }, alphaTitle)
+    if (typeof matchingBrowserTabs !== 'number') {
+      throw new Error(matchingBrowserTabs.error)
+    }
+    if (matchingBrowserTabs !== 1) {
+      throw new Error(
+        `Expected one Firefox tab after rapid double click, received ${matchingBrowserTabs}.`,
+      )
+    }
+
+    await removeFixtureTab(alphaTitle)
+    await waitForExtensionTabClosed(reopenedTabId, alphaTitle)
+    await expectSingleOpenWindowWithRootTabs([SESSION_FIXTURE_TITLES.initial])
+  })
+
+  it('coalesces rapid saved-window double clicks into one Firefox window', async () => {
+    await openSeededSessionTree()
+    await switchToPrimaryBrowserWindow()
+    const secondWindowHandle = await openFixtureWindow(
+      seed,
+      SESSION_FIXTURE_TITLES.secondWindow,
+    )
+    await browser.switchToWindow(popup.popupHandle)
+    await updateWindowTitleContainingTab(
+      SESSION_FIXTURE_TITLES.secondWindow,
+      SESSION_FIXTURE_TITLES.secondWindow,
+    )
+    await sessionTree.captureContextMenuItems()
+    await sessionTree.openWindowContextMenuByText(
+      SESSION_FIXTURE_TITLES.secondWindow,
+    )
+    await sessionTree.clickCapturedContextMenuItem('Save')
+    await waitForBrowserHandleClosed(
+      secondWindowHandle,
+      SESSION_FIXTURE_TITLES.secondWindow,
+    )
+    const savedWindow = await onlySavedWindow()
+
+    await sessionTree.rapidDoubleClickWindow(
+      SESSION_FIXTURE_TITLES.secondWindow,
+    )
+
+    await sessionTree.waitForBackgroundTree((tree) => {
+      const matchingWindows = windowsInTree(tree).filter((windowItem) =>
+        tabsInWindow(windowItem).some(
+          (tab) => tab.title === SESSION_FIXTURE_TITLES.secondWindow,
+        ),
+      )
+      return (
+        matchingWindows.length === 1 &&
+        matchingWindows[0].uid === savedWindow.uid &&
+        matchingWindows[0].state === TreeItemState.Open
+      )
+    }, 'Expected rapid saved-window double clicks to open one stable tree item.')
+    const reopenedWindowBrowserTitle = extensionFixtureTitle(
+      SESSION_FIXTURE_TITLES.secondWindow,
+    )
+    await trackFixtureHandleByTitle(seed, reopenedWindowBrowserTitle)
+    await browser.switchToWindow(popup.popupHandle)
+    const matchingBrowserWindows = await browser.executeAsync((title, done) => {
+      window.browser.windows
+        .getAll({ populate: true })
+        .then((windows) =>
+          done(
+            windows.filter((browserWindow) =>
+              browserWindow.tabs?.some((tab) => tab.title === title),
+            ).length,
+          ),
+        )
+        .catch((error) => done({ error: String(error) }))
+    }, reopenedWindowBrowserTitle)
+    if (typeof matchingBrowserWindows !== 'number') {
+      throw new Error(matchingBrowserWindows.error)
+    }
+    if (matchingBrowserWindows !== 1) {
+      throw new Error(
+        `Expected one Firefox window after rapid double click, received ${matchingBrowserWindows}.`,
+      )
+    }
+
+    const reopenedTree = await sessionTree.backgroundTreeSnapshot()
+    const reopenedWindow = windowsInTree(reopenedTree).find(
+      (windowItem) => windowItem.uid === savedWindow.uid,
+    )
+    if (!reopenedWindow) {
+      throw new Error('Expected the coalesced window to remain indexed by UID.')
+    }
+    await sessionTree.sendTreeCommand({
+      action: 'closeWindow',
+      windowId: reopenedWindow.id,
+      windowUid: reopenedWindow.uid,
+    })
     await expectSingleOpenWindowWithRootTabs([SESSION_FIXTURE_TITLES.initial])
   })
 

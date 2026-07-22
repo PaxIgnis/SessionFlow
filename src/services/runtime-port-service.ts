@@ -2,6 +2,7 @@ import { Tree } from '@/services/background-tree'
 import * as Messages from '@/types/messages'
 import {
   SESSION_TREE_PORT_NAME,
+  SessionTreeCommandResult,
   SessionTreeDelta,
   SessionTreePortMessage,
   SessionTreePortRequest,
@@ -11,7 +12,7 @@ import { TopLevelTreeItem } from '@/types/session-tree'
 
 type DispatchCommand = (
   message: Messages.SessionTreeMessage,
-) => void | Promise<void>
+) => void | SessionTreeCommandResult | Promise<void | SessionTreeCommandResult>
 
 type SnapshotGetter = () => TopLevelTreeItem[]
 
@@ -48,7 +49,11 @@ function sendResponse(
   port: browser.runtime.Port,
   requestId: string,
   ok: boolean,
-  payload?: { treeItems?: TopLevelTreeItem[]; error?: string },
+  payload?: {
+    treeItems?: TopLevelTreeItem[]
+    error?: string
+    result?: SessionTreeCommandResult
+  },
 ): void {
   const response: SessionTreePortResponse = {
     type: 'response',
@@ -57,6 +62,7 @@ function sendResponse(
     version: treeVersion,
     treeItems: payload?.treeItems,
     error: payload?.error,
+    result: payload?.result,
   }
   port.postMessage(response as SessionTreePortMessage)
 }
@@ -146,8 +152,13 @@ async function handlePortMessage(
       if (!dispatchCommandHandler) {
         throw new Error('Session tree command dispatcher is not initialized')
       }
-      await dispatchCommandHandler(typedMessage.command)
-      sendResponse(port, typedMessage.requestId, true)
+      const result = await dispatchCommandHandler(typedMessage.command)
+      sendResponse(
+        port,
+        typedMessage.requestId,
+        true,
+        result ? { result } : undefined,
+      )
     } catch (error) {
       sendResponse(port, typedMessage.requestId, false, {
         error: String(error),
@@ -218,7 +229,7 @@ export function emitTreeReplaced(): void {
 
 export async function sendTreeCommand(
   message: Messages.SessionTreeMessage,
-): Promise<void> {
+): Promise<SessionTreeCommandResult | undefined> {
   const response = await sendRequest({
     type: 'command',
     requestId: createRequestId(),
@@ -227,6 +238,7 @@ export async function sendTreeCommand(
   if (!response.ok) {
     throw new Error(response.error || 'Session tree command failed')
   }
+  return response.result
 }
 
 export async function subscribeTreePort(): Promise<TopLevelTreeItem[]> {

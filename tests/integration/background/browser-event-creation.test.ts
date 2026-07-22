@@ -300,9 +300,8 @@ function mixedChildren(): WindowChild[] {
       uid: 'note-1' as UID,
       windowUid: 'window-20' as UID,
       selected: false,
-      state: State.SAVED,
       indentLevel: 1,
-      content: 'between tabs',
+      text: 'between tabs',
     },
     tab('tab-10', 10, State.OPEN),
     {
@@ -310,7 +309,6 @@ function mixedChildren(): WindowChild[] {
       uid: 'separator-1' as UID,
       windowUid: 'window-20' as UID,
       selected: false,
-      state: State.SAVED,
       indentLevel: 1,
     },
     tab('tab-saved', -1, State.SAVED),

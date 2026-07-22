@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '@/defaults/settings'
 import { Settings } from '@/services/settings'
+import type { SessionTreeMessage } from '@/types/messages'
 import {
   getDispatchCommand,
   loadBackgroundHandlers,
@@ -1457,6 +1458,96 @@ describe('background handlers', () => {
     expect(resolved).toBe(true)
   })
 
+  it('coalesces identical open commands for the same saved tab', async () => {
+    const { initializeListeners, mocks } = await loadBackgroundHandlers()
+    let resolveOpenTab: () => void = () => {}
+    mocks.openTab.mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolveOpenTab = resolve
+      }),
+    )
+    initializeListeners()
+    const dispatchCommand = getDispatchCommand(mocks.initializeSessionTreePort)
+    const message = {
+      action: 'openTab' as const,
+      tabUid: 'tab-4' as UID,
+      windowUid: 'window-1' as UID,
+    }
+
+    const first = dispatchCommand(message)
+    const second = dispatchCommand(message)
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(mocks.openTab).toHaveBeenCalledTimes(1)
+
+    resolveOpenTab()
+    await Promise.all([first, second])
+  })
+
+  it('serializes conflicting commands for the same tree item', async () => {
+    const { initializeListeners, mocks } = await loadBackgroundHandlers()
+    let resolveOpenTab: () => void = () => {}
+    mocks.openTab.mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolveOpenTab = resolve
+      }),
+    )
+    initializeListeners()
+    const dispatchCommand = getDispatchCommand(mocks.initializeSessionTreePort)
+
+    const open = dispatchCommand({
+      action: 'openTab',
+      tabUid: 'tab-4' as UID,
+      windowUid: 'window-1' as UID,
+    })
+    const save = dispatchCommand({
+      action: 'saveTab',
+      tabId: 44,
+      tabUid: 'tab-4' as UID,
+    })
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(mocks.openTab).toHaveBeenCalledTimes(1)
+    expect(mocks.saveTab).not.toHaveBeenCalled()
+
+    resolveOpenTab()
+    await Promise.all([open, save])
+
+    expect(mocks.saveTab).toHaveBeenCalledTimes(1)
+  })
+
+  it('allows commands for unrelated tree items to run concurrently', async () => {
+    const { initializeListeners, mocks } = await loadBackgroundHandlers()
+    let resolveFirstOpen: () => void = () => {}
+    mocks.openTab.mockImplementation(({ tabUid }: { tabUid: UID }) => {
+      if (tabUid !== ('tab-1' as UID)) return Promise.resolve()
+      return new Promise<void>((resolve) => {
+        resolveFirstOpen = resolve
+      })
+    })
+    initializeListeners()
+    const dispatchCommand = getDispatchCommand(mocks.initializeSessionTreePort)
+
+    const first = dispatchCommand({
+      action: 'openTab',
+      tabUid: 'tab-1' as UID,
+      windowUid: 'window-1' as UID,
+    })
+    const second = dispatchCommand({
+      action: 'openTab',
+      tabUid: 'tab-2' as UID,
+      windowUid: 'window-2' as UID,
+    })
+    await second
+
+    expect(mocks.openTab).toHaveBeenCalledTimes(2)
+
+    resolveFirstOpen()
+    await first
+  })
+
   it.each([
     {
       action: 'treeItemIndentIncrease' as const,
@@ -1560,36 +1651,38 @@ describe('background handlers', () => {
     initializeListeners()
     const dispatchCommand = getDispatchCommand(mocks.initializeSessionTreePort)
 
-    dispatchCommand({
-      action: 'moveTreeItems',
-      itemUIDs: ['note-2' as UID],
-      targetIndex: 4,
-      parentUid: 'note-parent' as UID,
-      targetWindowUid: 'window-2' as UID,
-      copy: false,
-      includeDescendants: true,
-    })
-    dispatchCommand({
-      action: 'moveWindows',
-      windowUIDs: ['window-3' as UID],
-      targetIndex: 5,
-      copy: true,
-    })
-    dispatchCommand({
-      action: 'duplicateTreeItems',
-      itemUIDs: ['note-1' as UID, 'window-1' as UID],
-    })
-    dispatchCommand({
-      action: 'treeItemIndentIncrease',
-      itemUIDs: ['note-2' as UID],
-    })
-    dispatchCommand({
-      action: 'treeItemIndentDecrease',
-      itemUIDs: ['window-2' as UID],
-    })
-    dispatchCommand({ action: 'pinTab', tabUid: 'tab-4' as UID })
-    dispatchCommand({ action: 'unpinTab', tabUid: 'tab-5' as UID })
-    dispatchCommand({ action: 'openWindowsInSameLocationUpdated' })
+    await Promise.all([
+      dispatchCommand({
+        action: 'moveTreeItems',
+        itemUIDs: ['note-2' as UID],
+        targetIndex: 4,
+        parentUid: 'note-parent' as UID,
+        targetWindowUid: 'window-2' as UID,
+        copy: false,
+        includeDescendants: true,
+      }),
+      dispatchCommand({
+        action: 'moveWindows',
+        windowUIDs: ['window-3' as UID],
+        targetIndex: 5,
+        copy: true,
+      }),
+      dispatchCommand({
+        action: 'duplicateTreeItems',
+        itemUIDs: ['note-1' as UID, 'window-1' as UID],
+      }),
+      dispatchCommand({
+        action: 'treeItemIndentIncrease',
+        itemUIDs: ['note-2' as UID],
+      }),
+      dispatchCommand({
+        action: 'treeItemIndentDecrease',
+        itemUIDs: ['window-2' as UID],
+      }),
+      dispatchCommand({ action: 'pinTab', tabUid: 'tab-4' as UID }),
+      dispatchCommand({ action: 'unpinTab', tabUid: 'tab-5' as UID }),
+      dispatchCommand({ action: 'openWindowsInSameLocationUpdated' }),
+    ])
 
     expect(mocks.moveTabs).not.toHaveBeenCalled()
     expect(mocks.moveTreeItems).toHaveBeenCalledWith(

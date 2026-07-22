@@ -98,6 +98,65 @@ describe('background browser-event detach and attach ordering', () => {
     )
   })
 
+  it('does not partially attach a tab when authoritative tab lookup rejects', async () => {
+    const { fakeBrowser, initializeListeners, mocks } =
+      await loadBackgroundHandlers()
+    mocks.Items.push(
+      treeWindow(20, 'window-source', [treeTab(10, 'window-source')]),
+      treeWindow(30, 'window-destination', []),
+    )
+    fakeBrowser.tabs.get.mockRejectedValueOnce(new Error('get failed'))
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    initializeListeners()
+
+    fakeBrowser.tabs.onDetached.emit(10, {
+      oldWindowId: 20,
+      oldPosition: 0,
+    })
+    await expect(
+      fakeBrowser.tabs.onAttached.emitAsync(10, {
+        newWindowId: 30,
+        newPosition: 0,
+      }),
+    ).resolves.toBeUndefined()
+
+    expect(mocks.addTab).not.toHaveBeenCalled()
+    expect(consoleError).toHaveBeenCalledWith(
+      'Failed to read attached tab:',
+      expect.any(Error),
+    )
+  })
+
+  it('does not partially attach a tab when destination-order lookup rejects', async () => {
+    const { fakeBrowser, initializeListeners, mocks } =
+      await loadBackgroundHandlers()
+    mocks.Items.push(
+      treeWindow(20, 'window-source', [treeTab(10, 'window-source')]),
+      treeWindow(30, 'window-destination', []),
+    )
+    fakeBrowser.tabs.get.mockResolvedValueOnce(browserTab(10, 30, 0))
+    fakeBrowser.tabs.query.mockRejectedValueOnce(new Error('query failed'))
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    initializeListeners()
+
+    fakeBrowser.tabs.onDetached.emit(10, {
+      oldWindowId: 20,
+      oldPosition: 0,
+    })
+    await expect(
+      fakeBrowser.tabs.onAttached.emitAsync(10, {
+        newWindowId: 30,
+        newPosition: 0,
+      }),
+    ).resolves.toBeUndefined()
+
+    expect(mocks.addTab).not.toHaveBeenCalled()
+    expect(consoleError).toHaveBeenCalledWith(
+      'Failed to read attached tab position:',
+      expect.any(Error),
+    )
+  })
+
   it.each([
     {
       label: 'first',

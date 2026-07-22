@@ -1,4 +1,8 @@
 import { Browser } from '@/services/background-browser'
+import {
+  claimTabRelocation,
+  removeBrowserTab,
+} from '@/services/background-command-removal'
 import { DeferredEventsQueue } from '@/services/background-deferred-events-queue'
 import { OnCreatedQueue } from '@/services/background-on-created-queue'
 import { Tree } from '@/services/background-tree'
@@ -400,42 +404,32 @@ export function getTabState(tabUid: UID): State {
  * @param {number} message.tabId - The ID of the tab to be closed.
  * @param {UID} message.tabUid - The UID of the tab to be closed.
  */
-export function closeTab(message: { tabId: number; tabUid: UID }): void {
-  if (message.tabUid !== undefined) {
-    const tab = Tree.tabsByUid.get(message.tabUid)
-    if (!tab) {
-      console.error('Error closing tab, could not find tab:', message.tabUid)
-      return
-    }
-    const windowUid = tab.windowUid
-    Tree.removeTab(message.tabUid)
-    // if this is the last open tab in the window but there are other saved tabs then
-    // update the window state to SAVED and reset id
-    const window = Tree.windowsByUid.get(windowUid)
-    if (window) {
-      const openTabs = Tree.getTabs(window.children).filter(
-        (tab) => tab.state === State.OPEN || tab.state === State.DISCARDED,
-      )
-      if (window.children.length > 0 && openTabs.length === 0) {
-        Tree.updateWindowState(window.uid, State.SAVED)
-        Tree.updateWindowId(window.uid, -1)
-      }
-    }
-  }
-  // only close the tab if it is open
-  if (message.tabId === -1 || message.tabId === 0) {
+export async function closeTab(message: {
+  tabId: number
+  tabUid: UID
+}): Promise<void> {
+  const initialTab = Tree.tabsByUid.get(message.tabUid)
+  if (!initialTab) {
+    console.error('Error closing tab, could not find tab:', message.tabUid)
     return
   }
-  browser.tabs
-    .get(message.tabId)
-    .then((tab) => {
-      if (tab !== undefined) {
-        browser.tabs.remove(message.tabId)
-      }
-    })
-    .catch((error) => {
-      console.debug('Error closing tab:', error)
-    })
+  if (message.tabId !== -1 && message.tabId !== 0) {
+    await removeBrowserTab(message.tabId)
+  }
+
+  const tab = Tree.tabsByUid.get(message.tabUid)
+  if (!tab) return
+  const windowUid = tab.windowUid
+  Tree.removeTab(message.tabUid)
+  const window = Tree.windowsByUid.get(windowUid)
+  if (!window) return
+  const openTabs = Tree.getTabs(window.children).filter(
+    (child) => child.state === State.OPEN || child.state === State.DISCARDED,
+  )
+  if (window.children.length > 0 && openTabs.length === 0) {
+    Tree.updateWindowState(window.uid, State.SAVED)
+    Tree.updateWindowId(window.uid, -1)
+  }
 }
 
 /**
@@ -632,6 +626,15 @@ export async function openTab(
     try {
       tab = await OnCreatedQueue.createTabAndWait(properties)
       if (tab.id === undefined) throw new Error('Tab creation returned no ID')
+      if (tab.windowId !== sessionTreeWindow.id) {
+        await browser.tabs.remove(tab.id).catch((removeError) => {
+          console.error(
+            'Error removing tab created in wrong window:',
+            removeError,
+          )
+        })
+        throw new Error('Tab creation returned an unexpected window ID')
+      }
     } catch (error) {
       await containerRecovery.rollback()
       Tree.updateTabState(message.tabUid, State.SAVED)
@@ -655,32 +658,30 @@ export async function openTab(
  * @param {number} message.tabId - The ID of the tab to be saved.
  * @param {UID} message.tabUid - The UID of the tab to be saved.
  */
-export function saveTab(message: { tabId: number; tabUid: UID }): void {
-  if (message.tabUid !== undefined) {
-    const tab = Tree.tabsByUid.get(message.tabUid)
-    if (!tab) {
-      console.error('Error saving tab, could not find tab:', message.tabUid)
-      return
-    }
-    if (Tree.getTabState(message.tabUid) === State.SAVED) {
-      // tab is already saved, do nothing
-      return
-    }
-    // if this is the last open tab in the window, update the window state to SAVED and reset id
-    const window = Tree.windowsByUid.get(tab.windowUid)
-    if (window) {
-      const openTabs = Tree.getTabs(window.children).filter(
-        (tab) => tab.state === State.OPEN || tab.state === State.DISCARDED,
-      )
-      if (openTabs.length === 1) {
-        Tree.saveWindow(window.uid)
-      }
-    }
-    Tree.setTabSaved(message.tabUid)
+export async function saveTab(message: {
+  tabId: number
+  tabUid: UID
+}): Promise<void> {
+  const initialTab = Tree.tabsByUid.get(message.tabUid)
+  if (!initialTab) {
+    console.error('Error saving tab, could not find tab:', message.tabUid)
+    return
   }
-  browser.tabs.remove(message.tabId).catch((error) => {
-    console.error('Error saving tab:', error)
-  })
+  if (initialTab.state === State.SAVED) return
+  if (message.tabId !== -1 && message.tabId !== 0) {
+    await removeBrowserTab(message.tabId)
+  }
+
+  const tab = Tree.tabsByUid.get(message.tabUid)
+  if (!tab) return
+  const window = Tree.windowsByUid.get(tab.windowUid)
+  if (window) {
+    const openTabs = Tree.getTabs(window.children).filter(
+      (child) => child.state === State.OPEN || child.state === State.DISCARDED,
+    )
+    if (openTabs.length === 1) Tree.saveWindow(window.uid)
+  }
+  Tree.setTabSaved(message.tabUid)
 }
 
 /**
@@ -1274,7 +1275,7 @@ export async function moveTab(
       ? true
       : false
 
-  const currentIndexInBrowser = Tree.getTabs(targetWindow.children)
+  const currentIndexInBrowser = Tree.getTabs(sourceWindow?.children ?? [])
     .filter((t) => t.state === State.OPEN || t.state === State.DISCARDED)
     .findIndex((t) => t.uid === tab.uid)
 
@@ -1287,39 +1288,43 @@ export async function moveTab(
     return tab.uid
   }
 
-  // remove and add tab in session tree to simulate move
-  removeTab(tab.uid, emitDelta)
-
-  addTab(
-    tabActive,
-    targetWindow.uid,
-    tab.id,
-    tab.selected,
-    tab.state,
-    tab.title,
-    tab.url,
-    tab.pinned || false,
-    targetIndex,
-    effectiveParentUid,
-    tab.uid,
-    emitDelta,
-    tab.tabGroup,
-    tab.container,
+  const targetChildrenWithoutTab = targetWindow.children.filter(
+    (item) => item.uid !== tab.uid,
   )
-
-  const targetIndexInBrowser = targetWindow.children.filter(
+  const targetIndexInBrowser = targetChildrenWithoutTab.filter(
     (t, index) =>
       index < targetIndex &&
       t.type === TreeItemType.TAB &&
-      // t.uid !== tab.uid && // removed this line to allow moving within same window
       (t.state === State.OPEN || t.state === State.DISCARDED),
   ).length
+
+  const commitTreeMove = (newTabId: number = tab.id): void => {
+    removeTab(tab.uid, emitDelta)
+    addTab(
+      tabActive,
+      targetWindow.uid,
+      tab.id,
+      tab.selected,
+      tab.state,
+      tab.title,
+      tab.url,
+      tab.pinned || false,
+      targetIndex,
+      effectiveParentUid,
+      tab.uid,
+      emitDelta,
+      tab.tabGroup,
+      tab.container,
+    )
+    if (newTabId !== tab.id) Tree.updateTabId(tab.uid, newTabId)
+  }
 
   // if tab is open in browser but target window is not open then create the window first
   if (
     (tab.state === State.OPEN || tab.state === State.DISCARDED) &&
     targetWindow.state === State.SAVED
   ) {
+    commitTreeMove()
     Tree.updateWindowState(targetWindowUid, State.OPEN)
     const properties: browser.windows._CreateCreateData = {}
     properties.tabId = tab.id
@@ -1371,36 +1376,27 @@ export async function moveTab(
       tab.windowUid === targetWindowUid &&
       currentIndexInBrowser === targetIndexInBrowser
     ) {
+      commitTreeMove()
       return tab.uid
     }
-    // TODO: create a 'moveTabAndWait' flow to safeguard against the tabid changing after move?
-    // handle move
-    await browser.tabs
-      .move(tab.id, {
+    const releaseRelocation = claimTabRelocation(tab.id)
+    let moved: browser.tabs.Tab | browser.tabs.Tab[]
+    try {
+      moved = await browser.tabs.move(tab.id, {
         windowId: targetWindow.id,
         index: targetIndexInBrowser,
       })
-      .catch((error) => {
-        console.error('Error moving tab in browser:', error)
-        return
-      })
-      .then((moved) => {
-        const movedTab = Array.isArray(moved) ? moved[0] : moved
-        // tab moved successfully in browser, now verify tab id in session tree matches
-        const newTab = targetWindow.children.find(
-          (t): t is Tab => t.type === TreeItemType.TAB && t.id === movedTab?.id,
-        )
-        if (!newTab) console.error('Moved tab not found in session tree')
-        if (newTab && newTab.id !== tab.id)
-          console.error(
-            'Tab ID mismatch after move. TabID:',
-            newTab.id,
-            'Expected:',
-            tab.id,
-          )
-      })
+    } finally {
+      releaseRelocation()
+    }
+    const movedTab = Array.isArray(moved) ? moved[0] : moved
+    if (movedTab?.id === undefined) {
+      throw new Error('Tab move returned no tab ID')
+    }
+    commitTreeMove(movedTab.id)
     return tab.uid
   }
+  commitTreeMove()
   return tab.uid
 }
 

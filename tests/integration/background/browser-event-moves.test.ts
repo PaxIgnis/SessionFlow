@@ -88,17 +88,15 @@ describe('background browser-event move ordering', () => {
           uid: 'note-child' as UID,
           windowUid: 'window-20' as UID,
           selected: false,
-          state: State.SAVED,
           indentLevel: 2,
           parentUid: 'tab-10' as UID,
-          content: 'Child note',
+          text: 'Child note',
         },
         {
           type: TreeItemType.SEPARATOR,
           uid: 'separator-child' as UID,
           windowUid: 'window-20' as UID,
           selected: false,
-          state: State.SAVED,
           indentLevel: 2,
           parentUid: 'tab-10' as UID,
         },
@@ -147,6 +145,31 @@ describe('background browser-event move ordering', () => {
     expect(mocks.updateNote).not.toHaveBeenCalled()
     expect(mocks.updateSeparator).not.toHaveBeenCalled()
     expect(mocks.recomputeSessionTree).not.toHaveBeenCalled()
+  })
+
+  it('leaves the tree unchanged when tab-order lookup rejects', async () => {
+    const { fakeBrowser, initializeListeners, mocks } =
+      await loadBackgroundHandlers()
+    mocks.Items.push(treeWindow([treeTab(10), treeTab(11)]))
+    fakeBrowser.tabs.query.mockRejectedValueOnce(new Error('query failed'))
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    initializeListeners()
+
+    await expect(
+      fakeBrowser.tabs.onMoved.emitAsync(11, {
+        windowId: 20,
+        fromIndex: 1,
+        toIndex: 0,
+      }),
+    ).resolves.toBeUndefined()
+
+    expect(mocks.removeTab).not.toHaveBeenCalled()
+    expect(mocks.addTab).not.toHaveBeenCalled()
+    expect(mocks.recomputeSessionTree).not.toHaveBeenCalled()
+    expect(consoleError).toHaveBeenCalledWith(
+      'Failed to reconcile moved tab:',
+      expect.any(Error),
+    )
   })
 
   it.each(['group-first', 'tab-first'] as const)(

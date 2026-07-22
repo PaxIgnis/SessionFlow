@@ -13,6 +13,16 @@ import {
 const NO_GROUP = -1
 const groupsByBrowserId = new Map<number, TabGroupMetadata>()
 
+export interface TabGroupRestoreFailure {
+  groupUid: UID
+  stage: 'group' | 'read'
+  error: string
+}
+
+export interface TabGroupRestoreResult {
+  failures: TabGroupRestoreFailure[]
+}
+
 function cloneGroup(
   group: TabGroupMetadata,
   id: number = group.id,
@@ -309,9 +319,12 @@ export async function restoreTabGroup(tabUid: UID): Promise<void> {
 }
 
 /** Recreates every persisted group whose tabs are live in a window. */
-export async function restoreWindowTabGroups(windowUid: UID): Promise<void> {
+export async function restoreWindowTabGroups(
+  windowUid: UID,
+): Promise<TabGroupRestoreResult> {
+  const result: TabGroupRestoreResult = { failures: [] }
   const targetWindow = Tree.windowsByUid.get(windowUid)
-  if (!targetWindow || targetWindow.id < 0) return
+  if (!targetWindow || targetWindow.id < 0) return result
 
   const groupedTabs = new Map<UID, Tab[]>()
   for (const tab of Tree.getTabs(targetWindow.children)) {
@@ -328,33 +341,69 @@ export async function restoreWindowTabGroups(windowUid: UID): Promise<void> {
       (tab) => (tab.tabGroup?.id ?? NO_GROUP) !== NO_GROUP,
     )?.tabGroup?.id
 
-    let groupId: number
-    if (existingGroupId !== undefined) {
-      try {
-        groupId = await browser.tabs.group({
-          groupId: existingGroupId,
-          tabIds,
-        })
-      } catch {
+    let groupId: number | undefined
+    try {
+      if (existingGroupId !== undefined) {
+        try {
+          groupId = await browser.tabs.group({
+            groupId: existingGroupId,
+            tabIds,
+          })
+        } catch {
+          groupId = await browser.tabs.group({
+            tabIds,
+            createProperties: { windowId: targetWindow.id },
+          })
+        }
+      } else {
         groupId = await browser.tabs.group({
           tabIds,
           createProperties: { windowId: targetWindow.id },
         })
       }
-    } else {
-      groupId = await browser.tabs.group({
-        tabIds,
-        createProperties: { windowId: targetWindow.id },
+    } catch (error) {
+      for (const tab of tabs) {
+        Tree.updateTab(
+          { tabUid: tab.uid },
+          { tabGroup: cloneGroup(persistedGroup, NO_GROUP) },
+        )
+      }
+      result.failures.push({
+        groupUid: persistedGroup.uid,
+        stage: 'group',
+        error: String(error),
       })
+      continue
     }
 
-    const updatedGroup = await browser.tabGroups.update(groupId, {
-      title: persistedGroup.title,
-      color: persistedGroup.color,
-      collapsed: persistedGroup.collapsed,
-    })
-    await syncBrowserTabGroup(updatedGroup)
+    for (const tab of tabs) {
+      Tree.updateTab(
+        { tabUid: tab.uid },
+        { tabGroup: cloneGroup(persistedGroup, groupId) },
+      )
+    }
+
+    try {
+      const updatedGroup = await browser.tabGroups.update(groupId, {
+        title: persistedGroup.title,
+        color: persistedGroup.color,
+        collapsed: persistedGroup.collapsed,
+      })
+      await syncBrowserTabGroup(updatedGroup)
+    } catch (updateError) {
+      try {
+        const actualGroup = await browser.tabGroups.get(groupId)
+        await syncBrowserTabGroup(actualGroup)
+      } catch (readError) {
+        result.failures.push({
+          groupUid: persistedGroup.uid,
+          stage: 'read',
+          error: `${updateError}; ${readError}`,
+        })
+      }
+    }
   }
+  return result
 }
 
 /**

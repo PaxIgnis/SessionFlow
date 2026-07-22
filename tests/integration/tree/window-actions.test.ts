@@ -322,7 +322,7 @@ describe('window actions', () => {
     expectTreeInvariants()
   })
 
-  it('removes an open tree window immediately and then closes the browser window', async () => {
+  it('removes an open tree window after the browser window closes', async () => {
     const tab = createTab('tab-1' as UID, { id: 10, state: State.OPEN })
     const note = createNote('note-1' as UID)
     const window = createWindow('window-1' as UID, [tab, note], {
@@ -333,12 +333,17 @@ describe('window actions', () => {
     const removeSettled = new Promise<void>((resolve) => {
       resolveRemove = resolve
     })
-    vi.mocked(browser.windows.get).mockResolvedValue({
-      id: window.id,
-    } as browser.windows.Window)
     vi.mocked(browser.windows.remove).mockReturnValue(removeSettled)
 
-    Tree.closeWindow({ windowId: window.id, windowUid: window.uid })
+    const command = Tree.closeWindow({
+      windowId: window.id,
+      windowUid: window.uid,
+    })
+
+    expect(Tree.windowsByUid.get(window.uid)).toBe(window)
+    expect(browser.windows.remove).toHaveBeenCalledWith(window.id)
+    resolveRemove()
+    await command
 
     expect(Tree.Items).toEqual([])
     expect(Tree.windowsByUid.has(window.uid)).toBe(false)
@@ -347,35 +352,27 @@ describe('window actions', () => {
     expect(Tree.existingUidsSet.has(window.uid)).toBe(false)
     expect(Tree.existingUidsSet.has(tab.uid)).toBe(false)
     expect(Tree.existingUidsSet.has(note.uid)).toBe(false)
-    expect(browser.windows.get).toHaveBeenCalledWith(window.id)
-    await vi.waitFor(() => {
-      expect(browser.windows.remove).toHaveBeenCalledWith(window.id)
-    })
-    resolveRemove()
-    await removeSettled
     expectTreeInvariants()
   })
 
-  it('logs debug and skips browser removal when a closed tree window no longer exists in the browser', async () => {
-    const consoleDebug = vi.spyOn(console, 'debug').mockImplementation(() => {})
+  it('commits close when the browser window is already gone', async () => {
     const tab = createTab('tab-1' as UID, { id: 10, state: State.OPEN })
     const window = createWindow('window-1' as UID, [tab], {
       id: 20,
       state: State.OPEN,
     })
-    vi.mocked(browser.windows.get).mockRejectedValue(new Error('not found'))
+    vi.mocked(browser.windows.remove).mockRejectedValue(
+      new Error('Invalid window ID: 20'),
+    )
+    vi.mocked(browser.windows.get).mockRejectedValue(
+      new Error('Invalid window ID: 20'),
+    )
 
-    Tree.closeWindow({ windowId: window.id, windowUid: window.uid })
+    await Tree.closeWindow({ windowId: window.id, windowUid: window.uid })
 
     expect(Tree.windowsByUid.has(window.uid)).toBe(false)
     expect(Tree.tabsByUid.has(tab.uid)).toBe(false)
-    await vi.waitFor(() => {
-      expect(consoleDebug).toHaveBeenCalledWith(
-        'Window ID not found.',
-        window.id,
-      )
-    })
-    expect(browser.windows.remove).not.toHaveBeenCalled()
+    expect(browser.windows.remove).toHaveBeenCalledWith(window.id)
     expectTreeInvariants()
   })
 
@@ -397,7 +394,10 @@ describe('window actions', () => {
       state: State.OPEN,
     })
 
-    Tree.saveAndRemoveWindow({ windowId: window.id, windowUid: window.uid })
+    await Tree.saveAndRemoveWindow({
+      windowId: window.id,
+      windowUid: window.uid,
+    })
 
     expect(window.state).toBe(State.SAVED)
     expect(window.id).toBe(-1)
@@ -415,8 +415,7 @@ describe('window actions', () => {
     expectTreeInvariants()
   })
 
-  it('logs an error when browser removal fails after saving a window', async () => {
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+  it('keeps a window open when browser removal fails', async () => {
     const tab = createTab('tab-1' as UID, {
       active: true,
       id: 10,
@@ -430,19 +429,21 @@ describe('window actions', () => {
     })
     const removeError = new Error('remove failed')
     vi.mocked(browser.windows.remove).mockRejectedValue(removeError)
+    vi.mocked(browser.windows.get).mockResolvedValue({
+      id: window.id,
+    } as browser.windows.Window)
 
-    Tree.saveAndRemoveWindow({ windowId: window.id, windowUid: window.uid })
+    await expect(
+      Tree.saveAndRemoveWindow({
+        windowId: window.id,
+        windowUid: window.uid,
+      }),
+    ).rejects.toBe(removeError)
 
-    expect(window.state).toBe(State.SAVED)
-    expect(window.id).toBe(-1)
-    expect(tab.state).toBe(State.SAVED)
-    expect(tab.id).toBe(-1)
-    await vi.waitFor(() => {
-      expect(consoleError).toHaveBeenCalledWith(
-        'Error saving window:',
-        removeError,
-      )
-    })
+    expect(window.state).toBe(State.OPEN)
+    expect(window.id).toBe(20)
+    expect(tab.state).toBe(State.OPEN)
+    expect(tab.id).toBe(10)
     expectTreeInvariants()
   })
 
@@ -777,6 +778,48 @@ describe('window actions', () => {
     })
     expect(firstTab.tabGroup?.id).toBe(23)
     expect(secondTab.tabGroup?.id).toBe(23)
+    expectTreeInvariants()
+  })
+
+  it('returns one warning without rolling back a window after group restoration fails', async () => {
+    Settings.values.openWindowWithTabsDiscarded = false
+    Settings.values.openWindowsInSameLocation = false
+    const tab = createTab('tab-first' as UID, {
+      id: -1,
+      state: State.SAVED,
+      tabGroup: {
+        uid: 'stable-group' as UID,
+        id: -1,
+        title: 'Research',
+        color: 'blue',
+        collapsed: false,
+      },
+    })
+    const window = createWindow('window-1' as UID, [tab], {
+      id: -1,
+      state: State.SAVED,
+    })
+    vi.spyOn(OnCreatedQueue, 'createWindowAndWait').mockResolvedValue({
+      id: 30,
+      tabs: [{ id: 101 }],
+    } as browser.windows.Window)
+    vi.mocked(browser.tabs.group).mockRejectedValue(new Error('group failed'))
+
+    const result = await Tree.openWindow({ windowUid: window.uid })
+
+    expect(result).toEqual({
+      warnings: [
+        {
+          code: 'tab-group-restore-partial',
+          message:
+            'Session Flow opened the window, but 1 tab group could not be fully restored.',
+          affectedCount: 1,
+        },
+      ],
+    })
+    expect(window).toMatchObject({ id: 30, state: State.OPEN })
+    expect(tab).toMatchObject({ id: 101, state: State.OPEN })
+    expect(browser.windows.remove).not.toHaveBeenCalledWith(30)
     expectTreeInvariants()
   })
 })

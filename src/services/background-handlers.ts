@@ -1,6 +1,12 @@
 import * as Actions from '@/services/background-actions'
 import { updateBadge } from '@/services/background-actions'
 import { Browser } from '@/services/background-browser'
+import { coordinateCommand } from '@/services/background-command-coordinator'
+import {
+  isCommandOwnedTabRemoval,
+  isCommandOwnedTabRelocation,
+  isCommandOwnedWindowRemoval,
+} from '@/services/background-command-removal'
 import { OnCreatedQueue } from '@/services/background-on-created-queue'
 import { Tree } from '@/services/background-tree'
 import { initializeSessionTreePort } from '@/services/runtime-port-service'
@@ -8,6 +14,7 @@ import * as SessionRestore from '@/services/background-session-restore'
 import { Selection } from '@/services/selection'
 import { Settings } from '@/services/settings'
 import * as Messages from '@/types/messages'
+import type { SessionTreeCommandResult } from '@/types/runtime-port-service'
 import {
   LoadingStatus,
   State,
@@ -177,6 +184,7 @@ async function windowsOnCreated(window: browser.windows.Window): Promise<void> {
  * If the window only has 1 tab, save the window instead of removing.
  */
 function windowsOnRemoved(windowId: number): void {
+  if (isCommandOwnedWindowRemoval(windowId)) return
   Tree.removeSessionWindowId(windowId)
   const window = Tree.Items.filter(Tree.isWindow).find((w) => w.id === windowId)
   if (!window) {
@@ -241,9 +249,11 @@ async function tabsOnCreated(tab: browser.tabs.Tab): Promise<void> {
     console.error('Tab or Window ID is undefined')
     return
   }
-  const creationToken = Symbol(`tab-created-${tab.id}`)
-  pendingDetachedTabs.delete(tab.id)
-  pendingTabCreations.set(tab.id, creationToken)
+  const tabId = tab.id
+  const windowId = tab.windowId
+  const creationToken = Symbol(`tab-created-${tabId}`)
+  pendingDetachedTabs.delete(tabId)
+  pendingTabCreations.set(tabId, creationToken)
   try {
     const trackedWindow = Tree.Items.filter(Tree.isWindow).find(
       (window) => window.id === tab.windowId,
@@ -299,7 +309,10 @@ async function tabsOnCreated(tab: browser.tabs.Tab): Promise<void> {
       ) {
         return
       }
-      await addBrowserTabToTrackedWindow(latestTab, currentWindow)
+      await addBrowserTabToTrackedWindow(
+        { ...latestTab, id: tabId, windowId },
+        currentWindow,
+      )
       return
     }
     const restoredTabHandled = await SessionRestore.handleCreatedTab(tab)
@@ -313,7 +326,10 @@ async function tabsOnCreated(tab: browser.tabs.Tab): Promise<void> {
       if (!window) {
         return
       }
-      await addBrowserTabToTrackedWindow(tab, window)
+      await addBrowserTabToTrackedWindow(
+        { ...tab, id: tabId, windowId },
+        window,
+      )
     }
   } finally {
     if (pendingTabCreations.get(tab.id) === creationToken) {
@@ -377,6 +393,7 @@ function tabsOnRemoved(
   console.debug('Tab Removed:', tabId, removeInfo)
   pendingTabCreations.delete(tabId)
   pendingDetachedTabs.delete(tabId)
+  if (isCommandOwnedTabRemoval(tabId)) return
   if (removeInfo.windowId === undefined) {
     console.error('Window ID is undefined')
     return
@@ -523,6 +540,7 @@ async function tabsOnUpdated(
       authoritativeTab = currentTab
     } catch (error) {
       console.debug('Failed to refresh completed tab update:', error)
+      return
     }
   }
   const tabContents: Partial<Tab> = {
@@ -563,7 +581,11 @@ async function tabsOnMoved(
   moveInfo: browser.tabs._OnMovedMoveInfo,
 ): Promise<void> {
   console.debug('Tab Moved:', tabId, moveInfo)
-  if (SessionRestore.isTabRelocating(tabId)) return
+  if (
+    SessionRestore.isTabRelocating(tabId) ||
+    isCommandOwnedTabRelocation(tabId)
+  )
+    return
   if (
     moveInfo.windowId === undefined ||
     moveInfo.toIndex === undefined ||
@@ -585,9 +607,15 @@ async function tabsOnMoved(
   const moveToken = Symbol(`window-move-${moveInfo.windowId}`)
   pendingWindowMoves.set(moveInfo.windowId, moveToken)
   try {
-    const openBrowserTabs = await browser.tabs.query({
-      windowId: moveInfo.windowId,
-    })
+    let openBrowserTabs: browser.tabs.Tab[]
+    try {
+      openBrowserTabs = await browser.tabs.query({
+        windowId: moveInfo.windowId,
+      })
+    } catch (error) {
+      console.error('Failed to reconcile moved tab:', error)
+      return
+    }
     if (pendingWindowMoves.get(moveInfo.windowId) !== moveToken) return
     if (!openSessionTreeTabs || !openBrowserTabs) {
       console.error('Error getting tabs')
@@ -776,7 +804,11 @@ function tabsOnDetached(
   detachInfo: browser.tabs._OnDetachedDetachInfo,
 ): void {
   console.debug('Tab Detached:', tabId, detachInfo)
-  if (SessionRestore.isTabRelocating(tabId)) return
+  if (
+    SessionRestore.isTabRelocating(tabId) ||
+    isCommandOwnedTabRelocation(tabId)
+  )
+    return
   if (detachInfo.oldWindowId === undefined || tabId === undefined) {
     console.error('Tab or Window ID is undefined')
     return
@@ -811,7 +843,11 @@ async function tabsOnAttached(
   attachInfo: browser.tabs._OnAttachedAttachInfo,
 ): Promise<void> {
   console.debug('Tab Attached:', tabId, attachInfo)
-  if (SessionRestore.isTabRelocating(tabId)) return
+  if (
+    SessionRestore.isTabRelocating(tabId) ||
+    isCommandOwnedTabRelocation(tabId)
+  )
+    return
   const extensionTab = await OnCreatedQueue.isNewTabExtensionGenerated(tabId)
   if (extensionTab) {
     pendingDetachedTabs.delete(tabId)
@@ -845,7 +881,13 @@ async function tabsOnAttached(
       return
     }
   }
-  const tab = await browser.tabs.get(tabId)
+  let tab: browser.tabs.Tab
+  try {
+    tab = await browser.tabs.get(tabId)
+  } catch (error) {
+    console.error('Failed to read attached tab:', error)
+    return
+  }
   if (
     transferToken &&
     pendingDetachedTabs.get(tabId)?.token !== transferToken
@@ -864,10 +906,16 @@ async function tabsOnAttached(
   if (existingTab) return
 
   // get the id of the tab to the right in the browser
-  const tabToRight = await browser.tabs.query({
-    windowId: attachInfo.newWindowId,
-    index: tab.index + 1,
-  })
+  let tabToRight: browser.tabs.Tab[]
+  try {
+    tabToRight = await browser.tabs.query({
+      windowId: attachInfo.newWindowId,
+      index: tab.index + 1,
+    })
+  } catch (error) {
+    console.error('Failed to read attached tab position:', error)
+    return
+  }
   if (
     transferToken &&
     pendingDetachedTabs.get(tabId)?.token !== transferToken
@@ -993,21 +1041,70 @@ function onMessage(message: Messages.SessionTreeMessage): void {
 
 async function dispatchCommand(
   message: Messages.SessionTreeMessage,
-): Promise<void> {
+): Promise<void | SessionTreeCommandResult> {
+  const coordination = getCommandCoordination(message)
+  if (coordination) {
+    return coordinateCommand({
+      itemUids: coordination.itemUids,
+      operationKey: JSON.stringify(message),
+      coalesce: coordination.coalesce,
+      run: () => dispatchCommandNow(message),
+    })
+  }
+
+  return dispatchCommandNow(message)
+}
+
+function getCommandCoordination(message: Messages.SessionTreeMessage):
+  | {
+      itemUids: UID[]
+      coalesce: boolean
+    }
+  | undefined {
+  if (
+    message.action === 'openTab' ||
+    message.action === 'closeTab' ||
+    message.action === 'saveTab'
+  ) {
+    return { itemUids: [message.tabUid], coalesce: true }
+  }
+  if (
+    message.action === 'openWindow' ||
+    message.action === 'closeWindow' ||
+    message.action === 'saveWindow'
+  ) {
+    return { itemUids: [message.windowUid], coalesce: true }
+  }
+  if (
+    message.action === 'moveTreeItems' ||
+    message.action === 'duplicateTreeItems' ||
+    message.action === 'treeItemIndentIncrease' ||
+    message.action === 'treeItemIndentDecrease'
+  ) {
+    return { itemUids: message.itemUIDs, coalesce: false }
+  }
+  if (message.action === 'moveWindows') {
+    return { itemUids: message.windowUIDs, coalesce: false }
+  }
+}
+
+async function dispatchCommandNow(
+  message: Messages.SessionTreeMessage,
+): Promise<void | SessionTreeCommandResult> {
   if (message.action === 'closeTab') {
-    Tree.closeTab(message)
+    await Tree.closeTab(message)
   } else if (message.action === 'saveTab') {
-    Tree.saveTab(message)
+    await Tree.saveTab(message)
   } else if (message.action === 'openTab') {
     await Tree.openTab(message)
   } else if (message.action === 'reloadTab') {
     Browser.reloadTab(message)
   } else if (message.action === 'closeWindow') {
-    Tree.closeWindow(message)
+    await Tree.closeWindow(message)
   } else if (message.action === 'saveWindow') {
-    Tree.saveAndRemoveWindow(message)
+    await Tree.saveAndRemoveWindow(message)
   } else if (message.action === 'openWindow') {
-    await Tree.openWindow(message)
+    return Tree.openWindow(message)
   } else if (message.action === 'focusTab') {
     Browser.focusTabAndWindow(message)
   } else if (message.action === 'focusWindow') {
@@ -1061,7 +1158,11 @@ async function dispatchCommand(
       message.includeDescendants,
     )
   } else if (message.action === 'moveWindows') {
-    Tree.moveWindows(message.windowUIDs, message.targetIndex, message.copy)
+    await Tree.moveWindows(
+      message.windowUIDs,
+      message.targetIndex,
+      message.copy,
+    )
   } else if (message.action === 'duplicateTreeItems') {
     await Tree.duplicateTreeItems(message.itemUIDs)
   } else if (message.action === 'treeItemIndentIncrease') {

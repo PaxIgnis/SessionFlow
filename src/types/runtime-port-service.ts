@@ -24,6 +24,16 @@ export type SessionTreePortRequest =
   | SessionTreePortSubscribeRequest
   | SessionTreePortCommandRequest
 
+export interface SessionTreeCommandWarning {
+  code: 'tab-group-restore-partial'
+  message: string
+  affectedCount: number
+}
+
+export interface SessionTreeCommandResult {
+  warnings?: SessionTreeCommandWarning[]
+}
+
 export interface SessionTreePortResponse {
   type: 'response'
   requestId: string
@@ -31,6 +41,7 @@ export interface SessionTreePortResponse {
   version: number
   treeItems?: TopLevelTreeItem[]
   error?: string
+  result?: SessionTreeCommandResult
 }
 
 export type SessionTreeDelta =

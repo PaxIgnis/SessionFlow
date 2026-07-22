@@ -27,6 +27,8 @@ describe('background focus and window-type policy', () => {
         id: 30,
         type,
         incognito: false,
+        focused: false,
+        alwaysOnTop: false,
         tabs: [],
       } as browser.windows.Window)
 
@@ -55,6 +57,8 @@ describe('background focus and window-type policy', () => {
         id: 30,
         type: 'normal',
         incognito,
+        focused: false,
+        alwaysOnTop: false,
         tabs: [],
       } as browser.windows.Window)
 

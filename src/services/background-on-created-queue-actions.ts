@@ -1,5 +1,34 @@
 import { OnCreatedQueue } from '@/services/background-on-created-queue'
 
+const CREATION_EVENT_TIMEOUT_MS = 15000
+const CREATION_EVENT_POLL_MS = 100
+
+function waitForListenerResolution(
+  pendingItems: Map<number, { listenerResolved: boolean; complete: boolean }>,
+  id: number,
+  itemType: 'tab' | 'window',
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let elapsedMs = 0
+    const interval = setInterval(() => {
+      const item = pendingItems.get(id)
+      if (item?.listenerResolved) {
+        item.complete = true
+        clearInterval(interval)
+        resolve()
+        return
+      }
+      elapsedMs += CREATION_EVENT_POLL_MS
+      if (elapsedMs >= CREATION_EVENT_TIMEOUT_MS) {
+        clearInterval(interval)
+        reject(
+          new Error(`Timed out waiting for Firefox ${itemType} creation event`),
+        )
+      }
+    }, CREATION_EVENT_POLL_MS)
+  })
+}
+
 /**
  * Adds a tab to the pending tabs queue or updates an existing entry.
  * Tabs in this queue are tracked to coordinate between tab creation
@@ -167,23 +196,25 @@ export async function createTabAndWait(
     OnCreatedQueue.pendingTabCount--
     throw error
   })
-  const waitForTabId = (tabId: number): Promise<void> => {
-    return new Promise((resolve) => {
-      const interval = setInterval(() => {
-        const tab = OnCreatedQueue.pendingTabs.get(tabId)
-        if (tab && tab.listenerResolved) {
-          tab.complete = true
-          clearInterval(interval)
-          resolve()
-        }
-      }, 100)
-    })
-  }
-  if (tab.id !== undefined) {
-    addPendingTabToQueue(tab.id, true, false)
-    await waitForTabId(tab.id)
-  } else {
+  if (tab.id === undefined) {
     console.error('Tab ID is undefined')
+    OnCreatedQueue.pendingTabCount = Math.max(
+      0,
+      OnCreatedQueue.pendingTabCount - 1,
+    )
+    throw new Error('Tab creation returned no ID')
+  }
+  addPendingTabToQueue(tab.id, true, false)
+  try {
+    await waitForListenerResolution(OnCreatedQueue.pendingTabs, tab.id, 'tab')
+  } catch (error) {
+    OnCreatedQueue.pendingTabs.delete(tab.id)
+    OnCreatedQueue.pendingTabCount = Math.max(
+      0,
+      OnCreatedQueue.pendingTabCount - 1,
+    )
+    await browser.tabs.remove(tab.id).catch(() => undefined)
+    throw error
   }
   return tab
 }
@@ -249,6 +280,12 @@ export async function createWindowAndWait(
       throw error
     })
   try {
+    if (window.id === undefined || !window.tabs) {
+      throw new Error('Window creation failed: ID or tabs undefined')
+    }
+    if (tabCount > 0 && window.tabs.some((tab) => tab.id === undefined)) {
+      throw new Error('Tab ID is undefined')
+    }
     // Update window position if provided. This is necessary
     // because top/left are ignored before Firefox 109.
     if (properties?.left && properties?.top) {
@@ -258,43 +295,22 @@ export async function createWindowAndWait(
       })
     }
 
-    const waitForWindowId = (windowId: number): Promise<void> => {
-      return new Promise((resolve) => {
-        const interval = setInterval(() => {
-          const window = OnCreatedQueue.pendingWindows.get(windowId)
-          if (window && window.listenerResolved) {
-            window.complete = true
-            clearInterval(interval)
-            resolve()
-          }
-        }, 100)
-      })
-    }
-    if (!window.id || !window.tabs) {
-      throw new Error('Window creation failed: ID or tabs undefined')
-    }
     addPendingWindowToQueue(window.id, true, false)
-    await waitForWindowId(window.id)
+    await waitForListenerResolution(
+      OnCreatedQueue.pendingWindows,
+      window.id,
+      'window',
+    )
     if (tabCount > 0) {
       const promises: Promise<void>[] = []
-      const waitForTabId = (tabId: number): Promise<void> => {
-        return new Promise((resolve) => {
-          const interval = setInterval(() => {
-            const tab = OnCreatedQueue.pendingTabs.get(tabId)
-            if (tab && tab.listenerResolved) {
-              tab.complete = true
-              clearInterval(interval)
-              resolve()
-            }
-          }, 100)
-        })
-      }
       for (const tab of window.tabs) {
         if (!tab.id) {
           throw new Error('Tab ID is undefined')
         }
         addPendingTabToQueue(tab.id, true, false)
-        promises.push(waitForTabId(tab.id))
+        promises.push(
+          waitForListenerResolution(OnCreatedQueue.pendingTabs, tab.id, 'tab'),
+        )
       }
       await Promise.all(promises)
       // then pin tabs that were previously pinned

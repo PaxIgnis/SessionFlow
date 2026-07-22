@@ -14,24 +14,76 @@ import { SessionTree } from '@/services/foreground-tree'
 import { Settings } from '@/services/settings'
 import { isPrivateWindowAccessAllowed } from '@/services/utils'
 import * as Messages from '@/types/messages'
+import type { SessionTreeCommandResult } from '@/types/runtime-port-service'
 import { State, Tab, TreeItemType, Window } from '@/types/session-tree'
+
+function warningMessage(result: SessionTreeCommandResult | undefined): string {
+  return result?.warnings?.map((warning) => warning.message).join(' ') ?? ''
+}
+
+async function sendActionCommand(
+  message: Messages.SessionTreeMessage,
+  failureMessage: string,
+): Promise<void> {
+  try {
+    const result = await sendTreeCommand(message)
+    const warning = warningMessage(result)
+    if (warning) showNotification(warning)
+  } catch (error) {
+    showNotification(`${failureMessage}: ${error}`)
+  }
+}
+
+async function sendBulkCommands(
+  messages: Messages.SessionTreeMessage[],
+  failureMessage: (failedCount: number, totalCount: number) => string,
+): Promise<void> {
+  const results = await Promise.allSettled(
+    messages.map((message) => sendTreeCommand(message)),
+  )
+  const failedCount = results.filter(
+    (result) => result.status === 'rejected',
+  ).length
+  const warnings = results.flatMap((result) =>
+    result.status === 'fulfilled'
+      ? (result.value?.warnings?.map((warning) => warning.message) ?? [])
+      : [],
+  )
+  const notificationParts: string[] = []
+  if (failedCount > 0) {
+    notificationParts.push(failureMessage(failedCount, messages.length))
+  }
+  if (warnings.length > 0) notificationParts.push(warnings.join(' '))
+  if (notificationParts.length > 0) {
+    showNotification(notificationParts.join(' '))
+  }
+}
 
 // ==============================
 // Tab Messages
 // ==============================
 
-export function closeTab(tabId: number, tabUid: UID) {
-  void sendTreeCommand({
-    action: 'closeTab',
-    tabId: tabId,
-    tabUid: tabUid,
-  } as Messages.CloseTabMessage)
+export function closeTab(tabId: number, tabUid: UID): Promise<void> {
+  return sendActionCommand(
+    {
+      action: 'closeTab',
+      tabId: tabId,
+      tabUid: tabUid,
+    } as Messages.CloseTabMessage,
+    'Session Flow could not close the tab',
+  )
 }
 
-export function closeTabs(tabs: Array<Tab>) {
-  tabs.forEach((tab) => {
-    closeTab(tab.id, tab.uid)
-  })
+export function closeTabs(tabs: Array<Tab>): Promise<void> {
+  return sendBulkCommands(
+    tabs.map((tab) => ({
+      action: 'closeTab',
+      tabId: tab.id,
+      tabUid: tab.uid,
+    })),
+    (failedCount, totalCount) =>
+      `Session Flow could not close ${failedCount} of ${totalCount} tabs.`,
+  )
 }
 
 export function focusTab(tabId: number, windowId: number) {
@@ -85,13 +137,30 @@ export async function openTab(tabUid: UID, windowUid: UID, url: string) {
       return
     }
   }
-  await sendOpenTabTarget(target)
+  await sendActionCommand(
+    {
+      action: 'openTab',
+      tabUid: target.tabUid,
+      windowUid: target.windowUid,
+      url: target.url,
+    },
+    'Session Flow could not open the tab',
+  )
 }
 
 export async function openTabs(tabs: Array<Tab>): Promise<void> {
   const targets = tabs.map(tabRecoveryTarget)
   if (!tabs.some((tab) => tab.container)) {
-    await Promise.all(targets.map((target) => sendOpenTabTarget(target)))
+    await sendBulkCommands(
+      targets.map((target) => ({
+        action: 'openTab',
+        tabUid: target.tabUid,
+        windowUid: target.windowUid,
+        url: target.url,
+      })),
+      (failedCount, totalCount) =>
+        `Session Flow could not open ${failedCount} of ${totalCount} tabs.`,
+    )
     return
   }
   const missing = await missingContainers(tabs)
@@ -99,7 +168,16 @@ export async function openTabs(tabs: Array<Tab>): Promise<void> {
     openContainerRecoveryModal({ type: 'tabs', tabs: targets }, missing)
     return
   }
-  await Promise.all(targets.map((target) => sendOpenTabTarget(target)))
+  await sendBulkCommands(
+    targets.map((target) => ({
+      action: 'openTab',
+      tabUid: target.tabUid,
+      windowUid: target.windowUid,
+      url: target.url,
+    })),
+    (failedCount, totalCount) =>
+      `Session Flow could not open ${failedCount} of ${totalCount} tabs.`,
+  )
 }
 
 export function pinTabs(tabs: Array<Tab>) {
@@ -124,18 +202,27 @@ export function reloadTabs(tabs: Array<Tab>) {
   })
 }
 
-export function saveTab(tabId: number, tabUid: UID) {
-  void sendTreeCommand({
-    action: 'saveTab',
-    tabId: tabId,
-    tabUid: tabUid,
-  })
+export function saveTab(tabId: number, tabUid: UID): Promise<void> {
+  return sendActionCommand(
+    {
+      action: 'saveTab',
+      tabId: tabId,
+      tabUid: tabUid,
+    },
+    'Session Flow could not save the tab',
+  )
 }
 
-export function saveTabs(tabs: Array<Tab>) {
-  tabs.forEach((tab) => {
-    saveTab(tab.id, tab.uid)
-  })
+export function saveTabs(tabs: Array<Tab>): Promise<void> {
+  return sendBulkCommands(
+    tabs.map((tab) => ({
+      action: 'saveTab',
+      tabId: tab.id,
+      tabUid: tab.uid,
+    })),
+    (failedCount, totalCount) =>
+      `Session Flow could not save ${failedCount} of ${totalCount} tabs.`,
+  )
 }
 
 export async function tabDoubleClick(
@@ -237,32 +324,50 @@ export function updateCustomLabel(uid: UID, customLabel?: string) {
 // Window Messages
 // ==============================
 
-export function closeWindow(windowId: number, windowUid: UID) {
-  void sendTreeCommand({
-    action: 'closeWindow',
-    windowId: windowId,
-    windowUid: windowUid,
-  })
+export function closeWindow(windowId: number, windowUid: UID): Promise<void> {
+  return sendActionCommand(
+    {
+      action: 'closeWindow',
+      windowId: windowId,
+      windowUid: windowUid,
+    },
+    'Session Flow could not close the window',
+  )
 }
 
-export function closeWindows(windows: Array<Window>) {
-  windows.forEach((window) => {
-    closeWindow(window.id, window.uid)
-  })
+export function closeWindows(windows: Array<Window>): Promise<void> {
+  return sendBulkCommands(
+    windows.map((window) => ({
+      action: 'closeWindow',
+      windowId: window.id,
+      windowUid: window.uid,
+    })),
+    (failedCount, totalCount) =>
+      `Session Flow could not close ${failedCount} of ${totalCount} windows.`,
+  )
 }
 
-export function saveWindow(windowId: number, windowUid: UID) {
-  void sendTreeCommand({
-    action: 'saveWindow',
-    windowId: windowId,
-    windowUid: windowUid,
-  })
+export function saveWindow(windowId: number, windowUid: UID): Promise<void> {
+  return sendActionCommand(
+    {
+      action: 'saveWindow',
+      windowId: windowId,
+      windowUid: windowUid,
+    },
+    'Session Flow could not save the window',
+  )
 }
 
-export function saveWindows(windows: Array<Window>) {
-  windows.forEach((window) => {
-    saveWindow(window.id, window.uid)
-  })
+export function saveWindows(windows: Array<Window>): Promise<void> {
+  return sendBulkCommands(
+    windows.map((window) => ({
+      action: 'saveWindow',
+      windowId: window.id,
+      windowUid: window.uid,
+    })),
+    (failedCount, totalCount) =>
+      `Session Flow could not save ${failedCount} of ${totalCount} windows.`,
+  )
 }
 
 export async function windowDoubleClick(
@@ -288,10 +393,13 @@ export async function windowDoubleClick(
         return
       }
     }
-    void sendTreeCommand({
-      action: 'openWindow',
-      windowUid,
-    })
+    await sendActionCommand(
+      {
+        action: 'openWindow',
+        windowUid,
+      },
+      'Session Flow could not open the window',
+    )
   } else if (state === State.OPEN) {
     void sendTreeCommand({
       action: 'focusWindow',
@@ -462,13 +570,16 @@ export function moveWindows(
   windowUIDs: Array<UID>,
   targetIndex: number,
   copy: boolean = false,
-) {
-  void sendTreeCommand({
-    action: 'moveWindows',
-    windowUIDs: windowUIDs,
-    targetIndex: targetIndex,
-    copy: copy,
-  })
+): Promise<void> {
+  return sendActionCommand(
+    {
+      action: 'moveWindows',
+      windowUIDs: windowUIDs,
+      targetIndex: targetIndex,
+      copy: copy,
+    },
+    'Session Flow could not move the selected windows',
+  )
 }
 
 export function moveTreeItems(
@@ -478,16 +589,19 @@ export function moveTreeItems(
   targetWindowUid?: UID,
   copy: boolean = false,
   includeDescendants?: boolean,
-) {
-  void sendTreeCommand({
-    action: 'moveTreeItems',
-    itemUIDs,
-    targetIndex,
-    parentUid,
-    targetWindowUid,
-    copy,
-    includeDescendants,
-  } as Messages.MoveTreeItemsMessage)
+): Promise<void> {
+  return sendActionCommand(
+    {
+      action: 'moveTreeItems',
+      itemUIDs,
+      targetIndex,
+      parentUid,
+      targetWindowUid,
+      copy,
+      includeDescendants,
+    } as Messages.MoveTreeItemsMessage,
+    'Session Flow could not move the selected items',
+  )
 }
 
 export function importExternalUrls(

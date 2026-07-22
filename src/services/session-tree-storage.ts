@@ -1,6 +1,7 @@
 import * as Utils from '@/services/utils'
 import {
   ContainerMetadata,
+  LoadingStatus,
   Note,
   Separator,
   State,
@@ -199,7 +200,9 @@ function normalizeTab(
     collapsed: optionalBoolean(record.collapsed),
     loadingStatus:
       record.loadingStatus === 'loading' || record.loadingStatus === 'complete'
-        ? record.loadingStatus
+        ? record.loadingStatus === 'loading'
+          ? LoadingStatus.LOADING
+          : LoadingStatus.COMPLETE
         : undefined,
     indentLevel: finiteNumber(record.indentLevel, 1, context),
     pinned: booleanValue(record.pinned, false, context),

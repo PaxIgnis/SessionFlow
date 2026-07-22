@@ -1,4 +1,5 @@
 import { Browser } from '@/services/background-browser'
+import { removeBrowserWindow } from '@/services/background-command-removal'
 import { DeferredEventsQueue } from '@/services/background-deferred-events-queue'
 import { OnCreatedQueue } from '@/services/background-on-created-queue'
 import { Tree } from '@/services/background-tree'
@@ -10,6 +11,7 @@ import {
 } from '@/services/background-session-identity'
 import * as Utils from '@/services/utils'
 import type { OpenWindowMessage } from '@/types/messages'
+import type { SessionTreeCommandResult } from '@/types/runtime-port-service'
 import {
   State,
   TreeItemType,
@@ -340,28 +342,18 @@ export function setActiveWindow(windowId: number, tries: number = 0): void {
  * @param {number} message.windowId - The ID of the window to be closed.
  * @param {UID} message.windowUid - The UID of the window to be closed.
  */
-export function closeWindow(message: {
+export async function closeWindow(message: {
   windowId: number
   windowUid: UID
-}): void {
-  if (message.windowUid !== undefined) {
-    Tree.removeWindow(message.windowUid)
-  }
+}): Promise<void> {
   if (message.windowId === -1 || message.windowId === 0) {
+    Tree.removeWindow(message.windowUid)
     return
   }
-  browser.windows
-    .get(message.windowId)
-    .then((window) => {
-      if (window) {
-        browser.windows.remove(message.windowId).catch((error) => {
-          console.error('Error closing window:', error)
-        })
-      }
-    })
-    .catch(() => {
-      console.debug('Window ID not found.', message.windowId)
-    })
+  await removeBrowserWindow(message.windowId)
+  if (Tree.windowsByUid.has(message.windowUid)) {
+    Tree.removeWindow(message.windowUid)
+  }
 }
 
 /**
@@ -372,7 +364,7 @@ export function closeWindow(message: {
  */
 export async function openWindow(
   message: Omit<OpenWindowMessage, 'action'>,
-): Promise<void> {
+): Promise<SessionTreeCommandResult | undefined> {
   try {
     const sessionTreeWindow = Tree.windowsByUid.get(message.windowUid)
     if (!sessionTreeWindow) {
@@ -481,7 +473,9 @@ export async function openWindow(
           containerRecoveryStoreIds: message.containerRecoveryStoreIds,
         })
       }
-      await Tree.restoreWindowTabGroups(message.windowUid)
+      const groupRestoreResult = await Tree.restoreWindowTabGroups(
+        message.windowUid,
+      )
       const savedActiveTab = sessionTreeWindow.savedActiveTabUid
         ? Tree.tabsByUid.get(sessionTreeWindow.savedActiveTabUid)
         : undefined
@@ -494,6 +488,18 @@ export async function openWindow(
         }
         Tree.updateWindow(message.windowUid, { activeTabId: savedActiveTab.id })
         Browser.focusTab({ tabId: savedActiveTab.id })
+      }
+      if (groupRestoreResult.failures.length > 0) {
+        const affectedCount = groupRestoreResult.failures.length
+        return {
+          warnings: [
+            {
+              code: 'tab-group-restore-partial',
+              message: `Session Flow opened the window, but ${affectedCount} tab ${affectedCount === 1 ? 'group' : 'groups'} could not be fully restored.`,
+              affectedCount,
+            },
+          ],
+        }
       }
     } catch (error) {
       if (createdWindowId !== undefined) {
@@ -520,14 +526,18 @@ export async function openWindow(
  * @param {number} message.windowId - The ID of the window to be saved.
  * @param {UID} message.windowUid - The UID of the window to be saved.
  */
-export function saveAndRemoveWindow(message: {
+export async function saveAndRemoveWindow(message: {
   windowId: number
   windowUid: UID
-}): void {
-  Tree.saveWindow(message.windowUid)
-  browser.windows.remove(message.windowId).catch((error) => {
-    console.error('Error saving window:', error)
-  })
+}): Promise<void> {
+  const window = Tree.windowsByUid.get(message.windowUid)
+  if (!window || window.state === State.SAVED) return
+  if (message.windowId !== -1 && message.windowId !== 0) {
+    await removeBrowserWindow(message.windowId)
+  }
+  if (Tree.windowsByUid.has(message.windowUid)) {
+    Tree.saveWindow(message.windowUid)
+  }
 }
 
 /**

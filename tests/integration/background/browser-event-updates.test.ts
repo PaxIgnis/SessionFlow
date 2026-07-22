@@ -52,6 +52,31 @@ describe('background browser-event update ordering', () => {
     )
   })
 
+  it('leaves the tree unchanged when a completed-tab lookup rejects', async () => {
+    const { fakeBrowser, initializeListeners, mocks } =
+      await loadBackgroundHandlers()
+    mocks.Items.push(treeWindow())
+    fakeBrowser.tabs.get.mockRejectedValueOnce(new Error('get failed'))
+    const consoleDebug = vi.spyOn(console, 'debug').mockImplementation(() => {})
+    initializeListeners()
+
+    await fakeBrowser.tabs.onUpdated.emitAsync(
+      10,
+      { status: 'complete' },
+      browserTab({
+        title: 'Unverified title',
+        url: 'https://example.test/unverified',
+        status: 'complete',
+      }),
+    )
+
+    expect(mocks.updateTab).not.toHaveBeenCalled()
+    expect(consoleDebug).toHaveBeenCalledWith(
+      'Failed to refresh completed tab update:',
+      expect.any(Error),
+    )
+  })
+
   it('announces that the current page completed without a favicon (EV-09)', async () => {
     const { fakeBrowser, initializeListeners, mocks, setBrowserTabs } =
       await loadBackgroundHandlers()
@@ -193,7 +218,13 @@ describe('background browser-event update ordering', () => {
 
     await fakeBrowser.tabs.onUpdated.emitAsync(
       10,
-      { groupId: 7, pinned: true, status: 'complete' },
+      {
+        groupId: 7,
+        pinned: true,
+        status: 'complete',
+      } as browser.tabs._OnUpdatedChangeInfo & {
+        groupId: number
+      },
       updated,
     )
 
@@ -227,7 +258,12 @@ describe('background browser-event update ordering', () => {
 
     await fakeBrowser.tabs.onUpdated.emitAsync(
       99,
-      { groupId: 7, status: 'complete' },
+      {
+        groupId: 7,
+        status: 'complete',
+      } as browser.tabs._OnUpdatedChangeInfo & {
+        groupId: number
+      },
       unindexed,
     )
 

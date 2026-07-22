@@ -75,6 +75,81 @@ describe('foreground message helpers', () => {
     })
   })
 
+  it('shows one action-specific notification when closing a tab fails', async () => {
+    const error = new Error('remove failed')
+    sendTreeCommand.mockRejectedValueOnce(error)
+    const { closeTab } = await import('@/services/foreground-messages')
+
+    await closeTab(10, 'tab-1' as UID)
+
+    expect(showNotification).toHaveBeenCalledOnce()
+    expect(showNotification).toHaveBeenCalledWith(
+      `Session Flow could not close the tab: ${error}`,
+    )
+  })
+
+  it('aggregates bulk close failures into one notification', async () => {
+    const firstTab = makeForegroundTab('tab-1' as UID, {
+      windowUid: 'window-1' as UID,
+      state: State.OPEN,
+    })
+    const secondTab = makeForegroundTab('tab-2' as UID, {
+      windowUid: 'window-1' as UID,
+      state: State.OPEN,
+    })
+    sendTreeCommand
+      .mockRejectedValueOnce(new Error('first failed'))
+      .mockResolvedValueOnce(undefined)
+    const { closeTabs } = await import('@/services/foreground-messages')
+
+    await closeTabs([firstTab, secondTab])
+
+    expect(sendTreeCommand).toHaveBeenCalledTimes(2)
+    expect(showNotification).toHaveBeenCalledOnce()
+    expect(showNotification).toHaveBeenCalledWith(
+      'Session Flow could not close 1 of 2 tabs.',
+    )
+  })
+
+  it('shows a structured warning without treating the command as failed', async () => {
+    sendTreeCommand.mockResolvedValueOnce({
+      warnings: [
+        {
+          code: 'tab-group-restore-partial',
+          message: 'One saved tab group could not be restored.',
+          affectedCount: 1,
+        },
+      ],
+    })
+    const { windowDoubleClick } = await import('@/services/foreground-messages')
+
+    await windowDoubleClick('window-1' as UID, -1, State.SAVED)
+
+    expect(showNotification).toHaveBeenCalledOnce()
+    expect(showNotification).toHaveBeenCalledWith(
+      'One saved tab group could not be restored.',
+    )
+  })
+
+  it('shows one action-specific notification when a tree move fails', async () => {
+    const error = new Error('move failed')
+    sendTreeCommand.mockRejectedValueOnce(error)
+    const { moveTreeItems } = await import('@/services/foreground-messages')
+
+    await moveTreeItems(
+      ['tab-1' as UID],
+      0,
+      undefined,
+      'window-1' as UID,
+      false,
+    )
+
+    expect(showNotification).toHaveBeenCalledOnce()
+    expect(showNotification).toHaveBeenCalledWith(
+      `Session Flow could not move the selected items: ${error}`,
+    )
+  })
+
   it('sends generic tree item action payloads', async () => {
     const {
       duplicateTreeItems,

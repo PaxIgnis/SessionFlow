@@ -258,6 +258,32 @@ export class SessionTreePage {
     await tabItem.click({ button: 'right' })
   }
 
+  async rapidDoubleClickTab(tabTitle) {
+    const tabItem = await this.tabItemByText(tabTitle)
+    await expect(tabItem).toBeDisplayed()
+    await browser.execute((element) => {
+      element.dispatchEvent(
+        new MouseEvent('dblclick', { bubbles: true, cancelable: true }),
+      )
+      element.dispatchEvent(
+        new MouseEvent('dblclick', { bubbles: true, cancelable: true }),
+      )
+    }, tabItem)
+  }
+
+  async rapidDoubleClickWindow(windowTitle) {
+    const windowItem = await this.windowItemByText(windowTitle)
+    await expect(windowItem).toBeDisplayed()
+    await browser.execute((element) => {
+      element.dispatchEvent(
+        new MouseEvent('dblclick', { bubbles: true, cancelable: true }),
+      )
+      element.dispatchEvent(
+        new MouseEvent('dblclick', { bubbles: true, cancelable: true }),
+      )
+    }, windowItem)
+  }
+
   async openNoteContextMenu(noteText) {
     const noteItem = await this.noteItemByText(noteText)
     await expect(noteItem).toBeDisplayed()

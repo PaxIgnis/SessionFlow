@@ -709,4 +709,114 @@ describe('tab groups', () => {
     expect(first.tabGroup).toEqual(group('stable-group', 23))
     expect(second.tabGroup).toEqual(group('stable-group', 23))
   })
+
+  it('continues restoring later groups when one Firefox grouping call fails', async () => {
+    const failedTab = createTab('failed' as UID, {
+      id: 10,
+      state: State.OPEN,
+      tabGroup: group('failed-group', -1),
+    })
+    const restoredTab = createTab('restored' as UID, {
+      id: 11,
+      state: State.OPEN,
+      tabGroup: group('restored-group', -1),
+    })
+    const window = createWindow('window' as UID, [failedTab, restoredTab], {
+      id: 100,
+      state: State.OPEN,
+    })
+    vi.mocked(browser.tabs.group).mockImplementation(async ({ tabIds }) => {
+      if (tabIds === 10 || (Array.isArray(tabIds) && tabIds.includes(10))) {
+        throw new Error('group failed')
+      }
+      return 24
+    })
+    vi.mocked(browser.tabGroups.update).mockResolvedValue({
+      id: 24,
+      windowId: window.id,
+      title: 'Research',
+      color: 'blue',
+      collapsed: false,
+    })
+    vi.mocked(browser.tabs.query).mockResolvedValue([
+      { id: 11, windowId: window.id, groupId: 24 },
+    ] as browser.tabs.Tab[])
+
+    const result = await Tree.restoreWindowTabGroups(window.uid)
+
+    expect(browser.tabs.group).toHaveBeenCalledTimes(2)
+    expect(failedTab.tabGroup).toEqual(group('failed-group', -1))
+    expect(restoredTab.tabGroup).toEqual(group('restored-group', 24))
+    expect(result.failures).toEqual([
+      expect.objectContaining({
+        groupUid: 'failed-group',
+        stage: 'group',
+      }),
+    ])
+  })
+
+  it('adopts Firefox group metadata when updating the restored group fails', async () => {
+    const tab = createTab('tab' as UID, {
+      id: 10,
+      state: State.OPEN,
+      tabGroup: group('stable-group', -1),
+    })
+    const window = createWindow('window' as UID, [tab], {
+      id: 100,
+      state: State.OPEN,
+    })
+    vi.mocked(browser.tabs.group).mockResolvedValue(23)
+    vi.mocked(browser.tabGroups.update).mockRejectedValue(
+      new Error('update failed'),
+    )
+    vi.mocked(browser.tabGroups.get).mockResolvedValue({
+      id: 23,
+      windowId: window.id,
+      title: 'Firefox title',
+      color: 'red',
+      collapsed: true,
+    })
+    vi.mocked(browser.tabs.query).mockResolvedValue([
+      { id: 10, windowId: window.id, groupId: 23 },
+    ] as browser.tabs.Tab[])
+
+    const result = await Tree.restoreWindowTabGroups(window.uid)
+
+    expect(browser.tabGroups.get).toHaveBeenCalledWith(23)
+    expect(tab.tabGroup).toMatchObject({
+      uid: 'stable-group',
+      id: 23,
+      title: 'Firefox title',
+      color: 'red',
+      collapsed: true,
+    })
+    expect(result.failures).toEqual([])
+  })
+
+  it('retains intended metadata and the live ID when update recovery also fails', async () => {
+    const tab = createTab('tab' as UID, {
+      id: 10,
+      state: State.OPEN,
+      tabGroup: group('stable-group', -1),
+    })
+    const window = createWindow('window' as UID, [tab], {
+      id: 100,
+      state: State.OPEN,
+    })
+    vi.mocked(browser.tabs.group).mockResolvedValue(23)
+    vi.mocked(browser.tabGroups.update).mockRejectedValue(
+      new Error('update failed'),
+    )
+    vi.mocked(browser.tabGroups.get).mockRejectedValue(new Error('get failed'))
+
+    const result = await Tree.restoreWindowTabGroups(window.uid)
+
+    expect(tab.tabGroup).toEqual(group('stable-group', 23))
+    expect(result.failures).toEqual([
+      expect.objectContaining({
+        groupUid: 'stable-group',
+        stage: 'read',
+      }),
+    ])
+  })
 })

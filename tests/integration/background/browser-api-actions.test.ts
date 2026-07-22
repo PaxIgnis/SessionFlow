@@ -97,7 +97,7 @@ describe('background browser API interactions', () => {
     expectTreeInvariants()
   })
 
-  it('clears active state when saving the only open tab in an active window', () => {
+  it('clears active state when saving the only open tab in an active window', async () => {
     const tab = createTab('tab-1' as UID, {
       active: true,
       id: 10,
@@ -110,7 +110,7 @@ describe('background browser API interactions', () => {
       state: State.OPEN,
     })
 
-    Tree.saveTab({ tabId: tab.id, tabUid: tab.uid })
+    await Tree.saveTab({ tabId: tab.id, tabUid: tab.uid })
 
     expect(window.state).toBe(State.SAVED)
     expect(window.id).toBe(-1)
@@ -119,6 +119,115 @@ describe('background browser API interactions', () => {
     expect(tab.state).toBe(State.SAVED)
     expect(tab.active).toBe(false)
     expect(browser.tabs.remove).toHaveBeenCalledWith(10)
+    expectTreeInvariants()
+  })
+
+  it('keeps an open tab unchanged when browser removal fails and it still exists', async () => {
+    const tab = createTab('tab-1' as UID, { id: 10, state: State.OPEN })
+    const window = createWindow('window-1' as UID, [tab], {
+      id: 20,
+      state: State.OPEN,
+    })
+    vi.mocked(browser.tabs.remove).mockRejectedValue(new Error('remove failed'))
+    vi.mocked(browser.tabs.get).mockResolvedValue({
+      id: tab.id,
+      windowId: window.id,
+    } as browser.tabs.Tab)
+
+    await expect(
+      Tree.closeTab({ tabId: tab.id, tabUid: tab.uid }),
+    ).rejects.toThrow('remove failed')
+
+    expect(Tree.tabsByUid.get(tab.uid)).toBe(tab)
+    expect(window.children).toEqual([tab])
+    expect(tab).toMatchObject({ id: 10, state: State.OPEN })
+    expectTreeInvariants()
+  })
+
+  it('keeps an open tab unchanged when failed removal cannot be revalidated', async () => {
+    const tab = createTab('tab-1' as UID, { id: 10, state: State.OPEN })
+    const window = createWindow('window-1' as UID, [tab], {
+      id: 20,
+      state: State.OPEN,
+    })
+    vi.mocked(browser.tabs.remove).mockRejectedValue(new Error('remove failed'))
+    vi.mocked(browser.tabs.get).mockRejectedValue(new Error('lookup failed'))
+
+    await expect(
+      Tree.saveTab({ tabId: tab.id, tabUid: tab.uid }),
+    ).rejects.toThrow('Could not confirm whether Firefox removed tab 10')
+
+    expect(tab).toMatchObject({ id: 10, state: State.OPEN })
+    expect(window).toMatchObject({ id: 20, state: State.OPEN })
+    expectTreeInvariants()
+  })
+
+  it('commits a save when Firefox reports that the tab is already gone', async () => {
+    const tab = createTab('tab-1' as UID, { id: 10, state: State.OPEN })
+    const window = createWindow('window-1' as UID, [tab], {
+      id: 20,
+      state: State.OPEN,
+    })
+    vi.mocked(browser.tabs.remove).mockRejectedValue(
+      new Error('Invalid tab ID: 10'),
+    )
+    vi.mocked(browser.tabs.get).mockRejectedValue(
+      new Error('Invalid tab ID: 10'),
+    )
+
+    await expect(
+      Tree.saveTab({ tabId: tab.id, tabUid: tab.uid }),
+    ).resolves.toBeUndefined()
+
+    expect(tab).toMatchObject({ id: -1, state: State.SAVED })
+    expect(window).toMatchObject({ id: -1, state: State.SAVED })
+    expectTreeInvariants()
+  })
+
+  it('keeps an open window unchanged when browser removal fails and it still exists', async () => {
+    const tab = createTab('tab-1' as UID, { id: 10, state: State.OPEN })
+    const window = createWindow('window-1' as UID, [tab], {
+      id: 20,
+      state: State.OPEN,
+    })
+    vi.mocked(browser.windows.remove).mockRejectedValue(
+      new Error('remove failed'),
+    )
+    vi.mocked(browser.windows.get).mockResolvedValue({
+      id: window.id,
+    } as browser.windows.Window)
+
+    await expect(
+      Tree.closeWindow({ windowId: window.id, windowUid: window.uid }),
+    ).rejects.toThrow('remove failed')
+
+    expect(Tree.windowsByUid.get(window.uid)).toBe(window)
+    expect(Tree.tabsByUid.get(tab.uid)).toBe(tab)
+    expectTreeInvariants()
+  })
+
+  it('commits a saved window when Firefox reports that it is already gone', async () => {
+    const tab = createTab('tab-1' as UID, { id: 10, state: State.OPEN })
+    const window = createWindow('window-1' as UID, [tab], {
+      id: 20,
+      state: State.OPEN,
+    })
+    vi.mocked(browser.windows.remove).mockRejectedValue(
+      new Error('Invalid window ID: 20'),
+    )
+    vi.mocked(browser.windows.get).mockRejectedValue(
+      new Error('Invalid window ID: 20'),
+    )
+
+    await expect(
+      Tree.saveAndRemoveWindow({
+        windowId: window.id,
+        windowUid: window.uid,
+      }),
+    ).resolves.toBeUndefined()
+
+    expect(window).toMatchObject({ id: -1, state: State.SAVED })
+    expect(tab).toMatchObject({ id: -1, state: State.SAVED })
     expectTreeInvariants()
   })
 
@@ -253,6 +362,35 @@ describe('background browser API interactions', () => {
     ).rejects.toThrow('Firefox refused tab creation')
     expect(savedTab.state).toBe(State.SAVED)
     expect(savedTab.id).toBe(-1)
+  })
+
+  it('rejects and removes a created tab returned for the wrong window', async () => {
+    const openTab = createTab('open-tab' as UID, {
+      id: 10,
+      state: State.OPEN,
+    })
+    const savedTab = createTab('saved-tab' as UID, {
+      id: -1,
+      state: State.SAVED,
+    })
+    const window = createWindow('window-1' as UID, [openTab, savedTab], {
+      id: 20,
+      state: State.OPEN,
+    })
+    vi.spyOn(OnCreatedQueue, 'createTabAndWait').mockResolvedValue({
+      id: 30,
+      windowId: 999,
+      index: 0,
+    } as browser.tabs.Tab)
+
+    await expect(
+      Tree.openTab({ tabUid: savedTab.uid, windowUid: window.uid }),
+    ).rejects.toThrow('Tab creation returned an unexpected window ID')
+
+    expect(browser.tabs.remove).toHaveBeenCalledWith(30)
+    expect(savedTab).toMatchObject({ id: -1, state: State.SAVED })
+    expect(window).toMatchObject({ id: 20, state: State.OPEN })
+    expectTreeInvariants()
   })
 
   it('rolls back recreated container metadata when browser tab creation fails', async () => {
@@ -468,7 +606,7 @@ describe('background browser API interactions', () => {
       id: window.id,
     } as browser.windows.Window)
 
-    Tree.closeWindow({ windowId: window.id, windowUid: window.uid })
+    await Tree.closeWindow({ windowId: window.id, windowUid: window.uid })
 
     expect(Tree.windowsByUid.has(window.uid)).toBe(false)
     expect(Tree.notesByUid.has(note.uid)).toBe(false)
@@ -478,7 +616,7 @@ describe('background browser API interactions', () => {
     expectTreeInvariants()
   })
 
-  it('keeps tree state consistent when browser tab move rejects', async () => {
+  it('restores the original tree position when browser tab move rejects', async () => {
     const firstTab = createTab('tab-first' as UID, {
       id: 10,
       state: State.OPEN,
@@ -491,19 +629,52 @@ describe('background browser API interactions', () => {
       id: 20,
       state: State.OPEN,
     })
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
     vi.mocked(browser.tabs.move).mockRejectedValue(new Error('move failed'))
+
+    await expect(
+      Tree.moveTab(movedTab.uid, window.uid, 0, undefined, false, false),
+    ).rejects.toThrow('move failed')
+
+    expect(window.children.map((item) => item.uid)).toEqual([
+      firstTab.uid,
+      movedTab.uid,
+    ])
+    expectTreeInvariants()
+  })
+
+  it('rebinds the stable tab UID when Firefox returns a new ID after moving', async () => {
+    const firstTab = createTab('tab-first' as UID, {
+      id: 10,
+      state: State.OPEN,
+    })
+    const movedTab = createTab('tab-moved' as UID, {
+      id: 11,
+      state: State.OPEN,
+    })
+    const window = createWindow('window-1' as UID, [firstTab, movedTab], {
+      id: 20,
+      state: State.OPEN,
+    })
+    vi.mocked(browser.tabs.move).mockResolvedValue({
+      id: 77,
+      windowId: window.id,
+      index: 0,
+    } as browser.tabs.Tab)
 
     await Tree.moveTab(movedTab.uid, window.uid, 0, undefined, false, false)
 
-    expect(consoleError).toHaveBeenCalledWith(
-      'Error moving tab in browser:',
-      expect.any(Error),
-    )
     expect(window.children.map((item) => item.uid)).toEqual([
       movedTab.uid,
       firstTab.uid,
     ])
+    expect(Tree.tabsByUid.get(movedTab.uid)).toMatchObject({
+      id: 77,
+      uid: movedTab.uid,
+      windowUid: window.uid,
+    })
+    expect(
+      Tree.getTabs(window.children).some((tab) => tab.id === movedTab.id),
+    ).toBe(false)
     expectTreeInvariants()
   })
 

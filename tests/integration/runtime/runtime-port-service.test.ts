@@ -91,6 +91,46 @@ describe('runtime port service', () => {
     expect(resolved).toBe(true)
   })
 
+  it('returns structured warnings from a successful command', async () => {
+    const { runtime } = await loadRuntimePortService()
+    const result = {
+      warnings: [
+        {
+          code: 'tab-group-restore-partial' as const,
+          message: 'One saved tab group could not be restored.',
+          affectedCount: 1,
+        },
+      ],
+    }
+    runtime.initializeSessionTreePort({
+      dispatchCommand: vi.fn().mockResolvedValue(result),
+      getSnapshot: () => [],
+    })
+
+    await expect(
+      runtime.sendTreeCommand({
+        action: 'openWindow',
+        windowUid: 'window-1' as UID,
+      }),
+    ).resolves.toEqual(result)
+  })
+
+  it('rejects command requests when async dispatch rejects', async () => {
+    const { runtime } = await loadRuntimePortService()
+    runtime.initializeSessionTreePort({
+      dispatchCommand: vi.fn().mockRejectedValue(new Error('remove failed')),
+      getSnapshot: () => [],
+    })
+
+    await expect(
+      runtime.sendTreeCommand({
+        action: 'closeTab',
+        tabId: 10,
+        tabUid: 'tab-1' as UID,
+      }),
+    ).rejects.toThrow('remove failed')
+  })
+
   it('rejects command requests when the dispatcher throws', async () => {
     const { runtime } = await loadRuntimePortService()
     runtime.initializeSessionTreePort({

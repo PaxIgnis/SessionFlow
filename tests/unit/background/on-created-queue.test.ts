@@ -122,6 +122,86 @@ describe('on-created queue', () => {
     expect(errorSpy).toHaveBeenCalledWith('Error creating tab:', error)
   })
 
+  it('createTabAndWait rejects a missing tab ID and releases queue ownership', async () => {
+    fakeBrowser.tabs.create.mockResolvedValue({
+      windowId: 20,
+    } as browser.tabs.Tab)
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await expect(
+      OnCreatedQueue.createTabAndWait({ url: 'https://missing-id.test' }),
+    ).rejects.toThrow('Tab creation returned no ID')
+
+    expect(OnCreatedQueue.pendingTabCount).toBe(0)
+    expect(OnCreatedQueue.pendingTabs.size).toBe(0)
+    expect(errorSpy).toHaveBeenCalledWith('Tab ID is undefined')
+  })
+
+  it('createTabAndWait times out and releases suppression ownership', async () => {
+    vi.useFakeTimers()
+    fakeBrowser.tabs.create.mockResolvedValue({
+      id: 42,
+      windowId: 20,
+    } as browser.tabs.Tab)
+
+    const result = OnCreatedQueue.createTabAndWait({
+      url: 'https://listener-timeout.test',
+    })
+    const rejection = expect(result).rejects.toThrow(
+      'Timed out waiting for Firefox tab creation event',
+    )
+    await flushMicrotasks()
+    await vi.advanceTimersByTimeAsync(15000)
+
+    await rejection
+    expect(fakeBrowser.tabs.remove).toHaveBeenCalledWith(42)
+    expect(OnCreatedQueue.pendingTabCount).toBe(0)
+    expect(OnCreatedQueue.pendingTabs.size).toBe(0)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('createWindowAndWait times out and releases all suppression ownership', async () => {
+    vi.useFakeTimers()
+    fakeBrowser.windows.create.mockResolvedValue({
+      id: 9,
+      tabs: [{ id: 101, windowId: 9 }],
+    } as browser.windows.Window)
+
+    const result = OnCreatedQueue.createWindowAndWait({
+      url: 'https://listener-timeout.test',
+    })
+    const rejection = expect(result).rejects.toThrow(
+      'Timed out waiting for Firefox window creation event',
+    )
+    await flushMicrotasks()
+    await vi.advanceTimersByTimeAsync(15000)
+
+    await rejection
+    expect(fakeBrowser.windows.remove).toHaveBeenCalledWith(9)
+    expect(OnCreatedQueue.pendingWindowCount).toBe(0)
+    expect(OnCreatedQueue.pendingTabCount).toBe(0)
+    expect(OnCreatedQueue.pendingWindows.size).toBe(0)
+    expect(OnCreatedQueue.pendingTabs.size).toBe(0)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('createWindowAndWait rejects a missing first-tab ID and clears all ownership', async () => {
+    fakeBrowser.windows.create.mockResolvedValue({
+      id: 9,
+      tabs: [{ windowId: 9 }],
+    } as browser.windows.Window)
+
+    await expect(
+      OnCreatedQueue.createWindowAndWait({ url: 'https://missing-id.test' }),
+    ).rejects.toThrow('Tab ID is undefined')
+
+    expect(fakeBrowser.windows.remove).toHaveBeenCalledWith(9)
+    expect(OnCreatedQueue.pendingWindowCount).toBe(0)
+    expect(OnCreatedQueue.pendingTabCount).toBe(0)
+    expect(OnCreatedQueue.pendingWindows.size).toBe(0)
+    expect(OnCreatedQueue.pendingTabs.size).toBe(0)
+  })
+
   it('createWindowAndWait creates positioned URL windows and waits for window and tab listeners', async () => {
     vi.useFakeTimers()
     const properties = {
