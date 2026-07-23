@@ -240,6 +240,30 @@ describe('background browser-event update ordering', () => {
     expect(mocks.tabGroupMembershipChanged).toHaveBeenCalledWith(10, 7)
   })
 
+  it('routes Firefox unpinning and ungrouping through authoritative tree events', async () => {
+    const { fakeBrowser, initializeListeners, mocks, setBrowserTabs } =
+      await loadBackgroundHandlers()
+    mocks.Items.push(treeWindow())
+    const updated = browserTab({
+      pinned: false,
+      groupId: -1,
+      status: 'complete',
+    })
+    setBrowserTabs(20, [updated])
+    initializeListeners()
+
+    await fakeBrowser.tabs.onUpdated.emitAsync(
+      10,
+      { pinned: false, groupId: -1 } as browser.tabs._OnUpdatedChangeInfo & {
+        groupId: number
+      },
+      updated,
+    )
+
+    expect(mocks.unpinTabInTree).toHaveBeenCalledWith('tab-10')
+    expect(mocks.tabGroupMembershipChanged).toHaveBeenCalledWith(10, -1)
+  })
+
   it('ignores an update for a tab that is not indexed yet (EV-12)', async () => {
     const { fakeBrowser, initializeListeners, mocks, setBrowserTabs } =
       await loadBackgroundHandlers()

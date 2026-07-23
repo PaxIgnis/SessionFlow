@@ -417,6 +417,11 @@ export async function closeTab(message: {
     await removeBrowserTab(message.tabId)
   }
 
+  const initialWindow = Tree.windowsByUid.get(initialTab.windowUid)
+  if (initialWindow?.activeTabId === message.tabId) {
+    Tree.updateWindow(initialWindow.uid, { activeTabId: undefined })
+  }
+
   const tab = Tree.tabsByUid.get(message.tabUid)
   if (!tab) return
   const windowUid = tab.windowUid
@@ -525,20 +530,12 @@ export async function openTab(
   const cookieStoreId = sessionTreeTab.container?.cookieStoreId
   const pinned = sessionTreeTab.pinned || false
   if (pinned) message.discarded = false // pinned tabs cannot be opened as discarded with firefox api
-  let url = message.url
-  if (url === undefined) url = sessionTreeTab.url
-  // if the URL is a privileged URL, open a redirect page instead
-  if (Utils.isPrivilegedUrl(url)) {
-    const title = Tree.getTabTitle(message.tabUid)
-    url = Utils.getRedirectUrl(url, title)
-  } else if (
-    url === 'about:newtab' ||
-    url === 'about:blank' ||
-    url === 'chrome://browser/content/blanktab.html'
-  ) {
-    // don't set the URL for new tabs
-    url = undefined
-  }
+  const originalUrl = message.url ?? sessionTreeTab.url
+  const preparedUrl = Utils.prepareRestorableUrl(
+    originalUrl,
+    Tree.getTabTitle(message.tabUid),
+  )
+  const url = preparedUrl.kind === 'url' ? preparedUrl.url : undefined
   Tree.updateTabState(
     message.tabUid,
     message.discarded ? State.DISCARDED : State.OPEN,
@@ -554,10 +551,10 @@ export async function openTab(
       Settings.values.openWindowsInSameLocation &&
       sessionTreeWindow.windowPosition
     ) {
-      properties.left = sessionTreeWindow.windowPosition.left
-      properties.top = sessionTreeWindow.windowPosition.top
-      properties.width = sessionTreeWindow.windowPosition.width
-      properties.height = sessionTreeWindow.windowPosition.height
+      Object.assign(
+        properties,
+        Utils.restorableWindowBounds(sessionTreeWindow.windowPosition),
+      )
     }
     let windowId: number
     let tabId: number
@@ -589,7 +586,9 @@ export async function openTab(
     Tree.updateTabId(message.tabUid, tabId)
     Tree.updateTabState(message.tabUid, State.OPEN)
     if (pinned) Browser.pinTab(tabId)
-    await Tree.restoreTabGroup(message.tabUid)
+    if (!message.deferGroupRestore) {
+      await Tree.restoreTabGroup(message.tabUid)
+    }
   } else {
     const properties: browser.tabs._CreateCreateProperties = {}
     if (url) properties.url = url
@@ -606,7 +605,7 @@ export async function openTab(
         properties.discarded = false
       }
     } else {
-      properties.active = message.active ?? true
+      properties.active = message.active ?? Settings.values.focusTabOnOpen
     }
     if (cookieStoreId) properties.cookieStoreId = cookieStoreId
     if (sessionTreeTab.pinned) properties.pinned = true
@@ -645,7 +644,9 @@ export async function openTab(
       message.tabUid,
       tab.discarded ? State.DISCARDED : State.OPEN,
     )
-    await Tree.restoreTabGroup(message.tabUid)
+    if (!message.deferGroupRestore) {
+      await Tree.restoreTabGroup(message.tabUid)
+    }
   }
 }
 
@@ -672,6 +673,11 @@ export async function saveTab(message: {
     await removeBrowserTab(message.tabId)
   }
 
+  const initialWindow = Tree.windowsByUid.get(initialTab.windowUid)
+  if (initialWindow?.activeTabId === message.tabId) {
+    Tree.updateWindow(initialWindow.uid, { activeTabId: undefined })
+  }
+
   const tab = Tree.tabsByUid.get(message.tabUid)
   if (!tab) return
   const window = Tree.windowsByUid.get(tab.windowUid)
@@ -695,6 +701,7 @@ export function pinTab(tabUid: UID): void {
     console.error('Error pinning tab, could not find tab:', tabUid)
     return
   }
+  if (tab.pinned) return
 
   // if tab is saved, just update the session tree
   if (tab.state === State.SAVED) {
@@ -752,6 +759,7 @@ export function unpinTab(tabUid: UID): void {
     console.error('Error unpinning tab, could not find tab:', tabUid)
     return
   }
+  if (!tab.pinned) return
   if (tab.state === State.SAVED) {
     // move to after last pinned tab in window
     Tree.unpinTabInTree(tab.uid)

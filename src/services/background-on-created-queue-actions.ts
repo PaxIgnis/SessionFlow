@@ -288,11 +288,15 @@ export async function createWindowAndWait(
     }
     // Update window position if provided. This is necessary
     // because top/left are ignored before Firefox 109.
-    if (properties?.left && properties?.top) {
-      await browser.windows.update(window.id!, {
-        left: properties.left,
-        top: properties.top,
-      })
+    const positionUpdate: browser.windows._UpdateUpdateInfo = {}
+    if (properties?.left !== undefined) {
+      positionUpdate.left = properties.left
+    }
+    if (properties?.top !== undefined) {
+      positionUpdate.top = properties.top
+    }
+    if (Object.keys(positionUpdate).length > 0) {
+      await browser.windows.update(window.id, positionUpdate)
     }
 
     addPendingWindowToQueue(window.id, true, false)

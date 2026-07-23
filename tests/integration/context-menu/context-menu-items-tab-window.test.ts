@@ -74,6 +74,19 @@ describe('tab context menu items', () => {
     expect(contextMenuItemsTab.unpinTab().enabled).toBe(true)
   })
 
+  it('keeps reload disabled when every selected tab is saved', async () => {
+    const saved = makeForegroundTab('tab-saved' as UID, {
+      id: -1,
+      state: State.SAVED,
+    })
+    Selection.selectedItems.value = [{ item: saved, type: SelectionType.TAB }]
+    const { contextMenuItemsTab } =
+      await import('@/services/context-menu-items-tab')
+
+    const reload = contextMenuItemsTab.reloadTab()
+    expect(reload.enabled).toBe(false)
+  })
+
   it('dispatches tab actions with selected tabs', async () => {
     const tab = makeForegroundTab('tab-1' as UID)
     Selection.selectedItems.value = [{ item: tab, type: SelectionType.TAB }]

@@ -1,4 +1,5 @@
 import { PRIVILEGED_URLS } from '@/defaults/constants'
+import type { WindowPosition } from '@/types/session-tree'
 
 type IncognitoAccessApi = {
   isAllowedIncognitoAccess?: () => Promise<boolean>
@@ -61,6 +62,75 @@ export function isPrivilegedUrl(url: string): boolean {
     !url.startsWith('about:blank') &&
     !url.startsWith('about:newtab')
   return isPrivilegedUrl || startsWithAbout
+}
+
+export type RestorableUrl =
+  | { kind: 'blank' }
+  | { kind: 'url'; url: string; redirected: boolean }
+
+export function prepareRestorableUrl(
+  originalUrl: string,
+  title: string,
+): RestorableUrl {
+  if (
+    originalUrl === '' ||
+    originalUrl === 'about:blank' ||
+    originalUrl === 'about:newtab' ||
+    originalUrl === 'chrome://browser/content/blanktab.html'
+  ) {
+    return { kind: 'blank' }
+  }
+
+  if (isSessionFlowRedirectUrl(originalUrl)) {
+    return { kind: 'url', url: originalUrl, redirected: false }
+  }
+
+  if (isPrivilegedUrl(originalUrl) || !isValidAbsoluteUrl(originalUrl)) {
+    return {
+      kind: 'url',
+      url: getRedirectUrl(originalUrl, title),
+      redirected: true,
+    }
+  }
+
+  return { kind: 'url', url: originalUrl, redirected: false }
+}
+
+function isSessionFlowRedirectUrl(url: string): boolean {
+  const redirectPageUrl = browser.runtime.getURL('/redirect.html')
+  return url === redirectPageUrl || url.startsWith(`${redirectPageUrl}?`)
+}
+
+function isValidAbsoluteUrl(value: string): boolean {
+  try {
+    new URL(value)
+    return true
+  } catch {
+    return false
+  }
+}
+
+export function restorableWindowBounds(
+  position: WindowPosition | undefined,
+): Pick<
+  browser.windows._CreateCreateData,
+  'left' | 'top' | 'width' | 'height'
+> {
+  const bounds: Pick<
+    browser.windows._CreateCreateData,
+    'left' | 'top' | 'width' | 'height'
+  > = {}
+  if (!position) return bounds
+
+  if (Number.isFinite(position.left)) bounds.left = position.left
+  if (Number.isFinite(position.top)) bounds.top = position.top
+  if (Number.isFinite(position.width) && position.width > 0) {
+    bounds.width = position.width
+  }
+  if (Number.isFinite(position.height) && position.height > 0) {
+    bounds.height = position.height
+  }
+  return bounds
 }
 
 /**

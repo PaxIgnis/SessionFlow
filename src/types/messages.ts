@@ -32,6 +32,7 @@ export interface OpenTabMessage {
   url?: string | undefined
   discarded?: boolean | undefined
   active?: boolean | undefined
+  deferGroupRestore?: boolean | undefined
   containerRecovery?: ContainerRecoveryStrategy
   containerRecoveryStoreIds?: string[]
 }

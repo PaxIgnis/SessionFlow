@@ -1658,8 +1658,14 @@ export async function duplicateTreeItems(itemUIDs: UID[]): Promise<void> {
     if (a.children === b.children) return b.startIndex - a.startIndex
     return 0
   })
-  const clonedBlocks = cloneIndependentTreeItemBlocks(
+  const clonedBlocks = cloneTreeItemBlocks(
     insertionBlocks.map((block) => block.items),
+  )
+  const clonedParentUids = new Set(
+    clonedBlocks
+      .flat()
+      .map((item) => item.parentUid)
+      .filter((uid): uid is UID => uid !== undefined),
   )
   const clonedTabPairs: ClonedTabPair[] = []
 
@@ -1669,7 +1675,11 @@ export async function duplicateTreeItems(itemUIDs: UID[]): Promise<void> {
         ? block.startIndex + block.items.length
         : getSubtreeEndIndex(block.children, block.startIndex)
     const duplicates = clonedBlocks[blockIndex]
-    if (!includeDescendants && block.root.type !== TreeItemType.WINDOW) {
+    if (
+      !includeDescendants &&
+      block.root.type !== TreeItemType.WINDOW &&
+      !clonedParentUids.has(duplicates[0].uid)
+    ) {
       duplicates[0].isParent = false
       duplicates[0].collapsed = false
     }
@@ -1908,18 +1918,6 @@ function cloneTreeItemBlocks(blocks: TreeItem[][]): TreeItem[][] {
   return blocks.map((items) =>
     items.map((item) => cloneTreeItem(item, context)),
   )
-}
-
-function cloneIndependentTreeItemBlocks(blocks: TreeItem[][]): TreeItem[][] {
-  const tabGroupUidMap = new Map<UID, UID>()
-  return blocks.map((items) => {
-    const context: TreeItemCloneContext = {
-      itemUidMap: new Map(),
-      tabGroupUidMap,
-    }
-    for (const item of items) reserveCloneIdentity(item, context)
-    return items.map((item) => cloneTreeItem(item, context))
-  })
 }
 
 function reserveCloneIdentity(

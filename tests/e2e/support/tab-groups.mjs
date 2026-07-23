@@ -105,6 +105,7 @@ export async function nativeTabGroupSnapshot(titles) {
             id: tab.id,
             groupId: tab.groupId,
             index: tab.index,
+            pinned: tab.pinned,
             title: tab.title,
             windowId: tab.windowId,
           }))
@@ -115,10 +116,25 @@ export async function nativeTabGroupSnapshot(titles) {
               .filter((groupId) => groupId !== undefined && groupId !== -1),
           ),
         ]
-        const groups = await Promise.all(
+        const groupResults = await Promise.allSettled(
           groupIds.map((groupId) => window.browser.tabGroups.get(groupId)),
         )
-        done({ ok: true, groups, tabs: matchingTabs })
+        const groups = groupResults
+          .filter((result) => result.status === 'fulfilled')
+          .map((result) => result.value)
+        done({
+          ok: true,
+          groups,
+          tabs: matchingTabs,
+          allTabs: tabs.map((tab) => ({
+            id: tab.id,
+            groupId: tab.groupId,
+            index: tab.index,
+            pinned: tab.pinned,
+            title: tab.title,
+            windowId: tab.windowId,
+          })),
+        })
       })
       .catch((error) => done({ ok: false, error: String(error) }))
   }, titles)

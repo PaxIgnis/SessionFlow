@@ -7,6 +7,7 @@ import { State, Window } from '@/types/session-tree'
 import { flushMicrotasks, installFakeBrowser } from '../../helpers/fake-browser'
 import {
   createNote,
+  createSeparator,
   createTab,
   createWindow,
   resetTree,
@@ -508,6 +509,407 @@ describe('window actions', () => {
     })
     expectTreeInvariants()
   })
+
+  it.each([
+    { label: 'empty', includeNote: false },
+    { label: 'note-only', includeNote: true },
+  ])(
+    'opens a $label saved window without pre-adding a synthetic tree tab',
+    async ({ includeNote }) => {
+      const note = createNote('note-1' as UID)
+      const children = includeNote ? [note] : []
+      const window = createWindow('window-1' as UID, children, {
+        id: -1,
+        state: State.SAVED,
+      })
+      vi.spyOn(OnCreatedQueue, 'createWindowAndWait').mockResolvedValue({
+        id: 30,
+        tabs: [{ id: 101, url: 'about:blank' }],
+      } as browser.windows.Window)
+
+      await Tree.openWindow({ windowUid: window.uid })
+
+      expect(OnCreatedQueue.createWindowAndWait).toHaveBeenCalledWith({
+        incognito: false,
+      })
+      expect(window).toMatchObject({ id: 30, state: State.OPEN })
+      expect(window.children).toEqual(children)
+      expect(Tree.tabsByUid.size).toBe(0)
+      if (includeNote) expect(Tree.notesByUid.get(note.uid)).toBe(note)
+      expectTreeInvariants()
+    },
+  )
+
+  it('restores mixed groups around notes and separators without changing tree order', async () => {
+    Settings.values.openWindowWithTabsDiscarded = false
+    const groupA = {
+      uid: 'group-a' as UID,
+      id: -1,
+      title: 'Research',
+      color: 'blue' as const,
+      collapsed: false,
+    }
+    const groupB = {
+      uid: 'group-b' as UID,
+      id: -1,
+      title: 'Personal',
+      color: 'green' as const,
+      collapsed: true,
+    }
+    const firstA = createTab('tab-a-1' as UID, {
+      id: -1,
+      pinned: true,
+      state: State.SAVED,
+      tabGroup: { ...groupA },
+    })
+    const note = createNote('note-between' as UID)
+    const secondA = createTab('tab-a-2' as UID, {
+      id: -1,
+      state: State.SAVED,
+      tabGroup: { ...groupA },
+    })
+    const separator = createSeparator('separator-between' as UID)
+    const onlyB = createTab('tab-b-1' as UID, {
+      id: -1,
+      state: State.SAVED,
+      tabGroup: { ...groupB },
+    })
+    const ungrouped = createTab('tab-ungrouped' as UID, {
+      id: -1,
+      state: State.SAVED,
+    })
+    const originalOrder = [firstA, note, secondA, separator, onlyB, ungrouped]
+    const window = createWindow('window-1' as UID, originalOrder, {
+      id: -1,
+      state: State.SAVED,
+    })
+    vi.spyOn(OnCreatedQueue, 'createWindowAndWait').mockResolvedValue({
+      id: 30,
+      tabs: [{ id: 101 }],
+    } as browser.windows.Window)
+    vi.spyOn(OnCreatedQueue, 'createTabAndWait')
+      .mockResolvedValueOnce({
+        id: 102,
+        windowId: 30,
+        active: false,
+        discarded: false,
+      } as browser.tabs.Tab)
+      .mockResolvedValueOnce({
+        id: 103,
+        windowId: 30,
+        active: false,
+        discarded: false,
+      } as browser.tabs.Tab)
+      .mockResolvedValueOnce({
+        id: 104,
+        windowId: 30,
+        active: false,
+        discarded: false,
+      } as browser.tabs.Tab)
+    vi.mocked(browser.tabs.group).mockImplementation(async (options) => {
+      if ('groupId' in options && options.groupId !== undefined) {
+        return options.groupId
+      }
+      const tabIds = Array.isArray(options.tabIds)
+        ? options.tabIds
+        : [options.tabIds]
+      return tabIds.includes(103) ? 24 : 23
+    })
+    vi.mocked(browser.tabGroups.update).mockImplementation(
+      async (groupId, changes) =>
+        ({
+          id: groupId,
+          windowId: 30,
+          title: changes.title,
+          color: changes.color,
+          collapsed: changes.collapsed,
+        }) as browser.tabGroups.TabGroup,
+    )
+    vi.mocked(browser.tabs.query).mockImplementation(async ({ groupId }) => {
+      if (groupId === 23) {
+        return [
+          { id: 101, windowId: 30, groupId: 23 },
+          { id: 102, windowId: 30, groupId: 23 },
+        ] as browser.tabs.Tab[]
+      }
+      if (groupId === 24) {
+        return [{ id: 103, windowId: 30, groupId: 24 }] as browser.tabs.Tab[]
+      }
+      return []
+    })
+
+    await Tree.openWindow({ windowUid: window.uid })
+
+    expect(window.children.map((item) => item.uid)).toEqual(
+      originalOrder.map((item) => item.uid),
+    )
+    expect(browser.tabs.group).toHaveBeenCalledWith({
+      tabIds: [101, 102],
+      createProperties: { windowId: 30 },
+    })
+    expect(browser.tabs.group).toHaveBeenCalledWith({
+      tabIds: [103],
+      createProperties: { windowId: 30 },
+    })
+    expect(browser.tabs.group).toHaveBeenCalledTimes(2)
+    expect(firstA.tabGroup).toMatchObject({ uid: groupA.uid, id: 23 })
+    expect(secondA.tabGroup).toMatchObject({ uid: groupA.uid, id: 23 })
+    expect(onlyB.tabGroup).toMatchObject({ uid: groupB.uid, id: 24 })
+    expect(ungrouped.tabGroup).toBeUndefined()
+    await vi.waitFor(() => {
+      expect(browser.tabs.update).toHaveBeenCalledWith(101, { pinned: true })
+    })
+    expect(Tree.notesByUid.get(note.uid)).toBe(note)
+    expect(Tree.separatorsByUid.get(separator.uid)).toBe(separator)
+    expectTreeInvariants()
+  })
+
+  it('restores saved group metadata cleared by transient tab-creation events', async () => {
+    Settings.values.openWindowWithTabsDiscarded = false
+    const tabGroup = {
+      uid: 'group-1' as UID,
+      id: -1,
+      title: 'Research',
+      color: 'blue' as const,
+      collapsed: false,
+    }
+    const ungrouped = createTab('tab-ungrouped' as UID, {
+      id: -1,
+      state: State.SAVED,
+    })
+    const firstGrouped = createTab('tab-grouped-1' as UID, {
+      id: -1,
+      state: State.SAVED,
+      tabGroup: { ...tabGroup },
+    })
+    const note = createNote('note-between' as UID)
+    const secondGrouped = createTab('tab-grouped-2' as UID, {
+      id: -1,
+      state: State.SAVED,
+      tabGroup: { ...tabGroup },
+    })
+    const window = createWindow(
+      'window-1' as UID,
+      [ungrouped, firstGrouped, note, secondGrouped],
+      { id: -1, state: State.SAVED },
+    )
+    vi.spyOn(OnCreatedQueue, 'createWindowAndWait').mockResolvedValue({
+      id: 30,
+      tabs: [{ id: 101 }],
+    } as browser.windows.Window)
+    vi.spyOn(OnCreatedQueue, 'createTabAndWait')
+      .mockImplementationOnce(async () => {
+        firstGrouped.tabGroup = undefined
+        return {
+          id: 102,
+          windowId: 30,
+          active: false,
+          discarded: false,
+        } as browser.tabs.Tab
+      })
+      .mockResolvedValueOnce({
+        id: 103,
+        windowId: 30,
+        active: false,
+        discarded: false,
+      } as browser.tabs.Tab)
+    vi.mocked(browser.tabs.group).mockResolvedValue(23)
+    vi.mocked(browser.tabGroups.update).mockResolvedValue({
+      id: 23,
+      windowId: 30,
+      title: tabGroup.title,
+      color: tabGroup.color,
+      collapsed: tabGroup.collapsed,
+    })
+    vi.mocked(browser.tabs.query).mockResolvedValue([
+      { id: 102, windowId: 30, groupId: 23 },
+      { id: 103, windowId: 30, groupId: 23 },
+    ] as browser.tabs.Tab[])
+
+    await Tree.openWindow({ windowUid: window.uid })
+
+    expect(browser.tabs.group).toHaveBeenCalledWith({
+      tabIds: [102, 103],
+      createProperties: { windowId: 30 },
+    })
+    expect(firstGrouped.tabGroup).toMatchObject({
+      uid: tabGroup.uid,
+      id: 23,
+    })
+    expect(secondGrouped.tabGroup).toMatchObject({
+      uid: tabGroup.uid,
+      id: 23,
+    })
+    expectTreeInvariants()
+  })
+
+  it('uses the shared URL policy for blank and malformed tabs in a saved window', async () => {
+    Settings.values.openWindowWithTabsDiscarded = true
+    Settings.values.openWindowsInSameLocation = false
+    const blank = createTab('tab-blank' as UID, {
+      id: -1,
+      state: State.SAVED,
+      title: 'Blank',
+      url: 'about:blank',
+    })
+    const malformed = createTab('tab-malformed' as UID, {
+      id: -1,
+      state: State.SAVED,
+      title: 'Malformed title',
+      url: 'not a valid absolute url',
+    })
+    const window = createWindow('window-1' as UID, [blank, malformed], {
+      id: -1,
+      state: State.SAVED,
+    })
+    const createWindowAndWait = vi
+      .spyOn(OnCreatedQueue, 'createWindowAndWait')
+      .mockResolvedValue({
+        id: 30,
+        tabs: [{ id: 101 }],
+      } as browser.windows.Window)
+    const createTabAndWait = vi
+      .spyOn(OnCreatedQueue, 'createTabAndWait')
+      .mockResolvedValue({
+        id: 102,
+        windowId: 30,
+        index: 1,
+        active: false,
+        discarded: false,
+        pinned: false,
+      } as browser.tabs.Tab)
+
+    await Tree.openWindow({ windowUid: window.uid })
+
+    expect(createWindowAndWait).toHaveBeenCalledWith({
+      incognito: false,
+      url: 'about:blank',
+    })
+    expect(createTabAndWait).toHaveBeenCalledWith(
+      expect.objectContaining({
+        active: false,
+        discarded: false,
+        url:
+          'moz-extension://test-id/redirect.html' +
+          '?targetUrl=not%20a%20valid%20absolute%20url' +
+          '&targetTitle=Malformed%20title',
+        windowId: 30,
+      }),
+    )
+    expectTreeInvariants()
+  })
+
+  it('normalizes multi-monitor bounds when reopening a saved window', async () => {
+    Settings.values.openWindowsInSameLocation = true
+    const tab = createTab('tab-1' as UID, {
+      id: -1,
+      state: State.SAVED,
+      url: 'https://example.test/saved',
+    })
+    const window = createWindow('window-1' as UID, [tab], {
+      id: -1,
+      state: State.SAVED,
+      windowPosition: {
+        left: -1920,
+        top: 0,
+        width: Number.NaN,
+        height: 900,
+      },
+    })
+    const createWindowAndWait = vi
+      .spyOn(OnCreatedQueue, 'createWindowAndWait')
+      .mockResolvedValue({
+        id: 30,
+        tabs: [{ id: 101 }],
+      } as browser.windows.Window)
+
+    await Tree.openWindow({ windowUid: window.uid })
+
+    expect(createWindowAndWait).toHaveBeenCalledWith({
+      incognito: false,
+      url: tab.url,
+      left: -1920,
+      top: 0,
+      height: 900,
+    })
+    expectTreeInvariants()
+  })
+
+  it('records zero and negative coordinates for later window restoration', async () => {
+    vi.useFakeTimers()
+    Settings.values.openWindowsInSameLocation = true
+    Settings.values.openWindowsInSameLocationUpdateInterval = 1
+    Settings.values.openWindowsInSameLocationUpdateIntervalUnit = 'seconds'
+    const tab = createTab('tab-1' as UID, {
+      id: 10,
+      state: State.OPEN,
+    })
+    const window = createWindow('window-1' as UID, [tab], {
+      id: 20,
+      state: State.OPEN,
+    })
+    vi.mocked(browser.windows.getAll).mockResolvedValue([
+      {
+        id: window.id,
+        left: 0,
+        top: -400,
+        width: 900,
+        height: 700,
+      } as browser.windows.Window,
+    ])
+
+    Tree.updateWindowPositionInterval()
+    await vi.advanceTimersByTimeAsync(1000)
+    await flushMicrotasks()
+
+    expect(window.windowPosition).toEqual({
+      left: 0,
+      top: -400,
+      width: 900,
+      height: 700,
+    })
+    if (Tree.windowPositionInterval) {
+      clearInterval(Tree.windowPositionInterval)
+      Tree.windowPositionInterval = undefined
+    }
+    expectTreeInvariants()
+  })
+
+  it.each([
+    { focusWindowOnOpen: true, shouldRestorePopupFocus: false },
+    { focusWindowOnOpen: false, shouldRestorePopupFocus: true },
+  ])(
+    'honors focusWindowOnOpen=$focusWindowOnOpen when reopening a window',
+    async ({ focusWindowOnOpen, shouldRestorePopupFocus }) => {
+      Settings.values.focusWindowOnOpen = focusWindowOnOpen
+      Tree.sessionTreeWindowId = 99
+      const tab = createTab('tab-1' as UID, {
+        id: -1,
+        state: State.SAVED,
+      })
+      const window = createWindow('window-1' as UID, [tab], {
+        id: -1,
+        state: State.SAVED,
+      })
+      vi.spyOn(OnCreatedQueue, 'createWindowAndWait').mockResolvedValue({
+        id: 30,
+        tabs: [{ id: 101 }],
+      } as browser.windows.Window)
+
+      await Tree.openWindow({ windowUid: window.uid })
+
+      if (shouldRestorePopupFocus) {
+        expect(browser.windows.update).toHaveBeenCalledWith(99, {
+          focused: true,
+        })
+      } else {
+        expect(browser.windows.update).not.toHaveBeenCalledWith(99, {
+          focused: true,
+        })
+      }
+      expectTreeInvariants()
+    },
+  )
 
   it('restores a mixed-container window one tab at a time', async () => {
     Settings.values.openWindowWithTabsDiscarded = false

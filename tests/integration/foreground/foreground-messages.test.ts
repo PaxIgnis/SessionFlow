@@ -287,6 +287,7 @@ describe('foreground message helpers', () => {
       tabUid: 'tab-saved',
       windowUid: 'window-1',
       url: 'https://example.test/saved',
+      active: true,
     })
   })
 
@@ -392,6 +393,7 @@ describe('foreground message helpers', () => {
       tabUid: 'tab-private',
       windowUid: 'window-private',
       url: 'https://example.test/private',
+      active: true,
     })
     expect(sendTreeCommand).toHaveBeenNthCalledWith(2, {
       action: 'openWindow',
@@ -500,12 +502,14 @@ describe('foreground message helpers', () => {
             windowUid: 'window-1',
             url: first.url,
             containerStoreId: 'firefox-container-work',
+            active: true,
           },
           {
             tabUid: 'tab-personal',
             windowUid: 'window-1',
             url: second.url,
             containerStoreId: 'firefox-container-personal',
+            active: false,
           },
         ],
       },
@@ -522,6 +526,7 @@ describe('foreground message helpers', () => {
       url: first.url,
       containerRecovery: 'without-container',
       containerRecoveryStoreIds: ['firefox-container-work'],
+      active: true,
     })
     expect(sendTreeCommand).toHaveBeenNthCalledWith(2, {
       action: 'openTab',
@@ -530,6 +535,7 @@ describe('foreground message helpers', () => {
       url: second.url,
       containerRecovery: 'without-container',
       containerRecoveryStoreIds: ['firefox-container-personal'],
+      active: false,
     })
   })
 
@@ -831,25 +837,22 @@ describe('foreground message helpers', () => {
   })
 
   it('sends multi-tab helper commands in item order', async () => {
-    const { closeTabs, openTabs, unpinTabs } =
+    const { closeTabs, unpinTabs } =
       await import('@/services/foreground-messages')
     const tabs = [
-      {
-        uid: 'tab-1' as UID,
+      makeForegroundTab('tab-1' as UID, {
         id: 1,
-        windowUid: 'window-1' as UID,
-        url: 'https://one.example',
-      },
-      {
-        uid: 'tab-2' as UID,
+        state: State.OPEN,
+        pinned: true,
+      }),
+      makeForegroundTab('tab-2' as UID, {
         id: 2,
-        windowUid: 'window-1' as UID,
-        url: 'https://two.example',
-      },
-    ] as Parameters<typeof closeTabs>[0]
+        state: State.OPEN,
+        pinned: true,
+      }),
+    ]
 
-    closeTabs(tabs)
-    openTabs(tabs)
+    await closeTabs(tabs)
     unpinTabs(tabs)
 
     expect(sendTreeCommand).toHaveBeenNthCalledWith(
@@ -862,21 +865,220 @@ describe('foreground message helpers', () => {
     )
     expect(sendTreeCommand).toHaveBeenNthCalledWith(
       3,
-      expect.objectContaining({ action: 'openTab', tabUid: 'tab-1' }),
-    )
-    expect(sendTreeCommand).toHaveBeenNthCalledWith(
-      4,
-      expect.objectContaining({ action: 'openTab', tabUid: 'tab-2' }),
-    )
-    expect(sendTreeCommand).toHaveBeenNthCalledWith(
-      5,
       expect.objectContaining({ action: 'unpinTab', tabUid: 'tab-2' }),
     )
     expect(sendTreeCommand).toHaveBeenNthCalledWith(
-      6,
+      4,
       expect.objectContaining({ action: 'unpinTab', tabUid: 'tab-1' }),
     )
   })
+
+  it('opens only saved tabs in tree order and focuses the first eligible tab', async () => {
+    const { openTabs } = await import('@/services/foreground-messages')
+    const savedFirst = makeForegroundTab('saved-first' as UID)
+    const openTab = makeForegroundTab('open-tab' as UID, {
+      state: State.OPEN,
+    })
+    const savedSecond = makeForegroundTab('saved-second' as UID)
+    const firstWindow = makeForegroundWindow('window-1' as UID, [
+      savedFirst,
+      openTab,
+    ])
+    const secondWindow = makeForegroundWindow('window-2' as UID, [savedSecond])
+    resetForegroundTree([firstWindow, secondWindow])
+    Settings.values.focusTabOnOpen = true
+
+    await openTabs([openTab, savedSecond, savedFirst])
+
+    expect(sendTreeCommand).toHaveBeenCalledTimes(2)
+    expect(sendTreeCommand).toHaveBeenNthCalledWith(1, {
+      action: 'openTab',
+      tabUid: 'saved-first',
+      windowUid: 'window-1',
+      url: savedFirst.url,
+      active: true,
+    })
+    expect(sendTreeCommand).toHaveBeenNthCalledWith(2, {
+      action: 'openTab',
+      tabUid: 'saved-second',
+      windowUid: 'window-2',
+      url: savedSecond.url,
+      active: false,
+    })
+  })
+
+  it('opens every eligible saved tab inactive when focus-on-open is disabled', async () => {
+    const { openTabs } = await import('@/services/foreground-messages')
+    const first = makeForegroundTab('tab-1' as UID)
+    const second = makeForegroundTab('tab-2' as UID)
+    resetForegroundTree([
+      makeForegroundWindow('window-1' as UID, [first, second]),
+    ])
+    Settings.values.focusTabOnOpen = false
+
+    await openTabs([second, first])
+
+    expect(sendTreeCommand).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ tabUid: 'tab-1', active: false }),
+    )
+    expect(sendTreeCommand).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ tabUid: 'tab-2', active: false }),
+    )
+  })
+
+  it('filters bulk tab actions to items eligible for each action', async () => {
+    const { closeTabs, pinTabs, reloadTabs, saveTabs, unpinTabs } =
+      await import('@/services/foreground-messages')
+    const saved = makeForegroundTab('saved' as UID, {
+      id: -1,
+      state: State.SAVED,
+    })
+    const open = makeForegroundTab('open' as UID, {
+      id: 10,
+      state: State.OPEN,
+      pinned: false,
+    })
+    const discarded = makeForegroundTab('discarded' as UID, {
+      id: 11,
+      state: State.DISCARDED,
+      pinned: true,
+    })
+
+    await closeTabs([saved, open, discarded])
+    expect(sendTreeCommand.mock.calls.map(([message]) => message)).toEqual([
+      expect.objectContaining({ action: 'closeTab', tabUid: 'open' }),
+      expect.objectContaining({ action: 'closeTab', tabUid: 'discarded' }),
+    ])
+
+    sendTreeCommand.mockClear()
+    await saveTabs([saved, open, discarded])
+    expect(sendTreeCommand.mock.calls.map(([message]) => message)).toEqual([
+      expect.objectContaining({ action: 'saveTab', tabUid: 'open' }),
+      expect.objectContaining({ action: 'saveTab', tabUid: 'discarded' }),
+    ])
+
+    sendTreeCommand.mockClear()
+    await reloadTabs([saved, open, discarded])
+    expect(sendTreeCommand.mock.calls.map(([message]) => message)).toEqual([
+      { action: 'reloadTab', tabId: 10 },
+      { action: 'reloadTab', tabId: 11 },
+    ])
+
+    sendTreeCommand.mockClear()
+    await pinTabs([discarded, open])
+    expect(sendTreeCommand).toHaveBeenCalledOnce()
+    expect(sendTreeCommand).toHaveBeenCalledWith({
+      action: 'pinTab',
+      tabUid: 'open',
+    })
+
+    sendTreeCommand.mockClear()
+    await unpinTabs([open, discarded])
+    expect(sendTreeCommand).toHaveBeenCalledOnce()
+    expect(sendTreeCommand).toHaveBeenCalledWith({
+      action: 'unpinTab',
+      tabUid: 'discarded',
+    })
+  })
+
+  it('does not send a bulk command when no selected tab is eligible', async () => {
+    const { closeTabs, openTabs, pinTabs, reloadTabs, saveTabs, unpinTabs } =
+      await import('@/services/foreground-messages')
+    const savedPinned = makeForegroundTab('saved-pinned' as UID, {
+      id: -1,
+      state: State.SAVED,
+      pinned: true,
+    })
+
+    await closeTabs([savedPinned])
+    await pinTabs([savedPinned])
+    await reloadTabs([savedPinned])
+    await saveTabs([savedPinned])
+    await unpinTabs([
+      makeForegroundTab('saved-unpinned' as UID, {
+        id: -1,
+        state: State.SAVED,
+        pinned: false,
+      }),
+    ])
+    await openTabs([makeForegroundTab('open' as UID, { state: State.OPEN })])
+
+    expect(sendTreeCommand).not.toHaveBeenCalled()
+    expect(showNotification).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    {
+      label: 'pin',
+      run: async (
+        tabs: Parameters<
+          typeof import('@/services/foreground-messages').pinTabs
+        >[0],
+      ) => {
+        const { pinTabs } = await import('@/services/foreground-messages')
+        await pinTabs(tabs)
+      },
+      expectedAction: 'pinTab',
+      expectedNotification: 'Session Flow could not pin 1 of 2 tabs.',
+      pinned: false,
+    },
+    {
+      label: 'unpin',
+      run: async (
+        tabs: Parameters<
+          typeof import('@/services/foreground-messages').unpinTabs
+        >[0],
+      ) => {
+        const { unpinTabs } = await import('@/services/foreground-messages')
+        await unpinTabs(tabs)
+      },
+      expectedAction: 'unpinTab',
+      expectedNotification: 'Session Flow could not unpin 1 of 2 tabs.',
+      pinned: true,
+    },
+    {
+      label: 'reload',
+      run: async (
+        tabs: Parameters<
+          typeof import('@/services/foreground-messages').reloadTabs
+        >[0],
+      ) => {
+        const { reloadTabs } = await import('@/services/foreground-messages')
+        await reloadTabs(tabs)
+      },
+      expectedAction: 'reloadTab',
+      expectedNotification: 'Session Flow could not reload 1 of 2 tabs.',
+      pinned: false,
+    },
+  ])(
+    'aggregates rejected bulk $label commands without an unhandled promise',
+    async ({ run, expectedAction, expectedNotification, pinned }) => {
+      const first = makeForegroundTab('tab-1' as UID, {
+        id: 10,
+        pinned,
+        state: State.OPEN,
+      })
+      const second = makeForegroundTab('tab-2' as UID, {
+        id: 11,
+        pinned,
+        state: State.OPEN,
+      })
+      sendTreeCommand
+        .mockRejectedValueOnce(new Error('first failed'))
+        .mockResolvedValueOnce(undefined)
+
+      await run([first, second])
+
+      expect(sendTreeCommand).toHaveBeenCalledTimes(2)
+      expect(sendTreeCommand.mock.calls[0][0]).toMatchObject({
+        action: expectedAction,
+      })
+      expect(showNotification).toHaveBeenCalledOnce()
+      expect(showNotification).toHaveBeenCalledWith(expectedNotification)
+    },
+  )
 
   it('sends updateCustomLabel and logs rejected commands', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})

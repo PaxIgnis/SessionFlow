@@ -5,6 +5,8 @@ import {
   getRedirectUrl,
   isPrivateWindowAccessAllowed,
   isPrivilegedUrl,
+  prepareRestorableUrl,
+  restorableWindowBounds,
 } from '@/services/utils'
 import { installFakeBrowser } from '../../helpers/fake-browser'
 
@@ -55,6 +57,39 @@ describe('utils', () => {
     expect(isPrivilegedUrl(url)).toBe(expected)
   })
 
+  it('preserves finite multi-monitor coordinates and positive dimensions', () => {
+    expect(
+      restorableWindowBounds({
+        left: -1920,
+        top: 0,
+        width: 1600,
+        height: 900,
+      }),
+    ).toEqual({ left: -1920, top: 0, width: 1600, height: 900 })
+  })
+
+  it('omits non-positive dimensions without dropping zero or negative coordinates', () => {
+    expect(
+      restorableWindowBounds({
+        left: 0,
+        top: -400,
+        width: 0,
+        height: -1,
+      }),
+    ).toEqual({ left: 0, top: -400 })
+  })
+
+  it('omits each non-finite window bound independently', () => {
+    expect(
+      restorableWindowBounds({
+        left: Number.NaN,
+        top: Number.POSITIVE_INFINITY,
+        width: Number.NEGATIVE_INFINITY,
+        height: 700,
+      }),
+    ).toEqual({ height: 700 })
+  })
+
   it.each([
     ['https://example.test', true],
     ['about:blank', false],
@@ -72,6 +107,59 @@ describe('utils', () => {
         '?targetUrl=about%3Aconfig%3Fx%3D1%20y%3D2' +
         '&targetTitle=Config%20%26%20More',
     )
+  })
+
+  it.each([
+    ['', { kind: 'blank' }],
+    ['about:blank', { kind: 'blank' }],
+    ['about:newtab', { kind: 'blank' }],
+    ['chrome://browser/content/blanktab.html', { kind: 'blank' }],
+  ] as const)('classifies blank restorable URLs: %s', (url, expected) => {
+    expect(prepareRestorableUrl(url, 'Saved title')).toEqual(expected)
+  })
+
+  it.each(['https://example.test/path', 'ftp://example.test/file'])(
+    'passes through valid restorable URLs: %s',
+    (url) => {
+      expect(prepareRestorableUrl(url, 'Saved title')).toEqual({
+        kind: 'url',
+        url,
+        redirected: false,
+      })
+    },
+  )
+
+  it('passes through an existing Session Flow redirect URL without nesting it', () => {
+    const redirectUrl = getRedirectUrl('about:config', 'Firefox config')
+
+    expect(
+      prepareRestorableUrl(redirectUrl, 'Redirect to Firefox config'),
+    ).toEqual({
+      kind: 'url',
+      url: redirectUrl,
+      redirected: false,
+    })
+  })
+
+  it.each([
+    'about:config',
+    'file:///tmp/example.txt',
+    'data:text/plain,hello',
+    'javascript:alert(1)',
+    'chrome://settings/',
+    'moz-extension://other-id/page.html',
+    'view-source:https://example.test/',
+    'not a valid absolute url',
+  ])('redirects restricted or malformed restorable URLs: %s', (url) => {
+    const result = prepareRestorableUrl(url, 'Saved title')
+
+    expect(result.kind).toBe('url')
+    if (result.kind !== 'url') throw new Error('Expected a URL result')
+    expect(result.redirected).toBe(true)
+    const redirect = new URL(result.url)
+    expect(redirect.pathname).toBe('/redirect.html')
+    expect(redirect.searchParams.get('targetUrl')).toBe(url)
+    expect(redirect.searchParams.get('targetTitle')).toBe('Saved title')
   })
 
   it('skips duplicate crypto UUIDs and adds the new UID to the set', () => {

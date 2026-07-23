@@ -206,8 +206,8 @@ describe('on-created queue', () => {
     vi.useFakeTimers()
     const properties = {
       url: ['https://a.test', 'https://b.test'],
-      left: 111,
-      top: 222,
+      left: 0,
+      top: -300,
     }
     const createdWindow = {
       id: 9,
@@ -225,8 +225,8 @@ describe('on-created queue', () => {
 
     expect(fakeBrowser.windows.create).toHaveBeenCalledWith(properties)
     expect(fakeBrowser.windows.update).toHaveBeenCalledWith(9, {
-      left: 111,
-      top: 222,
+      left: 0,
+      top: -300,
     })
     expect(OnCreatedQueue.pendingWindowCount).toBe(1)
     expect(OnCreatedQueue.pendingTabCount).toBe(2)

@@ -4,6 +4,7 @@ export const TreeItemType = {
   Window: 0,
   Tab: 1,
   Note: 2,
+  Separator: 3,
 }
 
 export const TreeItemState = {

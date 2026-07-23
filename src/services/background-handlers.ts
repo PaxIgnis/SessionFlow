@@ -1061,11 +1061,13 @@ function getCommandCoordination(message: Messages.SessionTreeMessage):
       coalesce: boolean
     }
   | undefined {
-  if (
-    message.action === 'openTab' ||
-    message.action === 'closeTab' ||
-    message.action === 'saveTab'
-  ) {
+  if (message.action === 'openTab') {
+    return {
+      itemUids: [message.tabUid, message.windowUid],
+      coalesce: true,
+    }
+  }
+  if (message.action === 'closeTab' || message.action === 'saveTab') {
     return { itemUids: [message.tabUid], coalesce: true }
   }
   if (

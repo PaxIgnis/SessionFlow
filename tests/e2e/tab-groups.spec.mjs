@@ -324,8 +324,9 @@ describe('native Firefox tab-group workflows', () => {
     const restoredAlphaTitle = extensionFixtureTitle(
       SESSION_FIXTURE_TITLES.alpha,
     )
+    const restoredBetaTitle = extensionFixtureTitle(SESSION_FIXTURE_TITLES.beta)
     await waitForNativeGroup(
-      [restoredAlphaTitle, SESSION_FIXTURE_TITLES.beta],
+      [restoredAlphaTitle, restoredBetaTitle],
       (snapshot) =>
         snapshot.tabs.length === 2 &&
         new Set(snapshot.tabs.map((tab) => tab.groupId)).size === 1 &&
@@ -407,16 +408,31 @@ async function waitForTreeTabs(titles, predicate, timeoutMsg) {
 
 async function waitForNativeGroup(titles, predicate, timeoutMsg) {
   let lastSnapshot
-  await browser.waitUntil(
-    async () => {
-      lastSnapshot = await nativeTabGroupSnapshot(titles)
-      return predicate(lastSnapshot)
-    },
-    {
-      timeout: 10_000,
-      timeoutMsg: `${timeoutMsg} Last snapshot: ${JSON.stringify(lastSnapshot)}`,
-    },
-  )
+  let lastError
+  try {
+    await browser.waitUntil(
+      async () => {
+        try {
+          await browser.switchToWindow(popup.popupHandle)
+          lastSnapshot = await nativeTabGroupSnapshot(titles)
+          lastError = undefined
+          return predicate(lastSnapshot)
+        } catch (error) {
+          lastError = String(error)
+          return false
+        }
+      },
+      {
+        timeout: 10_000,
+        timeoutMsg,
+      },
+    )
+  } catch (error) {
+    throw new Error(
+      `${timeoutMsg} Last snapshot: ${JSON.stringify(lastSnapshot)}. Last error: ${lastError}`,
+      { cause: error },
+    )
+  }
 }
 
 async function waitForBrowserGroupOrder(windowId, leadingTitles) {

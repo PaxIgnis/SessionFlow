@@ -1,10 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { DEFAULT_SETTINGS } from '@/defaults/settings'
 import { OnCreatedQueue } from '@/services/background-on-created-queue'
 import { Tree } from '@/services/background-tree'
+import { Settings } from '@/services/settings'
 import { State } from '@/types/session-tree'
 import { installFakeBrowser } from '../../helpers/fake-browser'
 import {
   createNote,
+  createSeparator,
   createTab,
   createWindow,
   resetTree,
@@ -18,6 +21,7 @@ describe('background browser API interactions', () => {
     vi.restoreAllMocks()
     fakeBrowser = installFakeBrowser()
     resetTree()
+    Object.assign(Settings.values, structuredClone(DEFAULT_SETTINGS))
   })
 
   it('moves saved tabs in the tree without calling browser.tabs.move', async () => {
@@ -65,6 +69,58 @@ describe('background browser API interactions', () => {
     ])
     expectTreeInvariants()
   })
+
+  it.each([
+    { action: 'pin' as const, pinned: true },
+    { action: 'unpin' as const, pinned: false },
+  ])(
+    'does not send a redundant browser update when a live tab is already $actionned',
+    ({ action, pinned }) => {
+      const tab = createTab('tab-1' as UID, {
+        id: 10,
+        pinned,
+        state: State.OPEN,
+      })
+      createWindow('window-1' as UID, [tab], {
+        id: 20,
+        state: State.OPEN,
+      })
+
+      if (action === 'pin') Tree.pinTab(tab.uid)
+      else Tree.unpinTab(tab.uid)
+
+      expect(browser.tabs.update).not.toHaveBeenCalled()
+      expect(tab.pinned).toBe(pinned)
+      expectTreeInvariants()
+    },
+  )
+
+  it.each([
+    { action: 'pin' as const, initialPinned: false, expectedPinned: true },
+    { action: 'unpin' as const, initialPinned: true, expectedPinned: false },
+  ])(
+    'waits for Firefox before applying a live $action tree state',
+    ({ action, initialPinned, expectedPinned }) => {
+      const tab = createTab('tab-1' as UID, {
+        id: 10,
+        pinned: initialPinned,
+        state: State.OPEN,
+      })
+      createWindow('window-1' as UID, [tab], {
+        id: 20,
+        state: State.OPEN,
+      })
+
+      if (action === 'pin') Tree.pinTab(tab.uid)
+      else Tree.unpinTab(tab.uid)
+
+      expect(browser.tabs.update).toHaveBeenCalledWith(10, {
+        pinned: expectedPinned,
+      })
+      expect(tab.pinned).toBe(initialPinned)
+      expectTreeInvariants()
+    },
+  )
 
   it('does not call browser.tabs.remove when closing a saved tab id', () => {
     const tab = createTab('tab-1' as UID, { id: -1, state: State.SAVED })
@@ -119,6 +175,171 @@ describe('background browser API interactions', () => {
     expect(tab.state).toBe(State.SAVED)
     expect(tab.active).toBe(false)
     expect(browser.tabs.remove).toHaveBeenCalledWith(10)
+    expectTreeInvariants()
+  })
+
+  it.each(['save', 'close'] as const)(
+    '%s clears the active tab before Firefox activates its replacement',
+    async (action) => {
+      const activeTab = createTab('tab-active' as UID, {
+        active: true,
+        id: 10,
+        state: State.OPEN,
+      })
+      const replacement = createTab('tab-replacement' as UID, {
+        active: false,
+        id: 11,
+        state: State.OPEN,
+      })
+      const window = createWindow('window-1' as UID, [activeTab, replacement], {
+        active: true,
+        activeTabId: activeTab.id,
+        id: 20,
+        state: State.OPEN,
+      })
+
+      if (action === 'save') {
+        await Tree.saveTab({ tabId: activeTab.id, tabUid: activeTab.uid })
+        expect(activeTab).toMatchObject({
+          active: false,
+          id: -1,
+          state: State.SAVED,
+        })
+      } else {
+        await Tree.closeTab({ tabId: activeTab.id, tabUid: activeTab.uid })
+        expect(Tree.tabsByUid.has(activeTab.uid)).toBe(false)
+      }
+
+      expect(window.activeTabId).toBeUndefined()
+      expect(replacement.active).toBe(false)
+
+      Tree.tabOnActivated({
+        tabId: replacement.id,
+        windowId: window.id,
+        previousTabId: activeTab.id,
+      })
+
+      expect(window.activeTabId).toBe(replacement.id)
+      expect(replacement.active).toBe(true)
+      expect(
+        window.children.filter(
+          (item) => item.type === 1 && item.active === true,
+        ),
+      ).toEqual([replacement])
+      expectTreeInvariants()
+    },
+  )
+
+  it.each(['save', 'close'] as const)(
+    '%s the only browser-backed tab preserves a note/separator window',
+    async (action) => {
+      const tab = createTab('tab-1' as UID, {
+        active: true,
+        id: 10,
+        state: State.OPEN,
+      })
+      const note = createNote('note-1' as UID)
+      const separator = createSeparator('separator-1' as UID)
+      const window = createWindow('window-1' as UID, [tab, note, separator], {
+        active: true,
+        activeTabId: tab.id,
+        id: 20,
+        state: State.OPEN,
+      })
+
+      if (action === 'save') {
+        await Tree.saveTab({ tabId: tab.id, tabUid: tab.uid })
+        expect(window.children.map((item) => item.uid)).toEqual([
+          tab.uid,
+          note.uid,
+          separator.uid,
+        ])
+        expect(tab).toMatchObject({ id: -1, state: State.SAVED })
+      } else {
+        await Tree.closeTab({ tabId: tab.id, tabUid: tab.uid })
+        expect(window.children.map((item) => item.uid)).toEqual([
+          note.uid,
+          separator.uid,
+        ])
+        expect(Tree.tabsByUid.has(tab.uid)).toBe(false)
+      }
+
+      expect(window).toMatchObject({ id: -1, state: State.SAVED })
+      expect(Tree.notesByUid.get(note.uid)).toBe(note)
+      expect(Tree.separatorsByUid.get(separator.uid)).toBe(separator)
+      expectTreeInvariants()
+    },
+  )
+
+  it('saves mixed live tabs while preserving saved items and metadata', async () => {
+    const group = {
+      uid: 'group-1' as UID,
+      id: 7,
+      title: 'Research',
+      color: 'blue' as const,
+      collapsed: true,
+    }
+    const container = {
+      cookieStoreId: 'firefox-container-1',
+      name: 'Work',
+      color: 'blue',
+      colorCode: '#37adff',
+      icon: 'briefcase',
+    }
+    const open = createTab('tab-open' as UID, {
+      id: 10,
+      state: State.OPEN,
+      tabGroup: { ...group },
+      container: { ...container },
+    })
+    const discarded = createTab('tab-discarded' as UID, {
+      id: 11,
+      state: State.DISCARDED,
+      tabGroup: { ...group },
+      container: { ...container },
+    })
+    const alreadySaved = createTab('tab-saved' as UID, {
+      id: -1,
+      state: State.SAVED,
+      savedTime: 123,
+    })
+    const note = createNote('note-1' as UID)
+    const separator = createSeparator('separator-1' as UID)
+    const window = createWindow(
+      'window-1' as UID,
+      [open, note, discarded, separator, alreadySaved],
+      { id: 20, state: State.OPEN },
+    )
+
+    await Tree.saveTab({ tabId: open.id, tabUid: open.uid })
+    await Tree.saveTab({ tabId: discarded.id, tabUid: discarded.uid })
+    await Tree.saveTab({ tabId: alreadySaved.id, tabUid: alreadySaved.uid })
+
+    expect(open).toMatchObject({
+      id: -1,
+      state: State.SAVED,
+      tabGroup: { uid: group.uid, id: -1 },
+      container,
+    })
+    expect(discarded).toMatchObject({
+      id: -1,
+      state: State.SAVED,
+      tabGroup: { uid: group.uid, id: -1 },
+      container,
+    })
+    expect(alreadySaved).toMatchObject({
+      id: -1,
+      state: State.SAVED,
+      savedTime: 123,
+    })
+    expect(window.children.map((item) => item.uid)).toEqual([
+      open.uid,
+      note.uid,
+      discarded.uid,
+      separator.uid,
+      alreadySaved.uid,
+    ])
+    expect(browser.tabs.remove).toHaveBeenCalledTimes(2)
     expectTreeInvariants()
   })
 
@@ -340,6 +561,156 @@ describe('background browser API interactions', () => {
     )
   })
 
+  it.each([
+    ['about:blank', undefined, false],
+    [
+      'about:config',
+      'moz-extension://test-id/redirect.html' +
+        '?targetUrl=about%3Aconfig&targetTitle=Saved%20title',
+      false,
+    ],
+    [
+      'not a valid absolute url',
+      'moz-extension://test-id/redirect.html' +
+        '?targetUrl=not%20a%20valid%20absolute%20url' +
+        '&targetTitle=Saved%20title',
+      false,
+    ],
+    ['https://example.test/path', 'https://example.test/path', true],
+  ] as const)(
+    'applies the shared URL policy when opening a discarded saved tab: %s',
+    async (url, expectedUrl, expectedDiscarded) => {
+      const openTab = createTab('open-tab' as UID, {
+        id: 10,
+        state: State.OPEN,
+      })
+      const savedTab = createTab('saved-tab' as UID, {
+        id: -1,
+        state: State.SAVED,
+        title: 'Saved title',
+        url,
+      })
+      const window = createWindow('window-1' as UID, [openTab, savedTab], {
+        id: 20,
+        state: State.OPEN,
+      })
+      const createTabAndWait = vi
+        .spyOn(OnCreatedQueue, 'createTabAndWait')
+        .mockResolvedValue({
+          id: 30,
+          windowId: window.id,
+          index: 1,
+          active: false,
+          discarded: expectedDiscarded,
+          pinned: false,
+        } as browser.tabs.Tab)
+
+      await Tree.openTab({
+        tabUid: savedTab.uid,
+        windowUid: window.uid,
+        discarded: true,
+      })
+
+      const properties = createTabAndWait.mock.calls[0][0]
+      if (expectedUrl === undefined) {
+        expect(properties).not.toHaveProperty('url')
+      } else {
+        expect(properties.url).toBe(expectedUrl)
+      }
+      expect(properties).toMatchObject({
+        active: false,
+        discarded: expectedDiscarded,
+        windowId: window.id,
+      })
+      expectTreeInvariants()
+    },
+  )
+
+  it.each([
+    {
+      focusSetting: false,
+      explicitActive: undefined,
+      expectedActive: false,
+    },
+    { focusSetting: true, explicitActive: undefined, expectedActive: true },
+    { focusSetting: true, explicitActive: false, expectedActive: false },
+    { focusSetting: false, explicitActive: true, expectedActive: true },
+  ])(
+    'uses focusTabOnOpen=$focusSetting with explicit active=$explicitActive',
+    async ({ focusSetting, explicitActive, expectedActive }) => {
+      Settings.values.focusTabOnOpen = focusSetting
+      const openTab = createTab('open-tab' as UID, {
+        id: 10,
+        state: State.OPEN,
+      })
+      const savedTab = createTab('saved-tab' as UID, {
+        id: -1,
+        state: State.SAVED,
+      })
+      const window = createWindow('window-1' as UID, [openTab, savedTab], {
+        id: 20,
+        state: State.OPEN,
+      })
+      const createTabAndWait = vi
+        .spyOn(OnCreatedQueue, 'createTabAndWait')
+        .mockResolvedValue({
+          id: 30,
+          windowId: window.id,
+          index: 1,
+          active: expectedActive,
+          discarded: false,
+          pinned: false,
+        } as browser.tabs.Tab)
+
+      await Tree.openTab({
+        tabUid: savedTab.uid,
+        windowUid: window.uid,
+        active: explicitActive,
+      })
+
+      expect(createTabAndWait).toHaveBeenCalledWith(
+        expect.objectContaining({ active: expectedActive }),
+      )
+      expectTreeInvariants()
+    },
+  )
+
+  it.each([
+    { focusWindowOnOpen: true, shouldRestorePopupFocus: false },
+    { focusWindowOnOpen: false, shouldRestorePopupFocus: true },
+  ])(
+    'honors focusWindowOnOpen=$focusWindowOnOpen for a saved tab window',
+    async ({ focusWindowOnOpen, shouldRestorePopupFocus }) => {
+      Settings.values.focusWindowOnOpen = focusWindowOnOpen
+      Tree.sessionTreeWindowId = 99
+      const tab = createTab('saved-tab' as UID, {
+        id: -1,
+        state: State.SAVED,
+      })
+      const window = createWindow('window-1' as UID, [tab], {
+        id: -1,
+        state: State.SAVED,
+      })
+      vi.spyOn(OnCreatedQueue, 'createWindowAndWait').mockResolvedValue({
+        id: 30,
+        tabs: [{ id: 31 }],
+      } as browser.windows.Window)
+
+      await Tree.openTab({ tabUid: tab.uid, windowUid: window.uid })
+
+      if (shouldRestorePopupFocus) {
+        expect(browser.windows.update).toHaveBeenCalledWith(99, {
+          focused: true,
+        })
+      } else {
+        expect(browser.windows.update).not.toHaveBeenCalledWith(99, {
+          focused: true,
+        })
+      }
+      expectTreeInvariants()
+    },
+  )
+
   it('rejects and restores saved state when browser tab creation fails', async () => {
     const openTab = createTab('open-tab' as UID, {
       id: 10,
@@ -472,6 +843,71 @@ describe('background browser API interactions', () => {
     expect(window.incognito).toBe(true)
     expect(tab.id).toBe(31)
     expect(tab.state).toBe(State.OPEN)
+    expectTreeInvariants()
+  })
+
+  it('creates a normal Firefox window when a saved tab has no live destination', async () => {
+    const tab = createTab('saved-tab' as UID, {
+      id: -1,
+      state: State.SAVED,
+      url: 'https://example.test/saved',
+    })
+    const window = createWindow('window-1' as UID, [tab], {
+      id: -1,
+      incognito: false,
+      state: State.SAVED,
+    })
+    vi.spyOn(OnCreatedQueue, 'createWindowAndWait').mockResolvedValue({
+      id: 30,
+      tabs: [{ id: 31 }],
+    } as browser.windows.Window)
+
+    await Tree.openTab({ tabUid: tab.uid, windowUid: window.uid })
+
+    expect(OnCreatedQueue.createWindowAndWait).toHaveBeenCalledWith({
+      incognito: false,
+      url: tab.url,
+    })
+    expect(window).toMatchObject({ id: 30, state: State.OPEN })
+    expect(tab).toMatchObject({ id: 31, state: State.OPEN })
+    expect(Tree.windowsByUid.get(window.uid)).toBe(window)
+    expect(Tree.tabsByUid.get(tab.uid)).toBe(tab)
+    expectTreeInvariants()
+  })
+
+  it('normalizes saved-window bounds when opening a saved tab', async () => {
+    Settings.values.openWindowsInSameLocation = true
+    const tab = createTab('saved-tab' as UID, {
+      id: -1,
+      state: State.SAVED,
+      url: 'https://example.test/saved',
+    })
+    const window = createWindow('window-1' as UID, [tab], {
+      id: -1,
+      state: State.SAVED,
+      windowPosition: {
+        left: 0,
+        top: -400,
+        width: 0,
+        height: 700,
+      },
+    })
+    const createWindowAndWait = vi
+      .spyOn(OnCreatedQueue, 'createWindowAndWait')
+      .mockResolvedValue({
+        id: 30,
+        tabs: [{ id: 31 } as browser.tabs.Tab],
+      } as browser.windows.Window)
+
+    await Tree.openTab({ tabUid: tab.uid, windowUid: window.uid })
+
+    expect(createWindowAndWait).toHaveBeenCalledWith({
+      incognito: false,
+      url: tab.url,
+      left: 0,
+      top: -400,
+      height: 700,
+    })
     expectTreeInvariants()
   })
 

@@ -208,7 +208,102 @@ describe('generic tree item structural actions', () => {
     expect(
       (duplicatedItems.find((item) => item.type === TreeItemType.TAB) as Tab)
         .isParent,
-    ).toBe(false)
+    ).toBe(true)
+    const duplicateParent = duplicatedItems.find(
+      (item): item is Tab => item.type === TreeItemType.TAB,
+    )!
+    const duplicateChild = duplicatedItems.find(
+      (item) => item.type === TreeItemType.NOTE,
+    )!
+    expect(duplicateChild.parentUid).toBe(duplicateParent.uid)
+    expectTreeInvariants()
+  })
+
+  it('duplicates a selected complete subtree only once when its descendant is also selected', async () => {
+    Settings.values.duplicateTreeItemDescendants = 'complete-subtree'
+    const parent = createTab('tab-parent' as UID, { isParent: true })
+    const child = createNote('note-child' as UID, {
+      parentUid: parent.uid,
+      indentLevel: 2,
+    })
+    const tail = createTab('tab-tail' as UID)
+    const window = createWindow('window-1' as UID, [parent, child, tail])
+
+    await Tree.duplicateTreeItems([parent.uid, child.uid])
+
+    expect(window.children).toHaveLength(5)
+    const clonedParent = window.children[2] as Tab
+    const clonedChild = window.children[3]
+    expect(clonedParent.uid).not.toBe(parent.uid)
+    expect(clonedChild.uid).not.toBe(child.uid)
+    expect(clonedChild.parentUid).toBe(clonedParent.uid)
+    expect(window.children.filter((item) => item !== child)).toHaveLength(4)
+    expectTreeInvariants()
+  })
+
+  it('duplicates a saved grouped tab with a fresh saved group identity', async () => {
+    const tabGroup = {
+      uid: 'group-1' as UID,
+      id: -1,
+      title: 'Work',
+      color: 'blue' as const,
+      collapsed: true,
+    }
+    const tab = createTab('tab-1' as UID, {
+      id: -1,
+      state: State.SAVED,
+      tabGroup,
+    })
+    const window = createWindow('window-1' as UID, [tab])
+
+    await Tree.duplicateTreeItems([tab.uid])
+
+    const clone = window.children[1] as Tab
+    expect(clone.uid).not.toBe(tab.uid)
+    expect(clone.tabGroup).toEqual({
+      ...tabGroup,
+      uid: expect.any(String),
+      id: -1,
+    })
+    expect(clone.tabGroup?.uid).not.toBe(tabGroup.uid)
+    expect(browser.tabs.group).not.toHaveBeenCalled()
+    expectTreeInvariants()
+  })
+
+  it('duplicates each window group with one distinct fresh stable UID', async () => {
+    const groupA = {
+      uid: 'group-a' as UID,
+      id: 10,
+      title: 'Research',
+      color: 'blue' as const,
+      collapsed: false,
+    }
+    const groupB = {
+      uid: 'group-b' as UID,
+      id: 11,
+      title: 'Personal',
+      color: 'green' as const,
+      collapsed: true,
+    }
+    const window = createWindow('window-1' as UID, [
+      createTab('tab-a-1' as UID, { tabGroup: { ...groupA } }),
+      createTab('tab-a-2' as UID, { tabGroup: { ...groupA } }),
+      createTab('tab-b-1' as UID, { tabGroup: { ...groupB } }),
+      createTab('tab-b-2' as UID, { tabGroup: { ...groupB } }),
+    ])
+
+    await Tree.duplicateTreeItems([window.uid])
+
+    const clone = Tree.Items[1] as Window
+    const clonedTabs = clone.children as Tab[]
+    const clonedGroupAUid = clonedTabs[0].tabGroup?.uid
+    const clonedGroupBUid = clonedTabs[2].tabGroup?.uid
+    expect(clonedTabs[1].tabGroup?.uid).toBe(clonedGroupAUid)
+    expect(clonedTabs[3].tabGroup?.uid).toBe(clonedGroupBUid)
+    expect(clonedGroupAUid).not.toBe(groupA.uid)
+    expect(clonedGroupBUid).not.toBe(groupB.uid)
+    expect(clonedGroupAUid).not.toBe(clonedGroupBUid)
+    expect(clonedTabs.map((tab) => tab.tabGroup?.id)).toEqual([-1, -1, -1, -1])
     expectTreeInvariants()
   })
 

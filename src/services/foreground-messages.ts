@@ -75,8 +75,10 @@ export function closeTab(tabId: number, tabUid: UID): Promise<void> {
 }
 
 export function closeTabs(tabs: Array<Tab>): Promise<void> {
+  const eligibleTabs = tabs.filter(isLiveTab)
+  if (eligibleTabs.length === 0) return Promise.resolve()
   return sendBulkCommands(
-    tabs.map((tab) => ({
+    eligibleTabs.map((tab) => ({
       action: 'closeTab',
       tabId: tab.id,
       tabUid: tab.uid,
@@ -106,6 +108,26 @@ function tabRecoveryTarget(tab: Tab): TabRecoveryTarget {
   }
 }
 
+function isLiveTab(tab: Tab): boolean {
+  return tab.state === State.OPEN || tab.state === State.DISCARDED
+}
+
+function tabsInTreeOrder(tabs: Tab[]): Tab[] {
+  const order = new Map<UID, number>()
+  let index = 0
+  for (const item of SessionTree.reactiveItems.value) {
+    if (item.type !== TreeItemType.WINDOW) continue
+    for (const child of item.children) {
+      if (child.type === TreeItemType.TAB) order.set(child.uid, index++)
+    }
+  }
+  return [...tabs].sort(
+    (left, right) =>
+      (order.get(left.uid) ?? Number.MAX_SAFE_INTEGER) -
+      (order.get(right.uid) ?? Number.MAX_SAFE_INTEGER),
+  )
+}
+
 async function sendOpenTabTarget(
   target: TabRecoveryTarget,
   recovery?: {
@@ -118,6 +140,7 @@ async function sendOpenTabTarget(
     tabUid: target.tabUid,
     windowUid: target.windowUid,
     url: target.url,
+    active: target.active,
     ...(recovery
       ? {
           containerRecovery: recovery.strategy,
@@ -128,7 +151,13 @@ async function sendOpenTabTarget(
 }
 
 export async function openTab(tabUid: UID, windowUid: UID, url: string) {
-  const target: TabRecoveryTarget = { type: 'tab', tabUid, windowUid, url }
+  const target: TabRecoveryTarget = {
+    type: 'tab',
+    tabUid,
+    windowUid,
+    url,
+    active: Settings.values.focusTabOnOpen,
+  }
   const tab = SessionTree.tabsByUid.get(tabUid)
   if (tab) {
     const missing = await missingContainers([tab])
@@ -143,27 +172,36 @@ export async function openTab(tabUid: UID, windowUid: UID, url: string) {
       tabUid: target.tabUid,
       windowUid: target.windowUid,
       url: target.url,
+      active: target.active,
     },
     'Session Flow could not open the tab',
   )
 }
 
 export async function openTabs(tabs: Array<Tab>): Promise<void> {
-  const targets = tabs.map(tabRecoveryTarget)
-  if (!tabs.some((tab) => tab.container)) {
+  const eligibleTabs = tabsInTreeOrder(
+    tabs.filter((tab) => tab.state === State.SAVED),
+  )
+  if (eligibleTabs.length === 0) return
+  const targets = eligibleTabs.map((tab, index) => ({
+    ...tabRecoveryTarget(tab),
+    active: Settings.values.focusTabOnOpen && index === 0,
+  }))
+  if (!eligibleTabs.some((tab) => tab.container)) {
     await sendBulkCommands(
       targets.map((target) => ({
         action: 'openTab',
         tabUid: target.tabUid,
         windowUid: target.windowUid,
         url: target.url,
+        active: target.active,
       })),
       (failedCount, totalCount) =>
         `Session Flow could not open ${failedCount} of ${totalCount} tabs.`,
     )
     return
   }
-  const missing = await missingContainers(tabs)
+  const missing = await missingContainers(eligibleTabs)
   if (missing.length > 0) {
     openContainerRecoveryModal({ type: 'tabs', tabs: targets }, missing)
     return
@@ -174,19 +212,24 @@ export async function openTabs(tabs: Array<Tab>): Promise<void> {
       tabUid: target.tabUid,
       windowUid: target.windowUid,
       url: target.url,
+      active: target.active,
     })),
     (failedCount, totalCount) =>
       `Session Flow could not open ${failedCount} of ${totalCount} tabs.`,
   )
 }
 
-export function pinTabs(tabs: Array<Tab>) {
-  tabs.forEach((tab) => {
-    void sendTreeCommand({
+export function pinTabs(tabs: Array<Tab>): Promise<void> {
+  const eligibleTabs = tabs.filter((tab) => !tab.pinned)
+  if (eligibleTabs.length === 0) return Promise.resolve()
+  return sendBulkCommands(
+    eligibleTabs.map((tab) => ({
       action: 'pinTab',
       tabUid: tab.uid,
-    })
-  })
+    })),
+    (failedCount, totalCount) =>
+      `Session Flow could not pin ${failedCount} of ${totalCount} tabs.`,
+  )
 }
 
 export function reloadTab(tabId: number) {
@@ -196,10 +239,17 @@ export function reloadTab(tabId: number) {
   })
 }
 
-export function reloadTabs(tabs: Array<Tab>) {
-  tabs.forEach((tab) => {
-    reloadTab(tab.id)
-  })
+export function reloadTabs(tabs: Array<Tab>): Promise<void> {
+  const eligibleTabs = tabs.filter(isLiveTab)
+  if (eligibleTabs.length === 0) return Promise.resolve()
+  return sendBulkCommands(
+    eligibleTabs.map((tab) => ({
+      action: 'reloadTab',
+      tabId: tab.id,
+    })),
+    (failedCount, totalCount) =>
+      `Session Flow could not reload ${failedCount} of ${totalCount} tabs.`,
+  )
 }
 
 export function saveTab(tabId: number, tabUid: UID): Promise<void> {
@@ -214,8 +264,10 @@ export function saveTab(tabId: number, tabUid: UID): Promise<void> {
 }
 
 export function saveTabs(tabs: Array<Tab>): Promise<void> {
+  const eligibleTabs = tabs.filter(isLiveTab)
+  if (eligibleTabs.length === 0) return Promise.resolve()
   return sendBulkCommands(
-    tabs.map((tab) => ({
+    eligibleTabs.map((tab) => ({
       action: 'saveTab',
       tabId: tab.id,
       tabUid: tab.uid,
@@ -298,16 +350,20 @@ export function toggleCollapseTab(tabUid: UID) {
   })
 }
 
-export function unpinTabs(tabs: Array<Tab>) {
-  tabs
+export function unpinTabs(tabs: Array<Tab>): Promise<void> {
+  const eligibleTabs = tabs
+    .filter((tab) => tab.pinned)
     .slice()
     .reverse()
-    .forEach((tab) => {
-      void sendTreeCommand({
-        action: 'unpinTab',
-        tabUid: tab.uid,
-      })
-    })
+  if (eligibleTabs.length === 0) return Promise.resolve()
+  return sendBulkCommands(
+    eligibleTabs.map((tab) => ({
+      action: 'unpinTab',
+      tabUid: tab.uid,
+    })),
+    (failedCount, totalCount) =>
+      `Session Flow could not unpin ${failedCount} of ${totalCount} tabs.`,
+  )
 }
 
 export function updateCustomLabel(uid: UID, customLabel?: string) {

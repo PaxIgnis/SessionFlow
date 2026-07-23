@@ -8,4 +8,6 @@ export const PRIVILEGED_URLS = [
   'javascript:',
   'data:',
   'file:',
+  'moz-extension:',
+  'view-source:',
 ]

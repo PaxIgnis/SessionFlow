@@ -28,6 +28,7 @@ export type ContainerRecoveryTabTarget = {
   windowUid: UID
   url: string
   containerStoreId?: string
+  active?: boolean
 }
 
 export type ContainerRecoveryTarget =

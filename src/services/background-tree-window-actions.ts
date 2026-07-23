@@ -37,6 +37,7 @@ export function saveWindow(windowUid: UID): void {
     window.active = false
     window.activeTabId = undefined
     tabs.forEach((tab) => {
+      if (tab.state === State.SAVED) return
       tab.state = State.SAVED
       tab.id = -1
       tab.savedTime = Date.now()
@@ -278,12 +279,18 @@ export function updateWindowPositionInterval(): void {
       const windows = await browser.windows.getAll()
       windows.forEach((window) => {
         if (
-          window.id &&
+          window.id !== undefined &&
           window.id !== Tree.sessionTreeWindowId &&
-          window.left &&
-          window.top &&
-          window.width &&
-          window.height
+          typeof window.left === 'number' &&
+          Number.isFinite(window.left) &&
+          typeof window.top === 'number' &&
+          Number.isFinite(window.top) &&
+          typeof window.width === 'number' &&
+          Number.isFinite(window.width) &&
+          typeof window.height === 'number' &&
+          Number.isFinite(window.height) &&
+          window.width > 0 &&
+          window.height > 0
         ) {
           updateWindowPosition(window.id, {
             left: window.left,
@@ -396,6 +403,7 @@ export async function openWindow(
           state: tab.state,
           active: tab.active,
           container: tab.container ? structuredClone(tab.container) : undefined,
+          tabGroup: tab.tabGroup ? structuredClone(tab.tabGroup) : undefined,
         },
       ]),
     )
@@ -405,19 +413,11 @@ export async function openWindow(
       message.containerRecoveryStoreIds,
     )
     for (const tab of sessionTabs) {
-      let url = String(tab.url)
-      // if the URL is a privileged URL, open a redirect page instead
-      if (Utils.isPrivilegedUrl(url)) {
-        const title = Tree.getTabTitle(tab.uid)
-        url = Utils.getRedirectUrl(url, title)
-      } else if (
-        url === 'about:newtab' ||
-        url === 'chrome://browser/content/blanktab.html'
-      ) {
-        // don't set the URL for new tabs
-        url = 'about:blank'
-      }
-      urls.push(url)
+      const preparedUrl = Utils.prepareRestorableUrl(
+        String(tab.url),
+        Tree.getTabTitle(tab.uid),
+      )
+      urls.push(preparedUrl.kind === 'blank' ? 'about:blank' : preparedUrl.url)
       if (tab.pinned) pinnedTabs.push(tab.uid)
     }
     let createdWindowId: number | undefined
@@ -434,10 +434,10 @@ export async function openWindow(
         Settings.values.openWindowsInSameLocation &&
         sessionTreeWindow.windowPosition
       ) {
-        properties.left = sessionTreeWindow.windowPosition.left
-        properties.top = sessionTreeWindow.windowPosition.top
-        properties.width = sessionTreeWindow.windowPosition.width
-        properties.height = sessionTreeWindow.windowPosition.height
+        Object.assign(
+          properties,
+          Utils.restorableWindowBounds(sessionTreeWindow.windowPosition),
+        )
       }
       const window = await OnCreatedQueue.createWindowAndWait(properties)
       createdWindowId = window?.id
@@ -469,9 +469,21 @@ export async function openWindow(
           windowUid: message.windowUid,
           discarded: Settings.values.openWindowWithTabsDiscarded,
           active: false,
+          deferGroupRestore: true,
           containerRecovery: message.containerRecovery,
           containerRecoveryStoreIds: message.containerRecoveryStoreIds,
         })
+      }
+      for (const tab of sessionTabs) {
+        const savedTabGroup = tabSnapshots.get(tab.uid)?.tabGroup
+        Tree.updateTab(
+          { tabUid: tab.uid },
+          {
+            tabGroup: savedTabGroup
+              ? structuredClone(savedTabGroup)
+              : undefined,
+          },
+        )
       }
       const groupRestoreResult = await Tree.restoreWindowTabGroups(
         message.windowUid,

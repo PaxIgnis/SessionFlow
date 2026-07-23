@@ -1548,6 +1548,69 @@ describe('background handlers', () => {
     await first
   })
 
+  it('serializes saved-tab opens in one window', async () => {
+    const { initializeListeners, mocks } = await loadBackgroundHandlers()
+    let resolveFirstOpen: () => void = () => {}
+    mocks.openTab.mockImplementation(({ tabUid }: { tabUid: UID }) => {
+      if (tabUid !== ('tab-1' as UID)) return Promise.resolve()
+      return new Promise<void>((resolve) => {
+        resolveFirstOpen = resolve
+      })
+    })
+    initializeListeners()
+    const dispatchCommand = getDispatchCommand(mocks.initializeSessionTreePort)
+
+    const first = dispatchCommand({
+      action: 'openTab',
+      tabUid: 'tab-1' as UID,
+      windowUid: 'window-1' as UID,
+    })
+    const second = dispatchCommand({
+      action: 'openTab',
+      tabUid: 'tab-2' as UID,
+      windowUid: 'window-1' as UID,
+    })
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(mocks.openTab).toHaveBeenCalledTimes(1)
+
+    resolveFirstOpen()
+    await Promise.all([first, second])
+
+    expect(mocks.openTab).toHaveBeenCalledTimes(2)
+  })
+
+  it('allows saved-tab opens in different windows', async () => {
+    const { initializeListeners, mocks } = await loadBackgroundHandlers()
+    let resolveFirstOpen: () => void = () => {}
+    mocks.openTab.mockImplementation(({ tabUid }: { tabUid: UID }) => {
+      if (tabUid !== ('tab-1' as UID)) return Promise.resolve()
+      return new Promise<void>((resolve) => {
+        resolveFirstOpen = resolve
+      })
+    })
+    initializeListeners()
+    const dispatchCommand = getDispatchCommand(mocks.initializeSessionTreePort)
+
+    const first = dispatchCommand({
+      action: 'openTab',
+      tabUid: 'tab-1' as UID,
+      windowUid: 'window-1' as UID,
+    })
+    const second = dispatchCommand({
+      action: 'openTab',
+      tabUid: 'tab-2' as UID,
+      windowUid: 'window-2' as UID,
+    })
+    await second
+
+    expect(mocks.openTab).toHaveBeenCalledTimes(2)
+
+    resolveFirstOpen()
+    await first
+  })
+
   it.each([
     {
       action: 'treeItemIndentIncrease' as const,
