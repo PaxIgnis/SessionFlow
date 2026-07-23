@@ -165,18 +165,6 @@ onBeforeUnmount(() => {
 
 // Handler functions
 
-const getTabTree = () => {
-  console.log(
-    'Session Tree has ',
-    SessionTree.reactiveItems.value.length,
-    ' windows',
-  )
-  console.log(SessionTree.reactiveItems.value)
-  console.log(SessionTree.reactiveItems)
-  console.log('Visible Tree Items:', visibleTreeItems.value)
-  Messages.printSessionTree()
-}
-
 function onClick() {
   Selection.clearSelection()
 }
@@ -255,7 +243,6 @@ function runToolbarAction(action: () => void | Promise<void>): void {
       @dragover.stop.prevent="DragAndDrop.onDragMove"
       @drop.stop.prevent="DragAndDrop.onDrop"
     >
-      <button @click="getTabTree">Get Tab Tree</button>
       <div
         class="hiddenAssets"
         style="display: none"
