@@ -213,6 +213,20 @@ export function removeTab(tabUid: UID, emitDelta: boolean = true): void {
 
   Tree.existingUidsSet.delete(tab.uid)
   Tree.tabsByUid.delete(tab.uid)
+  if (window.savedActiveTabUid === tab.uid) {
+    window.savedActiveTabUid = undefined
+  }
+  if (window.activeTabId === tab.id) {
+    window.activeTabId = undefined
+  }
+  if (
+    tab.tabGroup &&
+    ![...Tree.tabsByUid.values()].some(
+      (candidate) => candidate.tabGroup?.uid === tab.tabGroup?.uid,
+    )
+  ) {
+    Tree.existingUidsSet.delete(tab.tabGroup.uid)
+  }
   window.children.splice(index, 1)
   if (emitDelta) {
     emitTreeDelta({
@@ -270,8 +284,20 @@ export function updateTab(
       return
     }
   }
+  const previousGroupUid = tab.tabGroup?.uid
   // If the tab object exists update the new values
   Object.assign(tab, tabContents)
+  const nextGroupUid = tab.tabGroup?.uid
+  if (nextGroupUid) Tree.existingUidsSet.add(nextGroupUid)
+  if (
+    previousGroupUid &&
+    previousGroupUid !== nextGroupUid &&
+    ![...Tree.tabsByUid.values()].some(
+      (candidate) => candidate.tabGroup?.uid === previousGroupUid,
+    )
+  ) {
+    Tree.existingUidsSet.delete(previousGroupUid)
+  }
   if (emitDelta) {
     emitTreeDelta({
       op: 'tabUpdated',
@@ -1325,6 +1351,9 @@ export async function moveTab(
       tab.container,
     )
     if (newTabId !== tab.id) Tree.updateTabId(tab.uid, newTabId)
+    if (tabActive) {
+      Tree.updateWindow(targetWindow.uid, { activeTabId: newTabId }, emitDelta)
+    }
   }
 
   // if tab is open in browser but target window is not open then create the window first

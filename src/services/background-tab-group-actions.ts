@@ -482,17 +482,28 @@ export async function applyDropTabGroup(
     .filter((tab): tab is Tab => Boolean(tab))
   const liveTabs = movedTabs.filter(isLiveTab)
   const liveTabIds = liveTabs.map((tab) => tab.id).filter((id) => id >= 0)
-  const movedTabSourceGroup =
-    movedTabs.length === 1
-      ? (movedTabs[0].tabGroup ?? sourceTabGroups.get(movedTabs[0].uid))
-      : undefined
+  const firstMovedSourceGroup = movedTabs[0]
+    ? (movedTabs[0].tabGroup ?? sourceTabGroups.get(movedTabs[0].uid))
+    : undefined
+  const movedTabsShareSourceGroup =
+    firstMovedSourceGroup !== undefined &&
+    movedTabs.every(
+      (tab) =>
+        (tab.tabGroup ?? sourceTabGroups.get(tab.uid))?.uid ===
+        firstMovedSourceGroup.uid,
+    )
+  const preserveMovedSourceGroup =
+    movedTabsShareSourceGroup &&
+    (movedTabs.length === 1 ||
+      movedTabs.every((tab) => !isLiveTab(tab)) ||
+      movedTabs.some((tab) => sourceTabGroups.has(tab.uid)))
   const existingSoleGroup =
-    !targetGroup && movedTabSourceGroup ? movedTabSourceGroup : undefined
+    !targetGroup && preserveMovedSourceGroup ? firstMovedSourceGroup : undefined
   const preserveSoleGroup =
     existingSoleGroup !== undefined &&
     ![...Tree.tabsByUid.values()].some(
       (tab) =>
-        tab.uid !== movedTabs[0].uid &&
+        !tabUids.includes(tab.uid) &&
         tab.tabGroup?.uid === existingSoleGroup.uid,
     )
   const effectiveTargetGroup =

@@ -400,6 +400,12 @@ describe('generic tree item structural actions', () => {
       .mockImplementation(async ({ tabUid, discarded, active }) => {
         const tab = Tree.tabsByUid.get(tabUid)!
         tab.state = discarded ? State.DISCARDED : State.OPEN
+        if (active) {
+          const window = Tree.windowsByUid.get(tab.windowUid)
+          window?.children.forEach((child) => {
+            if (child.type === TreeItemType.TAB) child.active = false
+          })
+        }
         tab.active = active
       })
 

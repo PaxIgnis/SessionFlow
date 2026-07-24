@@ -18,6 +18,7 @@ import {
   createWindow,
   resetTree,
 } from '../../helpers/tree-fixtures'
+import { expectTreeInvariants } from '../../helpers/tree-invariants'
 
 function browserTab(
   id: number,
@@ -127,6 +128,68 @@ describe('Firefox-restored windows', () => {
     })
     expect(fresh?.uid).not.toBe(matching.uid)
     expect(savedWindow.children[0]).toBe(parent)
+  })
+
+  it('restores a saved window beneath its top-level note without disturbing the following sibling', async () => {
+    const rootNote = createNote('note-root' as UID, {
+      indentLevel: 0,
+      isParent: true,
+      windowUid: undefined,
+    })
+    const savedTab = createTab('tab-saved' as UID, {
+      id: 10,
+      state: State.OPEN,
+      active: true,
+    })
+    const savedWindow = createWindow('window-saved' as UID, [savedTab], {
+      id: 20,
+      state: State.OPEN,
+      activeTabId: savedTab.id,
+      parentUid: rootNote.uid,
+      indentLevel: 1,
+    })
+    const sibling = createWindow('window-sibling' as UID)
+    Tree.Items.splice(0, 0, rootNote)
+    Tree.notesByUid.set(rootNote.uid, rootNote)
+    Tree.existingUidsSet.add(rootNote.uid)
+    Tree.recomputeSessionTree(false)
+
+    Tree.saveWindow(savedWindow.uid)
+    vi.mocked(browser.sessions.getWindowValue).mockResolvedValue({
+      version: 1,
+      uid: savedWindow.uid,
+    })
+    vi.mocked(browser.sessions.getTabValue).mockResolvedValue({
+      version: 1,
+      uid: savedTab.uid,
+    })
+    const restored = browserTab(101, 0)
+    vi.mocked(browser.windows.get).mockResolvedValue({
+      alwaysOnTop: false,
+      id: 30,
+      focused: true,
+      incognito: false,
+      tabs: [restored],
+    })
+
+    await expect(
+      handleCreatedWindow({ id: 30 } as browser.windows.Window),
+    ).resolves.toBe(true)
+
+    expect(Tree.Items.map((item) => item.uid)).toEqual([
+      rootNote.uid,
+      savedWindow.uid,
+      sibling.uid,
+    ])
+    expect(savedWindow.parentUid).toBe(rootNote.uid)
+    expect(savedWindow.indentLevel).toBe(1)
+    expect(savedTab).toMatchObject({
+      uid: 'tab-saved',
+      id: 101,
+      state: State.OPEN,
+      windowUid: savedWindow.uid,
+    })
+    expectTreeInvariants()
   })
 
   it('retries a child identity read that hangs while Firefox restores the window', async () => {

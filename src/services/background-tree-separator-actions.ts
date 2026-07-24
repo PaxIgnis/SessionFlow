@@ -38,12 +38,6 @@ export function createSeparator(parentUid?: UID, index?: number): UID {
 
   Tree.recomputeSessionTree(false)
   emitTreeDelta({
-    op: 'separatorCreated',
-    parentUid: itemParentUid,
-    separator: structuredClone(separator),
-    index: targetIndex,
-  })
-  emitTreeDelta({
     op: 'treeReplaced',
     treeItems: structuredClone(Tree.Items),
   })
@@ -237,7 +231,6 @@ export function removeSeparator(separatorUid: UID): void {
   }
 
   Tree.recomputeSessionTree(false)
-  emitTreeDelta({ op: 'separatorRemoved', separatorUid })
   emitTreeDelta({
     op: 'treeReplaced',
     treeItems: structuredClone(Tree.Items),

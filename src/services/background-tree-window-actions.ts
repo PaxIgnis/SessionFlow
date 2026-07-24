@@ -149,10 +149,15 @@ export function removeWindow(windowUid: UID): void {
   const index = Tree.Items.findIndex((w) => w.uid === windowUid)
   const window = Tree.windowsByUid.get(windowUid)
   if (window && index !== -1) {
+    const oldParent = window.parentUid
+      ? Tree.getItemByUid(window.parentUid)
+      : undefined
+    const removedGroupUids = new Set<UID>()
     // remove uids of children and window from set and maps
     for (const child of window.children) {
       Tree.existingUidsSet.delete(child.uid)
       if (child.type === TreeItemType.TAB) {
+        if (child.tabGroup) removedGroupUids.add(child.tabGroup.uid)
         Tree.tabsByUid.delete(child.uid)
       } else if (child.type === TreeItemType.NOTE) {
         Tree.notesByUid.delete(child.uid)
@@ -164,11 +169,27 @@ export function removeWindow(windowUid: UID): void {
     Tree.windowsByUid.delete(window.uid)
 
     Tree.Items.splice(index, 1)
+    for (const groupUid of removedGroupUids) {
+      const groupStillUsed = [...Tree.tabsByUid.values()].some(
+        (tab) => tab.tabGroup?.uid === groupUid,
+      )
+      if (!groupStillUsed) Tree.existingUidsSet.delete(groupUid)
+    }
+    if (oldParent) {
+      oldParent.isParent = Tree.hasChildrenInContainer(oldParent, Tree.Items)
+    }
     Tree.recomputeSessionTree()
-    emitTreeDelta({
-      op: 'windowRemoved',
-      windowUid,
-    })
+    if (oldParent) {
+      emitTreeDelta({
+        op: 'treeReplaced',
+        treeItems: structuredClone(Tree.Items),
+      })
+    } else {
+      emitTreeDelta({
+        op: 'windowRemoved',
+        windowUid,
+      })
+    }
   } else {
     console.error(`Error Removing Window ${windowUid} from sessionTree`)
   }

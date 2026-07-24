@@ -40,12 +40,6 @@ export function createNote(
 
   Tree.recomputeSessionTree(false)
   emitTreeDelta({
-    op: 'noteCreated',
-    parentUid: itemParentUid,
-    note: structuredClone(note),
-    index: targetIndex,
-  })
-  emitTreeDelta({
     op: 'treeReplaced',
     treeItems: structuredClone(Tree.Items),
   })
@@ -109,13 +103,13 @@ export function toggleCollapseNote(noteUid: UID): void {
   // set visibility of children in tree and list based on new collapsed state
   if (note.collapsed) {
     if (note.windowUid && window) {
-      Tree.setItemChildrenVisibility(note.uid, window.children, false, true)
+      Tree.setItemChildrenVisibility(note.uid, window.children, false, false)
     } else {
       Tree.setItemChildrenVisibility(
         note.uid,
         Tree.Items as TreeItem[],
         false,
-        true,
+        false,
       )
     }
   } else {
@@ -133,23 +127,19 @@ export function toggleCollapseNote(noteUid: UID): void {
     }
     if (!ancestorCollapsed) {
       if (note.windowUid && window) {
-        Tree.setItemChildrenVisibility(note.uid, window.children, true, true)
+        Tree.setItemChildrenVisibility(note.uid, window.children, true, false)
       } else {
         Tree.setItemChildrenVisibility(
           note.uid,
           Tree.Items as TreeItem[],
           true,
-          true,
+          false,
         )
       }
     }
   }
 
   Tree.recomputeSessionTree(false)
-  emitTreeDelta({
-    op: 'noteUpdated',
-    note: structuredClone(note),
-  })
   emitTreeDelta({
     op: 'treeReplaced',
     treeItems: structuredClone(Tree.Items),
@@ -194,7 +184,6 @@ export function removeNote(noteUid: UID): void {
   }
 
   Tree.recomputeSessionTree(false)
-  emitTreeDelta({ op: 'noteRemoved', noteUid })
   emitTreeDelta({
     op: 'treeReplaced',
     treeItems: structuredClone(Tree.Items),

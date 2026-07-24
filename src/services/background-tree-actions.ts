@@ -872,6 +872,9 @@ export async function moveTreeItems(
   copy: boolean = false,
   includeDescendants: boolean = true,
 ): Promise<void> {
+  itemUIDs = distinctExistingItemUids(itemUIDs)
+  if (itemUIDs.length === 0) return
+
   if (copy) {
     copyTreeItems(
       itemUIDs,
@@ -880,6 +883,18 @@ export async function moveTreeItems(
       targetWindowUid,
       includeDescendants,
     )
+    return
+  }
+
+  if (
+    isEffectiveTreeMoveNoOp(
+      itemUIDs,
+      targetIndex,
+      parentUid,
+      targetWindowUid,
+      includeDescendants,
+    )
+  ) {
     return
   }
 
@@ -949,6 +964,82 @@ export async function moveTreeItems(
   if (moved && targetWindowUid && movedTabUids.length > 0) {
     await Tree.applyDropTabGroup(movedTabUids, targetWindowUid, targetTabGroup)
   }
+}
+
+function distinctExistingItemUids(itemUids: UID[]): UID[] {
+  const seen = new Set<UID>()
+  return itemUids.filter((uid) => {
+    if (seen.has(uid) || !getItemByUid(uid)) return false
+    seen.add(uid)
+    return true
+  })
+}
+
+function isEffectiveTreeMoveNoOp(
+  itemUids: UID[],
+  targetIndex: number,
+  parentUid: UID | undefined,
+  targetWindowUid: UID | undefined,
+  includeDescendants: boolean,
+): boolean {
+  const blocks = buildMoveBlocks(itemUids, includeDescendants)
+  if (blocks.length !== 1) return false
+
+  const block = blocks[0]
+  const destination = getContainerForParent(parentUid, targetWindowUid)
+  if (block.children !== destination.children) return false
+  if (
+    !includeDescendants &&
+    getSubtreeEndIndex(block.children, block.startIndex) > block.startIndex + 1
+  ) {
+    return false
+  }
+
+  const expectedParentUid =
+    destination.parent?.type === TreeItemType.WINDOW
+      ? undefined
+      : destination.parent?.uid
+  if (block.root.parentUid !== expectedParentUid) return false
+
+  const expectedWindowUid = destination.parent
+    ? getWindowUidForParent(destination.parent)
+    : targetWindowUid
+  if (
+    block.root.type !== TreeItemType.WINDOW &&
+    block.root.windowUid !== expectedWindowUid
+  ) {
+    return false
+  }
+
+  const movedTabs = block.items.filter(
+    (item): item is Tab => item.type === TreeItemType.TAB,
+  )
+  if (movedTabs.length > 0 && expectedWindowUid) {
+    const targetWindow = Tree.windowsByUid.get(expectedWindowUid)
+    const targetGroup = targetWindow
+      ? Tree.getDropTabGroup(
+          targetWindow.children,
+          targetIndex,
+          new Set(movedTabs.map((tab) => tab.uid)),
+        )
+      : undefined
+    if (
+      movedTabs.some(
+        (tab) => tab.tabGroup?.uid !== targetGroup?.uid,
+      )
+    ) {
+      return false
+    }
+  }
+
+  let adjustedTargetIndex = Math.max(
+    0,
+    Math.min(targetIndex, destination.children.length),
+  )
+  if (block.startIndex < adjustedTargetIndex) {
+    adjustedTargetIndex -= block.items.length
+  }
+  return adjustedTargetIndex === block.startIndex
 }
 
 /**

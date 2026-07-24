@@ -1,6 +1,7 @@
 import { expect } from 'vitest'
 import { Tree } from '@/services/background-tree'
 import {
+  State,
   TreeItem,
   TreeItemType,
   Window,
@@ -15,6 +16,20 @@ export function expectTreeInvariants(): void {
   const expectedNotes = new Set<UID>()
   const expectedSeparators = new Set<UID>()
   const topLevelByUid = new Map(Tree.Items.map((item) => [item.uid, item]))
+  const validatedTopLevelChains = new Set<UID>()
+  const topLevelVisibility = new Map<UID, boolean>()
+  const topLevelParentUids = new Set(
+    Tree.Items.flatMap((item) => (item.parentUid ? [item.parentUid] : [])),
+  )
+  const activeWindows = Tree.Items.filter(
+    (item): item is Window =>
+      item.type === TreeItemType.WINDOW && item.active === true,
+  )
+
+  expect(
+    activeWindows.length,
+    `multiple active windows: ${activeWindows.map((window) => window.uid).join(', ')}`,
+  ).toBeLessThanOrEqual(1)
 
   for (const item of Tree.Items) {
     expect(seenUids.has(item.uid), `duplicate uid ${item.uid}`).toBe(false)
@@ -31,13 +46,21 @@ export function expectTreeInvariants(): void {
         TreeItemType.NOTE,
       )
     }
+    expectAcyclicParentChain(item, topLevelByUid, validatedTopLevelChains)
     expect(item.indentLevel, `top-level item ${item.uid} indent`).toBe(
       parent ? (parent.indentLevel ?? 0) + 1 : 0,
     )
     expect(
       item.isVisible !== false,
       `top-level visibility for ${item.uid}`,
-    ).toBe(expectedTopLevelVisibility(item, topLevelByUid))
+    ).toBe(
+      expectedVisibilityFromParents(
+        item,
+        topLevelByUid,
+        topLevelVisibility,
+        true,
+      ),
+    )
 
     if (item.type === TreeItemType.WINDOW) {
       expectedWindows.set(item.uid, item)
@@ -70,7 +93,7 @@ export function expectTreeInvariants(): void {
   for (const item of Tree.Items) {
     if (item.type === TreeItemType.NOTE) {
       expect(Boolean(item.isParent), `top-level isParent for ${item.uid}`).toBe(
-        Tree.Items.some((child) => child.parentUid === item.uid),
+        topLevelParentUids.has(item.uid),
       )
     }
   }
@@ -93,6 +116,8 @@ function expectWindowChildrenInvariants(
   expectedSeparators: Set<UID>,
 ): void {
   const byUid = new Map<UID, WindowChild>()
+  const validatedParentChains = new Set<UID>()
+  const visibilityByUid = new Map<UID, boolean>()
   for (const child of window.children) {
     expect(seenUids.has(child.uid), `duplicate uid ${child.uid}`).toBe(false)
     seenUids.add(child.uid)
@@ -120,6 +145,7 @@ function expectWindowChildrenInvariants(
   }
 
   for (const child of window.children) {
+    expectAcyclicParentChain(child, byUid, validatedParentChains)
     const parent = child.parentUid ? byUid.get(child.parentUid) : window
     expect(parent, `parent ${child.parentUid} for ${child.uid}`).toBeDefined()
     if (!parent) continue
@@ -127,7 +153,12 @@ function expectWindowChildrenInvariants(
       (parent.indentLevel ?? 0) + 1,
     )
     expect(child.isVisible !== false, `visibility for ${child.uid}`).toBe(
-      expectedVisibility(child, window, byUid),
+      expectedVisibilityFromParents(
+        child,
+        byUid,
+        visibilityByUid,
+        window.isVisible !== false && !window.collapsed,
+      ),
     )
   }
 
@@ -136,6 +167,69 @@ function expectWindowChildrenInvariants(
       hasChildren(item, window.children),
     )
   }
+
+  const activeTabs = window.children.filter(
+    (child): child is WindowChild & { type: TreeItemType.TAB } =>
+      child.type === TreeItemType.TAB && child.active === true,
+  )
+  expect(
+    activeTabs.length,
+    `multiple active tabs in ${window.uid}: ${activeTabs.map((tab) => tab.uid).join(', ')}`,
+  ).toBeLessThanOrEqual(1)
+
+  if (window.activeTabId !== undefined) {
+    const activeTab = window.children.find(
+      (child) =>
+        child.type === TreeItemType.TAB &&
+        child.id === window.activeTabId &&
+        child.state === State.OPEN,
+    )
+    expect(
+      activeTab,
+      `activeTabId ${window.activeTabId} does not identify an open child in ${window.uid}`,
+    ).toBeDefined()
+  }
+
+  if (window.savedActiveTabUid !== undefined) {
+    const savedActiveTab = window.children.find(
+      (child) =>
+        child.type === TreeItemType.TAB &&
+        child.uid === window.savedActiveTabUid,
+    )
+    expect(
+      savedActiveTab,
+      `savedActiveTabUid ${window.savedActiveTabUid} does not identify a saved child in ${window.uid}`,
+    ).toBeDefined()
+    if (window.state === State.SAVED) {
+      expect(
+        savedActiveTab?.type === TreeItemType.TAB
+          ? savedActiveTab.state
+          : undefined,
+        `savedActiveTabUid ${window.savedActiveTabUid} identifies an open child in saved window ${window.uid}`,
+      ).not.toBe(State.OPEN)
+    }
+  }
+}
+
+function expectAcyclicParentChain(
+  item: TreeItem,
+  byUid: Map<UID, TreeItem>,
+  validatedUids: Set<UID>,
+): void {
+  const visited = new Set<UID>([item.uid])
+  const path: UID[] = [item.uid]
+  let parentUid = item.parentUid
+
+  while (parentUid && !validatedUids.has(parentUid)) {
+    expect(
+      visited.has(parentUid),
+      `parent cycle detected for ${item.uid} through ${parentUid}`,
+    ).toBe(false)
+    visited.add(parentUid)
+    path.push(parentUid)
+    parentUid = byUid.get(parentUid)?.parentUid
+  }
+  path.forEach((uid) => validatedUids.add(uid))
 }
 
 function hasChildren(item: TreeItem, children: WindowChild[]): boolean {
@@ -143,37 +237,29 @@ function hasChildren(item: TreeItem, children: WindowChild[]): boolean {
   return children.some((child) => child.parentUid === item.uid)
 }
 
-function expectedVisibility(
-  item: WindowChild,
-  window: Window,
-  byUid: Map<UID, WindowChild>,
+function expectedVisibilityFromParents<T extends TreeItem>(
+  item: T,
+  byUid: Map<UID, T>,
+  visibilityByUid: Map<UID, boolean>,
+  rootVisibility: boolean,
 ): boolean {
-  let parentUid = item.parentUid
-  let visible = window.isVisible !== false && !window.collapsed
-
-  while (parentUid) {
-    const parent = byUid.get(parentUid)
-    if (!parent) return false
-    visible = visible && parent.isVisible !== false && !parent.collapsed
-    parentUid = parent.parentUid
+  const path: T[] = []
+  let current: T | undefined = item
+  while (current && !visibilityByUid.has(current.uid)) {
+    path.push(current)
+    current = current.parentUid ? byUid.get(current.parentUid) : undefined
   }
 
-  return visible
-}
-
-function expectedTopLevelVisibility(
-  item: TreeItem,
-  byUid: Map<UID, TreeItem>,
-): boolean {
-  let parentUid = item.parentUid
-  let visible = true
-
-  while (parentUid) {
-    const parent = byUid.get(parentUid)
-    if (!parent) return false
-    visible = visible && parent.isVisible !== false && !parent.collapsed
-    parentUid = parent.parentUid
+  while (path.length > 0) {
+    const currentItem = path.pop()!
+    const parent = currentItem.parentUid
+      ? byUid.get(currentItem.parentUid)
+      : undefined
+    const visible = parent
+      ? (visibilityByUid.get(parent.uid) ?? rootVisibility) && !parent.collapsed
+      : rootVisibility
+    visibilityByUid.set(currentItem.uid, visible)
   }
 
-  return visible
+  return visibilityByUid.get(item.uid) ?? false
 }
