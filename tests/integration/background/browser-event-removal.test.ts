@@ -135,6 +135,46 @@ describe('background browser-event removal ordering', () => {
     },
   )
 
+  it.each(['tabs-first', 'group-first'] as const)(
+    'applies ordinary tab-close saving before clearing a deleted group when events arrive %s (TG-27)',
+    async (eventOrder) => {
+      vi.useFakeTimers()
+      const { fakeBrowser, initializeListeners, mocks, settings } =
+        await loadBackgroundHandlers()
+      settings.values.saveTabsWhenTabGroupDeleted = false
+      settings.values.saveTabOnClose = true
+      const group = browserGroup(7, 'Research')
+      mocks.Items.push(
+        treeWindow([treeTab(10, { tabGroup: treeGroup(7, 'Research') })]),
+      )
+      initializeListeners()
+      const removeTab = () =>
+        fakeBrowser.tabs.onRemoved.emit(10, {
+          windowId: 20,
+          isWindowClosing: false,
+        })
+      const removeGroup = () =>
+        fakeBrowser.tabGroups.onRemoved.emit(group, {
+          isWindowClosing: false,
+        })
+
+      if (eventOrder === 'tabs-first') {
+        removeTab()
+        removeGroup()
+      } else {
+        removeGroup()
+        removeTab()
+      }
+      await vi.advanceTimersByTimeAsync(100)
+
+      expect(mocks.setTabSaved).toHaveBeenCalledWith('tab-10')
+      expect(mocks.tabGroupRemoved).toHaveBeenCalledWith(group, false)
+      expect(mocks.setTabSaved.mock.invocationCallOrder[0]).toBeLessThan(
+        mocks.tabGroupRemoved.mock.invocationCallOrder[0],
+      )
+    },
+  )
+
   it('keeps two concurrent group deletions isolated (EV-25)', async () => {
     vi.useFakeTimers()
     const { fakeBrowser, initializeListeners, mocks, settings } =

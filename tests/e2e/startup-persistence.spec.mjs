@@ -185,6 +185,10 @@ describe('Firefox startup and persistent data', () => {
       color: 'blue',
     })
     expect(afterTabs[TITLES.beta].tabGroup?.uid).toBe(stableGroupUid)
+    expect(afterTabs[TITLES.alpha].tabGroup?.id).not.toBe(-1)
+    expect(afterTabs[TITLES.beta].tabGroup?.id).toBe(
+      afterTabs[TITLES.alpha].tabGroup?.id,
+    )
     expect(afterTabs['Restart saved tab']).toMatchObject({
       uid: 'restart-saved-tab',
       state: TreeItemState.Saved,

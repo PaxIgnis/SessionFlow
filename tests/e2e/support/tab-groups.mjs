@@ -69,6 +69,48 @@ export async function moveNativeTabGroup(groupId, index, windowId) {
   return response.group
 }
 
+export async function ungroupBrowserTabsByTitle(titles) {
+  const response = await browser.executeAsync((targetTitles, done) => {
+    window.browser.tabs
+      .query({})
+      .then(async (tabs) => {
+        const matchingTabs = targetTitles.map((title) =>
+          tabs.find((tab) => tab.title === title),
+        )
+        if (matchingTabs.some((tab) => tab?.id === undefined)) {
+          throw new Error(
+            `Could not find every tab to ungroup: ${targetTitles.join(', ')}`,
+          )
+        }
+        await window.browser.tabs.ungroup(matchingTabs.map((tab) => tab.id))
+        done({ ok: true })
+      })
+      .catch((error) => done({ ok: false, error: String(error) }))
+  }, titles)
+
+  if (!response.ok) {
+    throw new Error(response.error || 'Failed to ungroup browser tabs.')
+  }
+}
+
+export async function updateNativeTabGroup(groupId, changes) {
+  const response = await browser.executeAsync(
+    (targetGroupId, targetChanges, done) => {
+      window.browser.tabGroups
+        .update(targetGroupId, targetChanges)
+        .then((group) => done({ ok: true, group }))
+        .catch((error) => done({ ok: false, error: String(error) }))
+    },
+    groupId,
+    changes,
+  )
+
+  if (!response.ok) {
+    throw new Error(response.error || 'Failed to update native tab group.')
+  }
+  return response.group
+}
+
 export async function removeBrowserTabsByTitle(titles) {
   const response = await browser.executeAsync((targetTitles, done) => {
     window.browser.tabs
@@ -93,51 +135,55 @@ export async function removeBrowserTabsByTitle(titles) {
   }
 }
 
-export async function nativeTabGroupSnapshot(titles) {
-  const response = await browser.executeAsync((targetTitles, done) => {
-    window.browser.tabs
-      .query({})
-      .then(async (tabs) => {
-        const matchingTabs = targetTitles
-          .map((title) => tabs.find((tab) => tab.title === title))
-          .filter(Boolean)
-          .map((tab) => ({
-            id: tab.id,
-            groupId: tab.groupId,
-            index: tab.index,
-            pinned: tab.pinned,
-            title: tab.title,
-            windowId: tab.windowId,
-          }))
-        const groupIds = [
-          ...new Set(
-            matchingTabs
-              .map((tab) => tab.groupId)
-              .filter((groupId) => groupId !== undefined && groupId !== -1),
-          ),
-        ]
-        const groupResults = await Promise.allSettled(
-          groupIds.map((groupId) => window.browser.tabGroups.get(groupId)),
-        )
-        const groups = groupResults
-          .filter((result) => result.status === 'fulfilled')
-          .map((result) => result.value)
-        done({
-          ok: true,
-          groups,
-          tabs: matchingTabs,
-          allTabs: tabs.map((tab) => ({
-            id: tab.id,
-            groupId: tab.groupId,
-            index: tab.index,
-            pinned: tab.pinned,
-            title: tab.title,
-            windowId: tab.windowId,
-          })),
+export async function nativeTabGroupSnapshot(titles, windowId) {
+  const response = await browser.executeAsync(
+    (targetTitles, targetWindowId, done) => {
+      window.browser.tabs
+        .query(targetWindowId === undefined ? {} : { windowId: targetWindowId })
+        .then(async (tabs) => {
+          const matchingTabs = targetTitles
+            .map((title) => tabs.find((tab) => tab.title === title))
+            .filter(Boolean)
+            .map((tab) => ({
+              id: tab.id,
+              groupId: tab.groupId,
+              index: tab.index,
+              pinned: tab.pinned,
+              title: tab.title,
+              windowId: tab.windowId,
+            }))
+          const groupIds = [
+            ...new Set(
+              matchingTabs
+                .map((tab) => tab.groupId)
+                .filter((groupId) => groupId !== undefined && groupId !== -1),
+            ),
+          ]
+          const groupResults = await Promise.allSettled(
+            groupIds.map((groupId) => window.browser.tabGroups.get(groupId)),
+          )
+          const groups = groupResults
+            .filter((result) => result.status === 'fulfilled')
+            .map((result) => result.value)
+          done({
+            ok: true,
+            groups,
+            tabs: matchingTabs,
+            allTabs: tabs.map((tab) => ({
+              id: tab.id,
+              groupId: tab.groupId,
+              index: tab.index,
+              pinned: tab.pinned,
+              title: tab.title,
+              windowId: tab.windowId,
+            })),
+          })
         })
-      })
-      .catch((error) => done({ ok: false, error: String(error) }))
-  }, titles)
+        .catch((error) => done({ ok: false, error: String(error) }))
+    },
+    titles,
+    windowId,
+  )
 
   if (!response.ok) {
     throw new Error(response.error || 'Failed to inspect native tab groups.')

@@ -11,7 +11,32 @@ export const SESSION_TREE_URL = `moz-extension://${FIREFOX_EXTENSION_UUID}/sessi
 export async function installSessionFlowAddon() {
   const extensionPath = await findFirefoxExtensionPackage()
   const extension = await fs.readFile(extensionPath)
-  return browser.installAddOn(extension.toString('base64'), false)
+  return installAddOnWithPrivateBrowsing(extension.toString('base64'))
+}
+
+async function installAddOnWithPrivateBrowsing(addon) {
+  const { hostname, path: basePath = '/', port, protocol } = browser.options
+  const normalizedBasePath = basePath.endsWith('/')
+    ? basePath.slice(0, -1)
+    : basePath
+  const endpoint = `${protocol}://${hostname}:${port}${normalizedBasePath}/session/${browser.sessionId}/moz/addon/install`
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      addon,
+      temporary: false,
+      allowPrivateBrowsing: true,
+    }),
+  })
+  const payload = await response.json()
+  if (!response.ok || payload.value?.error) {
+    throw new Error(
+      payload.value?.message ||
+        `Firefox add-on installation failed with HTTP ${response.status}.`,
+    )
+  }
+  return payload.value
 }
 
 async function findFirefoxExtensionPackage() {

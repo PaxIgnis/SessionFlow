@@ -176,6 +176,68 @@ export async function openFixtureWindowFromExtension(seed, title) {
   return trackFixtureHandleByTitle(seed, title)
 }
 
+export async function createPrivateFixtureTabs(seed, titles) {
+  if (titles.length === 0) {
+    throw new Error('At least one private fixture title is required.')
+  }
+  const browserTitles = titles.map(extensionFixtureTitle)
+  const response = await browser.executeAsync((targetTitles, done) => {
+    const urls = targetTitles.map(
+      (title) =>
+        window.browser.runtime.getURL('/redirect.html') +
+        `?targetTitle=${encodeURIComponent(title)}`,
+    )
+
+    window.browser.windows
+      .create({ incognito: true, url: urls[0] })
+      .then(async (createdWindow) => {
+        if (createdWindow.id === undefined) {
+          throw new Error('Firefox did not return a private window ID.')
+        }
+        const tabIds =
+          createdWindow.tabs
+            ?.map((tab) => tab.id)
+            .filter((id) => id !== undefined) ?? []
+        for (const url of urls.slice(1)) {
+          const tab = await window.browser.tabs.create({
+            active: false,
+            url,
+            windowId: createdWindow.id,
+          })
+          if (tab.id !== undefined) tabIds.push(tab.id)
+        }
+        done({ ok: true, windowId: createdWindow.id, tabIds })
+      })
+      .catch((error) => done({ ok: false, error: String(error) }))
+  }, titles)
+
+  if (!response.ok) {
+    throw new Error(response.error || 'Failed to create private fixture tabs.')
+  }
+
+  seed.browserTabIds ??= {}
+  response.tabIds.forEach((tabId, index) => {
+    seed.browserTabIds[`private:${titles[index]}`] = tabId
+  })
+  await browser.waitUntil(
+    async () => {
+      const snapshot = await browser.executeAsync((windowId, done) => {
+        window.browser.tabs
+          .query({ windowId })
+          .then((tabs) => done(tabs.map((tab) => tab.title)))
+          .catch(() => done([]))
+      }, response.windowId)
+      return browserTitles.every((title) => snapshot.includes(title))
+    },
+    {
+      timeout: 10_000,
+      timeoutMsg: `Expected private fixture tabs: ${browserTitles.join(', ')}.`,
+    },
+  )
+
+  return { ...response, browserTitles }
+}
+
 export async function trackFixtureHandleByTitle(seed, title) {
   const handle = await switchToFixtureTitle(title)
   seed.handles.push(handle)
@@ -265,6 +327,51 @@ export async function trackExtensionFixtureTabByTitle(seed, title) {
   seed.browserTabIds ??= {}
   seed.browserTabIds[title] = tabId
   return tabId
+}
+
+export async function trackExtensionFixtureTabsInWindow(
+  seed,
+  windowId,
+  titles,
+) {
+  let matchingTabs = []
+  await browser.waitUntil(
+    async () => {
+      const response = await browser.executeAsync(
+        (targetWindowId, targetTitles, done) => {
+          window.browser.tabs
+            .query({ windowId: targetWindowId })
+            .then((tabs) =>
+              done({
+                ok: true,
+                tabs: targetTitles
+                  .map((title) => tabs.find((tab) => tab.title === title))
+                  .filter(Boolean)
+                  .map((tab) => ({ id: tab.id, title: tab.title })),
+              }),
+            )
+            .catch((error) => done({ ok: false, error: String(error) }))
+        },
+        windowId,
+        titles,
+      )
+      if (!response.ok) {
+        throw new Error(response.error || 'Failed to query extension tabs.')
+      }
+      matchingTabs = response.tabs
+      return matchingTabs.length === titles.length
+    },
+    {
+      timeout: 10_000,
+      timeoutMsg: `Expected fixture tabs in browser window ${windowId}: ${titles.join(', ')}.`,
+    },
+  )
+
+  seed.browserTabIds ??= {}
+  for (const tab of matchingTabs) {
+    seed.browserTabIds[`${windowId}:${tab.title}`] = tab.id
+  }
+  return matchingTabs.map((tab) => tab.id)
 }
 
 async function switchToFixtureTitle(title) {

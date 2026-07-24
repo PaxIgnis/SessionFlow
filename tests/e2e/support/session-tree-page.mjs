@@ -56,6 +56,12 @@ export class SessionTreePage {
     return this.treeItemByTypeAndText('tab', text)
   }
 
+  async tabGroupIndicatorByTabTitle(title) {
+    const tabItem = await this.tabItemByText(title)
+    await expect(tabItem).toBeDisplayed()
+    return tabItem.$('.tree-item-tab-group-indicator')
+  }
+
   async expectLoaded() {
     await expect(await this.treeRoot()).toBeExisting()
     await browser.waitUntil(
@@ -449,7 +455,7 @@ export class SessionTreePage {
     }
   }
 
-  async waitForBackgroundTree(predicate, timeoutMsg) {
+  async waitForBackgroundTree(predicate, timeoutMsg, timeout = 10_000) {
     let lastTree = []
     try {
       await browser.waitUntil(
@@ -458,7 +464,7 @@ export class SessionTreePage {
           return predicate(lastTree)
         },
         {
-          timeout: 10_000,
+          timeout,
           timeoutMsg,
         },
       )

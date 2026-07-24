@@ -42,6 +42,7 @@ const pendingRemovedGroups = new Map<
   {
     group: browser.tabGroups.TabGroup
     removeInfo: browser.tabGroups._RemoveInfo
+    saveAllMembers: boolean
   }
 >()
 const pendingGroupRemovalTimers = new Map<
@@ -411,7 +412,6 @@ function tabsOnRemoved(
   }
   const tab = tabs[index]
   if (
-    Settings.values.saveTabsWhenTabGroupDeleted &&
     !removeInfo.isWindowClosing &&
     tab.tabGroup?.id !== undefined &&
     tab.tabGroup.id !== -1
@@ -463,12 +463,11 @@ function tabGroupsOnRemoved(
     return
   }
 
-  if (!Settings.values.saveTabsWhenTabGroupDeleted) {
-    Tree.tabGroupRemoved(group)
-    return
-  }
-
-  pendingRemovedGroups.set(group.id, { group, removeInfo })
+  pendingRemovedGroups.set(group.id, {
+    group,
+    removeInfo,
+    saveAllMembers: Settings.values.saveTabsWhenTabGroupDeleted,
+  })
   scheduleGroupedTabRemoval(group.id)
 }
 
@@ -497,12 +496,18 @@ function finalizeGroupedTabRemoval(groupId: number, token: symbol): void {
   if (pendingGroupRemovalTimers.get(groupId)?.token !== token) return
   const groupRemoval = pendingRemovedGroups.get(groupId)
   const tabRemovals = pendingGroupedTabRemovals.get(groupId) ?? []
+  const saveAllMembers = Boolean(
+    groupRemoval?.saveAllMembers && tabRemovals.length > 0,
+  )
 
-  if (groupRemoval) {
-    Tree.tabGroupRemoved(groupRemoval.group, tabRemovals.length > 0)
+  if (groupRemoval && saveAllMembers) {
+    Tree.tabGroupRemoved(groupRemoval.group, true)
   }
   for (const removal of tabRemovals) {
     finishTabRemoval(removal.tabId, removal.removeInfo)
+  }
+  if (groupRemoval && !saveAllMembers) {
+    Tree.tabGroupRemoved(groupRemoval.group, false)
   }
 
   pendingRemovedGroups.delete(groupId)

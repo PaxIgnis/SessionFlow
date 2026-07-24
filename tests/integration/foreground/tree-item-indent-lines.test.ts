@@ -116,6 +116,94 @@ describe('TreeItem indent guide rendering', () => {
     expect(markup).toContain('Tab group: Research')
   })
 
+  it.each([
+    'blue',
+    'cyan',
+    'grey',
+    'green',
+    'orange',
+    'pink',
+    'purple',
+    'red',
+    'yellow',
+  ] as const)(
+    'renders the Firefox %s group color on both indicator sides (TG-05)',
+    async (color) => {
+      const tab = makeForegroundTab(`grouped-${color}` as UID, {
+        tabGroup: {
+          uid: `group-${color}` as UID,
+          id: 7,
+          title: `${color} group`,
+          color,
+          collapsed: false,
+        },
+      })
+
+      for (const position of ['left', 'right'] as const) {
+        Settings.values.tabGroupColorIndicator = position
+        const markup = await renderTreeItem(tab)
+
+        expect(markup).toContain(`tree-item-tab-group-indicator-${position}`)
+        expect(markup).toContain(`var(--tab-group-color-${color})`)
+      }
+    },
+  )
+
+  it.each(['', '   '])(
+    'labels an unnamed Firefox group consistently for title %j (TG-04)',
+    async (title) => {
+      const tab = makeForegroundTab('unnamed-grouped-tab' as UID, {
+        tabGroup: {
+          uid: 'unnamed-group' as UID,
+          id: 7,
+          title,
+          color: 'orange',
+          collapsed: false,
+        },
+      })
+
+      const markup = await renderTreeItem(tab)
+
+      expect(markup).toContain('aria-label="Unnamed tab group"')
+      expect(markup).toContain('Tab group: Unnamed tab group')
+      expect(markup).toContain('var(--tab-group-color-orange)')
+    },
+  )
+
+  it('escapes HTML-like group titles and renders long titles intact (TG-35)', async () => {
+    const hostileTitle = '<img src=x onerror=alert(1)> & "quoted"'
+    const hostileTab = makeForegroundTab('hostile-grouped-tab' as UID, {
+      tabGroup: {
+        uid: 'hostile-group' as UID,
+        id: 7,
+        title: hostileTitle,
+        color: 'red',
+        collapsed: false,
+      },
+    })
+    const longTitle = 'Long group '.repeat(100)
+    const longTab = makeForegroundTab('long-grouped-tab' as UID, {
+      tabGroup: {
+        uid: 'long-group' as UID,
+        id: 8,
+        title: longTitle,
+        color: 'purple',
+        collapsed: false,
+      },
+    })
+
+    const hostileMarkup = await renderTreeItem(hostileTab)
+    const longMarkup = await renderTreeItem(longTab)
+
+    expect(hostileMarkup).not.toContain('<img src=x')
+    expect(hostileMarkup).toContain('&lt;img src=x onerror=alert(1)&gt;')
+    expect(hostileMarkup).toContain('&amp;')
+    expect(hostileMarkup).toContain('&quot;quoted&quot;')
+    expect(longMarkup).toContain(longTitle.trim())
+    expect(countClass(hostileMarkup, 'tree-item')).toBe(1)
+    expect(countClass(longMarkup, 'tree-item')).toBe(1)
+  })
+
   it('supports left and hidden group color indicators while retaining the group tooltip', async () => {
     const tab = makeForegroundTab('grouped-tab' as UID, {
       tabGroup: {

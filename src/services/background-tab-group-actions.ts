@@ -12,6 +12,7 @@ import {
 
 const NO_GROUP = -1
 const groupsByBrowserId = new Map<number, TabGroupMetadata>()
+const groupSyncGenerations = new Map<number, number>()
 
 export interface TabGroupRestoreFailure {
   groupUid: UID
@@ -28,6 +29,21 @@ function cloneGroup(
   id: number = group.id,
 ): TabGroupMetadata {
   return { ...group, id }
+}
+
+function nextGroupSyncGeneration(groupId: number): number {
+  const generation = (groupSyncGenerations.get(groupId) ?? 0) + 1
+  groupSyncGenerations.set(groupId, generation)
+  return generation
+}
+
+function isCurrentGroupSync(groupId: number, generation: number): boolean {
+  return groupSyncGenerations.get(groupId) === generation
+}
+
+function invalidateGroupSync(groupId: number): void {
+  nextGroupSyncGeneration(groupId)
+  groupsByBrowserId.delete(groupId)
 }
 
 function findTreeTabByBrowserId(
@@ -84,7 +100,9 @@ export async function syncOpenTabGroups(): Promise<void> {
 export async function syncBrowserTabGroup(
   group: browser.tabGroups.TabGroup,
 ): Promise<boolean> {
+  const generation = nextGroupSyncGeneration(group.id)
   const browserTabs = await browser.tabs.query({ groupId: group.id })
+  if (!isCurrentGroupSync(group.id, generation)) return true
   const memberTabs = browserTabs
     .map((tab) =>
       tab.id === undefined
@@ -183,6 +201,15 @@ export async function syncBrowserWindowTabOrder(
     .map((tab) => (tab.id === undefined ? undefined : liveTabsById.get(tab.id)))
     .filter((tab): tab is Tab => Boolean(tab))
   if (orderedTabs.length !== liveTabs.length) return false
+  if (movedGroupId !== undefined) {
+    const browserMemberCount = browserTabs.filter(
+      (tab) => (tab.groupId ?? NO_GROUP) === movedGroupId,
+    ).length
+    const synchronizedMemberCount = orderedTabs.filter(
+      (tab) => tab.tabGroup?.id === movedGroupId,
+    ).length
+    if (browserMemberCount !== synchronizedMemberCount) return false
+  }
 
   const liveTabSlots = window.children
     .map((item, index) => ({ item, index }))
@@ -270,7 +297,7 @@ export function tabGroupRemoved(
   saveTabs: boolean = false,
 ): void {
   const metadata = groupsByBrowserId.get(group.id)
-  groupsByBrowserId.delete(group.id)
+  invalidateGroupSync(group.id)
 
   for (const tab of Tree.tabsByUid.values()) {
     if (tab.tabGroup?.id !== group.id) continue
@@ -292,7 +319,7 @@ export function tabGroupRemoved(
 
 /** Preserves group metadata while Firefox closes the group's browser window. */
 export function tabGroupWindowClosed(group: browser.tabGroups.TabGroup): void {
-  groupsByBrowserId.delete(group.id)
+  invalidateGroupSync(group.id)
 
   for (const tab of Tree.tabsByUid.values()) {
     if (tab.tabGroup?.id !== group.id) continue
@@ -527,4 +554,5 @@ export async function applyDropTabGroup(
 
 export function resetTabGroupState(): void {
   groupsByBrowserId.clear()
+  groupSyncGenerations.clear()
 }
