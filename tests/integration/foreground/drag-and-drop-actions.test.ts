@@ -306,6 +306,109 @@ describe('drag-and-drop onDrop command path', () => {
     )
   })
 
+  it('uses the last logical window for every item in a compatible mixed tab drag', () => {
+    const tab = makeForegroundTab('tab-moved' as UID)
+    const note = makeForegroundNote('note-moved' as UID)
+    const separator = makeForegroundSeparator('separator-moved' as UID)
+    const sourceWindow = makeForegroundWindow('window-source' as UID, [
+      tab,
+      note,
+      separator,
+    ])
+    const lastWindowChild = makeForegroundTab('tab-last-window' as UID)
+    const lastWindow = makeForegroundWindow('window-last' as UID, [
+      lastWindowChild,
+    ])
+    const trailingNote = makeForegroundNote('note-trailing' as UID, {
+      indentLevel: 0,
+      windowUid: undefined,
+    })
+    resetForegroundTree([sourceWindow, lastWindow, trailingNote])
+    DragAndDrop.dragInfo = {
+      dragType: DragType.TAB,
+      items: [tab, note, separator],
+    }
+
+    const target = createFakeDragTarget({
+      id: 'tree-end' as UID,
+      type: 'tree-end',
+    })
+    const event = createFakeDragEvent({ target, yRatio: 0.5 })
+
+    DragAndDrop.onDrop(event)
+
+    expect(moveTreeItems).toHaveBeenCalledTimes(1)
+    expect(moveTreeItems).toHaveBeenCalledWith(
+      [tab.uid, note.uid, separator.uid],
+      lastWindow.children.length,
+      undefined,
+      lastWindow.uid,
+      false,
+      false,
+    )
+  })
+
+  it('keeps a compatible mixed window drag atomic at tree root', () => {
+    const sourceWindow = makeForegroundWindow('window-source' as UID)
+    const note = makeForegroundNote('note-moved' as UID, {
+      indentLevel: 0,
+      windowUid: undefined,
+    })
+    const separator = makeForegroundSeparator('separator-moved' as UID, {
+      indentLevel: 0,
+      windowUid: undefined,
+    })
+    const targetWindow = makeForegroundWindow('window-target' as UID)
+    resetForegroundTree([sourceWindow, note, separator, targetWindow])
+    DragAndDrop.dragInfo = {
+      dragType: DragType.WINDOW,
+      items: [sourceWindow, note, separator],
+    }
+
+    const target = createFakeDragTarget({
+      id: 'tree-end' as UID,
+      type: 'tree-end',
+    })
+
+    DragAndDrop.onDrop(createFakeDragEvent({ target, yRatio: 0.5 }))
+
+    expect(moveTreeItems).toHaveBeenCalledTimes(1)
+    expect(moveTreeItems).toHaveBeenCalledWith(
+      [sourceWindow.uid, note.uid, separator.uid],
+      SessionTree.reactiveItems.value.length,
+      undefined,
+      undefined,
+      false,
+    )
+  })
+
+  it('rejects mixed window and tab drags without showing a valid target or moving a subset', () => {
+    const tab = makeForegroundTab('tab-moved' as UID)
+    const sourceWindow = makeForegroundWindow('window-source' as UID, [tab])
+    const targetWindow = makeForegroundWindow('window-target' as UID)
+    resetForegroundTree([sourceWindow, targetWindow])
+    DragAndDrop.dragInfo = {
+      dragType: DragType.WINDOW,
+      items: [sourceWindow, tab],
+    }
+    const target = createFakeDragTarget({
+      id: 'tree-end' as UID,
+      type: 'tree-end',
+    })
+    const event = createFakeDragEvent({ target, yRatio: 0.5 })
+
+    DragAndDrop.onDragMove(event)
+
+    expect(DragAndDrop.dragState.isValidDropTarget).toBe(false)
+    expect(target.classList.contains('drag-over-tree-end')).toBe(false)
+
+    DragAndDrop.onDrop(event)
+
+    expect(moveTreeItems).not.toHaveBeenCalled()
+    expect(moveTabs).not.toHaveBeenCalled()
+    expect(moveWindows).not.toHaveBeenCalled()
+  })
+
   it.each([
     { name: 'note', sourceType: DragType.NOTE },
     { name: 'separator', sourceType: DragType.SEPARATOR },
@@ -775,6 +878,86 @@ describe('drag-and-drop onDrop command path', () => {
     DragAndDrop.onDragMove(externalEvent)
 
     expect(externalEvent.dataTransfer?.dropEffect).toBe('copy')
+  })
+
+  it('cancels an active drag when drag-and-drop is disabled before the next move', () => {
+    const tab = makeForegroundTab('tab-1' as UID)
+    const window = makeForegroundWindow('window-1' as UID, [tab])
+    resetForegroundTree([window])
+    const target = createFakeDragTarget({ id: window.uid, type: 'window' })
+    const event = createFakeDragEvent({ target, yRatio: 0.5 })
+    DragAndDrop.dragInfo = { dragType: DragType.TAB, items: [tab] }
+    DragAndDrop.dragState.dragEventStarted = true
+    DragAndDrop.dragState.prevEl = target as unknown as HTMLElement
+    target.classList.add('drag-over-mid')
+
+    Settings.values.enableDragAndDrop = false
+    DragAndDrop.onDragMove(event)
+
+    expect(DragAndDrop.dragState.dragEventStarted).toBe(false)
+    expect(DragAndDrop.dragInfo).toBeNull()
+    expect(DragAndDrop.dragState.prevEl).toBeNull()
+    expect(target.classList.contains('drag-over-mid')).toBe(false)
+    expectNoMoveCommands()
+  })
+
+  it('does not dispatch a partial move when a dragged source disappears', () => {
+    const first = makeForegroundTab('tab-1' as UID)
+    const removed = makeForegroundNote('note-removed' as UID)
+    const targetWindow = makeForegroundWindow('window-target' as UID)
+    const sourceWindow = makeForegroundWindow('window-source' as UID, [
+      first,
+      removed,
+    ])
+    resetForegroundTree([sourceWindow, targetWindow])
+    DragAndDrop.dragInfo = {
+      dragType: DragType.TAB,
+      items: [first, removed],
+    }
+
+    resetForegroundTree([
+      makeForegroundWindow('window-source' as UID, [first]),
+      targetWindow,
+    ])
+    const target = createFakeDragTarget({
+      id: targetWindow.uid,
+      type: 'window',
+    })
+
+    DragAndDrop.onDrop(createFakeDragEvent({ target, yRatio: 0.5 }))
+
+    expectNoMoveCommands()
+    expect(DragAndDrop.dragInfo).toBeNull()
+    expect(DragAndDrop.dragState.dragEventStarted).toBe(false)
+  })
+
+  it('keeps the indicator when dragleave moves within the same drag target', () => {
+    const target = createFakeDragTarget({
+      id: 'window-1' as UID,
+      type: 'window',
+    })
+    const firstChild = {
+      closest: () => target,
+    }
+    const secondChild = {
+      closest: () => target,
+    }
+    target.classList.add('drag-over-mid')
+    DragAndDrop.dragState.prevEl = target as unknown as HTMLElement
+    DragAndDrop.dragState.destinationId = 'window-1' as UID
+    DragAndDrop.dragState.isValidDropTarget = true
+    const event = {
+      target: firstChild,
+      relatedTarget: secondChild,
+      dataTransfer: { dropEffect: 'move' },
+    } as unknown as DragEvent
+
+    DragAndDrop.onDragLeave(event)
+
+    expect(target.classList.contains('drag-over-mid')).toBe(true)
+    expect(DragAndDrop.dragState.prevEl).toBe(target)
+    expect(DragAndDrop.dragState.destinationId).toBe('window-1')
+    expect(DragAndDrop.dragState.isValidDropTarget).toBe(true)
   })
 
   it('keeps external drag effects disabled and clears drop target state on leave', () => {

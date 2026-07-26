@@ -15,6 +15,7 @@ import { State } from '@/types/session-tree'
 
 describe('moveTab', () => {
   beforeEach(() => {
+    installFakeBrowser()
     resetTree()
     Object.assign(Settings.values, structuredClone(DEFAULT_SETTINGS))
     Settings.values.allowDropOntoDescendantItems = true

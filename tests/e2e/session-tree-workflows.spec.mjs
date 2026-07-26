@@ -306,6 +306,51 @@ describe('critical Firefox UI workflows', () => {
     await expectSingleOpenWindowWithRootTabs([SESSION_FIXTURE_TITLES.initial])
   })
 
+  it('uses native Firefox auto-scroll and drops a tab at tree end', async () => {
+    await openSeededSessionTree()
+
+    await switchToPrimaryBrowserWindow()
+    const alphaHandle = await openFixtureTab(seed, SESSION_FIXTURE_TITLES.alpha)
+    await browser.switchToWindow(popup.popupHandle)
+    const trackedWindow = await onlyTrackedOpenWindow()
+    for (let index = 0; index < 44; index++) {
+      await sessionTree.sendTreeCommand({
+        action: 'createNote',
+        parentUid: trackedWindow.uid,
+        text: `Scroll note ${index}`,
+      })
+    }
+    await browser.waitUntil(
+      async () => (await sessionTree.treeItems()).length >= 47,
+      {
+        timeout: 10_000,
+        timeoutMsg: 'Expected enough items to overflow the session tree.',
+      },
+    )
+
+    const { beforeScrollTop, edgeScrollTop } =
+      await sessionTree.dragTreeItemToTreeEndWithPointer(
+        SESSION_FIXTURE_TITLES.initial,
+      )
+
+    if (edgeScrollTop <= beforeScrollTop) {
+      throw new Error('Expected native Firefox drag auto-scroll at tree end.')
+    }
+    await sessionTree.waitForBackgroundTree((tree) => {
+      const windowItem = onlyOpenWindow(tree)
+      if (!windowItem) return false
+      const titles = tabsInWindow(windowItem).map((tab) => tab.title)
+      return (
+        titles.at(-2) === SESSION_FIXTURE_TITLES.alpha &&
+        titles.at(-1) === SESSION_FIXTURE_TITLES.initial
+      )
+    }, 'Expected the native pointer drag to append the initial tab at tree end.')
+
+    await removeFixtureTab(SESSION_FIXTURE_TITLES.alpha)
+    await waitForBrowserHandleClosed(alphaHandle, SESSION_FIXTURE_TITLES.alpha)
+    await expectSingleOpenWindowWithRootTabs([SESSION_FIXTURE_TITLES.initial])
+  })
+
   it('Alt-copies an explicitly selected expanded parent and child hierarchy', async () => {
     await openSeededSessionTree()
     await sessionTree.updateSettings({

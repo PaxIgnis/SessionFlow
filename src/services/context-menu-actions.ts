@@ -88,16 +88,24 @@ export function createContextMenuItems(
  * @param items - The array of context menu items to add to browser context menu.
  */
 export function createContextMenu(items: ContextMenuItem[]): void {
+  const selectionSnapshot = Selection.selectedItems.value.slice()
   for (const item of items) {
     const optionProperties: browser.menus._CreateCreateProperties = {
       type: 'normal',
       title: item.label,
       contexts: ['all'],
       onclick: () => {
-        if (item.action) {
-          item.action()
+        const currentSelection = Selection.selectedItems.value
+        Selection.selectedItems.value = selectionSnapshot
+        try {
+          item.action?.()
+        } finally {
+          selectionSnapshot.forEach(({ item: selectedItem }) => {
+            selectedItem.selected = false
+          })
+          Selection.selectedItems.value = currentSelection
+          Selection.clearSelection()
         }
-        Selection.clearSelection()
       },
     }
     if (item.enabled === false) {

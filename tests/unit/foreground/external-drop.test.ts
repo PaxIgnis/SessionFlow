@@ -104,6 +104,88 @@ describe('external drop parsing', () => {
     ])
   })
 
+  it('extracts only the first safe anchor from a parsed HTML payload', () => {
+    const originalDomParser = globalThis.DOMParser
+    Object.defineProperty(globalThis, 'DOMParser', {
+      configurable: true,
+      value: class {
+        parseFromString() {
+          return {
+            querySelector: () => ({
+              getAttribute: () => 'https://example.test/path',
+              textContent: ' Example title ',
+            }),
+          }
+        }
+      },
+    })
+
+    try {
+      const payload = parseExternalDrop(
+        makeDataTransfer({
+          data: {
+            'text/html': [
+              '<div onclick="alert(1)">',
+              '<a href="https://example.test/path"> Example title </a>',
+              '<a href="https://ignored.test">Ignored</a>',
+              '</div>',
+            ].join(''),
+          },
+        }),
+      )
+
+      expect(
+        hasSupportedExternalDropType(
+          makeDataTransfer({
+            data: { 'text/html': '<a href="https://example.test">Example</a>' },
+          }),
+        ),
+      ).toBe(true)
+      expect(payload.items).toEqual([
+        { url: 'https://example.test/path', title: 'Example title' },
+      ])
+    } finally {
+      Object.defineProperty(globalThis, 'DOMParser', {
+        configurable: true,
+        value: originalDomParser,
+      })
+    }
+  })
+
+  it('fails closed when DOMParser is unavailable', () => {
+    const originalDomParser = globalThis.DOMParser
+    Object.defineProperty(globalThis, 'DOMParser', {
+      configurable: true,
+      value: undefined,
+    })
+    try {
+      expect(
+        parseExternalDrop(
+          makeDataTransfer({
+            data: {
+              'text/html': '<a href="https://example.test">Example</a>',
+            },
+          }),
+        ).items,
+      ).toEqual([])
+    } finally {
+      Object.defineProperty(globalThis, 'DOMParser', {
+        configurable: true,
+        value: originalDomParser,
+      })
+    }
+  })
+
+  it.each([
+    '<div>https://example.test is not an anchor</div>',
+    '<script>location="https://example.test"</script>',
+  ])('rejects anchorless HTML without DOM parsing: %s', (html) => {
+    expect(
+      parseExternalDrop(makeDataTransfer({ data: { 'text/html': html } }))
+        .items,
+    ).toEqual([])
+  })
+
   it('falls back when a preferred advertised format has no valid URL', () => {
     const payload = parseExternalDrop(
       makeDataTransfer({

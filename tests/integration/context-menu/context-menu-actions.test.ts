@@ -137,6 +137,33 @@ describe('context menu actions', () => {
     expect(selectedTab.selected).toBe(false)
   })
 
+  it('runs a delayed menu action against the selection captured when the menu opened', () => {
+    const original = makeForegroundTab('tab-original' as UID, {
+      state: State.OPEN,
+    })
+    const later = makeForegroundTab('tab-later' as UID, {
+      state: State.OPEN,
+    })
+    original.selected = true
+    Selection.selectedItems.value = [
+      { item: original, type: SelectionType.TAB },
+    ]
+
+    createContextMenu(createContextMenuItems(ContextMenu.tabConfig))
+    const closeMenu = vi
+      .mocked(browser.menus.create)
+      .mock.calls.map(([properties]) => properties)
+      .find((properties) => properties.title === 'Close')!
+
+    original.selected = false
+    later.selected = true
+    Selection.selectedItems.value = [{ item: later, type: SelectionType.TAB }]
+    closeMenu.onclick?.({} as browser.menus.OnClickData, {} as browser.tabs.Tab)
+
+    expect(closeTabs).toHaveBeenCalledWith([original])
+    expect(closeTabs).not.toHaveBeenCalledWith([later])
+  })
+
   it('opens a tab context menu by overriding defaults, clearing old items, and creating configured items', () => {
     const tab = makeForegroundTab('tab-open' as UID, {
       state: State.OPEN,

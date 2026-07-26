@@ -4,8 +4,8 @@ import { clickFirefoxExtensionAction } from './firefox-chrome-context.mjs'
 import { collectCoverageFromCurrentWindow } from './e2e-coverage.mjs'
 
 export async function openSessionTreePopup() {
+  const originalHandle = await closeStaleSessionTreePopups()
   const handlesBeforeClick = await browser.getWindowHandles()
-  const originalHandle = await browser.getWindowHandle()
 
   await browser.waitUntil(
     async () => {
@@ -50,6 +50,50 @@ export async function openSessionTreePopup() {
     originalHandle,
     popupHandle: openedHandle,
   }
+}
+
+async function closeStaleSessionTreePopups() {
+  const initialHandles = await browser.getWindowHandles()
+  const initialHandle = await browser.getWindowHandle()
+  const stalePopupHandles = []
+  const nonPopupHandles = []
+
+  for (const handle of initialHandles) {
+    try {
+      await browser.switchToWindow(handle)
+      const url = await browser.getUrl()
+      if (url.startsWith(SESSION_TREE_URL)) stalePopupHandles.push(handle)
+      else nonPopupHandles.push(handle)
+    } catch {
+      // Firefox may remove a fixture window while handles are being inspected.
+    }
+  }
+
+  for (const handle of stalePopupHandles) {
+    try {
+      if (!(await browser.getWindowHandles()).includes(handle)) continue
+      await browser.switchToWindow(handle)
+      await collectCoverageFromCurrentWindow('stale-session-tree-popup-close')
+      await browser.closeWindow()
+    } catch {
+      // A concurrently closed stale popup already satisfies the cleanup.
+    }
+  }
+
+  const remainingHandles = await browser.getWindowHandles()
+  const originalHandle =
+    nonPopupHandles.find(
+      (handle) => handle === initialHandle && remainingHandles.includes(handle),
+    ) ?? nonPopupHandles.find((handle) => remainingHandles.includes(handle))
+
+  if (!originalHandle) {
+    throw new Error(
+      'Expected a non-Session Flow browser window before opening the popup.',
+    )
+  }
+
+  await browser.switchToWindow(originalHandle)
+  return originalHandle
 }
 
 export async function closeSessionTreePopup(originalHandle) {

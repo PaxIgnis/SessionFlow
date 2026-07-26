@@ -2,6 +2,7 @@ import { DragAndDrop } from '@/services/drag-and-drop'
 import {
   hasSupportedExternalDropType,
   parseExternalDrop,
+  SESSION_FLOW_DROP_TYPE,
 } from '@/services/external-drop'
 import * as Messages from '@/services/foreground-messages'
 import { SessionTree } from '@/services/foreground-tree'
@@ -15,6 +16,7 @@ import {
   DropType,
   SelectionType,
   State,
+  Tab,
   TreeItem,
   TreeItemType,
   Window,
@@ -67,8 +69,219 @@ export function collectDraggedItemsWithIncludedChildren(
   return items.concat(additionalItems)
 }
 
+export function collectSelectedDragItems(
+  draggedItem: TreeItem,
+  selectedItems: TreeItem[],
+  includeSelectedItems: boolean,
+): TreeItem[] {
+  if (!includeSelectedItems) return [draggedItem]
+
+  const roots = selectedItems.some((item) => item.uid === draggedItem.uid)
+    ? selectedItems
+    : [...selectedItems, draggedItem]
+  const seen = new Set<UID>()
+  return roots.filter((item) => {
+    if (seen.has(item.uid)) return false
+    seen.add(item.uid)
+    return true
+  })
+}
+
+export interface DragImagePreview {
+  title: string
+  metadata?: string
+  body: string[]
+}
+
+export const DRAG_IMAGE_MAX_CANVAS_WIDTH = 370
+
+export function getDragImageTextWidth(
+  measuredWidth: number,
+  padding: number,
+): number {
+  return Math.min(measuredWidth, DRAG_IMAGE_MAX_CANVAS_WIDTH - padding * 2)
+}
+
+export function buildDragImagePreview(items: TreeItem[]): DragImagePreview {
+  if (items.length === 0) return { title: '', body: [] }
+
+  const firstItem = items[0]
+  if (items.length === 1) {
+    if (firstItem.type === TreeItemType.TAB) {
+      return {
+        title: firstItem.title || `Tab id ${firstItem.id}`,
+        body: [firstItem.url || ''],
+      }
+    }
+    if (firstItem.type === TreeItemType.NOTE) {
+      return { title: firstItem.text, body: [] }
+    }
+    if (firstItem.type === TreeItemType.SEPARATOR) {
+      return { title: 'Separator', body: [] }
+    }
+  }
+
+  let metadata: string | undefined
+  const selectedWindows = items.filter(
+    (item): item is Window => item.type === TreeItemType.WINDOW,
+  )
+  if (selectedWindows.length > 0) {
+    const windowChildren = selectedWindows.flatMap((window) => window.children)
+    const contents = formatItemCounts(windowChildren, [
+      TreeItemType.TAB,
+      TreeItemType.NOTE,
+      TreeItemType.SEPARATOR,
+    ])
+    metadata = `(Window contents: ${contents || '0 items'})`
+  }
+
+  if (items.length === 1 && firstItem.type === TreeItemType.WINDOW) {
+    return {
+      title: firstItem.title || `Window id ${firstItem.id}`,
+      metadata,
+      body: [],
+    }
+  }
+
+  const body = items
+    .filter((item): item is Tab => item.type === TreeItemType.TAB)
+    .map((tab) => tab.url)
+    .filter(Boolean)
+    .slice(0, 15 - (metadata ? 1 : 0))
+
+  return {
+    title: formatItemCounts(items, getFirstOccurrenceTypeOrder(items)),
+    ...(metadata ? { metadata } : {}),
+    body,
+  }
+}
+
+function getFirstOccurrenceTypeOrder(items: TreeItem[]): TreeItemType[] {
+  return [...new Set(items.map((item) => item.type))]
+}
+
+function formatItemCounts(
+  items: TreeItem[],
+  typeOrder: TreeItemType[],
+): string {
+  const phrases = typeOrder.flatMap((type) => {
+    const count = items.filter((item) => item.type === type).length
+    return count > 0 ? [`${count} ${getItemTypeLabel(type, count)}`] : []
+  })
+  if (phrases.length <= 1) return phrases[0] ?? ''
+  if (phrases.length === 2) return `${phrases[0]} and ${phrases[1]}`
+  return `${phrases.slice(0, -1).join(', ')} and ${phrases.at(-1)}`
+}
+
+function getItemTypeLabel(type: TreeItemType, count: number): string {
+  const plural = count === 1 ? '' : 's'
+  if (type === TreeItemType.WINDOW) return `window${plural}`
+  if (type === TreeItemType.TAB) return `tab${plural}`
+  if (type === TreeItemType.NOTE) return `note${plural}`
+  return `separator${plural}`
+}
+
+export function populateInternalDragData(
+  dataTransfer: DataTransfer | null,
+  dragInfo: DragInfo,
+): void {
+  if (!dataTransfer) return
+
+  const mozUrls: string[] = []
+  const uriList: string[] = []
+  const html: string[] = []
+  const plain: string[] = []
+
+  if (dragInfo.dragType === DragType.TAB) {
+    for (const item of dragInfo.items) {
+      if (item.type !== TreeItemType.TAB) continue
+      const url = normalizeInternalDragUrl(item.url)
+      if (!url) continue
+      mozUrls.push(url, item.title)
+      uriList.push(url)
+      html.push(`<a href="${escapeHtml(url)}">${escapeHtml(item.title)}</a>`)
+      plain.push(url)
+    }
+  } else if (dragInfo.dragType === DragType.WINDOW) {
+    for (const item of dragInfo.items) {
+      if (item.type !== TreeItemType.WINDOW) continue
+      const title = item.title || `Window id ${item.id}`
+      html.push(`<span>${escapeHtml(title)}</span>`)
+      plain.push(title)
+    }
+  } else if (dragInfo.dragType === DragType.NOTE) {
+    for (const item of dragInfo.items) {
+      plain.push(item.type === TreeItemType.NOTE ? item.text : item.uid)
+    }
+  } else {
+    plain.push('Separator')
+  }
+
+  safeSetDragData(
+    dataTransfer,
+    SESSION_FLOW_DROP_TYPE,
+    JSON.stringify(dragInfo),
+  )
+  safeSetDragData(dataTransfer, 'text/x-moz-url', mozUrls.join('\r\n'))
+  if (dragInfo.dragType === DragType.TAB) {
+    safeSetDragData(dataTransfer, 'text/uri-list', uriList.join('\r\n'))
+  }
+  safeSetDragData(dataTransfer, 'text/html', html.join('\r\n'))
+  safeSetDragData(dataTransfer, 'text/plain', plain.join('\r\n'))
+}
+
+function normalizeInternalDragUrl(value: string): string | undefined {
+  if (
+    [...value].some((character) => {
+      const code = character.charCodeAt(0)
+      return code <= 31 || code === 127
+    })
+  ) {
+    return undefined
+  }
+
+  try {
+    const url = new URL(value)
+    return [
+      'http:',
+      'https:',
+      'about:',
+      'chrome:',
+      'file:',
+      'moz-extension:',
+    ].includes(url.protocol)
+      ? url.href
+      : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function safeSetDragData(
+  dataTransfer: DataTransfer,
+  type: string,
+  value: string,
+): void {
+  try {
+    dataTransfer.setData(type, value)
+  } catch {
+    // Firefox may reject a native format while accepting the remaining ones.
+  }
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/gu, (character) => {
+    if (character === '&') return '&amp;'
+    if (character === '<') return '&lt;'
+    if (character === '>') return '&gt;'
+    if (character === '"') return '&quot;'
+    return '&#39;'
+  })
+}
+
 export function start(dragInfo: DragInfo): void {
   reset()
+  if (!Settings.values.enableDragAndDrop) return
   console.debug('drag-and-drop-actions.start: Drag started:', dragInfo)
   DragAndDrop.dragState.dragEventStarted = true
   DragAndDrop.dragState.sourceType = getEffectiveDragType(dragInfo.items)
@@ -82,7 +295,10 @@ export function onDragEnd(e: DragEvent): void {
 
 export function onDragEnter(e: DragEvent): void {
   if (e.dataTransfer) e.dataTransfer.dropEffect = 'none'
-  if (!Settings.values.enableDragAndDrop) return
+  if (!Settings.values.enableDragAndDrop) {
+    reset()
+    return
+  }
   if (!DragAndDrop.dragState.dragEventStarted) {
     if (!Settings.values.enableDropFromExternalSources) return
     if (!hasSupportedExternalDropType(e.dataTransfer)) return
@@ -130,6 +346,9 @@ export function onDragEnter(e: DragEvent): void {
 
 export function onDragLeave(e: DragEvent): void {
   if (e.dataTransfer) e.dataTransfer.dropEffect = 'none'
+  const currentTarget = getClosestDragTarget(e.target)
+  const relatedTarget = getClosestDragTarget(e.relatedTarget)
+  if (currentTarget && currentTarget === relatedTarget) return
   clearDragIndicators(DragAndDrop.dragState.prevEl)
   DragAndDrop.dragState.prevEl = null
   DragAndDrop.dragState.destinationId = null
@@ -138,7 +357,10 @@ export function onDragLeave(e: DragEvent): void {
 
 export function onDragMove(e: DragEvent): void {
   if (e.dataTransfer) e.dataTransfer.dropEffect = 'none'
-  if (!Settings.values.enableDragAndDrop) return
+  if (!Settings.values.enableDragAndDrop) {
+    reset()
+    return
+  }
   if (!DragAndDrop.dragState.dragEventStarted) {
     if (!Settings.values.enableDropFromExternalSources) return
     if (!hasSupportedExternalDropType(e.dataTransfer)) return
@@ -152,7 +374,10 @@ export function onDragMove(e: DragEvent): void {
 
 export function onDrop(e: DragEvent): void {
   console.log(DragAndDrop.dragState)
-  if (!Settings.values.enableDragAndDrop) return
+  if (!Settings.values.enableDragAndDrop) {
+    reset()
+    return
+  }
   if (!DragAndDrop.dragState.dragEventStarted) {
     handleExternalDrop(e)
     return
@@ -176,7 +401,17 @@ export function onDrop(e: DragEvent): void {
   let targetWindowUid: UID | undefined = undefined
   const id = DragAndDrop.dragState.destinationId
   const draggedItems = DragAndDrop.dragInfo!.items
+  if (draggedItems.some((item) => !getTreeItem(item.uid))) {
+    clearDragIndicators(DragAndDrop.dragState.prevEl)
+    reset()
+    return
+  }
   const effectiveSourceType = getEffectiveDragType(draggedItems)
+  if (effectiveSourceType === null) {
+    clearDragIndicators(DragAndDrop.dragState.prevEl)
+    reset()
+    return
+  }
   const copy = isInternalCopyDrag(e)
   const draggedItemsForMove = draggedItems
   const includeDescendantsForDraggedItems = shouldIncludeDescendantsForDrop(
@@ -714,6 +949,7 @@ function isInternalCopyDrag(e: DragEvent): boolean {
 }
 
 function reset(): void {
+  clearDragIndicators(DragAndDrop.dragState.prevEl)
   DragAndDrop.dragState.dragEventStarted = false
   DragAndDrop.dragState.sourceType = null
   DragAndDrop.dragState.destinationId = null
@@ -733,9 +969,12 @@ function reset(): void {
 
   DragAndDrop.dragState.prevEl = null
 
-  if (!Settings.values.enableDragAndDrop) return
-
   Selection.clearSelection()
+}
+
+function getClosestDragTarget(target: EventTarget | null): HTMLElement | null {
+  if (!(target as HTMLElement | null)?.closest) return null
+  return (target as HTMLElement).closest('.drag-and-drop-target')
 }
 
 /**
@@ -915,6 +1154,7 @@ function updateDropTarget(
   const sourceType =
     sourceTypeOverride ??
     getEffectiveDragType(DragAndDrop.dragInfo?.items ?? [])
+  if (sourceType === null) return
   if (
     sourceType === DragType.TAB &&
     DragAndDrop.dragState.destinationType === DropType.TREE_END &&
@@ -985,14 +1225,11 @@ function updateDropTarget(
       return
   }
 
-  const rect = el.getBoundingClientRect()
-  const y = e.clientY - rect.top
-  const h = rect.height || 1
   const dropPosition = getDropPositionForTarget(
     sourceType,
     DragAndDrop.dragState.destinationType,
-    y,
-    h,
+    e.clientY,
+    el.getBoundingClientRect(),
   )
   const includeDescendants = shouldIncludeDescendantsForDrop(
     sourceType,
@@ -1119,8 +1356,8 @@ function draggedItemsCrossPrivateWindowBoundary(
 function getDropPositionForTarget(
   sourceType: DragType,
   destinationType: DropType,
-  y: number,
-  h: number,
+  clientY: number,
+  rect: Pick<DOMRect, 'top' | 'height'>,
 ): DropPosition {
   if (destinationType === DropType.TREE_END) {
     return DropPosition.BELOW
@@ -1131,17 +1368,31 @@ function getDropPositionForTarget(
   }
 
   if (destinationType === DropType.SEPARATOR) {
-    return y < h / 2 ? DropPosition.ABOVE : DropPosition.BELOW
+    return getDropPosition(clientY, rect, false)
   }
 
   if (sourceType === DragType.WINDOW && destinationType === DropType.WINDOW) {
-    return y < h / 2 ? DropPosition.ABOVE : DropPosition.BELOW
+    return getDropPosition(clientY, rect, false)
   }
 
-  if (y < h * 0.33) {
+  return getDropPosition(clientY, rect, true)
+}
+
+export function getDropPosition(
+  clientY: number,
+  rect: Pick<DOMRect, 'top' | 'height'>,
+  supportsMiddle: boolean,
+): DropPosition {
+  const height = rect.height > 0 ? rect.height : 1
+  const y = clientY - rect.top
+
+  if (!supportsMiddle) {
+    return y < height / 2 ? DropPosition.ABOVE : DropPosition.BELOW
+  }
+  if (y < height * 0.33) {
     return DropPosition.ABOVE
   }
-  if (y > h * 0.66) {
+  if (y > height * 0.66) {
     return DropPosition.BELOW
   }
   return DropPosition.MID
@@ -1225,13 +1476,15 @@ function getDropParentUidForValidation(
   return undefined
 }
 
-function getEffectiveDragType(items: TreeItem[]): DragType {
-  if (items.some((item) => item.type === TreeItemType.WINDOW)) {
-    return DragType.WINDOW
-  }
-  if (items.some((item) => item.type === TreeItemType.TAB)) {
+function getEffectiveDragType(items: TreeItem[]): DragType | null {
+  const hasWindow = items.some((item) => item.type === TreeItemType.WINDOW)
+  const hasTab = items.some((item) => item.type === TreeItemType.TAB)
+
+  if (hasWindow && hasTab) return null
+  if (hasTab) {
     return DragType.TAB
   }
+  if (hasWindow) return DragType.WINDOW
   if (items.some((item) => item.type === TreeItemType.NOTE)) {
     return DragType.NOTE
   }

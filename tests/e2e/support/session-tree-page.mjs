@@ -584,6 +584,95 @@ export class SessionTreePage {
       options,
     )
   }
+
+  async dragTreeItemToTreeEndWithPointer(sourceText, options = {}) {
+    const source = await this.treeItemByText(sourceText)
+    const scrollContainer = await $('.sessiontree-content')
+    const treeEnd = await $('.tree-end-drop-target')
+    await source.scrollIntoView({ block: 'center' })
+    await expect(source).toBeDisplayed()
+    await expect(scrollContainer).toBeDisplayed()
+
+    const beforeScrollTop = await browser.execute(
+      (element) => element.scrollTop,
+      scrollContainer,
+    )
+    const containerRect = await browser.execute((element) => {
+      const rect = element.getBoundingClientRect()
+      return {
+        x: rect.x,
+        y: rect.y,
+        width: rect.width,
+        height: rect.height,
+        viewportHeight: window.innerHeight,
+      }
+    }, scrollContainer)
+    const sourcePoint = await browser.execute((element) => {
+      const rect = element.getBoundingClientRect()
+      return {
+        x: rect.x + rect.width / 2 + 8,
+        y: rect.y + rect.height / 2 + 8,
+      }
+    }, source)
+    const webdriverWindowSize = await browser.getWindowSize()
+    const edgeX = Math.floor(containerRect.x + containerRect.width / 2)
+    const edgeY = Math.floor(
+      Math.min(
+        containerRect.y + containerRect.height,
+        webdriverWindowSize.height,
+      ) - 4,
+    )
+    const edgeAction = browser
+      .action('pointer', { parameters: { pointerType: 'mouse' } })
+      .move({ origin: source, x: 8, y: 8 })
+      .down({ button: 0 })
+      .pause(250)
+      .move({
+        origin: 'pointer',
+        x: Math.floor(edgeX - sourcePoint.x),
+        y: Math.floor(edgeY - sourcePoint.y),
+        duration: 700,
+      })
+
+    const edgeSteps = options.edgeSteps ?? 30
+    for (let index = 0; index < edgeSteps; index++) {
+      edgeAction
+        .move({
+          origin: 'pointer',
+          x: index % 2 === 0 ? 1 : -1,
+          y: index % 2 === 0 ? -1 : 1,
+          duration: 100,
+        })
+        .pause((options.edgePause ?? 6_000) / edgeSteps)
+    }
+    await edgeAction.perform()
+
+    const edgeScrollTop = await browser.execute(
+      (element) => element.scrollTop,
+      scrollContainer,
+    )
+    // Geckodriver cannot release the same native HTML drag over this oversized
+    // scrolling target without corrupting its pointer coordinates. Native
+    // pointer input above proves Firefox edge scrolling; dispatch only the
+    // terminal drop into the already-active Session Flow drag operation.
+    await browser.execute((element) => {
+      const dataTransfer = new DataTransfer()
+      const rect = element.getBoundingClientRect()
+      const eventOptions = {
+        bubbles: true,
+        cancelable: true,
+        clientX: rect.left + rect.width / 2,
+        clientY: rect.top + 8,
+        dataTransfer,
+      }
+      element.dispatchEvent(new DragEvent('dragenter', eventOptions))
+      element.dispatchEvent(new DragEvent('dragover', eventOptions))
+      element.dispatchEvent(new DragEvent('drop', eventOptions))
+    }, treeEnd)
+    await browser.releaseActions()
+
+    return { beforeScrollTop, edgeScrollTop }
+  }
 }
 
 export function windowsInTree(tree) {

@@ -7,10 +7,12 @@ import {
   createWindow,
   resetTree,
 } from '../../helpers/tree-fixtures'
+import { installFakeBrowser } from '../../helpers/fake-browser'
 import { expectTreeInvariants } from '../../helpers/tree-invariants'
 
 describe('state actions', () => {
   beforeEach(() => {
+    installFakeBrowser()
     resetTree()
   })
 

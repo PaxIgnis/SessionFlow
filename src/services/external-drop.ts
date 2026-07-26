@@ -7,6 +7,7 @@ const MOZ_URL_TYPE = 'text/x-moz-url'
 const MOZ_URL_DATA_TYPE = 'text/x-moz-url-data'
 const MOZ_TEXT_INTERNAL_TYPE = 'text/x-moz-text-internal'
 const URI_LIST_TYPE = 'text/uri-list'
+const HTML_TYPE = 'text/html'
 const PLAIN_TEXT_TYPE = 'text/plain'
 
 const URL_TYPES = [
@@ -14,6 +15,7 @@ const URL_TYPES = [
   MOZ_URL_DATA_TYPE,
   URI_LIST_TYPE,
   MOZ_TEXT_INTERNAL_TYPE,
+  HTML_TYPE,
   PLAIN_TEXT_TYPE,
 ] as const
 
@@ -99,10 +101,32 @@ function readPreferredUrlPayload(
     if (items.length > 0) return items
   }
 
+  const html = safeGetData(dataTransfer, HTML_TYPE)
+  if (html) {
+    const items = parseHtmlLink(html)
+    if (items.length > 0) return items
+  }
+
   const plainText = safeGetData(dataTransfer, PLAIN_TEXT_TYPE)
   if (plainText) return parseUrlLines(plainText, false)
 
   return []
+}
+
+function parseHtmlLink(value: string): ExternalDropItem[] {
+  try {
+    if (typeof DOMParser === 'undefined') return []
+    const document = new DOMParser().parseFromString(value, 'text/html')
+    const anchor = document.querySelector('a[href]')
+    const href = anchor?.getAttribute('href') ?? ''
+    const title = anchor?.textContent?.trim() ?? ''
+
+    const url = normalizeUrl(href, true)
+    if (!url) return []
+    return [{ url, ...(title ? { title } : {}) }]
+  } catch {
+    return []
+  }
 }
 
 function parseMozUrl(value: string): ExternalDropItem[] {

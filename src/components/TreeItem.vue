@@ -4,7 +4,13 @@ import { isKnownFirefoxContainerIcon } from '@/defaults/container-icons'
 import { ContextMenu } from '@/services/context-menu'
 import { getTreeItemContextMenuArgs } from '@/services/context-menu-actions'
 import { DragAndDrop } from '@/services/drag-and-drop'
-import { collectDraggedItemsWithIncludedChildren } from '@/services/drag-and-drop-actions'
+import {
+  buildDragImagePreview,
+  collectDraggedItemsWithIncludedChildren,
+  collectSelectedDragItems,
+  getDragImageTextWidth,
+  populateInternalDragData,
+} from '@/services/drag-and-drop-actions'
 import { FaviconService } from '@/services/favicons'
 import * as Messages from '@/services/foreground-messages'
 import { SessionTree } from '@/services/foreground-tree'
@@ -41,33 +47,13 @@ function getTabFavicon(tab: Tab): string {
 
 function onDragStart(e: DragEvent) {
   if (!Settings.values.enableDragAndDrop) return
-  let items: TreeItem[] = []
+  let items: TreeItem[]
 
-  // determine which items to drag based on settings
-  if (Settings.values.includeSelectedItemsWithDraggedItem) {
-    // collect dragged items info
-    items = props.item.selected
-      ? Selection.selectedItems.value.map((selectedItem) => selectedItem.item)
-      : Selection.getSelectedItems(getType(props.item))
-    console.debug('Drag started for items:', items, 'origin item:', props.item)
-
-    // if the dragged item is not in the selection, add it by simulating a ctrl+click
-    if (!items.find((it) => it.uid === props.item.uid)) {
-      Selection.selectItem(
-        props.item,
-        getType(props.item),
-        new MouseEvent('click', {
-          bubbles: true,
-          cancelable: true,
-          ctrlKey: true,
-        }),
-      )
-    }
-    items = Selection.getSelectedItems(getType(props.item))
-  } else {
-    // only drag the single item
-    items = [props.item]
-  }
+  items = collectSelectedDragItems(
+    props.item,
+    Selection.selectedItems.value.map((selectedItem) => selectedItem.item),
+    Settings.values.includeSelectedItemsWithDraggedItem,
+  )
   items = collectDraggedItemsWithIncludedChildren(
     items,
     getType(props.item),
@@ -87,106 +73,39 @@ function onDragStart(e: DragEvent) {
 
   // prepare native drag data
   if (e.dataTransfer) {
-    const uris = []
-    const urls = []
-    const plain = []
-
-    if (isTab(props.item)) {
-      for (const item of items) {
-        if (!isTab(item)) continue
-        uris.push(item.url)
-        uris.push(`# ${item.title}`)
-        urls.push(`<a href="${item.url}">${item.title}</a>`)
-        plain.push(item.url)
-      }
-    } else if (isWindow(props.item)) {
-      for (const item of items) {
-        if (!isWindow(item)) continue
-        const title = item.title ? item.title : `Window id ${item.id}`
-        urls.push(`<span>${title}</span>`)
-        plain.push(title)
-      }
-    } else if (isNote(props.item)) {
-      for (const item of items) {
-        plain.push(isNote(item) ? item.text : item.uid)
-      }
-    } else if (isSeparator(props.item)) {
-      plain.push('Separator')
-    }
-
-    // set native drag data
-    e.dataTransfer.setData(
-      'application/x-sessionflow-draganddrop',
-      JSON.stringify(dragInfo),
-    )
-    e.dataTransfer.setData('text/x-moz-url', uris.join('\r\n'))
-    if (isTab(props.item))
-      e.dataTransfer.setData('text/uri-list', uris.join('\r\n'))
-    e.dataTransfer.setData('text/html', urls.join('\r\n'))
-    e.dataTransfer.setData('text/plain', plain.join('\r\n'))
+    populateInternalDragData(e.dataTransfer, dragInfo)
 
     // prepare and set drag image
     try {
-      // update preview text/title for the drag image
-      let title = ''
-      let body = [] as string[]
-      if (dragInfo.items && dragInfo.items.length > 0) {
-        const item = dragInfo.items[0]
-
-        if (isTab(item)) {
-          if (dragInfo.items.length === 1) {
-            title = (item as Tab).title || `Tab id ${(item as Tab).id}`
-            body = [(item as Tab).url || '']
-          } else {
-            title = `${dragInfo.items.length} tabs`
-            body = dragInfo.items
-              .map((i) => (i as Tab).url || '')
-              .filter(Boolean)
-              .slice(0, 15)
-          }
-        } else if (isWindow(item)) {
-          if (dragInfo.items.length === 1) {
-            title = item.title || `Window id ${item.id}`
-            body = [`Including ${item.children.length} items`]
-          } else {
-            title = `${dragInfo.items.length} windows`
-            body = dragInfo.items
-              .map((i) => (isWindow(i) ? i.title || `Window id ${i.id}` : ''))
-              .filter(Boolean)
-              .slice(0, 15)
-          }
-        } else if (isNote(item)) {
-          title = isNote(item) ? item.text : 'Note'
-          body = []
-        } else {
-          title = 'Separator'
-          body = []
-        }
-      }
+      const { title, metadata, body } = buildDragImagePreview(dragInfo.items)
 
       const padding = 8
       const lineHeight = 18
       const titleFont = 'bold 14px system-ui'
+      const metadataFont = 'italic 13px system-ui'
       const bodyFont = '14px system-ui'
 
-      // measure and cap text width to 300 CSS pixels, draw with ellipsis if needed
+      // Measure with each drawing font and cap the complete canvas at 370px.
       const canvas = document.createElement('canvas')
       const ctx = canvas.getContext('2d')!
       ctx.font = titleFont
       const measuredTitle = ctx.measureText(title).width
       let measuredMax = measuredTitle
+      if (metadata) {
+        ctx.font = metadataFont
+        measuredMax = Math.max(measuredMax, ctx.measureText(metadata).width)
+      }
       ctx.font = bodyFont
       for (const line of body) {
         const measuredSubtitle = ctx.measureText(line).width
         measuredMax = Math.max(measuredMax, measuredSubtitle)
       }
 
-      const MAX_TEXT_WIDTH = 284 // CSS pixels
-      const textWidth = Math.min(measuredMax, MAX_TEXT_WIDTH)
+      const textWidth = getDragImageTextWidth(measuredMax, padding)
 
       canvas.width = Math.ceil(textWidth + padding * 2)
       canvas.height = Math.ceil(
-        lineHeight * (body && body.length > 0 ? body.length + 1 : 1) + padding,
+        lineHeight * (1 + (metadata ? 1 : 0) + body.length) + padding,
       )
 
       // draw background and border
@@ -203,15 +122,26 @@ function onDragStart(e: DragEvent) {
         padding,
         textWidth,
       )
+      if (metadata) {
+        ctx.fillStyle = '#666'
+        ctx.font = metadataFont
+        DragAndDrop.drawTextEllipsisOnCanvas(
+          ctx,
+          metadata,
+          padding,
+          padding + lineHeight,
+          textWidth,
+        )
+      }
       ctx.font = bodyFont
-      if (body && body.length > 0) {
+      if (body.length > 0) {
         for (let i = 0; i < body.length; i++) {
           ctx.fillStyle = '#555'
           DragAndDrop.drawTextEllipsisOnCanvas(
             ctx,
             body[i],
             padding,
-            padding + lineHeight * (i + 1),
+            padding + lineHeight * (i + 1 + (metadata ? 1 : 0)),
             textWidth,
           )
         }

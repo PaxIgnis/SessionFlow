@@ -6,6 +6,16 @@ Run:
 
 - `pnpm run test:e2e`
 
+The dedicated `item-lifecycle.spec.mjs` covers Firefox-backed saved-item
+reopening, note-only windows, ordered bulk opening, restricted-URL fallback,
+grouped restoration, and native pin/unpin convergence. Run it alone while
+iterating with:
+
+```bash
+pnpm run zip:firefox
+pnpm exec wdio run ./wdio.conf.mjs --spec ./tests/e2e/item-lifecycle.spec.mjs
+```
+
 This command runs Firefox headed by default because the workflow tests depend on
 Firefox extension window events that are unreliable in headless mode. To opt
 into the unstable headless path for diagnostics, set `WDIO_HEADLESS=true`.

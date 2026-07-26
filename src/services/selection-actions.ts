@@ -15,13 +15,11 @@ export function selectItem(item: TreeItem, type: SelectionType, e: MouseEvent) {
 
   const ctrlKey = e.ctrlKey || e.metaKey
   const shiftKey = e.shiftKey
-  if (shiftKey && firstItem && selectItemRange(firstItem.item, item)) {
-    return
-  }
-
-  // If the first item is not of the same type, clear the selection
-  if (firstItem && firstItem.type !== type) {
+  if (shiftKey && firstItem) {
+    if (selectItemRange(firstItem.item, item, ctrlKey)) return
     clearSelection()
+    addSelectedItem(item)
+    return
   }
 
   if (item.selected && ctrlKey) {
@@ -62,69 +60,41 @@ export function selectItem(item: TreeItem, type: SelectionType, e: MouseEvent) {
   }
 }
 
-function selectItemRange(firstItem: TreeItem, lastItem: TreeItem): boolean {
-  if (selectTopLevelItemRange(firstItem, lastItem)) {
-    return true
-  }
-  return selectWindowChildItemRange(firstItem, lastItem)
-}
-
-function selectTopLevelItemRange(
+function selectItemRange(
   firstItem: TreeItem,
   lastItem: TreeItem,
+  additive: boolean,
 ): boolean {
-  const firstIndex = SessionTree.reactiveItems.value.findIndex(
+  const logicalItems = getLogicalTreeOrder()
+  const firstIndex = logicalItems.findIndex(
     (item) => item.uid === firstItem.uid,
   )
-  const lastIndex = SessionTree.reactiveItems.value.findIndex(
-    (item) => item.uid === lastItem.uid,
-  )
+  const lastIndex = logicalItems.findIndex((item) => item.uid === lastItem.uid)
   if (firstIndex === -1 || lastIndex === -1) return false
 
-  Selection.clearSelection()
+  if (!additive) Selection.clearSelection()
   const [minIndex, maxIndex] = [firstIndex, lastIndex].sort((a, b) => a - b)
   for (let i = minIndex; i <= maxIndex; i++) {
-    addSelectedItem(SessionTree.reactiveItems.value[i])
+    addSelectedItem(logicalItems[i])
   }
   return true
 }
 
-function selectWindowChildItemRange(
-  firstItem: TreeItem,
-  lastItem: TreeItem,
-): boolean {
-  const firstWindowUid = getWindowUid(firstItem)
-  const lastWindowUid = getWindowUid(lastItem)
-  if (!firstWindowUid || firstWindowUid !== lastWindowUid) return false
-
-  const window = SessionTree.windowsByUid.get(firstWindowUid)
-  if (!window) return false
-
-  const firstIndex = window.children.findIndex(
-    (item) => item.uid === firstItem.uid,
+export function getLogicalTreeOrder(): TreeItem[] {
+  return SessionTree.reactiveItems.value.flatMap((item) =>
+    item.type === TreeItemType.WINDOW ? [item, ...item.children] : [item],
   )
-  const lastIndex = window.children.findIndex(
-    (item) => item.uid === lastItem.uid,
-  )
-  if (firstIndex === -1 || lastIndex === -1) return false
-
-  Selection.clearSelection()
-  const [minIndex, maxIndex] = [firstIndex, lastIndex].sort((a, b) => a - b)
-  for (let i = minIndex; i <= maxIndex; i++) {
-    addSelectedItem(window.children[i])
-  }
-  return true
-}
-
-function getWindowUid(item: TreeItem): UID | undefined {
-  if (item.type === TreeItemType.TAB) return item.windowUid
-  if (item.type === TreeItemType.NOTE) return item.windowUid
-  if (item.type === TreeItemType.SEPARATOR) return item.windowUid
-  return undefined
 }
 
 function addSelectedItem(item: TreeItem | undefined): void {
   if (!item) return
+  if (
+    Selection.selectedItems.value.some(
+      (selectedItem) => selectedItem.item.uid === item.uid,
+    )
+  ) {
+    return
+  }
   item.selected = true
   Selection.selectedItems.value.push({
     item,
@@ -254,12 +224,6 @@ export function selectItemForContextMenu(
   type: SelectionType,
   e: MouseEvent,
 ): void {
-  const firstItem = Selection.selectedItems.value[0]
-  // If the first item is not of the same type, clear the selection
-  if (firstItem && firstItem.type !== type) {
-    clearSelection()
-  }
-
   const ctrlKey = e.ctrlKey || e.metaKey
   if (!item.selected && ctrlKey) {
     // If item is not selected and ctrl/meta key is pressed, select & add to selection
