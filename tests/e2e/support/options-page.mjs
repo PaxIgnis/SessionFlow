@@ -27,6 +27,7 @@ export class OptionsPage {
     const button = await this.toggleButton(label, optionLabel)
 
     await expect(button).toBeDisplayed()
+    await button.scrollIntoView({ block: 'center', inline: 'nearest' })
     await button.click()
     await browser.waitUntil(
       async () => (await button.getAttribute('class')).includes('active'),
@@ -35,6 +36,76 @@ export class OptionsPage {
         timeoutMsg: `Expected "${label}" option "${optionLabel}" to be active.`,
       },
     )
+  }
+
+  async expectToggleActive(label, optionLabel) {
+    const button = await this.toggleButton(label, optionLabel)
+
+    await browser.waitUntil(
+      async () => (await button.getAttribute('class')).includes('active'),
+      {
+        timeout: 10_000,
+        timeoutMsg: `Expected "${label}" option "${optionLabel}" to be active.`,
+      },
+    )
+  }
+
+  async selectSection(sectionId) {
+    const navItem = await $(`#nav-item-${sectionId}`)
+
+    await expect(navItem).toBeDisplayed()
+    await navItem.click()
+    await this.expectSectionActive(sectionId)
+  }
+
+  async scrollToSection(sectionId) {
+    // Click navigation uses a one-second smooth-scroll guard. Wait for it to
+    // finish before simulating an independent manual scroll.
+    await browser.pause(1_100)
+    await browser.execute((targetSectionId) => {
+      const panel = document.querySelector('.content-panel')
+      const section = document.getElementById(targetSectionId)
+      if (!(panel instanceof HTMLElement) || !section) return
+
+      panel.scrollTop = section.offsetTop
+      panel.dispatchEvent(new Event('scroll'))
+    }, sectionId)
+    await this.expectSectionActive(sectionId)
+  }
+
+  async expectSectionActive(sectionId) {
+    const navItem = await $(`#nav-item-${sectionId}`)
+
+    try {
+      await browser.waitUntil(
+        async () =>
+          (await navItem.getAttribute('class')).includes('nav-item-active'),
+        {
+          timeout: 10_000,
+          timeoutMsg: `Expected settings section "${sectionId}" to be active.`,
+        },
+      )
+    } catch (error) {
+      const scrollState = await browser.execute((targetSectionId) => {
+        const panel = document.querySelector('.content-panel')
+        const section = document.getElementById(targetSectionId)
+        return {
+          panelScrollTop:
+            panel instanceof HTMLElement ? panel.scrollTop : undefined,
+          panelScrollHeight:
+            panel instanceof HTMLElement ? panel.scrollHeight : undefined,
+          panelClientHeight:
+            panel instanceof HTMLElement ? panel.clientHeight : undefined,
+          sectionOffsetTop:
+            section instanceof HTMLElement ? section.offsetTop : undefined,
+          activeSection: document.querySelector('.nav-item-active')?.id,
+        }
+      }, sectionId)
+      throw new Error(
+        `Expected settings section "${sectionId}" to be active. Scroll state: ${JSON.stringify(scrollState)}`,
+        { cause: error },
+      )
+    }
   }
 
   async expectStoredSetting(key, value) {
@@ -50,6 +121,18 @@ export class OptionsPage {
   toggleButton(label, optionLabel) {
     return $(
       `//div[contains(concat(" ", normalize-space(@class), " "), " toggle-container ")][.//label[normalize-space()="${label}"]]//button[normalize-space()="${optionLabel}"]`,
+    )
+  }
+
+  async expectToggleDisabled(label, optionLabel, disabled = true) {
+    const button = await this.toggleButton(label, optionLabel)
+
+    await browser.waitUntil(
+      async () => (await button.isEnabled()) !== disabled,
+      {
+        timeout: 10_000,
+        timeoutMsg: `Expected "${label}" option "${optionLabel}" to be ${disabled ? 'disabled' : 'enabled'}.`,
+      },
     )
   }
 

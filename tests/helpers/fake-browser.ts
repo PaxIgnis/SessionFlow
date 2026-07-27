@@ -144,6 +144,7 @@ export interface FakeBrowser {
     setWindowValue: ReturnType<typeof vi.fn>
   }
   permissions: {
+    onRemoved: FakeEvent<[{ origins?: string[] }]>
     contains: ReturnType<typeof vi.fn>
     request: ReturnType<typeof vi.fn>
   }
@@ -277,6 +278,7 @@ export function installFakeBrowser(): FakeBrowser {
       setWindowValue: vi.fn().mockResolvedValue(undefined),
     },
     permissions: {
+      onRemoved: new FakeEvent<[{ origins?: string[] }]>(),
       contains: vi.fn().mockResolvedValue(false),
       request: vi.fn().mockResolvedValue(false),
     },

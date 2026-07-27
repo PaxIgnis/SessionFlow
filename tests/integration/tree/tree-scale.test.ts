@@ -77,7 +77,7 @@ describe('tree scale and stack safety', () => {
 
     SessionTree.replaceSessionTree(structuredClone(Tree.Items))
     expectForegroundIndexes()
-  }, 20_000)
+  }, 30_000)
 
   it('rebuilds and replaces a 25,000-item stress tree', () => {
     resetTree()

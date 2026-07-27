@@ -477,12 +477,19 @@ describe('favicon service', () => {
   it('checks and requests favicon permissions defensively', async () => {
     const service = new FaviconService()
     vi.mocked(browser.permissions.contains).mockResolvedValue(true)
-    vi.mocked(browser.permissions.request).mockRejectedValue(
-      new Error('denied'),
-    )
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
 
     await expect(service.hasFetchPermissions()).resolves.toBe(true)
+
+    vi.mocked(browser.permissions.request).mockResolvedValueOnce(true)
+    await expect(service.requestFetchPermissions()).resolves.toBe(true)
+
+    vi.mocked(browser.permissions.request).mockResolvedValueOnce(false)
+    await expect(service.requestFetchPermissions()).resolves.toBe(false)
+
+    vi.mocked(browser.permissions.request).mockRejectedValueOnce(
+      new Error('denied'),
+    )
     await expect(service.requestFetchPermissions()).resolves.toBe(false)
     expect(consoleError).toHaveBeenCalledWith(
       'Failed to request favicon host permissions',

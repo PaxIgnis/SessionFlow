@@ -1,5 +1,6 @@
 <script lang="ts" setup>
 import '@/styles/variables.css'
+import { normalizeBoundedNumberInput } from '@/services/settings-actions'
 
 interface Units {
   label: string
@@ -31,36 +32,25 @@ const handleInput = (event: Event) => {
     return
   }
 
-  // Remove any non-digit characters except decimal point and minus sign
-  const sanitizedValue = input.value.replace(/[^\d.-]/g, '')
-
-  // Ensure valid number format
-  if (/^-?\d*\.?\d*$/.test(sanitizedValue)) {
-    const value = Number(sanitizedValue)
-    // Check if value is within min/max bounds
-    if (props.min !== undefined && value < props.min) {
-      input.value = String(props.min)
-      emit('update:value', props.min)
-      emit('update', props.min)
-    } else if (props.max !== undefined && value > props.max) {
-      input.value = String(props.max)
-      emit('update:value', props.max)
-      emit('update', props.max)
-    } else {
-      input.value = sanitizedValue
-      emit('update:value', value)
-      emit('update', value)
-    }
-  }
+  const value = normalizeBoundedNumberInput(input.value, props.min, props.max)
+  if (value === undefined) return
+  input.value = String(value)
+  emit('update:value', value)
+  emit('update', value)
 }
 
 const handleBlur = (event: Event) => {
   const input = event.target as HTMLInputElement
-  if (input.value === '' || isNaN(Number(input.value))) {
+  const value = normalizeBoundedNumberInput(input.value, props.min, props.max)
+  if (value === undefined) {
     input.value = String(props.value)
     emit('update:value', props.value)
     emit('update', props.value)
+    return
   }
+  input.value = String(value)
+  emit('update:value', value)
+  emit('update', value)
 }
 
 const handleKeyDown = (event: KeyboardEvent) => {

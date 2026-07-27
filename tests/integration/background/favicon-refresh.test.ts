@@ -214,6 +214,30 @@ describe('favicon refresh scheduler', () => {
     expect(browser.alarms.clear).not.toHaveBeenCalled()
   })
 
+  it('cancels continuous refresh without changing saved timing values', async () => {
+    Settings.values.refreshFaviconsAfterPeriodOfTime = true
+    Settings.values.refreshFaviconsAfterPeriodOfTimeValue = 12
+    Settings.values.refreshFaviconsAfterPeriodOfTimeUnit = 'hours'
+    Settings.values.faviconRefreshTiming = 'expiration-and-startup'
+    const scheduler = new FaviconRefreshScheduler(faviconService, () => [
+      'https://example.test/saved',
+    ])
+    await scheduler.initialize()
+    vi.mocked(browser.alarms.clear).mockClear()
+    vi.mocked(browser.alarms.create).mockClear()
+
+    Settings.values.refreshFaviconsAfterPeriodOfTime = false
+    await scheduler.handleSettingsUpdated()
+
+    expect(browser.alarms.clear).toHaveBeenCalledWith(
+      FAVICON_REFRESH_ALARM_NAME,
+    )
+    expect(browser.alarms.create).not.toHaveBeenCalled()
+    expect(Settings.values.refreshFaviconsAfterPeriodOfTimeValue).toBe(12)
+    expect(Settings.values.refreshFaviconsAfterPeriodOfTimeUnit).toBe('hours')
+    expect(Settings.values.faviconRefreshTiming).toBe('expiration-and-startup')
+  })
+
   it('skips network work without website access and notifies open views after updates', async () => {
     Settings.values.refreshFaviconsAfterPeriodOfTime = true
     const scheduler = new FaviconRefreshScheduler(faviconService, () => [

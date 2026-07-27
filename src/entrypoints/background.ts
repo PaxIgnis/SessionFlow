@@ -37,6 +37,9 @@ async function initializeBackground(): Promise<void> {
 
   BackgroundHandlers.initializeListeners()
   Settings.setupSettingsUpdatedListener(FaviconRefresh.handleSettingsUpdated)
+  Settings.setupFaviconPermissionRemovalListener(
+    FaviconRefresh.handleSettingsUpdated,
+  )
 
   Actions.startSessionTreePersistence()
 

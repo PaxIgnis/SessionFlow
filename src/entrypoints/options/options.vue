@@ -1,5 +1,6 @@
 <script lang="ts" setup>
 import '@/styles/variables.css'
+import { findActiveSettingsSection } from '@/services/settings-actions'
 import { STRINGS } from '@/types/strings'
 import { onMounted, onUnmounted, ref } from 'vue'
 import SettingsDragAndDrop from './components/settings.drag-and-drop.vue'
@@ -54,14 +55,16 @@ const handleScroll = () => {
   const sections = document.querySelectorAll('.content-panel > section')
   const scrollTop = contentPanel.value?.scrollTop || 0
 
-  // Find top visible section
-  for (const section of sections) {
-    const htmlSection = section as HTMLElement
-    if (htmlSection.offsetTop >= scrollTop - htmlSection.clientHeight) {
-      activeSection.value = section.id
-      break
-    }
-  }
+  const active = findActiveSettingsSection(
+    Array.from(sections).map((section) => ({
+      id: section.id,
+      offsetTop: (section as HTMLElement).offsetTop,
+    })),
+    scrollTop,
+    contentPanel.value?.scrollHeight,
+    contentPanel.value?.clientHeight,
+  )
+  if (active) activeSection.value = active
 }
 
 onMounted(() => {

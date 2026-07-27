@@ -19,6 +19,7 @@ const emit = defineEmits<{
 }>()
 
 const handleToggle = (value: string | number | boolean) => {
+  if (!props.options.some((option) => Object.is(option.value, value))) return
   emit('update:modelValue', value)
   emit('update', value)
 }
