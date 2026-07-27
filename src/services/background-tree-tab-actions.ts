@@ -143,7 +143,10 @@ export function addTab(
   )
   Tree.existingUidsSet.add(tab.uid)
   if (tab.id >= 0) void writeTabUid(tab.id, tab.uid)
-  Tree.recomputeSessionTree(emitDelta)
+  // Compute the new tab's final visibility and indentation before publishing
+  // it. Emitting recompute updates here would send tabUpdated before the
+  // foreground has received tabCreated, forcing an unnecessary resync.
+  Tree.recomputeSessionTree(false)
   if (emitDelta) {
     emitTreeDelta({
       op: 'tabCreated',

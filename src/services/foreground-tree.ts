@@ -19,6 +19,23 @@ function updateObjectProperties<T extends object>(
   })
 }
 
+function replaceObjectProperties<T extends object>(
+  target: T,
+  source: Partial<T>,
+  preservedKeys: string[] = [],
+): void {
+  const preserved = new Set(preservedKeys)
+  Object.keys(target).forEach((key) => {
+    if (
+      !preserved.has(key) &&
+      !Object.prototype.hasOwnProperty.call(source, key)
+    ) {
+      delete (target as Record<string, unknown>)[key]
+    }
+  })
+  updateObjectProperties(target, source)
+}
+
 function updateTreeItemInPlace(target: TreeItem, source: TreeItem): void {
   if (target.type !== source.type) return
 
@@ -59,6 +76,54 @@ function reconcileChildren(
   targetChildren.splice(0, targetChildren.length, ...nextChildren)
 }
 
+function indexExistingItems(items: TreeItem[]): Map<UID, TreeItem> {
+  const existingByUid = new Map<UID, TreeItem>()
+  walk(items, (item) => existingByUid.set(item.uid, item))
+  return existingByUid
+}
+
+function reconcileSnapshotItem(
+  sourceItem: TreeItem,
+  existingByUid: Map<UID, TreeItem>,
+): TreeItem {
+  const existingItem = existingByUid.get(sourceItem.uid)
+
+  if (sourceItem.type === TreeItemType.WINDOW) {
+    const { children, ...windowProperties } = sourceItem
+    const targetWindow =
+      existingItem?.type === TreeItemType.WINDOW
+        ? existingItem
+        : structuredClone(sourceItem)
+    replaceObjectProperties(targetWindow, windowProperties, ['children'])
+    const nextChildren = children.map((child) =>
+      reconcileSnapshotItem(child, existingByUid),
+    ) as Window['children']
+    targetWindow.children.splice(
+      0,
+      targetWindow.children.length,
+      ...nextChildren,
+    )
+    return targetWindow
+  }
+
+  if (existingItem && existingItem.type === sourceItem.type) {
+    replaceObjectProperties(existingItem, sourceItem)
+    return existingItem
+  }
+  return structuredClone(sourceItem)
+}
+
+function reconcileTreeItems(
+  targetItems: TreeItem[],
+  sourceItems: TreeItem[],
+): void {
+  const existingByUid = indexExistingItems(targetItems)
+  const nextItems = sourceItems.map((sourceItem) =>
+    reconcileSnapshotItem(sourceItem, existingByUid),
+  )
+  targetItems.splice(0, targetItems.length, ...nextItems)
+}
+
 function getChildren(item: TreeItem): TreeItem[] {
   if (item.type === TreeItemType.WINDOW) return item.children
   return []
@@ -93,42 +158,50 @@ function reindexTree(): void {
 }
 
 function replaceSessionTree(newItems: Array<TopLevelTreeItem>): void {
-  SessionTree.reactiveItems.value = structuredClone(newItems)
+  reconcileTreeItems(
+    SessionTree.reactiveItems.value as TreeItem[],
+    newItems as TreeItem[],
+  )
   reindexTree()
 }
 
-function applyDelta(delta: SessionTreeDelta): void {
+function applyDelta(delta: SessionTreeDelta): boolean {
   switch (delta.op) {
     case 'treeReplaced':
       replaceSessionTree(delta.treeItems)
-      return
+      return true
     case 'windowCreated': {
+      if (
+        delta.index < 0 ||
+        delta.index > SessionTree.reactiveItems.value.length
+      ) {
+        return false
+      }
       const window = structuredClone(delta.window)
       SessionTree.reactiveItems.value.splice(delta.index, 0, window)
       reindexTree()
-      return
+      return true
     }
     case 'windowRemoved': {
       const index = SessionTree.reactiveItems.value.findIndex(
         (w) => w.uid === delta.windowUid,
       )
-      if (index !== -1) {
-        SessionTree.reactiveItems.value.splice(index, 1)
-        reindexTree()
-      }
-      return
+      if (index === -1) return false
+      SessionTree.reactiveItems.value.splice(index, 1)
+      reindexTree()
+      return true
     }
     case 'windowUpdated': {
       const existingWindow = SessionTree.windowsByUid.get(delta.window.uid)
-      if (existingWindow) {
-        updateTreeItemInPlace(existingWindow, delta.window)
-      }
+      if (!existingWindow) return false
+      updateTreeItemInPlace(existingWindow, delta.window)
       reindexTree()
-      return
+      return true
     }
     case 'tabCreated': {
       const window = findWindow(delta.windowUid)
-      if (!window) return
+      if (!window || delta.index < 0 || delta.index > window.children.length)
+        return false
       const existingIndex = window.children.findIndex(
         (t) => t.uid === delta.tab.uid,
       )
@@ -136,46 +209,47 @@ function applyDelta(delta: SessionTreeDelta): void {
         window.children.splice(delta.index, 0, structuredClone(delta.tab))
       }
       reindexTree()
-      return
+      return true
     }
     case 'tabRemoved': {
       const window = findWindow(delta.windowUid)
-      if (!window) return
+      if (!window) return false
       const index = window.children.findIndex((t) => t.uid === delta.tabUid)
-      if (index !== -1) window.children.splice(index, 1)
+      if (index === -1) return false
+      window.children.splice(index, 1)
       reindexTree()
-      return
+      return true
     }
     case 'tabUpdated': {
       const existingTab = SessionTree.tabsByUid.get(delta.tab.uid)
-      if (existingTab) {
-        updateObjectProperties(existingTab, delta.tab)
-      }
+      if (!existingTab) return false
+      updateObjectProperties(existingTab, delta.tab)
       reindexTree()
-      return
+      return true
     }
     case 'noteCreated':
     case 'noteRemoved':
     case 'separatorCreated':
     case 'separatorRemoved':
-      return
+      return false
     case 'separatorUpdated': {
       const existingSeparator = SessionTree.separatorsByUid.get(
         delta.separator.uid,
       )
-      if (existingSeparator)
-        updateTreeItemInPlace(existingSeparator, delta.separator)
+      if (!existingSeparator) return false
+      updateTreeItemInPlace(existingSeparator, delta.separator)
       reindexTree()
-      return
+      return true
     }
     case 'noteUpdated': {
       const existingNote = SessionTree.notesByUid.get(delta.note.uid)
-      if (existingNote) updateTreeItemInPlace(existingNote, delta.note)
+      if (!existingNote) return false
+      updateTreeItemInPlace(existingNote, delta.note)
       reindexTree()
-      return
+      return true
     }
     default:
-      return
+      return false
   }
 }
 
@@ -190,6 +264,6 @@ export const SessionTree = {
     replaceSessionTree(items)
   },
   applyDelta(delta: SessionTreeDelta) {
-    applyDelta(delta)
+    return applyDelta(delta)
   },
 }

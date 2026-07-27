@@ -27,6 +27,19 @@ export async function reloadExtensionBackground() {
   })
 }
 
+export async function reloadExtensionBackgroundPage() {
+  const response = await browser.executeAsync((done) => {
+    window.browser.runtime
+      .getBackgroundPage()
+      .then((backgroundPage) => {
+        backgroundPage.setTimeout(() => backgroundPage.location.reload(), 0)
+        done({ ok: true })
+      })
+      .catch((error) => done({ ok: false, error: String(error) }))
+  })
+  assertLifecycleResponse(response, 'reload the extension background page')
+}
+
 export async function removeTabsByTitles(titles) {
   const response = await browser.executeAsync((targetTitles, done) => {
     window.browser.tabs

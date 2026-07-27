@@ -11,11 +11,7 @@ import { Favicons } from '@/services/favicons'
 import * as Messages from '@/services/foreground-messages'
 import { SessionTree } from '@/services/foreground-tree'
 import { closeModal, ModalState } from '@/services/modal-state'
-import {
-  disconnectTreePort,
-  onTreeDeltaPort,
-  subscribeTreePort,
-} from '@/services/runtime-port-service'
+import { subscribeTreeUpdates } from '@/services/runtime-port-service'
 import { Selection } from '@/services/selection'
 import * as ToolbarActions from '@/services/session-tree-toolbar-actions'
 import { Settings } from '@/services/settings'
@@ -24,24 +20,9 @@ import type { ContainerRecoveryStrategy } from '@/types/messages'
 import { TreeItem as SessionTreeItem, TreeItemType } from '@/types/session-tree'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 
-let unsubscribeFromTreeDelta: (() => void) | undefined
+let unsubscribeFromTreeUpdates: (() => void) | undefined
 let removeRuntimeListener: (() => void) | undefined
 let isSessionTreeUnmounted = false
-
-const wait = (ms: number) =>
-  new Promise<void>((resolve) => setTimeout(resolve, ms))
-
-async function subscribeTreePortWithRetry() {
-  while (!isSessionTreeUnmounted) {
-    try {
-      return await subscribeTreePort()
-    } catch (error) {
-      console.error('Failed to subscribe to tree port, retrying...', error)
-      await wait(250)
-    }
-  }
-  return []
-}
 
 // Save Session Tree Window location and size before closing.
 window.onbeforeunload = () => {
@@ -57,7 +38,7 @@ window.onbeforeunload = () => {
   Messages.deselectAllItems()
 
   console.log('Unloading')
-  disconnectTreePort()
+  unsubscribeFromTreeUpdates?.()
   faviconService.saveCacheToStorage()
 }
 
@@ -100,13 +81,15 @@ onMounted(async () => {
     faviconService.warmCacheFromTabs(openTabs)
   })
 
-  const initialSnapshot = await subscribeTreePortWithRetry()
   if (isSessionTreeUnmounted) {
     return
   }
-  SessionTree.replaceSessionTree(initialSnapshot)
-  unsubscribeFromTreeDelta = onTreeDeltaPort((delta) => {
-    SessionTree.applyDelta(delta)
+  unsubscribeFromTreeUpdates = subscribeTreeUpdates({
+    replaceTree: (items) => SessionTree.replaceSessionTree(items),
+    applyDelta: (delta) => SessionTree.applyDelta(delta),
+    onError: (error) => {
+      console.error('Session tree synchronization error', error)
+    },
   })
 
   // Listen for messages from the background script
@@ -158,9 +141,8 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   isSessionTreeUnmounted = true
   console.log('Unmounted')
-  unsubscribeFromTreeDelta?.()
+  unsubscribeFromTreeUpdates?.()
   removeRuntimeListener?.()
-  disconnectTreePort()
 })
 
 // Handler functions

@@ -152,6 +152,121 @@ describe('foreground SessionTree deltas', () => {
     expectForegroundIndexes()
   })
 
+  it('preserves matching object identities when treeReplaced reconciles the tree', () => {
+    const retainedTab = makeForegroundTab('tab-retained' as UID, {
+      title: 'Before',
+    })
+    const staleTab = makeForegroundTab('tab-stale' as UID)
+    const retainedWindow = makeForegroundWindow(
+      'window-retained' as UID,
+      [retainedTab, staleTab],
+      { title: 'Before' },
+    )
+    const retainedNote = makeForegroundNote('note-retained' as UID, {
+      indentLevel: 0,
+      text: 'Before',
+    })
+    resetForegroundTree([retainedNote, retainedWindow])
+    const indexedNote = SessionTree.notesByUid.get(retainedNote.uid)
+    const indexedWindow = SessionTree.windowsByUid.get(retainedWindow.uid)
+    const indexedTab = SessionTree.tabsByUid.get(retainedTab.uid)
+
+    const replacementTab = { ...retainedTab, title: 'After' }
+    const replacementWindow = {
+      ...retainedWindow,
+      title: 'After',
+      children: [replacementTab],
+    }
+    const replacementNote = { ...retainedNote, text: 'After' }
+
+    const applied = SessionTree.applyDelta({
+      op: 'treeReplaced',
+      treeItems: [replacementWindow, replacementNote],
+    })
+
+    expect(SessionTree.windowsByUid.get(retainedWindow.uid)).toBe(indexedWindow)
+    expect(SessionTree.tabsByUid.get(retainedTab.uid)).toBe(indexedTab)
+    expect(SessionTree.notesByUid.get(retainedNote.uid)).toBe(indexedNote)
+    expect(indexedWindow?.title).toBe('After')
+    expect(indexedTab?.title).toBe('After')
+    expect(indexedNote?.text).toBe('After')
+    expect(SessionTree.tabsByUid.has(staleTab.uid)).toBe(false)
+    expect(applied).toBe(true)
+    expectForegroundIndexes()
+  })
+
+  it('preserves item identities when treeReplaced moves them between parent scopes', () => {
+    const movedTab = makeForegroundTab('tab-moved' as UID)
+    const firstWindow = makeForegroundWindow('window-first' as UID, [movedTab])
+    const secondWindow = makeForegroundWindow('window-second' as UID)
+    const movedNote = makeForegroundNote('note-moved' as UID, {
+      indentLevel: 0,
+      text: 'Before',
+    })
+    resetForegroundTree([movedNote, firstWindow, secondWindow])
+    const indexedTab = SessionTree.tabsByUid.get(movedTab.uid)
+    const indexedNote = SessionTree.notesByUid.get(movedNote.uid)
+
+    const movedTabSnapshot = { ...movedTab, windowUid: secondWindow.uid }
+    const movedNoteSnapshot = {
+      ...movedNote,
+      windowUid: firstWindow.uid,
+      indentLevel: 1,
+      text: 'After',
+    }
+    SessionTree.applyDelta({
+      op: 'treeReplaced',
+      treeItems: [
+        { ...firstWindow, children: [movedNoteSnapshot] },
+        { ...secondWindow, children: [movedTabSnapshot] },
+      ],
+    })
+
+    expect(SessionTree.tabsByUid.get(movedTab.uid)).toBe(indexedTab)
+    expect(SessionTree.notesByUid.get(movedNote.uid)).toBe(indexedNote)
+    expect(indexedTab?.windowUid).toBe(secondWindow.uid)
+    expect(indexedNote?.windowUid).toBe(firstWindow.uid)
+    expect(indexedNote?.text).toBe('After')
+    expectForegroundIndexes()
+  })
+
+  it('removes stale optional properties omitted by an authoritative treeReplaced snapshot', () => {
+    const parent = makeForegroundTab('tab-parent' as UID, { isParent: true })
+    const child = makeForegroundTab('tab-child' as UID, {
+      customLabel: 'Stale label',
+      parentUid: parent.uid,
+      indentLevel: 2,
+    })
+    const window = makeForegroundWindow('window-1' as UID, [parent, child])
+    resetForegroundTree([window])
+    const indexedChild = SessionTree.tabsByUid.get(child.uid)
+    const {
+      customLabel: _customLabel,
+      parentUid: _parentUid,
+      ...replacementChild
+    } = child
+
+    SessionTree.applyDelta({
+      op: 'treeReplaced',
+      treeItems: [
+        {
+          ...window,
+          children: [parent, { ...replacementChild, indentLevel: 1 }],
+        },
+      ],
+    })
+
+    expect(SessionTree.tabsByUid.get(child.uid)).toBe(indexedChild)
+    expect(
+      Object.prototype.hasOwnProperty.call(indexedChild, 'customLabel'),
+    ).toBe(false)
+    expect(
+      Object.prototype.hasOwnProperty.call(indexedChild, 'parentUid'),
+    ).toBe(false)
+    expect(indexedChild?.indentLevel).toBe(1)
+    expectForegroundIndexes()
+  })
+
   it('applies tab create, update, and remove deltas', () => {
     const window = makeForegroundWindow('window-1' as UID)
     const tab = makeForegroundTab('tab-1' as UID, { windowUid: window.uid })
@@ -301,35 +416,39 @@ describe('foreground SessionTree deltas', () => {
     expectForegroundIndexes()
   })
 
-  it('ignores deltas for missing windows, tabs, and notes', () => {
+  it('reports deltas for missing windows, tabs, and notes as unapplied', () => {
     const tab = makeForegroundTab('tab-1' as UID)
     const note = makeForegroundNote('note-1' as UID)
     const window = makeForegroundWindow('window-1' as UID, [tab, note])
     resetForegroundTree([window])
 
-    SessionTree.applyDelta({
-      op: 'windowUpdated',
-      window: makeForegroundWindow('missing-window' as UID),
-    })
-    SessionTree.applyDelta({
-      op: 'tabCreated',
-      windowUid: 'missing-window' as UID,
-      tab: makeForegroundTab('new-tab' as UID),
-      index: 0,
-    })
-    SessionTree.applyDelta({
-      op: 'tabRemoved',
-      windowUid: 'missing-window' as UID,
-      tabUid: tab.uid,
-    })
-    SessionTree.applyDelta({
-      op: 'tabUpdated',
-      tab: makeForegroundTab('missing-tab' as UID, { title: 'missing' }),
-    })
-    SessionTree.applyDelta({
-      op: 'noteUpdated',
-      note: makeForegroundNote('missing-note' as UID, { text: 'missing' }),
-    })
+    const results = [
+      SessionTree.applyDelta({
+        op: 'windowUpdated',
+        window: makeForegroundWindow('missing-window' as UID),
+      }),
+      SessionTree.applyDelta({
+        op: 'tabCreated',
+        windowUid: 'missing-window' as UID,
+        tab: makeForegroundTab('new-tab' as UID),
+        index: 0,
+      }),
+      SessionTree.applyDelta({
+        op: 'tabRemoved',
+        windowUid: 'missing-window' as UID,
+        tabUid: tab.uid,
+      }),
+      SessionTree.applyDelta({
+        op: 'tabUpdated',
+        tab: makeForegroundTab('missing-tab' as UID, { title: 'missing' }),
+      }),
+      SessionTree.applyDelta({
+        op: 'noteUpdated',
+        note: makeForegroundNote('missing-note' as UID, { text: 'missing' }),
+      }),
+    ]
+
+    expect(results).toEqual([false, false, false, false, false])
 
     expect(SessionTree.reactiveItems.value.map((item) => item.uid)).toEqual([
       window.uid,

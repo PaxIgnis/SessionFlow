@@ -52,6 +52,59 @@ export async function openSessionTreePopup() {
   }
 }
 
+export async function openAdditionalSessionTreePopup() {
+  const handlesBeforeOpen = await browser.getWindowHandles()
+  const response = await browser.executeAsync((done) => {
+    window.browser.windows
+      .create({
+        type: 'popup',
+        url: window.browser.runtime.getURL('/sessiontree.html'),
+      })
+      .then(() => done({ ok: true }))
+      .catch((error) => done({ ok: false, error: String(error) }))
+  })
+  if (!response?.ok) {
+    throw new Error(response?.error || 'Failed to open a second popup.')
+  }
+
+  await browser.waitUntil(
+    async () =>
+      (await browser.getWindowHandles()).some(
+        (handle) => !handlesBeforeOpen.includes(handle),
+      ),
+    {
+      timeout: 10_000,
+      timeoutMsg: 'Expected a second Session Flow popup window.',
+    },
+  )
+  const popupHandle = (await browser.getWindowHandles()).find(
+    (handle) => !handlesBeforeOpen.includes(handle),
+  )
+  if (!popupHandle) throw new Error('Could not identify the second popup.')
+
+  await browser.switchToWindow(popupHandle)
+  await browser.waitUntil(
+    async () => (await browser.getUrl()).startsWith(SESSION_TREE_URL),
+    {
+      timeout: 10_000,
+      timeoutMsg: 'Expected the second Session Flow popup to load.',
+    },
+  )
+  await expect(await $('#sessiontree')).toBeExisting()
+  return popupHandle
+}
+
+export async function closeSessionTreePopupHandle(handle, nextHandle) {
+  const handles = await browser.getWindowHandles()
+  if (!handles.includes(handle)) return
+  await browser.switchToWindow(handle)
+  await collectCoverageFromCurrentWindow('session-tree-popup-close')
+  await browser.closeWindow()
+  if ((await browser.getWindowHandles()).includes(nextHandle)) {
+    await browser.switchToWindow(nextHandle)
+  }
+}
+
 async function closeStaleSessionTreePopups() {
   const initialHandles = await browser.getWindowHandles()
   const initialHandle = await browser.getWindowHandle()

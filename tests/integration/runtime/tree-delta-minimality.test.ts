@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Tree } from '@/services/background-tree'
 import { SessionTreeDelta } from '@/types/runtime-port-service'
+import { State } from '@/types/session-tree'
 import {
   createNote,
   createSeparator,
@@ -31,6 +32,31 @@ describe('minimal sufficient tree deltas', () => {
     expect(emittedDeltas).toEqual([
       expect.objectContaining({ op: 'noteUpdated' }),
     ])
+  })
+
+  it('emits tabCreated only after the new tab has its computed tree fields', () => {
+    const window = createWindow('window-1' as UID)
+
+    Tree.addTab(
+      true,
+      window.uid,
+      -1,
+      false,
+      State.OPEN,
+      'New Tab',
+      'about:newtab',
+      false,
+      0,
+    )
+
+    expect(emittedDeltas.map((delta) => delta.op)).toEqual(['tabCreated'])
+    expect(emittedDeltas[0]).toMatchObject({
+      op: 'tabCreated',
+      tab: {
+        indentLevel: 1,
+        isVisible: true,
+      },
+    })
   })
 
   it('emits one replacement for a structural note creation', () => {

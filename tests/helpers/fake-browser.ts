@@ -32,7 +32,7 @@ class FakeEvent<T extends unknown[]> {
   }
 }
 
-class FakePort {
+export class FakePort {
   onMessage = new FakeEvent<[object]>()
   onDisconnect = new FakeEvent<[]>()
   peer?: FakePort
@@ -84,7 +84,7 @@ export interface FakeBrowser {
     onInstalled: FakeEvent<[browser.runtime._OnInstalledDetails?]>
     onMessage: FakeEvent<[Record<string, unknown>]>
     onStartup: FakeEvent<[]>
-    connect: ReturnType<typeof vi.fn>
+    connect: ReturnType<typeof vi.fn<(options?: { name?: string }) => FakePort>>
     sendMessage: ReturnType<typeof vi.fn>
     getURL: ReturnType<typeof vi.fn>
   }
