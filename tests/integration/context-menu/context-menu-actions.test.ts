@@ -1,10 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ContextMenu } from '@/services/context-menu'
 import {
+  clear,
   createContextMenu,
   createContextMenuItems,
+  handleContextMenuHidden,
   handleContextMenuClick,
   open,
+  setupContextMenuLifecycle,
 } from '@/services/context-menu-actions'
 import { Selection } from '@/services/selection'
 import {
@@ -87,6 +90,18 @@ describe('context menu actions', () => {
     expect(items[0].action).toEqual(expect.any(Function))
   })
 
+  it('creates a normal window from the configured panel menu action', () => {
+    const items = createContextMenuItems(ContextMenu.panelConfig)
+    const newWindow = items.find((item) => item.id === 'newWindow')
+
+    expect(newWindow).toMatchObject({
+      label: 'New Window',
+      enabled: true,
+    })
+    newWindow?.action?.()
+    expect(browser.windows.create).toHaveBeenCalledWith()
+  })
+
   it('creates enabled and disabled browser menu entries and clears selection after click', () => {
     const selectedTab = makeForegroundTab('selected-tab' as UID)
     selectedTab.selected = true
@@ -135,6 +150,75 @@ describe('context menu actions', () => {
     expect(enabledAction).toHaveBeenCalledTimes(1)
     expect(Selection.selectedItems.value).toEqual([])
     expect(selectedTab.selected).toBe(false)
+  })
+
+  it('reports one failed menu creation and continues creating later items', () => {
+    const error = new Error('create failed')
+    vi.mocked(browser.menus.create).mockImplementationOnce(() => {
+      throw error
+    })
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    createContextMenu([
+      { id: 'first', label: 'First', action: vi.fn() },
+      { id: 'second', label: 'Second', action: vi.fn() },
+    ])
+
+    expect(browser.menus.create).toHaveBeenCalledTimes(2)
+    expect(consoleError).toHaveBeenCalledWith(
+      'Failed to create context menu item "First":',
+      error,
+    )
+  })
+
+  it('reports rejected menu cleanup without an unhandled rejection', async () => {
+    const error = new Error('remove failed')
+    vi.mocked(browser.menus.removeAll).mockRejectedValueOnce(error)
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await clear()
+
+    expect(consoleError).toHaveBeenCalledWith(
+      'Failed to remove context menu items:',
+      error,
+    )
+  })
+
+  it('restores focus to the invoking row and clears local selection when hidden', () => {
+    const tab = makeForegroundTab('tab-focus' as UID)
+    const focus = vi.fn()
+    const row = { focus } as unknown as HTMLElement
+    Selection.selectedItems.value = [{ item: tab, type: SelectionType.TAB }]
+
+    handleContextMenuClick(
+      ContextMenuType.Tab,
+      {
+        ctrlKey: false,
+        metaKey: false,
+        currentTarget: row,
+      } as unknown as MouseEvent,
+      undefined,
+      tab,
+    )
+    expect(focus).toHaveBeenCalledWith({ preventScroll: true })
+    focus.mockClear()
+    handleContextMenuHidden()
+
+    expect(Selection.selectedItems.value).toEqual([])
+    expect(focus).toHaveBeenCalledWith({ preventScroll: true })
+  })
+
+  it('registers and removes the foreground menu-hidden lifecycle listener', () => {
+    const onHidden = browser.menus.onHidden as unknown as {
+      listeners: Array<() => void>
+    }
+    const removeLifecycle = setupContextMenuLifecycle()
+
+    expect(onHidden.listeners).toContain(handleContextMenuHidden)
+
+    removeLifecycle()
+
+    expect(onHidden.listeners).not.toContain(handleContextMenuHidden)
   })
 
   it('runs a delayed menu action against the selection captured when the menu opened', () => {

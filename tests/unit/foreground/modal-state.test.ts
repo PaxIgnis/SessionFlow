@@ -59,6 +59,8 @@ describe('modal state', () => {
       kind: 'editNote',
       note,
     })
+    expect(ModalState.active).not.toHaveProperty('customLabel')
+    expect(ModalState.active).not.toHaveProperty('uid', 'tab-1')
   })
 
   it('stores a serializable missing-container recovery target', () => {

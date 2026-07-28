@@ -52,6 +52,10 @@ export class SessionTreePage {
     return $(`.tree-item[drag-and-drop-type="note"]*=${text}`)
   }
 
+  separatorItems() {
+    return $$('.tree-item[drag-and-drop-type="separator"]')
+  }
+
   tabItemByText(text) {
     return this.treeItemByTypeAndText('tab', text)
   }
@@ -237,6 +241,12 @@ export class SessionTreePage {
     }, title)
   }
 
+  capturedContextMenuTitles() {
+    return browser.execute(() =>
+      (window.__sessionFlowE2eContextMenuItems || []).map((item) => item.title),
+    )
+  }
+
   async firstWindowItem() {
     await browser.waitUntil(async () => (await this.windowItems()).length > 0, {
       timeout: 10_000,
@@ -295,6 +305,25 @@ export class SessionTreePage {
     const noteItem = await this.noteItemByText(noteText)
     await expect(noteItem).toBeDisplayed()
     await noteItem.click({ button: 'right' })
+  }
+
+  async openSeparatorContextMenu() {
+    await browser.waitUntil(
+      async () => (await this.separatorItems()).length > 0,
+      {
+        timeout: 10_000,
+        timeoutMsg: 'Expected at least one separator tree item.',
+      },
+    )
+    const separators = await this.separatorItems()
+    await expect(separators[0]).toBeDisplayed()
+    await separators[0].click({ button: 'right' })
+  }
+
+  async openPanelContextMenu() {
+    const panelTarget = await $('.tree-end-drop-target')
+    await expect(panelTarget).toBeDisplayed()
+    await panelTarget.click({ button: 'right' })
   }
 
   async setEditTextModalValue(value) {

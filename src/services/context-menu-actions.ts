@@ -24,6 +24,8 @@ interface ItemLocation {
   index: number
 }
 
+let contextMenuTrigger: HTMLElement | null = null
+
 /**
  * Controls logic opening of context menu based on selected type.
  *
@@ -35,7 +37,10 @@ export function open(type: ContextMenuType): void {
   } catch (e) {
     console.error('Error overriding context menu:', e)
   }
-  ContextMenu.clear()
+  // These WebExtension calls are issued in order, but this function must stay
+  // synchronous so Firefox still associates menu creation with the user's
+  // contextmenu gesture. Awaiting removeAll() here can suppress the native menu.
+  void ContextMenu.clear()
   if (!type) return
   let items: ContextMenuItem[] = []
   if (type === ContextMenuType.Window) {
@@ -111,15 +116,39 @@ export function createContextMenu(items: ContextMenuItem[]): void {
     if (item.enabled === false) {
       optionProperties.enabled = false
     }
-    browser.menus.create(optionProperties)
+    try {
+      browser.menus.create(optionProperties)
+    } catch (error) {
+      console.error(
+        `Failed to create context menu item "${item.label}":`,
+        error,
+      )
+    }
   }
 }
 
 /**
  * Clears all context menu items that have been added.
  */
-export function clear(): void {
-  browser.menus.removeAll()
+export async function clear(): Promise<void> {
+  try {
+    await browser.menus.removeAll()
+  } catch (error) {
+    console.error('Failed to remove context menu items:', error)
+  }
+}
+
+export function handleContextMenuHidden(): void {
+  Selection.clearSelection()
+  contextMenuTrigger?.focus({ preventScroll: true })
+  contextMenuTrigger = null
+}
+
+export function setupContextMenuLifecycle(): () => void {
+  browser.menus.onHidden.addListener(handleContextMenuHidden)
+  return () => {
+    browser.menus.onHidden.removeListener(handleContextMenuHidden)
+  }
 }
 
 export function canIncreaseIndentSelectedItems(items: TreeItem[]): boolean {
@@ -213,6 +242,13 @@ export function handleContextMenuClick(
   separator?: Separator,
   selectionType?: SelectionType,
 ): void {
+  const currentTarget = e.currentTarget as HTMLElement | null
+  contextMenuTrigger =
+    currentTarget && typeof currentTarget.focus === 'function'
+      ? currentTarget
+      : null
+  contextMenuTrigger?.focus({ preventScroll: true })
+
   if (type === ContextMenuType.Window && window) {
     Selection.selectItemForContextMenu(
       window,

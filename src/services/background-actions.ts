@@ -52,7 +52,7 @@ export function startSessionTreePersistence(): NodeJS.Timeout {
 }
 
 export function setupBrowserActionMenu(): void {
-  browser.menus.create({
+  createBrowserActionMenu({
     id: 'open-sessiontree',
     title: 'Open SessionTree',
     onclick: () => {
@@ -61,7 +61,7 @@ export function setupBrowserActionMenu(): void {
     contexts: ['browser_action'],
   })
 
-  browser.menus.create({
+  createBrowserActionMenu({
     id: 'open-settings',
     title: 'Settings',
     onclick: () => {
@@ -69,4 +69,17 @@ export function setupBrowserActionMenu(): void {
     },
     contexts: ['browser_action'],
   })
+}
+
+function createBrowserActionMenu(
+  properties: browser.menus._CreateCreateProperties,
+): void {
+  try {
+    browser.menus.create(properties)
+  } catch (error) {
+    console.error(
+      `Failed to create browser-action menu item "${properties.title}":`,
+      error,
+    )
+  }
 }

@@ -171,3 +171,26 @@ export function createUid(existing: Set<string>): string {
   )
   return nonUniqueId
 }
+
+// Edit text normalization and truncation utilities
+
+export type EditTextKind = 'window-title' | 'custom-label' | 'note'
+
+export function truncateText(value: string, maxLength: number): string {
+  return Array.from(value).slice(0, maxLength).join('')
+}
+
+export function normalizeEditTextValue(
+  kind: EditTextKind,
+  value: string,
+): string | undefined {
+  const maxLength = kind === 'note' ? 500 : 150
+  if (kind === 'note') {
+    return value.trim().length === 0 ? '' : truncateText(value, maxLength)
+  }
+
+  const normalized = truncateText(value.trim(), maxLength)
+  return kind === 'custom-label' && normalized.length === 0
+    ? undefined
+    : normalized
+}

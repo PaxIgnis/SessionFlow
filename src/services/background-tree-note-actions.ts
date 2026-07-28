@@ -1,5 +1,6 @@
 import { Tree } from '@/services/background-tree'
 import { emitTreeDelta } from '@/services/runtime-port-service'
+import { normalizeEditTextValue } from '@/services/utils'
 import * as Utils from '@/services/utils'
 import { Note, TreeItem, TreeItemType, Window } from '@/types/session-tree'
 
@@ -23,7 +24,7 @@ export function createNote(
   const note: Note = {
     type: TreeItemType.NOTE,
     uid: Utils.createUid(Tree.existingUidsSet),
-    text,
+    text: normalizeEditTextValue('note', text) ?? '',
     selected: false,
     windowUid: Tree.getWindowUidForParent(parent),
     collapsed: false,
@@ -77,7 +78,7 @@ export function updateNote(
  * @param {string} text - The new text content for the note.
  */
 export function updateNoteText(noteUid: UID, text: string): void {
-  updateNote(noteUid, { text })
+  updateNote(noteUid, { text: normalizeEditTextValue('note', text) ?? '' })
 }
 
 /**

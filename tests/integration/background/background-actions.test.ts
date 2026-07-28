@@ -221,4 +221,20 @@ describe('background actions', () => {
     expect(openSessionTree).toHaveBeenCalledTimes(1)
     expect(openOptionsPage).toHaveBeenCalledTimes(1)
   })
+
+  it('reports one browser-action menu creation failure and continues', () => {
+    const error = new Error('duplicate id')
+    vi.mocked(browser.menus.create).mockImplementationOnce(() => {
+      throw error
+    })
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    setupBrowserActionMenu()
+
+    expect(browser.menus.create).toHaveBeenCalledTimes(2)
+    expect(consoleError).toHaveBeenCalledWith(
+      'Failed to create browser-action menu item "Open SessionTree":',
+      error,
+    )
+  })
 })

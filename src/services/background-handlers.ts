@@ -13,6 +13,7 @@ import { initializeSessionTreePort } from '@/services/runtime-port-service'
 import * as SessionRestore from '@/services/background-session-restore'
 import { Selection } from '@/services/selection'
 import { Settings } from '@/services/settings'
+import { normalizeEditTextValue } from '@/services/utils'
 import * as Messages from '@/types/messages'
 import type { SessionTreeCommandResult } from '@/types/runtime-port-service'
 import {
@@ -1127,20 +1128,36 @@ async function dispatchCommandNow(
   } else if (message.action === 'updateWindowTitle') {
     const window = Tree.windowsByUid.get(message.windowUid)
     if (window) {
-      Tree.updateWindow(message.windowUid, { title: message.newTitle })
+      Tree.updateWindow(message.windowUid, {
+        title: normalizeEditTextValue('window-title', message.newTitle) ?? '',
+      })
     }
   } else if (message.action === 'updateCustomLabel') {
     const tab = Tree.tabsByUid.get(message.uid)
     if (tab) {
       Tree.updateTab(
         { tabUid: message.uid },
-        { customLabel: message.customLabel?.trim() || undefined },
+        {
+          customLabel: normalizeEditTextValue(
+            'custom-label',
+            message.customLabel ?? '',
+          ),
+        },
       )
     }
   } else if (message.action === 'createNote') {
-    Tree.createNote(message.parentUid, message.index, message.text)
+    Tree.createNote(
+      message.parentUid,
+      message.index,
+      message.text === undefined
+        ? undefined
+        : normalizeEditTextValue('note', message.text),
+    )
   } else if (message.action === 'updateNoteText') {
-    Tree.updateNoteText(message.noteUid, message.text)
+    Tree.updateNoteText(
+      message.noteUid,
+      normalizeEditTextValue('note', message.text) ?? '',
+    )
   } else if (message.action === 'toggleCollapseNote') {
     Tree.toggleCollapseNote(message.noteUid)
   } else if (message.action === 'removeNote') {
@@ -1189,8 +1206,12 @@ async function dispatchCommandNow(
  * When the context menu is closed, clear Selection and remove all custom context menu items,
  * then recreate the browser action context menu.
  */
-function onContextMenuHidden(): void {
+async function onContextMenuHidden(): Promise<void> {
   Selection.clearSelection()
-  browser.menus.removeAll()
+  try {
+    await browser.menus.removeAll()
+  } catch (error) {
+    console.error('Failed to remove hidden context menu items:', error)
+  }
   Actions.setupBrowserActionMenu()
 }

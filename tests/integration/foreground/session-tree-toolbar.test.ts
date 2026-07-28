@@ -16,6 +16,7 @@ import {
 import { createSSRApp } from 'vue'
 import { renderToString } from 'vue/server-renderer'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import fs from 'node:fs/promises'
 
 vi.mock('@/services/foreground-messages', () => ({
   createNote: vi.fn(),
@@ -103,6 +104,42 @@ describe('SessionTreeToolbar', () => {
 
     expect(createTab).not.toHaveBeenCalled()
     expect(createWindow).toHaveBeenCalledWith()
+  })
+
+  it('creates a normal window when the tree has no browser window', async () => {
+    await createNewTab()
+
+    expect(createTab).not.toHaveBeenCalled()
+    expect(createWindow).toHaveBeenCalledWith()
+  })
+
+  it('keeps the toolbar fixed as the non-scrolling flex child', async () => {
+    const toolbarSource = await fs.readFile(
+      new URL(
+        '../../../src/components/SessionTreeToolbar.vue',
+        import.meta.url,
+      ),
+      'utf8',
+    )
+    const treeSource = await fs.readFile(
+      new URL(
+        '../../../src/entrypoints/sessiontree/SessionTree.vue',
+        import.meta.url,
+      ),
+      'utf8',
+    )
+
+    expect(toolbarSource).toContain('flex: 0 0 42px')
+    expect(treeSource).toMatch(
+      /\.sessiontree-content\s*\{[\s\S]*?flex:\s*1 1 auto/,
+    )
+    expect(treeSource).toMatch(
+      /\.sessiontree-content\s*\{[\s\S]*?overflow-y:\s*auto/,
+    )
+    expect(treeSource).toMatch(/\.sessiontree\s*\{[\s\S]*?overflow-y:\s*hidden/)
+    expect(treeSource).toContain('setupContextMenuLifecycle')
+    expect(treeSource).toContain('@contextmenu.stop="openPanelContextMenu"')
+    expect(treeSource).toContain('ContextMenuType.Panel')
   })
 
   it('opens the extension settings page', async () => {

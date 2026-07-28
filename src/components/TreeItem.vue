@@ -378,6 +378,20 @@ const containerDescriptionId = computed(() =>
     : undefined,
 )
 
+const tabGroupDescriptionId = computed(() =>
+  isTab(props.item) && props.item.tabGroup
+    ? `tab-group-description-${props.item.uid}`
+    : undefined,
+)
+
+const itemDescriptionIds = computed(() => {
+  const ids = [
+    containerDescriptionId.value,
+    tabGroupDescriptionId.value,
+  ].filter(Boolean)
+  return ids.length > 0 ? ids.join(' ') : undefined
+})
+
 const tabHoverDetails = computed(() => {
   if (!isTab(props.item)) return undefined
 
@@ -435,6 +449,7 @@ function flatDescendantsHaveOpenTab(item: TreeItem): boolean {
 <template>
   <div
     class="tree-item drag-and-drop-target"
+    tabindex="-1"
     draggable="true"
     @dragstart="onDragStart"
     :drag-and-drop-id="String(item.uid)"
@@ -459,7 +474,7 @@ function flatDescendantsHaveOpenTab(item: TreeItem): boolean {
     :style="{
       '--indent-level': item.indentLevel ?? 0,
     }"
-    :aria-describedby="containerDescriptionId"
+    :aria-describedby="itemDescriptionIds"
     :title="itemHoverDetails"
     @click.stop="Selection.selectItem(item, getType(item), $event)"
     @contextmenu.stop="openItemContextMenu"
@@ -475,12 +490,20 @@ function flatDescendantsHaveOpenTab(item: TreeItem): boolean {
       Container: {{ containerDisplay.metadata.name }}
     </span>
     <span
+      v-if="isTab(item) && item.tabGroup"
+      :id="tabGroupDescriptionId"
+      class="tree-item-tab-group-description"
+    >
+      Tab group: {{ item.tabGroup.title?.trim() || 'Unnamed tab group' }}
+    </span>
+    <span
       v-if="tabGroupIndicator"
       class="tree-item-tab-group-indicator"
       :class="`tree-item-tab-group-indicator-${tabGroupIndicator.position}`"
       :style="{ backgroundColor: tabGroupIndicator.color }"
       :title="tabGroupIndicator.title"
       :aria-label="tabGroupIndicator.title"
+      @dblclick.stop
     ></span>
     <span
       v-if="
@@ -582,6 +605,7 @@ function flatDescendantsHaveOpenTab(item: TreeItem): boolean {
       <svg
         v-if="isTab(item) && item.pinned"
         class="tree-item-pinned"
+        @dblclick.stop
       >
         <use :xlink:href="'#pinned'" />
       </svg>
@@ -589,6 +613,7 @@ function flatDescendantsHaveOpenTab(item: TreeItem): boolean {
         v-if="isTab(item)"
         class="tree-item-favicon"
         :src="getTabFavicon(item)"
+        @dblclick.stop
       />
       <div class="tree-item-spacer"></div>
     </div>
@@ -609,6 +634,7 @@ function flatDescendantsHaveOpenTab(item: TreeItem): boolean {
             class="tree-item-favicon tree-item-window-favicon"
             src="/icon/16.png"
             alt=""
+            @dblclick.stop
           />
           <div
             class="tree-item-title"
@@ -742,7 +768,7 @@ function flatDescendantsHaveOpenTab(item: TreeItem): boolean {
   padding-inline-start: calc(var(--indent-padding));
   text-decoration: none;
   box-sizing: border-box;
-  min-height: 20px;
+  min-height: max(20px, calc(var(--font-size-xs) + 7px));
 
   background: transparent;
   color: inherit;
@@ -944,7 +970,7 @@ function flatDescendantsHaveOpenTab(item: TreeItem): boolean {
   grid-area: content;
   overflow: hidden;
   min-width: 40px;
-  max-height: 18px;
+  max-height: none;
 }
 
 .tree-item-tab-content {
@@ -986,7 +1012,8 @@ function flatDescendantsHaveOpenTab(item: TreeItem): boolean {
   z-index: 2;
 }
 
-.tree-item-container-description {
+.tree-item-container-description,
+.tree-item-tab-group-description {
   clip: rect(0 0 0 0);
   clip-path: inset(50%);
   height: 1px;
@@ -994,10 +1021,6 @@ function flatDescendantsHaveOpenTab(item: TreeItem): boolean {
   position: absolute;
   white-space: nowrap;
   width: 1px;
-}
-
-.tree-item-window .tree-item-content {
-  max-height: 20px;
 }
 
 .tree-item-prepend {

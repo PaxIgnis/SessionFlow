@@ -6,6 +6,7 @@ import EditTextModal from '@/components/EditTextModal.vue'
 import SessionTreeNotification from '@/components/SessionTreeNotification.vue'
 import SessionTreeToolbar from '@/components/SessionTreeToolbar.vue'
 import TreeItem from '@/components/TreeItem.vue'
+import { ContextMenu } from '@/services/context-menu'
 import { DragAndDrop } from '@/services/drag-and-drop'
 import { Favicons } from '@/services/favicons'
 import * as Messages from '@/services/foreground-messages'
@@ -15,13 +16,16 @@ import { subscribeTreeUpdates } from '@/services/runtime-port-service'
 import { Selection } from '@/services/selection'
 import * as ToolbarActions from '@/services/session-tree-toolbar-actions'
 import { Settings } from '@/services/settings'
+import { normalizeEditTextValue } from '@/services/utils'
 import '@/styles/variables.css'
+import { ContextMenuType } from '@/types/context-menu'
 import type { ContainerRecoveryStrategy } from '@/types/messages'
 import { TreeItem as SessionTreeItem, TreeItemType } from '@/types/session-tree'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 
 let unsubscribeFromTreeUpdates: (() => void) | undefined
 let removeRuntimeListener: (() => void) | undefined
+let removeContextMenuListener: (() => void) | undefined
 let isSessionTreeUnmounted = false
 
 // Save Session Tree Window location and size before closing.
@@ -75,6 +79,7 @@ onMounted(async () => {
   console.log('Mounted')
   await Settings.loadSettingsFromStorage()
   Settings.setupSettingsUpdatedListener()
+  removeContextMenuListener = ContextMenu.setupContextMenuLifecycle()
 
   await faviconService.init().then(async () => {
     const openTabs = await window.browser.tabs.query({})
@@ -143,6 +148,7 @@ onBeforeUnmount(() => {
   console.log('Unmounted')
   unsubscribeFromTreeUpdates?.()
   removeRuntimeListener?.()
+  removeContextMenuListener?.()
 })
 
 // Handler functions
@@ -151,11 +157,15 @@ function onClick() {
   Selection.clearSelection()
 }
 
+function openPanelContextMenu(event: MouseEvent) {
+  ContextMenu.handleContextMenuClick(ContextMenuType.Panel, event)
+}
+
 function handleEditWindowTitleConfirm(newTitle: string) {
   if (ModalState.active?.kind === 'editWindowTitle') {
     Messages.updateWindowTitle(
       ModalState.active.window.uid,
-      newTitle.slice(0, 150),
+      normalizeEditTextValue('window-title', newTitle) ?? '',
     )
   }
   closeModal()
@@ -167,10 +177,9 @@ function handleEditWindowTitleCancel() {
 
 function handleEditCustomLabelConfirm(label: string) {
   if (ModalState.active?.kind === 'editCustomLabel') {
-    const sanitized = label.slice(0, 150).trim()
     Messages.updateCustomLabel(
       ModalState.active.uid,
-      sanitized.length > 0 ? sanitized : undefined,
+      normalizeEditTextValue('custom-label', label),
     )
   }
   closeModal()
@@ -178,7 +187,10 @@ function handleEditCustomLabelConfirm(label: string) {
 
 function handleEditNoteConfirm(text: string) {
   if (ModalState.active?.kind === 'editNote') {
-    Messages.updateNoteText(ModalState.active.note.uid, text.slice(0, 500))
+    Messages.updateNoteText(
+      ModalState.active.note.uid,
+      normalizeEditTextValue('note', text) ?? '',
+    )
   }
   closeModal()
 }
@@ -217,8 +229,10 @@ function runToolbarAction(action: () => void | Promise<void>): void {
   >
     <div
       class="sessiontree-content"
+      tabindex="-1"
       :inert="containerRecoveryActive"
       :aria-hidden="containerRecoveryActive"
+      @contextmenu.stop="openPanelContextMenu"
       @dragend="DragAndDrop.onDragEnd"
       @dragenter.stop.prevent="DragAndDrop.onDragEnter"
       @dragleave="DragAndDrop.onDragLeave"
@@ -273,6 +287,7 @@ function runToolbarAction(action: () => void | Promise<void>): void {
       v-if="ModalState.active?.kind === 'editWindowTitle'"
       title="Edit Window Title"
       :initial-value="ModalState.active.window.title || ''"
+      :max-length="150"
       placeholder="Enter window title"
       @confirm="handleEditWindowTitleConfirm"
       @cancel="handleEditWindowTitleCancel"
@@ -282,6 +297,7 @@ function runToolbarAction(action: () => void | Promise<void>): void {
       v-if="ModalState.active?.kind === 'editCustomLabel'"
       title="Edit Custom Label"
       :initial-value="ModalState.active.customLabel || ''"
+      :max-length="150"
       placeholder="Enter custom label"
       @confirm="handleEditCustomLabelConfirm"
       @cancel="handleEditCustomLabelCancel"
@@ -291,6 +307,8 @@ function runToolbarAction(action: () => void | Promise<void>): void {
       v-if="ModalState.active?.kind === 'editNote'"
       title="Edit Note"
       :initial-value="ModalState.active.note.text"
+      :max-length="500"
+      multiline
       placeholder="Enter note text"
       @confirm="handleEditNoteConfirm"
       @cancel="handleEditNoteCancel"

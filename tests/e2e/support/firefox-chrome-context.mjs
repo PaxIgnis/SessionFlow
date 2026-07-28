@@ -77,6 +77,96 @@ export async function clickFirefoxExtensionAction(extensionId) {
   )
 }
 
+export async function readFirefoxContextMenu() {
+  let lastSnapshot = { open: false, popupId: undefined, items: [] }
+  await browser.waitUntil(
+    async () => {
+      lastSnapshot = await withFirefoxChromeContext(async () => {
+        const response = await executeFirefoxChromeScript(() => {
+          const browserWindow =
+            window.BrowserWindowTracker?.getTopWindow?.() ?? window
+          const documents = [
+            ...new Set([window.document, browserWindow.document]),
+          ]
+          const popups = documents.flatMap((document) =>
+            Array.from(document.querySelectorAll('menupopup')),
+          )
+          const openPopup = popups.find((popup) => {
+            const state = popup.state ?? popup.getAttribute('state')
+            return (
+              state === 'open' ||
+              state === 'showing' ||
+              popup.getAttribute('open') === 'true'
+            )
+          })
+          if (!openPopup) return { open: false, items: [] }
+
+          const items = Array.from(
+            openPopup.querySelectorAll(':scope > menuitem, :scope > menu'),
+          )
+            .filter(
+              (item) =>
+                !item.hidden &&
+                !item.collapsed &&
+                item.getAttribute('hidden') !== 'true',
+            )
+            .map((item) => ({
+              label:
+                item.getAttribute('label') ??
+                item.getAttribute('aria-label') ??
+                item.textContent?.trim() ??
+                '',
+              disabled:
+                item.disabled === true ||
+                item.getAttribute('disabled') === 'true',
+              id: item.id || undefined,
+            }))
+            .filter((item) => item.label.length > 0)
+
+          return {
+            open: true,
+            popupId: openPopup.id || undefined,
+            items,
+          }
+        })
+        return response.value
+      })
+      return lastSnapshot.open && lastSnapshot.items.length > 0
+    },
+    {
+      timeout: 10_000,
+      timeoutMsg: `Expected a rendered Firefox context menu. Last snapshot: ${JSON.stringify(lastSnapshot)}`,
+    },
+  )
+  return lastSnapshot
+}
+
+export async function dismissFirefoxContextMenu() {
+  return withFirefoxChromeContext(async () => {
+    const response = await executeFirefoxChromeScript(() => {
+      const browserWindow =
+        window.BrowserWindowTracker?.getTopWindow?.() ?? window
+      const documents = [...new Set([window.document, browserWindow.document])]
+      const openPopup = documents
+        .flatMap((document) =>
+          Array.from(document.querySelectorAll('menupopup')),
+        )
+        .find((popup) => {
+          const state = popup.state ?? popup.getAttribute('state')
+          return (
+            state === 'open' ||
+            state === 'showing' ||
+            popup.getAttribute('open') === 'true'
+          )
+        })
+      if (!openPopup) return false
+      openPopup.hidePopup()
+      return true
+    })
+    return response.value
+  })
+}
+
 async function setFirefoxContext(context) {
   const response = await fetch(
     `${getWebDriverBaseUrl()}/session/${browser.sessionId}/moz/context`,

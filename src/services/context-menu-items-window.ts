@@ -9,6 +9,23 @@ import { ContextMenuItem } from '@/types/context-menu'
 import { State } from '@/types/session-tree'
 
 export const contextMenuItemsWindow: Record<string, () => ContextMenuItem> = {
+  newWindow: () => {
+    return {
+      id: 'newWindow',
+      label: 'New Window',
+      icon: 'window',
+      enabled: true,
+      action: () => {
+        void browser.windows.create().catch((error) => {
+          console.error(
+            'Failed to create a window from the context menu:',
+            error,
+          )
+        })
+      },
+    }
+  },
+
   duplicateTreeItem: () => {
     return {
       id: 'duplicateTreeItem',

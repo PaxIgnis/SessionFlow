@@ -167,11 +167,51 @@ describe('background handlers', () => {
       await loadBackgroundHandlers()
     initializeListeners()
 
-    fakeBrowser.menus.onHidden.emit()
+    await fakeBrowser.menus.onHidden.emitAsync()
 
     expect(mocks.clearSelection).toHaveBeenCalledTimes(1)
     expect(fakeBrowser.menus.removeAll).toHaveBeenCalledTimes(1)
     expect(mocks.setupBrowserActionMenu).toHaveBeenCalledTimes(1)
+  })
+
+  it('restores the browser action menu when context-menu removal rejects', async () => {
+    const { fakeBrowser, initializeListeners, mocks } =
+      await loadBackgroundHandlers()
+    const error = new Error('remove failed')
+    fakeBrowser.menus.removeAll.mockRejectedValueOnce(error)
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    initializeListeners()
+
+    await fakeBrowser.menus.onHidden.emitAsync()
+
+    await vi.waitFor(() => {
+      expect(consoleError).toHaveBeenCalledWith(
+        'Failed to remove hidden context menu items:',
+        error,
+      )
+    })
+    expect(mocks.clearSelection).toHaveBeenCalledOnce()
+    expect(mocks.setupBrowserActionMenu).toHaveBeenCalledOnce()
+  })
+
+  it('waits for hidden-menu removal before recreating browser-action items', async () => {
+    const { fakeBrowser, initializeListeners, mocks } =
+      await loadBackgroundHandlers()
+    let finishRemoval: () => void = () => {}
+    fakeBrowser.menus.removeAll.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finishRemoval = resolve
+      }),
+    )
+    initializeListeners()
+
+    const hidden = fakeBrowser.menus.onHidden.emitAsync()
+    await Promise.resolve()
+
+    expect(mocks.setupBrowserActionMenu).not.toHaveBeenCalled()
+    finishRemoval()
+    await hidden
+    expect(mocks.setupBrowserActionMenu).toHaveBeenCalledOnce()
   })
 
   it('routes badge-related browser events to the badge updater', async () => {
@@ -1707,6 +1747,51 @@ describe('background handlers', () => {
     expect(mocks.removeNote).toHaveBeenCalledWith('note-3')
     expect(mocks.toggleCollapseTab).toHaveBeenCalledWith('tab-1')
     expect(mocks.toggleCollapseWindow).toHaveBeenCalledWith('window-1')
+  })
+
+  it('normalizes editable text at the background command boundary', async () => {
+    const { initializeListeners, mocks } = await loadBackgroundHandlers()
+    initializeListeners()
+    const dispatchCommand = getDispatchCommand(mocks.initializeSessionTreePort)
+    mocks.windowsByUid.set('window-1' as UID, {})
+    mocks.tabsByUid.set('tab-1' as UID, {})
+    const title = `  ${'😀'.repeat(151)}  `
+    const label = `  ${'λ'.repeat(151)}  `
+    const note = '😀'.repeat(501)
+
+    await dispatchCommand({
+      action: 'updateWindowTitle',
+      windowUid: 'window-1' as UID,
+      newTitle: title,
+    })
+    await dispatchCommand({
+      action: 'updateCustomLabel',
+      uid: 'tab-1' as UID,
+      customLabel: label,
+    })
+    await dispatchCommand({ action: 'createNote', text: note })
+    await dispatchCommand({
+      action: 'updateNoteText',
+      noteUid: 'note-1' as UID,
+      text: note,
+    })
+
+    expect(mocks.updateWindow).toHaveBeenCalledWith('window-1', {
+      title: '😀'.repeat(150),
+    })
+    expect(mocks.updateTab).toHaveBeenCalledWith(
+      { tabUid: 'tab-1' },
+      { customLabel: 'λ'.repeat(150) },
+    )
+    expect(mocks.createNote).toHaveBeenCalledWith(
+      undefined,
+      undefined,
+      '😀'.repeat(500),
+    )
+    expect(mocks.updateNoteText).toHaveBeenCalledWith(
+      'note-1',
+      '😀'.repeat(500),
+    )
   })
 
   it('routes move, indent, pin, and position commands with forwarded arguments', async () => {
