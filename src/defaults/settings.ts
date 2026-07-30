@@ -54,6 +54,7 @@ export const DEFAULT_SETTINGS: Settings = {
   tryToMaintainCollapsedStateOfDraggedItems: true,
 
   // Favicons
+  cachePrivateTabFavicons: true,
   fetchMissingFaviconsOnStartup: false,
   refreshFaviconsAfterPeriodOfTime: false,
   refreshFaviconsAfterPeriodOfTimeValue: 7,

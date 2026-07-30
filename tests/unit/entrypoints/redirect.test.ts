@@ -83,8 +83,8 @@ describe('redirect entrypoint', () => {
     expect(document.title).toBe('Redirect to Advanced Preferences')
     expect(targetUrlElement.textContent).toBe('about:config')
     expect(targetUrlElement.href).toBe('about:config')
-    expect(document.elements.get('message')!.innerHTML).toContain(
-      'privileged URL',
+    expect(document.elements.get('message')!.textContent).toContain(
+      'URL is privileged',
     )
 
     const clickEvent = targetUrlElement.click()
@@ -121,6 +121,11 @@ describe('redirect entrypoint', () => {
         'Error copying URL to clipboard:',
         error,
       )
+      const status = document.elements.get('copied-message')!
+      expect(status.textContent).toBe(
+        'Copy unavailable. Select the URL and copy it manually.',
+      )
+      expect(status.classList.contains('visible')).toBe(true)
     } finally {
       consoleError.mockRestore()
     }
@@ -143,6 +148,47 @@ describe('redirect entrypoint', () => {
     expect(document.elements.get('message')!.innerHTML).toBe('')
     expect(writeText).not.toHaveBeenCalled()
   })
+
+  it('renders HTML-looking, Unicode, fragmented, and long targets only as text', async () => {
+    const targetUrl = `about:reader?url=${encodeURIComponent(
+      'https://example.test/<img src=x onerror=alert(1)>/λ',
+    )}#fragment-${'x'.repeat(2_000)}`
+    const targetTitle = '<script>alert(1)</script> — λ'
+    const document = createRedirectDocument()
+    installRedirectGlobals({
+      document,
+      search: `?targetUrl=${encodeURIComponent(targetUrl)}&targetTitle=${encodeURIComponent(targetTitle)}`,
+      writeText: vi.fn().mockResolvedValue(undefined),
+    })
+
+    await import('@/entrypoints/redirect/main')
+    document.fireDOMContentLoaded()
+
+    const target = document.elements.get('target-url')!
+    expect(document.title).toBe(`Redirect to ${targetTitle}`)
+    expect(target.textContent).toBe(targetUrl)
+    expect(target.href).toBe(targetUrl)
+    expect(target.innerHTML).toBe('')
+  })
+
+  it('shows manual-copy guidance when the clipboard API is unavailable', async () => {
+    const document = createRedirectDocument()
+    installRedirectGlobals({
+      document,
+      search: '?targetUrl=about%3Aconfig',
+    })
+
+    await import('@/entrypoints/redirect/main')
+    document.fireDOMContentLoaded()
+
+    expect(() => document.elements.get('target-url')!.click()).not.toThrow()
+    await Promise.resolve()
+    const status = document.elements.get('copied-message')!
+    expect(status.textContent).toBe(
+      'Copy unavailable. Select the URL and copy it manually.',
+    )
+    expect(status.classList.contains('visible')).toBe(true)
+  })
 })
 
 function createRedirectDocument() {
@@ -160,7 +206,7 @@ function installRedirectGlobals({
 }: {
   document: FakeDocument
   search: string
-  writeText: (text: string) => Promise<void>
+  writeText?: (text: string) => Promise<void>
 }) {
   vi.stubGlobal('document', document)
   vi.stubGlobal('window', {
@@ -168,9 +214,14 @@ function installRedirectGlobals({
       search,
     },
   })
-  vi.stubGlobal('navigator', {
-    clipboard: {
-      writeText,
-    },
-  })
+  vi.stubGlobal(
+    'navigator',
+    writeText
+      ? {
+          clipboard: {
+            writeText,
+          },
+        }
+      : {},
+  )
 }

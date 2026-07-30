@@ -167,6 +167,31 @@ export async function dismissFirefoxContextMenu() {
   })
 }
 
+export async function grantFirefoxExtensionOrigins(extensionId, origins) {
+  return withFirefoxChromeContext(async () => {
+    const response = await executeFirefoxChromeScript(
+      async (id, grantedOrigins) => {
+        const { ExtensionParent } = ChromeUtils.importESModule(
+          'resource://gre/modules/ExtensionParent.sys.mjs',
+        )
+        const { ExtensionPermissions } = ChromeUtils.importESModule(
+          'resource://gre/modules/ExtensionPermissions.sys.mjs',
+        )
+        const extension = ExtensionParent.GlobalManager.getExtension(id)
+        if (!extension) throw new Error(`Extension not found: ${id}`)
+        await ExtensionPermissions.add(
+          id,
+          { permissions: [], origins: grantedOrigins },
+          extension,
+        )
+        return true
+      },
+      [extensionId, origins],
+    )
+    return response.value
+  })
+}
+
 async function setFirefoxContext(context) {
   const response = await fetch(
     `${getWebDriverBaseUrl()}/session/${browser.sessionId}/moz/context`,

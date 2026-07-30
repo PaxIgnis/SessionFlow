@@ -12,6 +12,9 @@ export async function loadBackgroundHandlers() {
   const updateBadge = vi.fn()
   const initializeSessionTreePort = vi.fn()
   const clearSelection = vi.fn()
+  const initializeFavicons = vi.fn().mockResolvedValue(undefined)
+  const updateFavicon = vi.fn().mockResolvedValue(undefined)
+  const saveFaviconCache = vi.fn().mockResolvedValue(undefined)
   const isNewTabExtensionGenerated = vi.fn().mockResolvedValue(false)
   const isNewWindowExtensionGenerated = vi.fn().mockResolvedValue(false)
   const beginWindowClassification = vi.fn()
@@ -159,6 +162,13 @@ export async function loadBackgroundHandlers() {
       clearSelection,
     },
   }))
+  vi.doMock('@/services/favicons', () => ({
+    Favicons: {
+      init: initializeFavicons,
+      updateFavicon,
+      saveCacheToStorage: saveFaviconCache,
+    },
+  }))
 
   const { Settings: handlerSettings } = await import('@/services/settings')
   const { initializeListeners } = await import('@/services/background-handlers')
@@ -185,11 +195,14 @@ export async function loadBackgroundHandlers() {
       isNewWindowExtensionGenerated,
       isTabRelocating,
       initializeSessionTreePort,
+      initializeFavicons,
       openSessionTree,
       setActiveWindow,
       setupBrowserActionMenu,
+      saveFaviconCache,
       tabOnActivated,
       updateBadge,
+      updateFavicon,
       waitForWindowClassification,
       Items,
       windowsByUid,

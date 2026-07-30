@@ -2,6 +2,7 @@ import * as Actions from '@/services/background-actions'
 import { updateBadge } from '@/services/background-actions'
 import { Browser } from '@/services/background-browser'
 import { coordinateCommand } from '@/services/background-command-coordinator'
+import { Favicons } from '@/services/favicons'
 import {
   isCommandOwnedTabRemoval,
   isCommandOwnedTabRelocation,
@@ -30,6 +31,14 @@ interface PendingDetachedTab {
   token: symbol
 }
 
+interface PendingFaviconRecheck {
+  token: symbol
+  windowId: number
+  url: string
+  attempt: number
+  timer?: ReturnType<typeof setTimeout>
+}
+
 const pendingDetachedTabs = new Map<number, PendingDetachedTab>()
 const pendingGroupedTabRemovals = new Map<
   number,
@@ -55,6 +64,8 @@ const pendingGroupRemovalTimers = new Map<
 >()
 const pendingTabCreations = new Map<number, symbol>()
 const pendingWindowMoves = new Map<number, symbol>()
+const pendingFaviconRechecks = new Map<number, PendingFaviconRecheck>()
+const FAVICON_RECHECK_DELAYS_MS = [100, 250, 500, 1_000]
 
 // ==============================
 // Event Listeners
@@ -113,37 +124,129 @@ async function tabsOnUpdatedFavicon(
   changeInfo: browser.tabs._OnUpdatedChangeInfo,
   tab: browser.tabs.Tab,
 ): Promise<void> {
+  if (
+    changeInfo.status === LoadingStatus.LOADING ||
+    changeInfo.url !== undefined
+  ) {
+    cancelPendingFaviconRecheck(tabId)
+  }
   if (browser.extension.getViews().length === 0 || tab.status !== 'complete') {
     return
   }
+  if (
+    changeInfo.favIconUrl === undefined &&
+    changeInfo.status !== LoadingStatus.COMPLETE
+  ) {
+    return
+  }
 
-  let authoritativeTab = tab
-  if (changeInfo.status === LoadingStatus.COMPLETE) {
-    try {
-      const currentTab = await browser.tabs.get(tabId)
-      if (currentTab.id !== tabId || currentTab.windowId !== tab.windowId) {
-        return
-      }
-      authoritativeTab = currentTab
-    } catch (error) {
-      console.debug('Failed to refresh completed favicon update:', error)
+  let authoritativeTab: browser.tabs.Tab
+  try {
+    const currentTab = await browser.tabs.get(tabId)
+    if (currentTab.id !== tabId || currentTab.windowId !== tab.windowId) {
+      return
     }
+    authoritativeTab = currentTab
+  } catch (error) {
+    console.debug('Failed to refresh completed favicon update:', error)
+    return
   }
   if (authoritativeTab.status !== 'complete') return
 
-  const message = authoritativeTab.favIconUrl
-    ? {
-        type: 'FAVICON_UPDATED',
-        favIconUrl: authoritativeTab.favIconUrl,
-        tab: authoritativeTab,
-      }
-    : {
-        type: 'FAVICON_CLEARED',
-        pageUrl: authoritativeTab.url,
-      }
-  window.browser.runtime.sendMessage(message).catch(() => {
-    console.debug('No receivers for favicon update')
-  })
+  if (authoritativeTab.favIconUrl) {
+    cancelPendingFaviconRecheck(tabId)
+    await publishFaviconUpdate(authoritativeTab)
+    return
+  }
+
+  scheduleFaviconRecheck(authoritativeTab)
+}
+
+async function publishFaviconUpdate(tab: browser.tabs.Tab): Promise<void> {
+  if (!tab.favIconUrl) return
+  await Favicons.init()
+  await Favicons.updateFavicon(tab.favIconUrl, tab)
+  await Favicons.saveCacheToStorage()
+  await window.browser.runtime
+    .sendMessage({ type: 'FAVICON_CACHE_UPDATED' })
+    .catch(() => {
+      console.debug('No receivers for favicon update')
+    })
+}
+
+function scheduleFaviconRecheck(tab: browser.tabs.Tab): void {
+  if (tab.id === undefined || tab.windowId === undefined || !tab.url) return
+  cancelPendingFaviconRecheck(tab.id)
+  const pending: PendingFaviconRecheck = {
+    token: Symbol(`favicon-recheck-${tab.id}`),
+    windowId: tab.windowId,
+    url: tab.url,
+    attempt: 0,
+  }
+  pendingFaviconRechecks.set(tab.id, pending)
+  scheduleNextFaviconRecheck(tab.id, pending)
+}
+
+function scheduleNextFaviconRecheck(
+  tabId: number,
+  pending: PendingFaviconRecheck,
+): void {
+  pending.timer = setTimeout(() => {
+    void revalidateCompletedTabFavicon(tabId, pending.token)
+  }, FAVICON_RECHECK_DELAYS_MS[pending.attempt])
+}
+
+async function revalidateCompletedTabFavicon(
+  tabId: number,
+  token: symbol,
+): Promise<void> {
+  const pending = pendingFaviconRechecks.get(tabId)
+  if (!pending || pending.token !== token) return
+
+  let currentTab: browser.tabs.Tab
+  try {
+    currentTab = await browser.tabs.get(tabId)
+  } catch (error) {
+    cancelPendingFaviconRecheck(tabId, token)
+    console.debug('Failed to recheck completed tab favicon:', error)
+    return
+  }
+  if (
+    pendingFaviconRechecks.get(tabId)?.token !== token ||
+    currentTab.id !== tabId ||
+    currentTab.windowId !== pending.windowId ||
+    currentTab.url !== pending.url ||
+    currentTab.status !== 'complete'
+  ) {
+    cancelPendingFaviconRecheck(tabId, token)
+    return
+  }
+
+  if (currentTab.favIconUrl) {
+    cancelPendingFaviconRecheck(tabId, token)
+    await publishFaviconUpdate(currentTab)
+    return
+  }
+
+  pending.attempt += 1
+  if (pending.attempt < FAVICON_RECHECK_DELAYS_MS.length) {
+    scheduleNextFaviconRecheck(tabId, pending)
+    return
+  }
+
+  cancelPendingFaviconRecheck(tabId, token)
+  await window.browser.runtime
+    .sendMessage({ type: 'FAVICON_CLEARED', pageUrl: pending.url })
+    .catch(() => {
+      console.debug('No receivers for favicon update')
+    })
+}
+
+function cancelPendingFaviconRecheck(tabId: number, token?: symbol): void {
+  const pending = pendingFaviconRechecks.get(tabId)
+  if (!pending || (token !== undefined && pending.token !== token)) return
+  if (pending.timer !== undefined) clearTimeout(pending.timer)
+  pendingFaviconRechecks.delete(tabId)
 }
 
 /**
@@ -393,6 +496,7 @@ function tabsOnRemoved(
   removeInfo: browser.tabs._OnRemovedRemoveInfo,
 ): void {
   console.debug('Tab Removed:', tabId, removeInfo)
+  cancelPendingFaviconRecheck(tabId)
   pendingTabCreations.delete(tabId)
   pendingDetachedTabs.delete(tabId)
   if (isCommandOwnedTabRemoval(tabId)) return
@@ -810,6 +914,7 @@ function tabsOnDetached(
   detachInfo: browser.tabs._OnDetachedDetachInfo,
 ): void {
   console.debug('Tab Detached:', tabId, detachInfo)
+  cancelPendingFaviconRecheck(tabId)
   if (
     SessionRestore.isTabRelocating(tabId) ||
     isCommandOwnedTabRelocation(tabId)

@@ -16,6 +16,8 @@ describe('favicon refresh scheduler', () => {
   let hasFetchPermissions: ReturnType<typeof vi.spyOn>
   let refreshFavicons: ReturnType<typeof vi.spyOn>
   let getNextRefreshAt: ReturnType<typeof vi.spyOn>
+  let removePrivateOnlyEntries: ReturnType<typeof vi.spyOn>
+  let saveCacheToStorage: ReturnType<typeof vi.spyOn>
 
   beforeEach(() => {
     fakeBrowser = installFakeBrowser()
@@ -31,6 +33,12 @@ describe('favicon refresh scheduler', () => {
     getNextRefreshAt = vi
       .spyOn(faviconService, 'getNextRefreshAt')
       .mockReturnValue(123_456)
+    removePrivateOnlyEntries = vi
+      .spyOn(faviconService, 'removePrivateOnlyEntries')
+      .mockReturnValue([])
+    saveCacheToStorage = vi
+      .spyOn(faviconService, 'saveCacheToStorage')
+      .mockResolvedValue(undefined)
   })
 
   it('converts supported refresh units to milliseconds and clamps invalid values', () => {
@@ -264,6 +272,66 @@ describe('favicon refresh scheduler', () => {
     ])
     await scheduler.handleSettingsUpdated()
 
+    expect(browser.runtime.sendMessage).toHaveBeenCalledWith({
+      type: 'FAVICON_CACHE_UPDATED',
+    })
+  })
+
+  it('excludes private tree and browser tabs from refresh when private caching is disabled', async () => {
+    Settings.values.cachePrivateTabFavicons = false
+    Settings.values.refreshFaviconsAfterPeriodOfTime = true
+    const normalTab = {
+      id: 1,
+      url: 'https://normal.test/live',
+      favIconUrl: 'data:image/png;base64,bm9ybWFs',
+      incognito: false,
+    } as browser.tabs.Tab
+    const privateTab = {
+      id: 2,
+      url: 'https://private.test/live',
+      favIconUrl: 'data:image/png;base64,cHJpdmF0ZQ==',
+      incognito: true,
+    } as browser.tabs.Tab
+    vi.mocked(browser.tabs.query).mockResolvedValue([normalTab, privateTab])
+    const references = [
+      { url: 'https://normal.test/saved', incognito: false },
+      { url: 'https://private.test/saved', incognito: true },
+    ]
+    const scheduler = new FaviconRefreshScheduler(
+      faviconService,
+      () => references,
+    )
+
+    await scheduler.initialize()
+
+    expect(refreshFavicons).toHaveBeenCalledWith(
+      ['https://normal.test/saved'],
+      7 * 24 * 60 * 60 * 1000,
+      [normalTab],
+    )
+  })
+
+  it('purges private-only entries when the private favicon setting is disabled', async () => {
+    const references = [
+      { url: 'https://private.test/saved', incognito: true },
+      { url: 'https://shared.test/private', incognito: true },
+      { url: 'https://shared.test/normal', incognito: false },
+    ]
+    const scheduler = new FaviconRefreshScheduler(
+      faviconService,
+      () => references,
+    )
+    await scheduler.initialize()
+    removePrivateOnlyEntries.mockClear()
+    removePrivateOnlyEntries.mockReturnValueOnce(['private.test'])
+    saveCacheToStorage.mockClear()
+    vi.mocked(browser.runtime.sendMessage).mockClear()
+
+    Settings.values.cachePrivateTabFavicons = false
+    await scheduler.handleSettingsUpdated()
+
+    expect(removePrivateOnlyEntries).toHaveBeenCalledWith(references)
+    expect(saveCacheToStorage).toHaveBeenCalledOnce()
     expect(browser.runtime.sendMessage).toHaveBeenCalledWith({
       type: 'FAVICON_CACHE_UPDATED',
     })

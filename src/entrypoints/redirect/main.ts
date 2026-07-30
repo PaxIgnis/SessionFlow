@@ -18,25 +18,41 @@ document.addEventListener('DOMContentLoaded', () => {
 
   targetUrlElement.textContent = targetUrl
   targetUrlElement.href = targetUrl
-  messageElement.innerHTML = `
-    The URL is a privileged URL and cannot be opened 
-    automatically due to Firefox security restrictions. <br>
-    Click the URL to copy it to the clipboard and paste 
-    it into the URL bar yourself.`
+  messageElement.textContent =
+    'The URL is privileged and cannot be opened automatically because of Firefox security restrictions. Select the URL to copy it, then paste it into the address bar.'
   targetUrlElement.addEventListener('click', (event) => {
     event.preventDefault()
-    navigator.clipboard
-      .writeText(targetUrl)
-      .then(() => {
-        copiedMessageElement?.classList.add('visible')
-        setTimeout(() => {
-          copiedMessageElement?.classList.remove('visible')
-        }, 2000)
-      })
-      .catch((error) => {
-        console.error('Error copying URL to clipboard:', error)
-      })
+    const writeText = navigator.clipboard?.writeText?.bind(navigator.clipboard)
+    if (!writeText) {
+      showManualCopyMessage(copiedMessageElement)
+      return
+    }
+
+    try {
+      void writeText(targetUrl)
+        .then(() => {
+          if (!copiedMessageElement) return
+          copiedMessageElement.textContent = 'Copied!'
+          copiedMessageElement.classList.add('visible')
+          setTimeout(() => {
+            copiedMessageElement.classList.remove('visible')
+          }, 2000)
+        })
+        .catch((error) => {
+          console.error('Error copying URL to clipboard:', error)
+          showManualCopyMessage(copiedMessageElement)
+        })
+    } catch (error) {
+      console.error('Error copying URL to clipboard:', error)
+      showManualCopyMessage(copiedMessageElement)
+    }
   })
 })
+
+function showManualCopyMessage(element: HTMLElement | null): void {
+  if (!element) return
+  element.textContent = 'Copy unavailable. Select the URL and copy it manually.'
+  element.classList.add('visible')
+}
 
 export {}

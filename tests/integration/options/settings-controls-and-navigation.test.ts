@@ -123,4 +123,19 @@ describe('settings controls and navigation', () => {
       'iconPosition: Settings.values.containerIconPosition',
     )
   })
+
+  it('exposes the private favicon cache and display policy in favicon settings', () => {
+    const source = fs.readFileSync(
+      path.join(
+        projectRoot,
+        'src/entrypoints/options/components/settings.favicons.vue',
+      ),
+      'utf8',
+    )
+
+    expect(source).toContain(
+      'v-model="Settings.values.cachePrivateTabFavicons"',
+    )
+    expect(source).toContain('Show and Cache Favicons for Private Tabs')
+  })
 })

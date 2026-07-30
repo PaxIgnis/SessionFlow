@@ -61,6 +61,7 @@ describe('settings actions', () => {
     expect(Object.keys(Settings.values).sort()).toEqual(
       Object.keys(DEFAULT_SETTINGS).sort(),
     )
+    expect(Settings.values.cachePrivateTabFavicons).toBe(true)
   })
 
   it('fills every missing legacy setting from current defaults', async () => {

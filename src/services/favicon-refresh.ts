@@ -1,6 +1,7 @@
 import { Tree } from '@/services/background-tree'
 import { Favicons, FaviconService } from '@/services/favicons'
 import { Settings } from '@/services/settings'
+import type { FaviconReference } from '@/types/favicons'
 import type { Settings as SettingsValues } from '@/types/settings'
 
 export const FAVICON_REFRESH_ALARM_NAME = 'sessionflow-refresh-favicons'
@@ -9,6 +10,7 @@ type FaviconRefreshUnit = SettingsValues['refreshFaviconsAfterPeriodOfTimeUnit']
 type FaviconRefreshTiming = SettingsValues['faviconRefreshTiming']
 
 interface FaviconRefreshSettingsSnapshot {
+  cachePrivateFavicons: boolean
   fetchMissingOnStartup: boolean
   automaticRefresh: boolean
   intervalValue: number
@@ -42,10 +44,15 @@ export class FaviconRefreshScheduler {
 
   public constructor(
     private readonly faviconService: FaviconService = Favicons,
-    private readonly getTreeTabUrls: () => string[] = () =>
+    private readonly getTreeTabReferences: () => Array<
+      string | FaviconReference
+    > = () =>
       Array.from(Tree.tabsByUid.values())
-        .map((tab) => tab.url)
-        .filter((url): url is string => typeof url === 'string' && url !== ''),
+        .filter((tab) => typeof tab.url === 'string' && tab.url !== '')
+        .map((tab) => ({
+          url: tab.url,
+          incognito: Tree.windowsByUid.get(tab.windowUid)?.incognito === true,
+        })),
   ) {}
 
   public async initialize(): Promise<void> {
@@ -54,6 +61,7 @@ export class FaviconRefreshScheduler {
     this.ensureAlarmListener()
 
     this.settingsSnapshot = this.readSettings()
+    await this.applyPrivateCachePolicy(this.settingsSnapshot)
     await this.refreshOnStartup(this.settingsSnapshot)
     await this.syncAlarm(this.settingsSnapshot)
   }
@@ -67,6 +75,8 @@ export class FaviconRefreshScheduler {
     this.settingsSnapshot = next
 
     if (previous && this.settingsEqual(previous, next)) return
+
+    await this.applyPrivateCachePolicy(next)
 
     const automaticRefreshChanged =
       next.automaticRefresh &&
@@ -144,7 +154,13 @@ export class FaviconRefreshScheduler {
   }
 
   private async performRefresh(maxAgeMs: number): Promise<void> {
-    const urls = this.getTreeTabUrls()
+    const references = this.readReferences()
+    const urls = references
+      .filter(
+        (reference) =>
+          Settings.values.cachePrivateTabFavicons || !reference.incognito,
+      )
+      .map((reference) => reference.url)
     if (urls.length === 0) return
 
     await this.faviconService.init()
@@ -158,6 +174,9 @@ export class FaviconRefreshScheduler {
     let openTabs: browser.tabs.Tab[] = []
     try {
       openTabs = await browser.tabs.query({})
+      if (!Settings.values.cachePrivateTabFavicons) {
+        openTabs = openTabs.filter((tab) => tab.incognito !== true)
+      }
     } catch (error) {
       console.error(
         'Failed to query open tabs while refreshing favicons',
@@ -205,7 +224,11 @@ export class FaviconRefreshScheduler {
       return
     }
 
-    const urls = this.getTreeTabUrls()
+    const urls = this.readReferences()
+      .filter(
+        (reference) => settings.cachePrivateFavicons || !reference.incognito,
+      )
+      .map((reference) => reference.url)
     if (urls.length === 0) return
 
     await this.faviconService.init()
@@ -232,6 +255,7 @@ export class FaviconRefreshScheduler {
 
   private readSettings(): FaviconRefreshSettingsSnapshot {
     return {
+      cachePrivateFavicons: Settings.values.cachePrivateTabFavicons,
       fetchMissingOnStartup: Settings.values.fetchMissingFaviconsOnStartup,
       automaticRefresh: Settings.values.refreshFaviconsAfterPeriodOfTime,
       intervalValue: Settings.values.refreshFaviconsAfterPeriodOfTimeValue,
@@ -245,12 +269,40 @@ export class FaviconRefreshScheduler {
     right: FaviconRefreshSettingsSnapshot,
   ): boolean {
     return (
+      left.cachePrivateFavicons === right.cachePrivateFavicons &&
       left.fetchMissingOnStartup === right.fetchMissingOnStartup &&
       left.automaticRefresh === right.automaticRefresh &&
       left.intervalValue === right.intervalValue &&
       left.intervalUnit === right.intervalUnit &&
       left.timing === right.timing
     )
+  }
+
+  private readReferences(): FaviconReference[] {
+    return this.getTreeTabReferences().flatMap((reference) => {
+      if (typeof reference === 'string') {
+        return reference ? [{ url: reference, incognito: false }] : []
+      }
+      return reference.url ? [reference] : []
+    })
+  }
+
+  private async applyPrivateCachePolicy(
+    settings: FaviconRefreshSettingsSnapshot,
+  ): Promise<void> {
+    if (settings.cachePrivateFavicons) return
+    await this.faviconService.init()
+    const removed = this.faviconService.removePrivateOnlyEntries(
+      this.readReferences(),
+    )
+    if (removed.length === 0) return
+
+    await this.faviconService.saveCacheToStorage()
+    try {
+      await browser.runtime.sendMessage({ type: 'FAVICON_CACHE_UPDATED' })
+    } catch {
+      console.debug('No open Session Tree to receive favicon cache updates')
+    }
   }
 }
 

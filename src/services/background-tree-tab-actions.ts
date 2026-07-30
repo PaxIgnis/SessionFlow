@@ -6,11 +6,13 @@ import {
 import { DeferredEventsQueue } from '@/services/background-deferred-events-queue'
 import { OnCreatedQueue } from '@/services/background-on-created-queue'
 import { Tree } from '@/services/background-tree'
+import { Favicons } from '@/services/favicons'
 import { emitTreeDelta } from '@/services/runtime-port-service'
 import { Settings } from '@/services/settings'
 import { writeTabUid } from '@/services/background-session-identity'
 import * as Utils from '@/services/utils'
 import type { OpenTabMessage } from '@/types/messages'
+import type { FaviconReference } from '@/types/favicons'
 import {
   ContainerMetadata,
   Note,
@@ -181,6 +183,7 @@ export function removeTab(tabUid: UID, emitDelta: boolean = true): void {
     console.error('Error removing tab, could not find tab:', tabUid)
     return
   }
+  const privateFaviconUrl = window.incognito ? tab.url : undefined
 
   // before removing the tab, adjust the indent levels and parentUid of its children
 
@@ -243,6 +246,9 @@ export function removeTab(tabUid: UID, emitDelta: boolean = true): void {
     Tree.removeWindow(window.uid)
   }
   Tree.recomputeSessionTree(emitDelta)
+  if (privateFaviconUrl) {
+    void cleanupPrivateFaviconDomain(privateFaviconUrl)
+  }
 }
 
 /**
@@ -288,6 +294,13 @@ export function updateTab(
     }
   }
   const previousGroupUid = tab.tabGroup?.uid
+  const containingWindow = Tree.windowsByUid.get(tab.windowUid)
+  const previousPrivateUrl =
+    containingWindow?.incognito &&
+    typeof tabContents.url === 'string' &&
+    tabContents.url !== tab.url
+      ? tab.url
+      : undefined
   // If the tab object exists update the new values
   Object.assign(tab, tabContents)
   const nextGroupUid = tab.tabGroup?.uid
@@ -306,6 +319,30 @@ export function updateTab(
       op: 'tabUpdated',
       tab: structuredClone(tab),
     })
+  }
+  if (previousPrivateUrl) {
+    void cleanupPrivateFaviconDomain(previousPrivateUrl)
+  }
+}
+
+/** Removes an affected private favicon after its final tree reference is gone. */
+export async function cleanupPrivateFaviconDomain(
+  pageUrl: string,
+): Promise<void> {
+  await Favicons.init()
+  const references: FaviconReference[] = Array.from(Tree.tabsByUid.values())
+    .filter((tab) => typeof tab.url === 'string' && tab.url !== '')
+    .map((tab) => ({
+      url: tab.url,
+      incognito: Tree.windowsByUid.get(tab.windowUid)?.incognito === true,
+    }))
+  if (!Favicons.removeDomainIfUnreferenced(pageUrl, references)) return
+
+  await Favicons.saveCacheToStorage()
+  try {
+    await browser.runtime.sendMessage({ type: 'FAVICON_CACHE_UPDATED' })
+  } catch {
+    console.debug('No open Session Tree to receive favicon cache updates')
   }
 }
 

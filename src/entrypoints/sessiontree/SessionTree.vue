@@ -108,9 +108,8 @@ onMounted(async () => {
       case 'FAVICON_UPDATED':
         console.log('FaviconUpdated message received')
         if (message.favIconUrl) {
-          const tabLike = message.tab as { url?: string } | undefined
           void faviconService
-            .updateFavicon(message.favIconUrl, undefined, tabLike?.url)
+            .updateFavicon(message.favIconUrl, message.tab as browser.tabs.Tab)
             .then(() => {
               faviconRevision.value += 1
             })

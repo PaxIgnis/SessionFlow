@@ -42,7 +42,10 @@ function getTabFavicon(tab: Tab): string {
   void props.faviconRevision
   return tab.loadingStatus === 'loading' && tab.state === State.OPEN
     ? TAB_LOADING
-    : props.faviconService.getFavicon(tab.url)
+    : props.faviconService.getFavicon(
+        tab.url,
+        SessionTree.windowsByUid.get(tab.windowUid)?.incognito === true,
+      )
 }
 
 function onDragStart(e: DragEvent) {
@@ -632,7 +635,11 @@ function flatDescendantsHaveOpenTab(item: TreeItem): boolean {
         >
           <img
             class="tree-item-favicon tree-item-window-favicon"
-            src="/icon/16.png"
+            :src="
+              props.item.incognito
+                ? '/icons/private-browsing.svg'
+                : '/icon/16.png'
+            "
             alt=""
             @dblclick.stop
           />

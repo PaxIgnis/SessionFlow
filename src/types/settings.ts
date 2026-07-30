@@ -52,6 +52,7 @@ export interface Settings {
   tryToMaintainCollapsedStateOfDraggedItems: boolean
 
   // Favicons
+  cachePrivateTabFavicons: boolean
   fetchMissingFaviconsOnStartup: boolean
   refreshFaviconsAfterPeriodOfTime: boolean
   refreshFaviconsAfterPeriodOfTimeValue: number

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '@/defaults/settings'
 import { Settings } from '@/services/settings'
 import { State, TreeItemType } from '@/types/session-tree'
@@ -15,6 +15,11 @@ describe('background browser-event update ordering', () => {
     vi.doUnmock('@/services/background-tree')
     vi.doUnmock('@/services/runtime-port-service')
     vi.doUnmock('@/services/selection')
+    vi.doUnmock('@/services/favicons')
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('does not let a delayed completed navigation overwrite the current page (EV-08)', async () => {
@@ -77,7 +82,8 @@ describe('background browser-event update ordering', () => {
     )
   })
 
-  it('announces that the current page completed without a favicon (EV-09)', async () => {
+  it('announces that the current page remains faviconless after bounded revalidation (EV-09)', async () => {
+    vi.useFakeTimers()
     const { fakeBrowser, initializeListeners, mocks, setBrowserTabs } =
       await loadBackgroundHandlers()
     mocks.Items.push(treeWindow())
@@ -97,10 +103,164 @@ describe('background browser-event update ordering', () => {
       faviconlessTab,
     )
 
+    expect(fakeBrowser.runtime.sendMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'FAVICON_CLEARED' }),
+    )
+
+    await vi.runAllTimersAsync()
+
     expect(fakeBrowser.runtime.sendMessage).toHaveBeenCalledWith({
       type: 'FAVICON_CLEARED',
       pageUrl: 'https://example.test/no-icon',
     })
+  })
+
+  it('keeps the cached icon when Firefox reports the favicon shortly after completion', async () => {
+    vi.useFakeTimers()
+    const { fakeBrowser, initializeListeners, mocks, setBrowserTabs } =
+      await loadBackgroundHandlers()
+    mocks.Items.push(treeWindow())
+    fakeBrowser.extension.getViews.mockReturnValue([{}])
+    const completedWithoutIcon = browserTab({
+      url: 'https://www.wikipedia.org/',
+      status: 'complete',
+      favIconUrl: undefined,
+      incognito: true,
+    })
+    setBrowserTabs(20, [completedWithoutIcon])
+    initializeListeners()
+
+    await fakeBrowser.tabs.onUpdated.emitAsync(
+      10,
+      { status: 'complete' },
+      completedWithoutIcon,
+    )
+    const completedWithIcon = browserTab({
+      ...completedWithoutIcon,
+      favIconUrl: 'https://www.wikipedia.org/static/favicon/wikipedia.ico',
+    })
+    setBrowserTabs(20, [completedWithIcon])
+
+    await vi.runAllTimersAsync()
+
+    expect(mocks.updateFavicon).toHaveBeenCalledWith(
+      completedWithIcon.favIconUrl,
+      completedWithIcon,
+    )
+    expect(mocks.saveFaviconCache).toHaveBeenCalledOnce()
+    expect(fakeBrowser.runtime.sendMessage).toHaveBeenCalledWith({
+      type: 'FAVICON_CACHE_UPDATED',
+    })
+    expect(fakeBrowser.runtime.sendMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'FAVICON_CLEARED' }),
+    )
+  })
+
+  it('cancels a pending faviconless decision when the tab navigates', async () => {
+    vi.useFakeTimers()
+    const { fakeBrowser, initializeListeners, mocks, setBrowserTabs } =
+      await loadBackgroundHandlers()
+    mocks.Items.push(treeWindow())
+    fakeBrowser.extension.getViews.mockReturnValue([{}])
+    const completed = browserTab({
+      url: 'https://example.test/old',
+      status: 'complete',
+      favIconUrl: undefined,
+    })
+    setBrowserTabs(20, [completed])
+    initializeListeners()
+
+    await fakeBrowser.tabs.onUpdated.emitAsync(
+      10,
+      { status: 'complete' },
+      completed,
+    )
+    const navigating = browserTab({
+      url: 'https://example.test/new',
+      status: 'loading',
+      favIconUrl: undefined,
+    })
+    setBrowserTabs(20, [navigating])
+    await fakeBrowser.tabs.onUpdated.emitAsync(
+      10,
+      { status: 'loading', url: navigating.url },
+      navigating,
+    )
+
+    await vi.runAllTimersAsync()
+
+    expect(fakeBrowser.runtime.sendMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'FAVICON_CLEARED' }),
+    )
+  })
+
+  it('persists an authoritative private favicon before notifying open views', async () => {
+    const { fakeBrowser, initializeListeners, mocks, setBrowserTabs } =
+      await loadBackgroundHandlers()
+    mocks.Items.push(treeWindow())
+    fakeBrowser.extension.getViews.mockReturnValue([{}])
+    const privateTab = browserTab({
+      title: 'Private icon',
+      url: 'https://private.test/page',
+      status: 'complete',
+      favIconUrl: 'data:image/svg+xml,%3Csvg%3E%3C/svg%3E',
+      incognito: true,
+    })
+    setBrowserTabs(20, [privateTab])
+    initializeListeners()
+
+    await fakeBrowser.tabs.onUpdated.emitAsync(
+      10,
+      { status: 'complete', favIconUrl: privateTab.favIconUrl },
+      privateTab,
+    )
+
+    expect(mocks.initializeFavicons).toHaveBeenCalledOnce()
+    expect(mocks.updateFavicon).toHaveBeenCalledWith(
+      privateTab.favIconUrl,
+      privateTab,
+    )
+    expect(mocks.saveFaviconCache).toHaveBeenCalledOnce()
+    expect(fakeBrowser.runtime.sendMessage).toHaveBeenCalledWith({
+      type: 'FAVICON_CACHE_UPDATED',
+    })
+  })
+
+  it('does not let a delayed favicon event overwrite the current page icon', async () => {
+    const { fakeBrowser, initializeListeners, mocks, setBrowserTabs } =
+      await loadBackgroundHandlers()
+    mocks.Items.push(treeWindow())
+    fakeBrowser.extension.getViews.mockReturnValue([{}])
+    const currentTab = browserTab({
+      title: 'Current blue page',
+      url: 'https://example.test/blue',
+      status: 'complete',
+      favIconUrl: 'data:image/svg+xml,%3Csvg%20fill%3D%22blue%22%3E%3C/svg%3E',
+    })
+    setBrowserTabs(20, [currentTab])
+    initializeListeners()
+
+    await fakeBrowser.tabs.onUpdated.emitAsync(
+      10,
+      {
+        favIconUrl: 'data:image/svg+xml,%3Csvg%20fill%3D%22red%22%3E%3C/svg%3E',
+      },
+      browserTab({
+        title: 'Stale red page',
+        url: 'https://example.test/red',
+        status: 'complete',
+        favIconUrl: 'data:image/svg+xml,%3Csvg%20fill%3D%22red%22%3E%3C/svg%3E',
+      }),
+    )
+
+    expect(mocks.updateFavicon).toHaveBeenCalledWith(
+      currentTab.favIconUrl,
+      currentTab,
+    )
+    expect(mocks.updateFavicon).not.toHaveBeenCalledWith(
+      expect.stringContaining('red'),
+      expect.anything(),
+    )
   })
 
   it('folds a navigation update sequence into one indexed tree item (EV-07)', async () => {

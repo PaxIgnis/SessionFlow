@@ -48,6 +48,12 @@ async function onAutomaticFaviconRefreshUpdate(
   >
     <h2>{{ STRINGS.settings_favicons }}</h2>
     <ToggleButton
+      label="Show and Cache Favicons for Private Tabs"
+      v-model="Settings.values.cachePrivateTabFavicons"
+      :options="OPTIONS.boolean"
+      @update="Settings.saveSettingsToStorage()"
+    />
+    <ToggleButton
       label="Fetch Missing Favicons When Firefox Starts (Requires Website Access)"
       v-model="Settings.values.fetchMissingFaviconsOnStartup"
       :options="OPTIONS.boolean"

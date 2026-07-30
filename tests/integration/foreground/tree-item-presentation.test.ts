@@ -13,7 +13,12 @@ import { renderToString } from 'vue/server-renderer'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import fs from 'node:fs/promises'
 
-async function renderTreeItem(item: TreeItem): Promise<string> {
+async function renderTreeItem(
+  item: TreeItem,
+  getFavicon: (url: string, privateTab?: boolean) => string = vi.fn(
+    () => '/icon/16.png',
+  ),
+): Promise<string> {
   ;(
     TreeItemComponent as unknown as { __cssModules?: Record<string, object> }
   ).__cssModules = { $style: {} }
@@ -21,7 +26,7 @@ async function renderTreeItem(item: TreeItem): Promise<string> {
     createSSRApp(TreeItemComponent, {
       item,
       faviconService: {
-        getFavicon: vi.fn(() => '/icon/16.png'),
+        getFavicon,
       },
     }),
   )
@@ -91,6 +96,51 @@ describe('tree item presentation', () => {
     )
     expect(source).toMatch(
       /\.tree-item-title\s*\{[\s\S]*?text-overflow:\s*ellipsis/,
+    )
+  })
+
+  it('identifies private tabs when resolving their favicon', async () => {
+    const getFavicon = vi.fn((_url: string, privateTab?: boolean) =>
+      privateTab ? '/assets/private-browsing.svg' : '/icon/16.png',
+    )
+    const tab = makeForegroundTab('private-tab' as UID)
+    const window = makeForegroundWindow('private-window' as UID, [tab], {
+      incognito: true,
+    })
+    resetForegroundTree([window])
+
+    const markup = await renderTreeItem(tab, getFavicon)
+
+    expect(getFavicon).toHaveBeenCalledWith(tab.url, true)
+    expect(markup).toContain('private-browsing.svg')
+  })
+
+  it('uses the private-browsing icon only for private window items', async () => {
+    const privateMarkup = await renderTreeItem(
+      makeForegroundWindow('private-window' as UID, [], {
+        incognito: true,
+      }),
+    )
+    const normalMarkup = await renderTreeItem(
+      makeForegroundWindow('normal-window' as UID),
+    )
+
+    expect(privateMarkup).toContain('src="/icons/private-browsing.svg"')
+    expect(normalMarkup).toContain('src="/icon/16.png"')
+    expect(normalMarkup).not.toContain('private-browsing.svg')
+  })
+
+  it('passes the authoritative browser tab to live favicon updates', async () => {
+    const source = await fs.readFile(
+      new URL(
+        '../../../src/entrypoints/sessiontree/SessionTree.vue',
+        import.meta.url,
+      ),
+      'utf8',
+    )
+
+    expect(source).toMatch(
+      /updateFavicon\(\s*message\.favIconUrl,\s*message\.tab as browser\.tabs\.Tab,?\s*\)/,
     )
   })
 

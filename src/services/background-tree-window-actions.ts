@@ -149,6 +149,9 @@ export function removeWindow(windowUid: UID): void {
   const index = Tree.Items.findIndex((w) => w.uid === windowUid)
   const window = Tree.windowsByUid.get(windowUid)
   if (window && index !== -1) {
+    const privateFaviconUrls = window.incognito
+      ? Tree.getTabs(window.children).map((tab) => tab.url)
+      : []
     const oldParent = window.parentUid
       ? Tree.getItemByUid(window.parentUid)
       : undefined
@@ -189,6 +192,9 @@ export function removeWindow(windowUid: UID): void {
         op: 'windowRemoved',
         windowUid,
       })
+    }
+    for (const url of privateFaviconUrls) {
+      void Tree.cleanupPrivateFaviconDomain(url)
     }
   } else {
     console.error(`Error Removing Window ${windowUid} from sessionTree`)
