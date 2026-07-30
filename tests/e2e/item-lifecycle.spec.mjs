@@ -1,4 +1,8 @@
-import { browser } from '@wdio/globals'
+import { browser, expect } from '@wdio/globals'
+import {
+  reloadExtensionBackgroundPage,
+  writeStoredSessionTree,
+} from './support/extension-lifecycle.mjs'
 import {
   cleanupSeededTabs,
   extensionFixtureTitle,
@@ -404,6 +408,137 @@ describe('Firefox item lifecycle workflows', () => {
     }, 'Expected the positioned saved window to reopen once with stable identity.')
   })
 
+  it('preserves normal bounds while Firefox changes window state (WN-02)', async () => {
+    await openLifecycleSession()
+    const original = await onlyTrackedTab(SESSION_FIXTURE_TITLES.initial)
+    await sessionTree.updateSettings({
+      openWindowsInSameLocation: true,
+      openWindowsInSameLocationUpdateInterval: 1,
+      openWindowsInSameLocationUpdateIntervalUnit: 'seconds',
+    })
+    await sessionTree.sendTreeCommand({
+      action: 'openWindowsInSameLocationUpdated',
+    })
+    await updateFirefoxWindow(original.window.id, {
+      state: 'normal',
+    })
+    await updateFirefoxWindow(original.window.id, {
+      left: 80,
+      top: 80,
+      width: 900,
+      height: 700,
+    })
+    const normalWindow = await firefoxWindowSnapshot(original.window.id)
+    const expectedNormalBounds = {
+      left: normalWindow.left,
+      top: normalWindow.top,
+      width: normalWindow.width,
+      height: normalWindow.height,
+    }
+    await sessionTree.waitForBackgroundTree((tree) => {
+      const tracked = windowsInTree(tree).find(
+        (windowItem) => windowItem.uid === original.window.uid,
+      )
+      return (
+        JSON.stringify(tracked?.windowPosition) ===
+        JSON.stringify(expectedNormalBounds)
+      )
+    }, 'Expected initial normal-state bounds to be captured.')
+
+    for (const state of ['maximized', 'minimized', 'fullscreen']) {
+      const before = await trackedWindowPosition(original.window.uid)
+      await updateFirefoxWindow(original.window.id, { state })
+      await waitForFirefoxWindowState(original.window.id, state)
+      await browser.pause(1_200)
+
+      expect(await trackedWindowPosition(original.window.uid)).toEqual(before)
+
+      await updateFirefoxWindow(original.window.id, { state: 'normal' })
+      await waitForFirefoxWindowState(original.window.id, 'normal')
+    }
+  })
+
+  it('lets Firefox clamp disconnected-monitor bounds without changing the stored request (WN-03/WN-04)', async () => {
+    await openLifecycleSession()
+    await sessionTree.updateSettings({
+      openWindowsInSameLocation: true,
+      openWindowsInSameLocationUpdateInterval: 60,
+      openWindowsInSameLocationUpdateIntervalUnit: 'minutes',
+    })
+    const currentTree = await sessionTree.backgroundTreeSnapshot()
+    const storedBounds = {
+      left: -50_000,
+      top: -50_000,
+      width: 900,
+      height: 700,
+    }
+    const windowUid = 'wn-disconnected-window'
+    const tabUid = 'wn-disconnected-tab'
+    await writeStoredSessionTree([
+      ...currentTree,
+      {
+        type: 0,
+        uid: windowUid,
+        id: -1,
+        incognito: false,
+        selected: false,
+        state: TreeItemState.Saved,
+        collapsed: false,
+        indentLevel: 0,
+        windowPosition: storedBounds,
+        children: [
+          {
+            type: 1,
+            uid: tabUid,
+            id: -1,
+            active: false,
+            selected: false,
+            state: TreeItemState.Saved,
+            title: 'Disconnected monitor fixture',
+            url: 'about:blank',
+            windowUid,
+            indentLevel: 1,
+            pinned: false,
+          },
+        ],
+      },
+    ])
+    await reloadExtensionBackgroundPage()
+    await sessionTree.waitForBackgroundTree(
+      (tree) =>
+        windowsInTree(tree).some(
+          (windowItem) =>
+            windowItem.uid === windowUid &&
+            windowItem.state === TreeItemState.Saved,
+        ),
+      'Expected the disconnected-monitor fixture after background reload.',
+    )
+
+    await sessionTree.sendTreeCommand({ action: 'openWindow', windowUid })
+    let reopened
+    await sessionTree.waitForBackgroundTree((tree) => {
+      reopened = windowsInTree(tree).find(
+        (windowItem) =>
+          windowItem.uid === windowUid &&
+          windowItem.state === TreeItemState.Open,
+      )
+      return Boolean(reopened?.id >= 0)
+    }, 'Expected Firefox to reopen the off-screen saved window.')
+    const liveBounds = await firefoxWindowSnapshot(reopened.id)
+
+    expect(
+      liveBounds.left !== storedBounds.left ||
+        liveBounds.top !== storedBounds.top,
+    ).toBe(true)
+    expect(await trackedWindowPosition(windowUid)).toEqual(storedBounds)
+
+    await sessionTree.sendTreeCommand({
+      action: 'closeWindow',
+      windowId: reopened.id,
+      windowUid,
+    })
+  })
+
   it('pins and unpins a native grouped tab according to Firefox events', async () => {
     const titles = [
       SESSION_FIXTURE_TITLES.initial,
@@ -475,6 +610,53 @@ async function onlyOpenTreeWindow() {
     )
   }
   return windows[0]
+}
+
+async function trackedWindowPosition(windowUid) {
+  const tree = await sessionTree.backgroundTreeSnapshot()
+  const windowItem = windowsInTree(tree).find((item) => item.uid === windowUid)
+  if (!windowItem?.windowPosition) {
+    throw new Error(`Expected stored bounds for window ${windowUid}.`)
+  }
+  return windowItem.windowPosition
+}
+
+async function updateFirefoxWindow(windowId, updateInfo) {
+  const response = await browser.executeAsync(
+    (targetWindowId, changes, done) => {
+      window.browser.windows
+        .update(targetWindowId, changes)
+        .then(() => done({ ok: true }))
+        .catch((error) => done({ ok: false, error: String(error) }))
+    },
+    windowId,
+    updateInfo,
+  )
+  if (!response?.ok) {
+    throw new Error(response?.error || 'Failed to update the Firefox window.')
+  }
+}
+
+async function firefoxWindowSnapshot(windowId) {
+  const response = await browser.executeAsync((targetWindowId, done) => {
+    window.browser.windows
+      .get(targetWindowId)
+      .then((windowInfo) => done({ ok: true, windowInfo }))
+      .catch((error) => done({ ok: false, error: String(error) }))
+  }, windowId)
+  if (!response?.ok) {
+    throw new Error(response?.error || 'Failed to read the Firefox window.')
+  }
+  return response.windowInfo
+}
+
+async function waitForFirefoxWindowState(windowId, expectedState) {
+  await browser.waitUntil(
+    async () => (await firefoxWindowSnapshot(windowId)).state === expectedState,
+    {
+      timeoutMsg: `Expected Firefox window ${windowId} state ${expectedState}.`,
+    },
+  )
 }
 
 async function waitForWindowContainingNote(text) {

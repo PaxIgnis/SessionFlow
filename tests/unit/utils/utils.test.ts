@@ -8,6 +8,7 @@ import {
   prepareRestorableUrl,
   restorableWindowBounds,
 } from '@/services/utils'
+import type { WindowPosition } from '@/types/session-tree'
 import { installFakeBrowser } from '../../helpers/fake-browser'
 
 describe('utils', () => {
@@ -88,6 +89,15 @@ describe('utils', () => {
         height: 700,
       }),
     ).toEqual({ height: 700 })
+  })
+
+  it('restores the available coordinates when dimensions are missing', () => {
+    expect(
+      restorableWindowBounds({
+        left: 0,
+        top: -900,
+      } as unknown as WindowPosition),
+    ).toEqual({ left: 0, top: -900 })
   })
 
   it.each([

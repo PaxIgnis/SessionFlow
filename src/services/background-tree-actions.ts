@@ -15,6 +15,17 @@ import { emitTreeDelta } from './runtime-port-service'
 
 const startupOpenTabUids = new Set<UID>()
 
+function isSessionTreePopupWindow(window: browser.windows.Window): boolean {
+  if (window.type !== 'popup') return false
+  const sessionTreeUrl = browser.runtime.getURL('/sessiontree.html')
+  return Boolean(
+    window.tabs?.some(
+      (tab) =>
+        tab.url === sessionTreeUrl || tab.url?.startsWith(`${sessionTreeUrl}?`),
+    ),
+  )
+}
+
 /**
  * Initializes the session tree by first loading the save tree from storage,
  * and then updating it with the current state of the browser.
@@ -35,6 +46,16 @@ export async function initializeWindows(): Promise<void> {
       }
     })
     currentWindows.forEach((win) => {
+      if (isSessionTreePopupWindow(win)) {
+        if (win.id !== undefined) {
+          Tree.sessionTreeWindowId = win.id
+          const persistedPopup = Tree.Items.filter(Tree.isWindow).find(
+            (window) => window.id === win.id,
+          )
+          if (persistedPopup) Tree.removeWindow(persistedPopup.uid)
+        }
+        return
+      }
       let bestMatch = undefined
       if (Settings.values.matchOpenedWindowsWithSavedWindowsOnStartup) {
         // Reuse a saved window when the current browser window looks like a restored session window.
@@ -573,17 +594,21 @@ export async function saveSessionTreeToStorage(): Promise<void> {
  * Opens Session Tree popup window
  */
 export async function openSessionTree(): Promise<void> {
-  if (Tree.sessionTreeWindowId) {
-    const openWindows = await browser.windows.getAll()
-    const exists = openWindows.some(
-      (window) => window.id === Tree.sessionTreeWindowId,
-    )
-
-    if (exists) {
-      await browser.windows.update(Tree.sessionTreeWindowId, { focused: true })
-      return // Window is already open
-    }
+  const openWindows = await browser.windows.getAll({ populate: true })
+  const existingSessionTreeWindow =
+    openWindows.find(
+      (window) =>
+        window.id === Tree.sessionTreeWindowId &&
+        isSessionTreePopupWindow(window),
+    ) ?? openWindows.find(isSessionTreePopupWindow)
+  if (existingSessionTreeWindow?.id !== undefined) {
+    Tree.sessionTreeWindowId = existingSessionTreeWindow.id
+    await browser.windows.update(existingSessionTreeWindow.id, {
+      focused: true,
+    })
+    return
   }
+  Tree.sessionTreeWindowId = undefined
   // properties to pass to browser.windows.create
   const properties: browser.windows._CreateCreateData = {
     type: 'popup' as browser.windows.CreateType,
@@ -621,25 +646,29 @@ export async function openSessionTree(): Promise<void> {
 }
 
 /**
- * Sets the session tree window id variable to the given window id.
- * Removes the window from the session tree if it exists there as a saved window.
+ * Registers a verified Session Tree popup window.
+ * Removes the popup from the session tree if it was indexed as a user window.
  *
  */
-export function registerSessionTreeWindow(windowId: number): void {
+export async function registerSessionTreeWindow(
+  windowId: number,
+): Promise<void> {
+  let browserWindow: browser.windows.Window
+  try {
+    browserWindow = await browser.windows.get(windowId, { populate: true })
+  } catch {
+    return
+  }
+  if (!isSessionTreePopupWindow(browserWindow)) return
+
   Tree.sessionTreeWindowId = windowId
   // remove windowId from session tree if it exists there as a saved window, since it's now the live session tree window
   const existingWindow = Tree.Items.find(
     (w) => w.type === TreeItemType.WINDOW && w.id === windowId,
   ) as Window | undefined
   if (existingWindow) {
-    Tree.Items.splice(Tree.Items.indexOf(existingWindow), 1)
-    emitTreeDelta({
-      op: 'windowRemoved',
-      windowUid: existingWindow.uid,
-    })
-    Tree.windowsByUid.delete(existingWindow.uid)
-    Tree.existingUidsSet.delete(existingWindow.uid)
-    void saveSessionTreeToStorage().catch((error) => {
+    Tree.removeWindow(existingWindow.uid)
+    await saveSessionTreeToStorage().catch((error) => {
       console.error('Failed to persist session tree:', error)
     })
   }

@@ -291,6 +291,7 @@ export function updateWindowPositionInterval(): void {
   // Clear existing interval
   if (Tree.windowPositionInterval) {
     clearInterval(Tree.windowPositionInterval)
+    Tree.windowPositionInterval = undefined
   }
   if (!Settings.values.openWindowsInSameLocation) {
     return
@@ -308,6 +309,7 @@ export function updateWindowPositionInterval(): void {
         if (
           window.id !== undefined &&
           window.id !== Tree.sessionTreeWindowId &&
+          (window.state === undefined || window.state === 'normal') &&
           typeof window.left === 'number' &&
           Number.isFinite(window.left) &&
           typeof window.top === 'number' &&

@@ -55,6 +55,86 @@ describe('startup initialization', () => {
     expectTreeInvariants()
   })
 
+  it('does not add an existing Session Flow popup as a user session window (WN-09)', async () => {
+    const popupUrl = browser.runtime.getURL('/sessiontree.html')
+    vi.mocked(browser.windows.getAll).mockResolvedValue([
+      {
+        id: 90,
+        type: 'popup',
+        alwaysOnTop: false,
+        incognito: false,
+        focused: true,
+        tabs: [
+          {
+            id: 91,
+            windowId: 90,
+            index: 0,
+            active: true,
+            discarded: false,
+            pinned: false,
+            title: 'Session Flow',
+            url: popupUrl,
+          } as browser.tabs.Tab,
+        ],
+      } as browser.windows.Window,
+    ])
+
+    await Tree.initializeWindows()
+
+    expect(Tree.sessionTreeWindowId).toBe(90)
+    expect(Tree.Items).toEqual([])
+    expect(Tree.windowsByUid.size).toBe(0)
+    expectTreeInvariants()
+  })
+
+  it('keeps a normal window containing a manually opened Session Flow tab', async () => {
+    const sessionTreeUrl = browser.runtime.getURL('/sessiontree.html')
+    vi.mocked(browser.windows.getAll).mockResolvedValue([
+      {
+        id: 90,
+        type: 'normal',
+        alwaysOnTop: false,
+        incognito: false,
+        focused: true,
+        tabs: [
+          {
+            id: 91,
+            windowId: 90,
+            index: 0,
+            active: false,
+            discarded: false,
+            pinned: false,
+            title: 'Session Flow',
+            url: sessionTreeUrl,
+          } as browser.tabs.Tab,
+          {
+            id: 92,
+            windowId: 90,
+            index: 1,
+            active: true,
+            discarded: false,
+            pinned: false,
+            title: 'Example',
+            url: 'https://example.test/',
+          } as browser.tabs.Tab,
+        ],
+      } as browser.windows.Window,
+    ])
+
+    await Tree.initializeWindows()
+
+    expect(Tree.sessionTreeWindowId).toBeUndefined()
+    expect(Tree.Items).toHaveLength(1)
+    expect(Tree.Items.find(Tree.isWindow)).toMatchObject({
+      id: 90,
+      children: [
+        { id: 91, url: sessionTreeUrl },
+        { id: 92, url: 'https://example.test/' },
+      ],
+    })
+    expectTreeInvariants()
+  })
+
   it('captures container metadata for tabs already open at startup', async () => {
     const identity = {
       cookieStoreId: 'firefox-container-work',

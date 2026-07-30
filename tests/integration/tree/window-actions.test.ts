@@ -876,6 +876,309 @@ describe('window actions', () => {
   })
 
   it.each([
+    { unit: 'seconds' as const, value: 2, expectedDelay: 2_000 },
+    { unit: 'minutes' as const, value: 2, expectedDelay: 120_000 },
+  ])(
+    'schedules position capture at the $unit boundary (WN-05)',
+    ({ unit, value, expectedDelay }) => {
+      vi.useFakeTimers()
+      Settings.values.openWindowsInSameLocation = true
+      Settings.values.openWindowsInSameLocationUpdateInterval = value
+      Settings.values.openWindowsInSameLocationUpdateIntervalUnit = unit
+      const setIntervalSpy = vi.spyOn(globalThis, 'setInterval')
+
+      Tree.updateWindowPositionInterval()
+
+      expect(setIntervalSpy).toHaveBeenCalledWith(
+        expect.any(Function),
+        expectedDelay,
+      )
+    },
+  )
+
+  it('clears the position timer reference when capture is disabled (WN-05)', () => {
+    vi.useFakeTimers()
+    Settings.values.openWindowsInSameLocation = true
+    Tree.updateWindowPositionInterval()
+    expect(Tree.windowPositionInterval).toBeDefined()
+
+    Settings.values.openWindowsInSameLocation = false
+    Tree.updateWindowPositionInterval()
+
+    expect(Tree.windowPositionInterval).toBeUndefined()
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('reports a rejected position capture without losing the interval (WN-06)', async () => {
+    vi.useFakeTimers()
+    Settings.values.openWindowsInSameLocation = true
+    Settings.values.openWindowsInSameLocationUpdateInterval = 1
+    Settings.values.openWindowsInSameLocationUpdateIntervalUnit = 'seconds'
+    const error = new Error('window enumeration failed')
+    vi.mocked(browser.windows.getAll).mockRejectedValueOnce(error)
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    Tree.updateWindowPositionInterval()
+    await vi.advanceTimersByTimeAsync(1_000)
+
+    expect(consoleError).toHaveBeenCalledWith(
+      'Error updating window positions:',
+      error,
+    )
+    expect(Tree.windowPositionInterval).toBeDefined()
+  })
+
+  it.each(['maximized', 'minimized', 'fullscreen'] as const)(
+    'does not overwrite normal bounds while a window is %s (WN-02)',
+    async (state) => {
+      vi.useFakeTimers()
+      Settings.values.openWindowsInSameLocation = true
+      Settings.values.openWindowsInSameLocationUpdateInterval = 1
+      Settings.values.openWindowsInSameLocationUpdateIntervalUnit = 'seconds'
+      const window = createWindow('window-stateful' as UID, [], {
+        id: 20,
+        state: State.OPEN,
+        windowPosition: {
+          left: 80,
+          top: 60,
+          width: 900,
+          height: 700,
+        },
+      })
+      vi.mocked(browser.windows.getAll).mockResolvedValue([
+        {
+          id: window.id,
+          state,
+          left: 0,
+          top: 0,
+          width: 1920,
+          height: 1080,
+        } as browser.windows.Window,
+      ])
+
+      Tree.updateWindowPositionInterval()
+      await vi.advanceTimersByTimeAsync(1_000)
+
+      expect(window.windowPosition).toEqual({
+        left: 80,
+        top: 60,
+        width: 900,
+        height: 700,
+      })
+    },
+  )
+
+  it('keeps stored off-screen bounds when Firefox clamps the live window (WN-03/WN-04)', async () => {
+    Settings.values.openWindowsInSameLocation = true
+    const tab = createTab('tab-offscreen' as UID, {
+      id: -1,
+      state: State.SAVED,
+    })
+    const storedBounds = {
+      left: -50_000,
+      top: -50_000,
+      width: 900,
+      height: 700,
+    }
+    const window = createWindow('window-offscreen' as UID, [tab], {
+      id: -1,
+      state: State.SAVED,
+      windowPosition: storedBounds,
+    })
+    vi.spyOn(OnCreatedQueue, 'createWindowAndWait').mockResolvedValue({
+      id: 30,
+      left: 0,
+      top: 0,
+      width: 900,
+      height: 700,
+      tabs: [{ id: 101 }],
+    } as browser.windows.Window)
+
+    await Tree.openWindow({ windowUid: window.uid })
+
+    expect(window.windowPosition).toEqual(storedBounds)
+    expect(OnCreatedQueue.createWindowAndWait).toHaveBeenCalledWith(
+      expect.objectContaining(storedBounds),
+    )
+  })
+
+  it('focuses a verified existing Session Flow popup (WN-07)', async () => {
+    Settings.values.openSessionTreeInSameLocation = false
+    Tree.sessionTreeWindowId = 90
+    vi.mocked(browser.windows.getAll).mockResolvedValue([
+      {
+        id: 90,
+        type: 'popup',
+        tabs: [
+          {
+            id: 91,
+            url: browser.runtime.getURL('/sessiontree.html'),
+          } as browser.tabs.Tab,
+        ],
+      } as browser.windows.Window,
+    ])
+    const createWindowSpy = vi.spyOn(OnCreatedQueue, 'createWindowAndWait')
+
+    await Tree.openSessionTree()
+
+    expect(browser.windows.update).toHaveBeenCalledWith(90, { focused: true })
+    expect(createWindowSpy).not.toHaveBeenCalled()
+  })
+
+  it('rediscovers an existing popup when its stored ID is stale (WN-08)', async () => {
+    Settings.values.openSessionTreeInSameLocation = false
+    Tree.sessionTreeWindowId = 999
+    vi.mocked(browser.windows.getAll).mockResolvedValue([
+      {
+        id: 90,
+        type: 'popup',
+        tabs: [
+          {
+            id: 91,
+            url: browser.runtime.getURL('/sessiontree.html'),
+          } as browser.tabs.Tab,
+        ],
+      } as browser.windows.Window,
+    ])
+    const createWindowSpy = vi
+      .spyOn(OnCreatedQueue, 'createWindowAndWait')
+      .mockResolvedValue({ id: 100 } as browser.windows.Window)
+
+    await Tree.openSessionTree()
+
+    expect(Tree.sessionTreeWindowId).toBe(90)
+    expect(browser.windows.update).toHaveBeenCalledWith(90, { focused: true })
+    expect(createWindowSpy).not.toHaveBeenCalled()
+  })
+
+  it('does not treat a reused stale popup ID as popup ownership (WN-10)', async () => {
+    Settings.values.openSessionTreeInSameLocation = false
+    const realWindow = createWindow('window-real' as UID, [], {
+      id: 90,
+      state: State.OPEN,
+    })
+    Tree.sessionTreeWindowId = realWindow.id
+    vi.mocked(browser.windows.getAll).mockResolvedValue([
+      {
+        id: realWindow.id,
+        type: 'normal',
+        tabs: [
+          {
+            id: 91,
+            url: 'https://example.test/real',
+          } as browser.tabs.Tab,
+        ],
+      } as browser.windows.Window,
+    ])
+    const createWindowSpy = vi
+      .spyOn(OnCreatedQueue, 'createWindowAndWait')
+      .mockResolvedValue({ id: 100 } as browser.windows.Window)
+
+    await Tree.openSessionTree()
+
+    expect(browser.windows.update).not.toHaveBeenCalledWith(90, {
+      focused: true,
+    })
+    expect(createWindowSpy).toHaveBeenCalledOnce()
+    expect(Tree.sessionTreeWindowId).toBe(100)
+    expect(Tree.windowsByUid.get(realWindow.uid)).toBe(realWindow)
+  })
+
+  it('opens a popup when Session Flow is already open in a normal tab', async () => {
+    Settings.values.openSessionTreeInSameLocation = false
+    vi.mocked(browser.windows.getAll).mockResolvedValue([
+      {
+        id: 90,
+        type: 'normal',
+        tabs: [
+          {
+            id: 91,
+            url: browser.runtime.getURL('/sessiontree.html'),
+          } as browser.tabs.Tab,
+        ],
+      } as browser.windows.Window,
+    ])
+    const createWindowSpy = vi
+      .spyOn(OnCreatedQueue, 'createWindowAndWait')
+      .mockResolvedValue({ id: 100 } as browser.windows.Window)
+
+    await Tree.openSessionTree()
+
+    expect(browser.windows.update).not.toHaveBeenCalledWith(90, {
+      focused: true,
+    })
+    expect(createWindowSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'popup',
+        url: 'sessiontree.html',
+      }),
+    )
+    expect(Tree.sessionTreeWindowId).toBe(100)
+  })
+
+  it('does not register or remove a normal window containing a Session Flow tab', async () => {
+    const tab = createTab('normal-session-tree-tab' as UID, { id: 91 })
+    const sibling = createTab('normal-sibling-tab' as UID, { id: 92 })
+    const window = createWindow('normal-window' as UID, [tab, sibling], {
+      id: 90,
+      state: State.OPEN,
+    })
+    vi.mocked(browser.windows.get).mockResolvedValue({
+      id: window.id,
+      type: 'normal',
+      tabs: [
+        {
+          id: tab.id,
+          url: browser.runtime.getURL('/sessiontree.html'),
+        } as browser.tabs.Tab,
+        { id: sibling.id, url: 'https://example.test/' } as browser.tabs.Tab,
+      ],
+    } as browser.windows.Window)
+
+    await Tree.registerSessionTreeWindow(window.id)
+
+    expect(Tree.sessionTreeWindowId).toBeUndefined()
+    expect(Tree.windowsByUid.get(window.uid)).toBe(window)
+    expect(Tree.tabsByUid.get(tab.uid)).toBe(tab)
+    expect(Tree.tabsByUid.get(sibling.uid)).toBe(sibling)
+    expect(browser.storage.local.set).not.toHaveBeenCalled()
+    expectTreeInvariants()
+  })
+
+  it('removes a mistakenly indexed popup and all descendant indexes (WN-09)', async () => {
+    const tab = createTab('popup-tab' as UID, { id: 91 })
+    const note = createNote('popup-note' as UID)
+    const popup = createWindow('popup-window' as UID, [tab, note], {
+      id: 90,
+      state: State.OPEN,
+    })
+    vi.mocked(browser.windows.get).mockResolvedValue({
+      id: popup.id,
+      type: 'popup',
+      tabs: [
+        {
+          id: tab.id,
+          url: browser.runtime.getURL('/sessiontree.html'),
+        } as browser.tabs.Tab,
+      ],
+    } as browser.windows.Window)
+
+    await Tree.registerSessionTreeWindow(popup.id)
+    await flushMicrotasks()
+
+    expect(Tree.sessionTreeWindowId).toBe(popup.id)
+    expect(Tree.Items).not.toContain(popup)
+    expect(Tree.windowsByUid.has(popup.uid)).toBe(false)
+    expect(Tree.tabsByUid.has(tab.uid)).toBe(false)
+    expect(Tree.notesByUid.has(note.uid)).toBe(false)
+    expect(Tree.existingUidsSet.has(popup.uid)).toBe(false)
+    expect(Tree.existingUidsSet.has(tab.uid)).toBe(false)
+    expect(Tree.existingUidsSet.has(note.uid)).toBe(false)
+    expect(browser.storage.local.set).toHaveBeenCalled()
+    expectTreeInvariants()
+  })
+
+  it.each([
     { focusWindowOnOpen: true, shouldRestorePopupFocus: false },
     { focusWindowOnOpen: false, shouldRestorePopupFocus: true },
   ])(

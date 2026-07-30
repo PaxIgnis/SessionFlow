@@ -1225,7 +1225,7 @@ async function dispatchCommandNow(
   } else if (message.action === 'openWindowsInSameLocationUpdated') {
     Tree.updateWindowPositionInterval()
   } else if (message.action === 'registerSessionTreeWindow') {
-    Tree.registerSessionTreeWindow(message.windowId)
+    await Tree.registerSessionTreeWindow(message.windowId)
   } else if (message.action === 'toggleCollapseTab') {
     Tree.toggleCollapseTab(message.tabUid)
   } else if (message.action === 'toggleCollapseWindow') {
