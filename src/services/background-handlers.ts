@@ -71,6 +71,7 @@ const FAVICON_RECHECK_DELAYS_MS = [100, 250, 500, 1_000]
 // Event Listeners
 // ==============================
 let containerListenersInitialized = false
+let listenersInitialized = false
 
 export function initializeContainerListeners(): void {
   const contextualIdentities = browser.contextualIdentities
@@ -84,6 +85,9 @@ export function initializeContainerListeners(): void {
 
 export function initializeListeners() {
   initializeContainerListeners()
+  if (listenersInitialized) return
+  listenersInitialized = true
+
   initializeSessionTreePort({
     dispatchCommand,
     getSnapshot: () => Tree.Items,
@@ -95,22 +99,55 @@ export function initializeListeners() {
   browser.runtime.onMessage.addListener(onMessage)
   browser.runtime.onStartup.addListener(updateBadge)
   browser.tabs.onActivated.addListener(tabsOnActivated)
-  browser.tabs.onAttached.addListener(tabsOnAttached)
+  browser.tabs.onAttached.addListener(
+    withAsyncListenerErrorBoundary('tab-attached', tabsOnAttached),
+  )
   browser.tabs.onCreated.addListener(updateBadge)
-  browser.tabs.onCreated.addListener(tabsOnCreated)
+  browser.tabs.onCreated.addListener(
+    withAsyncListenerErrorBoundary('tab-created', tabsOnCreated),
+  )
   browser.tabs.onDetached.addListener(tabsOnDetached)
-  browser.tabs.onMoved.addListener(tabsOnMoved)
+  browser.tabs.onMoved.addListener(
+    withAsyncListenerErrorBoundary('tab-moved', tabsOnMoved),
+  )
   browser.tabs.onRemoved.addListener(updateBadge)
   browser.tabs.onRemoved.addListener(tabsOnRemoved)
-  browser.tabs.onUpdated.addListener(tabsOnUpdated)
-  browser.tabs.onUpdated.addListener(tabsOnUpdatedFavicon)
+  browser.tabs.onUpdated.addListener(
+    withAsyncListenerErrorBoundary('tab-updated', tabsOnUpdated),
+  )
+  browser.tabs.onUpdated.addListener(
+    withAsyncListenerErrorBoundary('tab-favicon-updated', tabsOnUpdatedFavicon),
+  )
   browser.tabGroups.onCreated.addListener(tabGroupsOnCreatedOrUpdated)
-  browser.tabGroups.onMoved.addListener(Tree.tabGroupMoved)
+  browser.tabGroups.onMoved.addListener(
+    withAsyncListenerErrorBoundary('tab-group-moved', Tree.tabGroupMoved),
+  )
   browser.tabGroups.onRemoved.addListener(tabGroupsOnRemoved)
   browser.tabGroups.onUpdated.addListener(tabGroupsOnCreatedOrUpdated)
-  browser.windows.onCreated.addListener(windowsOnCreated)
+  browser.windows.onCreated.addListener(
+    withAsyncListenerErrorBoundary('window-created', windowsOnCreated),
+  )
   browser.windows.onFocusChanged.addListener(windowsOnFocusChanged)
   browser.windows.onRemoved.addListener(windowsOnRemoved)
+}
+
+/**
+ * Wraps an asynchronous Firefox event listener so failures are handled at the
+ * browser-event boundary. Rejected promises are logged with the event label
+ * instead of escaping as unhandled rejections, while the returned listener
+ * remains awaitable for deterministic event processing and testing.
+ */
+function withAsyncListenerErrorBoundary<TArgs extends unknown[]>(
+  label: string,
+  listener: (...args: TArgs) => Promise<unknown>,
+): (...args: TArgs) => Promise<void> {
+  return async (...args: TArgs): Promise<void> => {
+    try {
+      await listener(...args)
+    } catch (error) {
+      console.error(`Background ${label} listener failed:`, error)
+    }
+  }
 }
 
 /**

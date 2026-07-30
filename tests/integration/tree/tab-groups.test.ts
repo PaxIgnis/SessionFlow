@@ -282,6 +282,100 @@ describe('tab groups', () => {
     vi.useRealTimers()
   })
 
+  it('synchronizes a native group containing 500 tabs within the scale budget (PF-04)', async () => {
+    const members = Array.from({ length: 500 }, (_, index) =>
+      createTab(`large-group-member-${index}` as UID, {
+        id: 1_000 + index,
+        state: State.OPEN,
+      }),
+    )
+    const window = createWindow('large-group-window' as UID, members, {
+      id: 100,
+      state: State.OPEN,
+    })
+    const nativeGroup = browserGroup(7, { title: 'Large group' })
+    vi.mocked(browser.tabs.query).mockResolvedValue(
+      members.map((member, index) => ({
+        id: member.id,
+        windowId: window.id,
+        index,
+        groupId: nativeGroup.id,
+      })) as browser.tabs.Tab[],
+    )
+
+    const startedAt = performance.now()
+    await Tree.syncBrowserTabGroup(nativeGroup)
+    const elapsedMs = performance.now() - startedAt
+
+    expect(elapsedMs).toBeLessThan(5_000)
+    expect(members.every((tab) => tab.tabGroup?.id === nativeGroup.id)).toBe(
+      true,
+    )
+    expect(new Set(members.map((tab) => tab.tabGroup?.uid)).size).toBe(1)
+    expectTreeInvariants()
+  }, 15_000)
+
+  it('survives repeated group move, rename, delete, and recreate cycles (PF-06)', async () => {
+    vi.useFakeTimers()
+    const members = Array.from({ length: 20 }, (_, index) =>
+      createTab(`cycle-member-${index}` as UID, {
+        id: 2_000 + index,
+        state: State.OPEN,
+      }),
+    )
+    const window = createWindow('cycle-window' as UID, members, {
+      id: 100,
+      state: State.OPEN,
+    })
+    let orderedMembers = [...members]
+    vi.mocked(browser.tabs.query).mockImplementation(async (query) => {
+      if (query.groupId !== undefined || query.windowId === window.id) {
+        return orderedMembers.map((member, index) => ({
+          id: member.id,
+          windowId: window.id,
+          index,
+          groupId: 7,
+        })) as browser.tabs.Tab[]
+      }
+      return []
+    })
+    let previousUid: UID | undefined
+
+    for (let cycle = 0; cycle < 25; cycle++) {
+      const created = browserGroup(7, {
+        title: `Cycle ${cycle}`,
+        color: cycle % 2 === 0 ? 'blue' : 'red',
+      })
+      await Tree.syncBrowserTabGroup(created)
+      const createdUid = members[0].tabGroup?.uid
+      expect(createdUid).toBeDefined()
+      expect(createdUid).not.toBe(previousUid)
+
+      const renamed = { ...created, title: `Renamed ${cycle}` }
+      await Tree.syncBrowserTabGroup(renamed)
+      expect(members.every((tab) => tab.tabGroup?.uid === createdUid)).toBe(
+        true,
+      )
+      expect(
+        members.every((tab) => tab.tabGroup?.title === renamed.title),
+      ).toBe(true)
+
+      orderedMembers = [...orderedMembers.slice(1), orderedMembers[0]]
+      await Tree.tabGroupMoved(renamed)
+      expect(window.children.map((item) => item.uid)).toEqual(
+        orderedMembers.map((item) => item.uid),
+      )
+
+      Tree.tabGroupRemoved(renamed)
+      expect(members.every((tab) => tab.tabGroup === undefined)).toBe(true)
+      expect(vi.getTimerCount()).toBe(0)
+      previousUid = createdUid
+    }
+
+    expectTreeInvariants()
+    vi.useRealTimers()
+  }, 15_000)
+
   it('requires matching groups on both direct adjacent tabs by default', () => {
     const above = createTab('above' as UID, { tabGroup: group() })
     const below = createTab('below' as UID, { tabGroup: group() })

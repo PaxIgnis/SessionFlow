@@ -246,6 +246,41 @@ describe('favicon refresh scheduler', () => {
     expect(Settings.values.faviconRefreshTiming).toBe('expiration-and-startup')
   })
 
+  it('does no alarm work after continuous refresh is repeatedly disabled (PF-09)', async () => {
+    Settings.values.refreshFaviconsAfterPeriodOfTime = true
+    Settings.values.faviconRefreshTiming = 'expiration-and-startup'
+    const scheduler = new FaviconRefreshScheduler(faviconService, () => [
+      'https://example.test/saved',
+    ])
+    await scheduler.initialize()
+
+    for (let cycle = 0; cycle < 25; cycle++) {
+      Settings.values.refreshFaviconsAfterPeriodOfTime = false
+      await scheduler.handleSettingsUpdated()
+      Settings.values.refreshFaviconsAfterPeriodOfTime = true
+      await scheduler.handleSettingsUpdated()
+    }
+    Settings.values.refreshFaviconsAfterPeriodOfTime = false
+    await scheduler.handleSettingsUpdated()
+    refreshFavicons.mockClear()
+    getNextRefreshAt.mockClear()
+    vi.mocked(browser.alarms.create).mockClear()
+
+    for (let cycle = 0; cycle < 100; cycle++) {
+      fakeBrowser.alarms.onAlarm.emit({
+        name: FAVICON_REFRESH_ALARM_NAME,
+        scheduledTime: cycle,
+      })
+    }
+    await vi.waitFor(() => {
+      expect(browser.alarms.clear).toHaveBeenCalled()
+    })
+
+    expect(refreshFavicons).not.toHaveBeenCalled()
+    expect(getNextRefreshAt).not.toHaveBeenCalled()
+    expect(browser.alarms.create).not.toHaveBeenCalled()
+  })
+
   it('skips network work without website access and notifies open views after updates', async () => {
     Settings.values.refreshFaviconsAfterPeriodOfTime = true
     const scheduler = new FaviconRefreshScheduler(faviconService, () => [

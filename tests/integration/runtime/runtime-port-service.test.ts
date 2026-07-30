@@ -243,6 +243,42 @@ describe('runtime port service', () => {
     await expect(pending).rejects.toThrow('disconnected')
   })
 
+  it('releases each client port across repeated popup subscription lifecycles (PF-07)', async () => {
+    const { browser, runtime } = await loadRuntimePortService()
+    runtime.initializeSessionTreePort({
+      dispatchCommand: vi.fn(),
+      getSnapshot: () => [],
+    })
+
+    for (let cycle = 0; cycle < 50; cycle++) {
+      const unsubscribe = runtime.subscribeTreeUpdates({
+        replaceTree: vi.fn(),
+        applyDelta: vi.fn(() => true),
+      })
+      await flushMicrotasks()
+      unsubscribe()
+    }
+
+    expect(browser.__ports.clients).toHaveLength(50)
+    expect(browser.__ports.clients.every((port) => port.disconnected)).toBe(
+      true,
+    )
+    expect(browser.__ports.servers.every((port) => port.disconnected)).toBe(
+      true,
+    )
+
+    const unsubscribe = runtime.subscribeTreeUpdates({
+      replaceTree: vi.fn(),
+      applyDelta: vi.fn(() => true),
+    })
+    await flushMicrotasks()
+
+    expect(browser.__ports.clients).toHaveLength(51)
+    expect(browser.__ports.clients.at(-1)?.disconnected).toBe(false)
+    unsubscribe()
+    expect(browser.__ports.clients.at(-1)?.disconnected).toBe(true)
+  })
+
   it('buffers a delta received before the subscription snapshot response (RT-01)', async () => {
     const { browser, runtime } = await loadRuntimePortService()
     const snapshot = makeForegroundWindow('window-snapshot' as UID)

@@ -16,7 +16,10 @@ import * as Messages from '@/services/foreground-messages'
 import { SessionTree } from '@/services/foreground-tree'
 import { Selection } from '@/services/selection'
 import { Settings } from '@/services/settings'
-import { countTreeItemDescendants } from '@/services/tree-utils'
+import {
+  countTreeItemDescendants,
+  type TreeItemIndentGuideState,
+} from '@/services/tree-utils'
 import {
   DragInfo,
   DragType,
@@ -35,6 +38,7 @@ const props = defineProps<{
   item: TreeItem
   faviconService: FaviconService
   faviconRevision?: number
+  indentGuideState?: TreeItemIndentGuideState
 }>()
 
 function getTabFavicon(tab: Tab): string {
@@ -239,6 +243,9 @@ function getContainingList(item: TreeItem): TreeItem[] {
 
 function shouldShowVerticalIndentLine(indentLevel: number): boolean {
   if (Settings.values.showIndentLinesWithoutChildren) return true
+  if (props.indentGuideState) {
+    return props.indentGuideState.verticalLevels.includes(indentLevel)
+  }
 
   const currentIndent = props.item.indentLevel ?? 0
   if (indentLevel >= currentIndent) return false
@@ -285,6 +292,10 @@ function getIndentLineScanContext(indentLevel: number): {
 }
 
 function hasFollowingDirectSibling(): boolean {
+  if (props.indentGuideState) {
+    return props.indentGuideState.hasFollowingDirectSibling
+  }
+
   const currentIndent = props.item.indentLevel ?? 0
   const containingList = getContainingList(props.item)
   const itemIndex = containingList.findIndex(

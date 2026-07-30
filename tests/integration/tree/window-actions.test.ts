@@ -909,6 +909,26 @@ describe('window actions', () => {
     expect(vi.getTimerCount()).toBe(0)
   })
 
+  it('does no position-capture work after repeated enable/disable cycles (PF-09)', async () => {
+    vi.useFakeTimers()
+    Settings.values.openWindowsInSameLocationUpdateInterval = 1
+    Settings.values.openWindowsInSameLocationUpdateIntervalUnit = 'seconds'
+
+    for (let cycle = 0; cycle < 100; cycle++) {
+      Settings.values.openWindowsInSameLocation = true
+      Tree.updateWindowPositionInterval()
+      Settings.values.openWindowsInSameLocation = false
+      Tree.updateWindowPositionInterval()
+    }
+    vi.mocked(browser.windows.getAll).mockClear()
+
+    await vi.advanceTimersByTimeAsync(100_000)
+
+    expect(vi.getTimerCount()).toBe(0)
+    expect(Tree.windowPositionInterval).toBeUndefined()
+    expect(browser.windows.getAll).not.toHaveBeenCalled()
+  })
+
   it('reports a rejected position capture without losing the interval (WN-06)', async () => {
     vi.useFakeTimers()
     Settings.values.openWindowsInSameLocation = true

@@ -16,6 +16,10 @@ import { subscribeTreeUpdates } from '@/services/runtime-port-service'
 import { Selection } from '@/services/selection'
 import * as ToolbarActions from '@/services/session-tree-toolbar-actions'
 import { Settings } from '@/services/settings'
+import {
+  buildIndentGuideStates,
+  type TreeItemIndentGuideState,
+} from '@/services/tree-utils'
 import { normalizeEditTextValue } from '@/services/utils'
 import '@/styles/variables.css'
 import { ContextMenuType } from '@/types/context-menu'
@@ -72,6 +76,36 @@ const visibleTreeItems = computed<SessionTreeItem[]>(() => {
   }
   appendVisibleList(SessionTree.reactiveItems.value as SessionTreeItem[])
   return items
+})
+
+const indentGuideStates = computed(() => {
+  const topLevelItems = SessionTree.reactiveItems.value as SessionTreeItem[]
+  const topLevelStates = buildIndentGuideStates(topLevelItems)
+  const states = new Map<SessionTreeItem['uid'], TreeItemIndentGuideState>(
+    topLevelStates,
+  )
+
+  for (const item of topLevelItems) {
+    if (item.type !== TreeItemType.WINDOW) continue
+    const windowIndent = item.indentLevel ?? 0
+    const windowState = topLevelStates.get(item.uid)
+    const childStates = buildIndentGuideStates(item.children)
+    for (const [uid, childState] of childStates) {
+      states.set(uid, {
+        verticalLevels: [
+          ...(windowState?.verticalLevels.filter(
+            (level) => level <= windowIndent,
+          ) ?? []),
+          ...(windowState?.hasFollowingAtSameLevel ? [windowIndent] : []),
+          ...childState.verticalLevels.filter((level) => level > windowIndent),
+        ],
+        hasFollowingAtSameLevel: childState.hasFollowingAtSameLevel,
+        hasFollowingDirectSibling: childState.hasFollowingDirectSibling,
+      })
+    }
+  }
+
+  return states
 })
 
 // On component mount
@@ -256,6 +290,7 @@ function runToolbarAction(action: () => void | Promise<void>): void {
           :item="item"
           :favicon-service="faviconService"
           :favicon-revision="faviconRevision"
+          :indent-guide-state="indentGuideStates.get(item.uid)"
         />
       </template>
 

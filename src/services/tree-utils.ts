@@ -91,3 +91,49 @@ export function buildChildrenMap<T extends TreeItem>(items: T[]) {
   }
   return map
 }
+
+export interface TreeItemIndentGuideState {
+  verticalLevels: number[]
+  hasFollowingAtSameLevel: boolean
+  hasFollowingDirectSibling: boolean
+}
+
+/**
+ * Precomputes indent-guide continuation and sibling state in one reverse pass.
+ * Invisible items are skipped because they do not contribute visible guides.
+ */
+export function buildIndentGuideStates(
+  items: TreeItem[],
+): Map<UID, TreeItemIndentGuideState> {
+  const states = new Map<UID, TreeItemIndentGuideState>()
+  const reachableLevels = new Set<number>()
+  const nextParentAtLevel = new Map<number, UID | undefined>()
+  let deepestReachableLevel = 0
+
+  for (let index = items.length - 1; index >= 0; index--) {
+    const item = items[index]
+    if (item.isVisible === false) continue
+
+    const indentLevel = Math.max(0, item.indentLevel ?? 0)
+    const verticalLevels = [...reachableLevels]
+      .filter((level) => level < indentLevel)
+      .sort((left, right) => left - right)
+    states.set(item.uid, {
+      verticalLevels,
+      hasFollowingAtSameLevel: reachableLevels.has(indentLevel),
+      hasFollowingDirectSibling:
+        nextParentAtLevel.has(indentLevel) &&
+        nextParentAtLevel.get(indentLevel) === item.parentUid,
+    })
+
+    for (let level = deepestReachableLevel; level > indentLevel; level--) {
+      reachableLevels.delete(level)
+      nextParentAtLevel.delete(level)
+    }
+    deepestReachableLevel = indentLevel
+    reachableLevels.add(indentLevel)
+    nextParentAtLevel.set(indentLevel, item.parentUid)
+  }
+
+  return states
+}

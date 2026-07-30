@@ -297,4 +297,26 @@ describe('drag start item collection', () => {
       collectSelectedDragItems(note, [tab], true).map((item) => item.uid),
     ).toEqual([tab.uid, note.uid])
   })
+
+  it('preserves ordering and bounded preview output for a 10,000-item drag (PF-12)', () => {
+    const tabs = Array.from({ length: 10_000 }, (_, index) =>
+      makeForegroundTab(`drag-scale-${index}` as UID, {
+        title: `Scale tab ${index}`,
+        url: `https://drag.test/${index}`,
+      }),
+    )
+
+    const startedAt = performance.now()
+    const selected = collectSelectedDragItems(tabs[5_000], tabs, true)
+    const preview = buildDragImagePreview(selected)
+    const elapsedMs = performance.now() - startedAt
+
+    expect(elapsedMs).toBeLessThan(1_000)
+    expect(selected).toHaveLength(10_000)
+    expect(selected.map((item) => item.uid)).toEqual(
+      tabs.map((item) => item.uid),
+    )
+    expect(preview.title).toBe('10000 tabs')
+    expect(preview.body).toEqual(tabs.slice(0, 15).map((tab) => tab.url))
+  })
 })

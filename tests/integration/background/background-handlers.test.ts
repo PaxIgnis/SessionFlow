@@ -69,6 +69,60 @@ describe('background handlers', () => {
     expect(fakeBrowser.tabs.onCreated.listeners.length).toBeGreaterThan(0)
   })
 
+  it('does not register duplicate browser handlers when initialized twice (PF-08)', async () => {
+    const { fakeBrowser, initializeListeners, mocks } =
+      await loadBackgroundHandlers()
+
+    initializeListeners()
+    const listenerCounts = browserListenerCounts(fakeBrowser)
+    initializeListeners()
+
+    expect(browserListenerCounts(fakeBrowser)).toEqual(listenerCounts)
+    expect(mocks.initializeSessionTreePort).toHaveBeenCalledOnce()
+  })
+
+  it('contains rejected asynchronous browser listeners instead of leaking unhandled promises (PF-11)', async () => {
+    const { fakeBrowser, initializeListeners, mocks } =
+      await loadBackgroundHandlers()
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    mocks.isNewWindowExtensionGenerated.mockRejectedValueOnce(
+      new Error('window lookup failed'),
+    )
+    mocks.tabGroupMoved.mockRejectedValueOnce(new Error('group query failed'))
+    initializeListeners()
+
+    await expect(
+      Promise.resolve(
+        fakeBrowser.windows.onCreated.listeners[0]({
+          id: 30,
+          type: 'normal',
+          incognito: false,
+          tabs: [],
+        } as browser.windows.Window),
+      ),
+    ).resolves.toBeUndefined()
+    await expect(
+      Promise.resolve(
+        fakeBrowser.tabGroups.onMoved.listeners[0]({
+          id: 7,
+          windowId: 30,
+          title: 'Rejected group',
+          color: 'blue',
+          collapsed: false,
+        }),
+      ),
+    ).resolves.toBeUndefined()
+
+    expect(consoleError).toHaveBeenCalledWith(
+      'Background window-created listener failed:',
+      expect.any(Error),
+    )
+    expect(consoleError).toHaveBeenCalledWith(
+      'Background tab-group-moved listener failed:',
+      expect.any(Error),
+    )
+  })
+
   it('saves a deleted group when its grouped tab removals arrive in either event order', async () => {
     vi.useFakeTimers()
     const { fakeBrowser, initializeListeners, mocks, settings } =
@@ -1965,3 +2019,31 @@ describe('background handlers', () => {
     )
   })
 })
+
+function browserListenerCounts(
+  fakeBrowser: Awaited<
+    ReturnType<typeof loadBackgroundHandlers>
+  >['fakeBrowser'],
+) {
+  return {
+    browserActionClicked: fakeBrowser.browserAction.onClicked.listeners.length,
+    menuHidden: fakeBrowser.menus.onHidden.listeners.length,
+    runtimeInstalled: fakeBrowser.runtime.onInstalled.listeners.length,
+    runtimeMessage: fakeBrowser.runtime.onMessage.listeners.length,
+    runtimeStartup: fakeBrowser.runtime.onStartup.listeners.length,
+    tabActivated: fakeBrowser.tabs.onActivated.listeners.length,
+    tabAttached: fakeBrowser.tabs.onAttached.listeners.length,
+    tabCreated: fakeBrowser.tabs.onCreated.listeners.length,
+    tabDetached: fakeBrowser.tabs.onDetached.listeners.length,
+    tabMoved: fakeBrowser.tabs.onMoved.listeners.length,
+    tabRemoved: fakeBrowser.tabs.onRemoved.listeners.length,
+    tabUpdated: fakeBrowser.tabs.onUpdated.listeners.length,
+    groupCreated: fakeBrowser.tabGroups.onCreated.listeners.length,
+    groupMoved: fakeBrowser.tabGroups.onMoved.listeners.length,
+    groupRemoved: fakeBrowser.tabGroups.onRemoved.listeners.length,
+    groupUpdated: fakeBrowser.tabGroups.onUpdated.listeners.length,
+    windowCreated: fakeBrowser.windows.onCreated.listeners.length,
+    windowFocused: fakeBrowser.windows.onFocusChanged.listeners.length,
+    windowRemoved: fakeBrowser.windows.onRemoved.listeners.length,
+  }
+}
