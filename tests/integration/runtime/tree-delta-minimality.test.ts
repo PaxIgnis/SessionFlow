@@ -5,6 +5,7 @@ import { State } from '@/types/session-tree'
 import {
   createNote,
   createSeparator,
+  createTab,
   createWindow,
   resetTree,
 } from '../../helpers/tree-fixtures'
@@ -84,6 +85,64 @@ describe('minimal sufficient tree deltas', () => {
     emittedDeltas.length = 0
     Tree.toggleCollapseNote(parent.uid)
     expect(emittedDeltas.map((delta) => delta.op)).toEqual(['treeReplaced'])
+  })
+
+  it('emits one window snapshot when toggling a deeply nested tab', () => {
+    const parent = createTab('tab-parent' as UID, { isParent: true })
+    const child = createTab('tab-child' as UID, {
+      parentUid: parent.uid,
+      indentLevel: 2,
+      isParent: true,
+    })
+    const grandchild = createNote('note-grandchild' as UID, {
+      parentUid: child.uid,
+      indentLevel: 3,
+    })
+    const window = createWindow('window-1' as UID, [
+      parent,
+      child,
+      grandchild,
+    ])
+    Tree.recomputeSessionTree(false)
+
+    Tree.toggleCollapseTab(parent.uid)
+
+    expect(emittedDeltas).toEqual([
+      {
+        op: 'windowUpdated',
+        window: expect.objectContaining({
+          uid: window.uid,
+          children: [
+            expect.objectContaining({ uid: parent.uid, collapsed: true }),
+            expect.objectContaining({ uid: child.uid, isVisible: false }),
+            expect.objectContaining({
+              uid: grandchild.uid,
+              isVisible: false,
+            }),
+          ],
+        }),
+      },
+    ])
+
+    emittedDeltas.length = 0
+    Tree.toggleCollapseTab(parent.uid)
+
+    expect(emittedDeltas).toEqual([
+      {
+        op: 'windowUpdated',
+        window: expect.objectContaining({
+          uid: window.uid,
+          children: [
+            expect.objectContaining({ uid: parent.uid, collapsed: false }),
+            expect.objectContaining({ uid: child.uid, isVisible: true }),
+            expect.objectContaining({
+              uid: grandchild.uid,
+              isVisible: true,
+            }),
+          ],
+        }),
+      },
+    ])
   })
 
   it('emits one replacement when expanding a top-level note hierarchy', () => {

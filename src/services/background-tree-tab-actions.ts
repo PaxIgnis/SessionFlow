@@ -893,11 +893,11 @@ export function toggleCollapseTab(
     return
   }
 
-  Tree.updateTab({ tabUid: tab.uid }, { collapsed: !tab.collapsed }, emitDelta)
+  Tree.updateTab({ tabUid: tab.uid }, { collapsed: !tab.collapsed }, false)
 
   if (tab.collapsed) {
     // hiding this tab's subtree
-    Tree.setItemChildrenVisibility(tab.uid, window.children, false, emitDelta)
+    Tree.setItemChildrenVisibility(tab.uid, window.children, false, false)
   } else {
     // before showing children, ensure no ancestor is collapsed
     let ancestorCollapsed = false
@@ -916,8 +916,15 @@ export function toggleCollapseTab(
     }
 
     if (!ancestorCollapsed) {
-      Tree.setItemChildrenVisibility(tab.uid, window.children, true, emitDelta)
+      Tree.setItemChildrenVisibility(tab.uid, window.children, true, false)
     }
+  }
+
+  if (emitDelta) {
+    emitTreeDelta({
+      op: 'windowUpdated',
+      window: structuredClone(window),
+    })
   }
 }
 
