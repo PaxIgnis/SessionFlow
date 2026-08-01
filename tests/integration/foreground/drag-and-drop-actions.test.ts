@@ -180,6 +180,94 @@ describe('drag-and-drop onDrop command path', () => {
     expect(DragAndDrop.dragState.isValidDropTarget).toBe(false)
   })
 
+  it('marks an unpinned saved tab drop above a pinned tab invalid', () => {
+    const pinned = makeForegroundTab('tab-pinned' as UID, { pinned: true })
+    const saved = makeForegroundTab('tab-saved' as UID, {
+      state: State.SAVED,
+      pinned: false,
+    })
+    const window = makeForegroundWindow('window-1' as UID, [pinned, saved])
+    resetForegroundTree([window])
+    DragAndDrop.dragInfo = { dragType: DragType.TAB, items: [saved] }
+    const target = createFakeDragTarget({ id: pinned.uid, type: 'tab' })
+    const event = createFakeDragEvent({ target, yRatio: 0.1 })
+
+    DragAndDrop.onDragMove(event)
+
+    expect(event.dataTransfer?.dropEffect).toBe('none')
+    expect(DragAndDrop.dragState.isValidDropTarget).toBe(false)
+
+    DragAndDrop.onDrop(event)
+
+    expect(moveTreeItems).not.toHaveBeenCalled()
+  })
+
+  it('allows an unpinned saved tab drop after the final pinned tab', () => {
+    const pinned = makeForegroundTab('tab-pinned' as UID, { pinned: true })
+    const saved = makeForegroundTab('tab-saved' as UID, {
+      state: State.SAVED,
+      pinned: false,
+    })
+    const window = makeForegroundWindow('window-1' as UID, [pinned, saved])
+    resetForegroundTree([window])
+    DragAndDrop.dragInfo = { dragType: DragType.TAB, items: [saved] }
+    const target = createFakeDragTarget({ id: pinned.uid, type: 'tab' })
+    const event = createFakeDragEvent({ target, yRatio: 0.9 })
+
+    DragAndDrop.onDragMove(event)
+
+    expect(event.dataTransfer?.dropEffect).toBe('move')
+    expect(DragAndDrop.dragState.isValidDropTarget).toBe(true)
+
+    DragAndDrop.onDrop(event)
+
+    expect(moveTreeItems).toHaveBeenCalledOnce()
+  })
+
+  it('allows an unpinned saved tab to be dropped into a window with pinned tabs', () => {
+    const pinned = makeForegroundTab('tab-pinned' as UID, { pinned: true })
+    const saved = makeForegroundTab('tab-saved' as UID, {
+      state: State.SAVED,
+      pinned: false,
+    })
+    const window = makeForegroundWindow('window-1' as UID, [pinned, saved])
+    resetForegroundTree([window])
+    DragAndDrop.dragInfo = { dragType: DragType.TAB, items: [saved] }
+    const target = createFakeDragTarget({ id: window.uid, type: 'window' })
+    const event = createFakeDragEvent({ target, yRatio: 0.5 })
+
+    DragAndDrop.onDragMove(event)
+
+    expect(event.dataTransfer?.dropEffect).toBe('move')
+    expect(DragAndDrop.dragState.isValidDropTarget).toBe(true)
+
+    DragAndDrop.onDrop(event)
+
+    expect(moveTreeItems).toHaveBeenCalledOnce()
+  })
+
+  it('marks a pinned saved tab drop after an unpinned tab invalid', () => {
+    const pinned = makeForegroundTab('tab-pinned' as UID, {
+      state: State.SAVED,
+      pinned: true,
+    })
+    const unpinned = makeForegroundTab('tab-unpinned' as UID)
+    const window = makeForegroundWindow('window-1' as UID, [pinned, unpinned])
+    resetForegroundTree([window])
+    DragAndDrop.dragInfo = { dragType: DragType.TAB, items: [pinned] }
+    const target = createFakeDragTarget({ id: unpinned.uid, type: 'tab' })
+    const event = createFakeDragEvent({ target, yRatio: 0.9 })
+
+    DragAndDrop.onDragMove(event)
+
+    expect(event.dataTransfer?.dropEffect).toBe('none')
+    expect(DragAndDrop.dragState.isValidDropTarget).toBe(false)
+
+    DragAndDrop.onDrop(event)
+
+    expect(moveTreeItems).not.toHaveBeenCalled()
+  })
+
   it('allows an Alt-copy of an open tab across the normal/private boundary', () => {
     const tab = makeForegroundTab('tab-1' as UID, { state: State.OPEN })
     const sourceWindow = makeForegroundWindow('window-normal' as UID, [tab], {

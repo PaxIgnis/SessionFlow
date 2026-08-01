@@ -1505,7 +1505,17 @@ function moveNonTabTreeItems(
     }
   }
 
-  const movingItems = moveBlocks.flatMap((block) => block.items)
+  const orderedMoveBlocks = orderTabMoveBlocksByPinnedState(moveBlocks)
+  const movingItems = orderedMoveBlocks.flatMap((block) => block.items)
+  const pinnedBoundaryIndex = pinnedBoundaryInsertionIndex(
+    destination.children,
+    adjustedTargetIndex,
+    movingItems,
+  )
+  if (pinnedBoundaryIndex !== adjustedTargetIndex) {
+    adjustedTargetIndex = pinnedBoundaryIndex
+    destination = getContainerForParent(undefined, targetWindowUid)
+  }
   const movedItemUids = new Set(movingItems.map((item) => item.uid))
   destination.children.splice(adjustedTargetIndex, 0, ...movingItems)
 
@@ -1535,6 +1545,49 @@ function moveNonTabTreeItems(
     treeItems: structuredClone(Tree.Items),
   })
   return true
+}
+
+function pinnedBoundaryInsertionIndex(
+  destinationItems: TreeItem[],
+  requestedIndex: number,
+  movingItems: TreeItem[],
+): number {
+  const movingTabs = movingItems.filter(
+    (item): item is Tab => item.type === TreeItemType.TAB,
+  )
+  if (movingTabs.length === 0) return requestedIndex
+
+  if (movingTabs.some((tab) => !tab.pinned)) {
+    const lastPinnedIndex = destinationItems.findLastIndex(
+      (item) => item.type === TreeItemType.TAB && item.pinned,
+    )
+    return Math.max(requestedIndex, lastPinnedIndex + 1)
+  }
+
+  const firstUnpinnedIndex = destinationItems.findIndex(
+    (item) => item.type === TreeItemType.TAB && !item.pinned,
+  )
+  return firstUnpinnedIndex === -1
+    ? requestedIndex
+    : Math.min(requestedIndex, firstUnpinnedIndex)
+}
+
+function orderTabMoveBlocksByPinnedState(
+  moveBlocks: MoveBlock[],
+): MoveBlock[] {
+  const tabBlocks = moveBlocks
+    .filter(
+      (block): block is MoveBlock & { root: Tab } =>
+        block.root.type === TreeItemType.TAB,
+    )
+    .sort((a, b) => Number(!a.root.pinned) - Number(!b.root.pinned))
+  let tabBlockIndex = 0
+
+  return moveBlocks.map((block) =>
+    block.root.type === TreeItemType.TAB
+      ? tabBlocks[tabBlockIndex++]
+      : block,
+  )
 }
 
 /**

@@ -709,7 +709,7 @@ function handleExternalDrop(e: DragEvent): void {
   }
 
   updateDropTarget(e, DragType.TAB, true)
-  const destination = getExternalTabDropDestination()
+  const destination = getTabDropDestination()
   if (!DragAndDrop.dragState.isValidDropTarget || !destination) {
     reset()
     return
@@ -734,7 +734,7 @@ function handleExternalDrop(e: DragEvent): void {
   reset()
 }
 
-function getExternalTabDropDestination(): {
+function getTabDropDestination(): {
   dropIndex: number
   dropParentUid?: UID
   targetWindowUid?: UID
@@ -881,6 +881,45 @@ function getExternalTabDropDestination(): {
   }
 
   return null
+}
+
+function violatesPinnedTabOrder(draggedItems: TreeItem[]): boolean {
+  const destination = getTabDropDestination()
+  const targetWindow = destination?.targetWindowUid
+    ? SessionTree.windowsByUid.get(destination.targetWindowUid)
+    : undefined
+  if (!destination || !targetWindow) return false
+
+  if (
+    DragAndDrop.dragState.destinationType === DropType.WINDOW &&
+    DragAndDrop.dragState.dropPosition === DropPosition.MID
+  ) {
+    return false
+  }
+
+  const draggedTabs = draggedItems.filter(
+    (item): item is Tab => item.type === TreeItemType.TAB,
+  )
+  if (draggedTabs.length === 0) return false
+
+  const draggedUids = new Set(draggedItems.map((item) => item.uid))
+  const removedBeforeTarget = targetWindow.children
+    .slice(0, destination.dropIndex)
+    .filter((item) => draggedUids.has(item.uid)).length
+  const insertionIndex = destination.dropIndex - removedBeforeTarget
+  const remainingItems = targetWindow.children.filter(
+    (item) => !draggedUids.has(item.uid),
+  )
+
+  if (draggedTabs.some((tab) => !tab.pinned)) {
+    return remainingItems
+      .slice(insertionIndex)
+      .some((item) => item.type === TreeItemType.TAB && item.pinned)
+  }
+
+  return remainingItems
+    .slice(0, insertionIndex)
+    .some((item) => item.type === TreeItemType.TAB && !item.pinned)
 }
 
 function showDropIndicator(
@@ -1288,6 +1327,9 @@ function updateDropTarget(
   }
 
   DragAndDrop.dragState.dropPosition = dropPosition
+  if (sourceType === DragType.TAB && violatesPinnedTabOrder(draggedItems)) {
+    return
+  }
   DragAndDrop.dragState.isValidDropTarget = true
 }
 

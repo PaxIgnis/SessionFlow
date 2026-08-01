@@ -20,6 +20,102 @@ describe('moveTreeItems', () => {
     Settings.values.allowDropOntoDescendantItems = true
   })
 
+  it('keeps an unpinned saved tab after pinned tabs in the same window', async () => {
+    const pinned = createTab('tab-pinned' as UID, { pinned: true })
+    const tail = createTab('tab-tail' as UID)
+    const saved = createTab('tab-saved' as UID)
+    const window = createWindow('window-1' as UID, [pinned, tail, saved])
+
+    await Tree.moveTreeItems(
+      [saved.uid],
+      0,
+      undefined,
+      window.uid,
+      false,
+      false,
+    )
+
+    expect(window.children.map((item) => item.uid)).toEqual([
+      pinned.uid,
+      saved.uid,
+      tail.uid,
+    ])
+    expectTreeInvariants()
+  })
+
+  it('keeps an unpinned saved tab after pinned tabs across windows', async () => {
+    const saved = createTab('tab-saved' as UID)
+    const sourceWindow = createWindow('window-source' as UID, [saved])
+    const pinned = createTab('tab-pinned' as UID, { pinned: true })
+    const tail = createTab('tab-tail' as UID)
+    const targetWindow = createWindow('window-target' as UID, [pinned, tail])
+
+    await Tree.moveTreeItems(
+      [saved.uid],
+      0,
+      undefined,
+      targetWindow.uid,
+      false,
+      false,
+    )
+
+    expect(targetWindow.children.map((item) => item.uid)).toEqual([
+      pinned.uid,
+      saved.uid,
+      tail.uid,
+    ])
+    expect(Tree.windowsByUid.has(sourceWindow.uid)).toBe(false)
+    expectTreeInvariants()
+  })
+
+  it('keeps a pinned saved tab before unpinned tabs', async () => {
+    const pinned = createTab('tab-pinned' as UID, { pinned: true })
+    const unpinned = createTab('tab-unpinned' as UID)
+    const window = createWindow('window-1' as UID, [pinned, unpinned])
+
+    await Tree.moveTreeItems(
+      [pinned.uid],
+      window.children.length,
+      undefined,
+      window.uid,
+      false,
+      false,
+    )
+
+    expect(window.children.map((item) => item.uid)).toEqual([
+      pinned.uid,
+      unpinned.uid,
+    ])
+    expectTreeInvariants()
+  })
+
+  it('orders mixed saved tab selections pinned-first', async () => {
+    const unpinned = createTab('tab-unpinned' as UID)
+    const unpinnedWindow = createWindow('window-unpinned' as UID, [unpinned])
+    const pinned = createTab('tab-pinned' as UID, { pinned: true })
+    const pinnedWindow = createWindow('window-pinned' as UID, [pinned])
+    const tail = createTab('tab-tail' as UID)
+    const targetWindow = createWindow('window-target' as UID, [tail])
+
+    await Tree.moveTreeItems(
+      [unpinned.uid, pinned.uid],
+      0,
+      undefined,
+      targetWindow.uid,
+      false,
+      false,
+    )
+
+    expect(targetWindow.children.map((item) => item.uid)).toEqual([
+      pinned.uid,
+      unpinned.uid,
+      tail.uid,
+    ])
+    expect(Tree.windowsByUid.has(unpinnedWindow.uid)).toBe(false)
+    expect(Tree.windowsByUid.has(pinnedWindow.uid)).toBe(false)
+    expectTreeInvariants()
+  })
+
   it('copies a live tab subtree as saved items without changing browser or source state', async () => {
     const fakeBrowser = installFakeBrowser()
     const sourceGroup = {
