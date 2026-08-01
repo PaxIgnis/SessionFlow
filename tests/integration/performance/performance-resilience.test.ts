@@ -3,7 +3,12 @@ import { STORAGE_KEY } from '@/defaults/constants'
 import { DEFAULT_SETTINGS } from '@/defaults/settings'
 import { Tree } from '@/services/background-tree'
 import { Settings } from '@/services/settings'
-import { State, TreeItemType, Window } from '@/types/session-tree'
+import {
+  State,
+  TopLevelTreeItem,
+  TreeItemType,
+  Window,
+} from '@/types/session-tree'
 import { installFakeBrowser } from '../../helpers/fake-browser'
 import { resetTree } from '../../helpers/tree-fixtures'
 import { expectTreeInvariants } from '../../helpers/tree-invariants'
@@ -147,6 +152,7 @@ function buildLiveWindows(stored: Window[]): browser.windows.Window[] {
     type: 'normal',
     incognito: false,
     focused: windowIndex === 0,
+    alwaysOnTop: false,
     tabs: storedWindow.children.filter(Tree.isTab).map((tab, tabIndex) => ({
       id: 100_000 + windowIndex * 100 + tabIndex,
       windowId: 10_000 + windowIndex,
@@ -216,6 +222,12 @@ function buildMixedTree(
   }) as Window[]
 }
 
-function totalTreeItems(items: Window[]): number {
-  return items.reduce((total, window) => total + 1 + window.children.length, 0)
+function totalTreeItems(items: TopLevelTreeItem[]): number {
+  return items.reduce(
+    (total, item) =>
+      total +
+      1 +
+      (item.type === TreeItemType.WINDOW ? item.children.length : 0),
+    0,
+  )
 }

@@ -192,6 +192,38 @@ export async function grantFirefoxExtensionOrigins(extensionId, origins) {
   })
 }
 
+export async function setFirefoxExtensionPrivateBrowsingAllowed(
+  extensionId,
+  allowed,
+) {
+  return withFirefoxChromeContext(async () => {
+    const response = await executeFirefoxChromeScript(
+      async (id, shouldAllow) => {
+        const { ExtensionParent } = ChromeUtils.importESModule(
+          'resource://gre/modules/ExtensionParent.sys.mjs',
+        )
+        const { ExtensionPermissions } = ChromeUtils.importESModule(
+          'resource://gre/modules/ExtensionPermissions.sys.mjs',
+        )
+        const extension = ExtensionParent.GlobalManager.getExtension(id)
+        if (!extension) throw new Error(`Extension not found: ${id}`)
+        const permission = {
+          permissions: ['internal:privateBrowsingAllowed'],
+          origins: [],
+        }
+        if (shouldAllow) {
+          await ExtensionPermissions.add(id, permission, extension)
+        } else {
+          await ExtensionPermissions.remove(id, permission, extension)
+        }
+        return extension.privateBrowsingAllowed === shouldAllow
+      },
+      [extensionId, allowed],
+    )
+    return response.value
+  })
+}
+
 async function setFirefoxContext(context) {
   const response = await fetch(
     `${getWebDriverBaseUrl()}/session/${browser.sessionId}/moz/context`,

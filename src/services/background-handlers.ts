@@ -28,6 +28,7 @@ import {
 
 interface PendingDetachedTab {
   tab: Tab
+  sourceWindowIncognito: boolean
   token: symbol
 }
 
@@ -55,6 +56,26 @@ const pendingRemovedGroups = new Map<
     saveAllMembers: boolean
   }
 >()
+
+function commitPendingDetachedTab(
+  tabId: number,
+  pendingDetachedTab: PendingDetachedTab,
+): void {
+  const sourceWindow = Tree.Items.filter(Tree.isWindow).find(
+    (candidate) => candidate.uid === pendingDetachedTab.tab.windowUid,
+  )
+  const sourceTab = sourceWindow?.children.find(
+    (child) =>
+      child.type === TreeItemType.TAB &&
+      child.uid === pendingDetachedTab.tab.uid,
+  )
+  if (sourceTab?.type === TreeItemType.TAB) {
+    Tree.removeTab(sourceTab.uid)
+  }
+  if (pendingDetachedTabs.get(tabId)?.token === pendingDetachedTab.token) {
+    pendingDetachedTabs.delete(tabId)
+  }
+}
 const pendingGroupRemovalTimers = new Map<
   number,
   {
@@ -70,17 +91,22 @@ const FAVICON_RECHECK_DELAYS_MS = [100, 250, 500, 1_000]
 // ==============================
 // Event Listeners
 // ==============================
-let containerListenersInitialized = false
+const initializedContainerListenerApis = new WeakSet<object>()
 let listenersInitialized = false
 
 export function initializeContainerListeners(): void {
   const contextualIdentities = browser.contextualIdentities
-  if (containerListenersInitialized || !contextualIdentities) return
+  if (
+    !contextualIdentities ||
+    initializedContainerListenerApis.has(contextualIdentities)
+  ) {
+    return
+  }
 
   contextualIdentities.onCreated.addListener(Tree.containerCreated)
   contextualIdentities.onRemoved.addListener(Tree.containerRemoved)
   contextualIdentities.onUpdated.addListener(Tree.containerUpdated)
-  containerListenersInitialized = true
+  initializedContainerListenerApis.add(contextualIdentities)
 }
 
 export function initializeListeners() {
@@ -468,8 +494,19 @@ async function tabsOnCreated(tab: browser.tabs.Tab): Promise<void> {
       if (!window) {
         return
       }
+      let latestTab = tab
+      try {
+        latestTab = {
+          ...(await browser.tabs.get(tabId)),
+          id: tabId,
+          windowId,
+        }
+      } catch (error) {
+        console.debug('Failed to refresh created tab state:', error)
+      }
+      if (pendingTabCreations.get(tabId) !== creationToken) return
       await addBrowserTabToTrackedWindow(
-        { ...tab, id: tabId, windowId },
+        { ...latestTab, id: tabId, windowId },
         window,
       )
     }
@@ -977,9 +1014,9 @@ function tabsOnDetached(
   if (detachedTab.type !== TreeItemType.TAB) return
   pendingDetachedTabs.set(tabId, {
     tab: structuredClone(detachedTab),
+    sourceWindowIncognito: window.incognito,
     token: Symbol(`tab-detached-${tabId}`),
   })
-  Tree.removeTab(detachedTab.uid)
 }
 
 /**
@@ -1007,20 +1044,29 @@ async function tabsOnAttached(
     console.error('Tab or Window ID is undefined')
     return
   }
-  const pendingDetachedTab = pendingDetachedTabs.get(tabId)
-  const transferToken = pendingDetachedTab?.token
+  let pendingDetachedTab = pendingDetachedTabs.get(tabId)
+  let transferToken = pendingDetachedTab?.token
+  const refreshPendingDetachedTab = (): boolean => {
+    const latestPendingDetachedTab = pendingDetachedTabs.get(tabId)
+    if (
+      transferToken &&
+      latestPendingDetachedTab?.token !== transferToken
+    ) {
+      return false
+    }
+    if (!transferToken && latestPendingDetachedTab) {
+      pendingDetachedTab = latestPendingDetachedTab
+      transferToken = latestPendingDetachedTab.token
+    }
+    return true
+  }
   let window = Tree.Items.filter(Tree.isWindow).find(
     (w) => w.id === attachInfo.newWindowId,
   )
   if (!window) {
     SessionRestore.beginWindowClassification(attachInfo.newWindowId)
     await SessionRestore.waitForWindowClassification(attachInfo.newWindowId)
-    if (
-      transferToken &&
-      pendingDetachedTabs.get(tabId)?.token !== transferToken
-    ) {
-      return
-    }
+    if (!refreshPendingDetachedTab()) return
     window = Tree.Items.filter(Tree.isWindow).find(
       (w) => w.id === attachInfo.newWindowId,
     )
@@ -1029,6 +1075,16 @@ async function tabsOnAttached(
       return
     }
   }
+  if (
+    pendingDetachedTab &&
+    pendingDetachedTab.sourceWindowIncognito !== window.incognito
+  ) {
+    console.debug(
+      'Ignoring a browser tab transfer across the normal/private boundary:',
+      tabId,
+    )
+    return
+  }
   let tab: browser.tabs.Tab
   try {
     tab = await browser.tabs.get(tabId)
@@ -1036,14 +1092,19 @@ async function tabsOnAttached(
     console.error('Failed to read attached tab:', error)
     return
   }
-  if (
-    transferToken &&
-    pendingDetachedTabs.get(tabId)?.token !== transferToken
-  ) {
-    return
-  }
+  if (!refreshPendingDetachedTab()) return
   if (!tab) {
     console.error('Tab not found in window')
+    return
+  }
+  if (
+    tab.windowId !== undefined &&
+    tab.windowId !== attachInfo.newWindowId
+  ) {
+    console.debug(
+      'Ignoring a stale tab attachment whose tab is still in its source window:',
+      tabId,
+    )
     return
   }
 
@@ -1051,7 +1112,20 @@ async function tabsOnAttached(
   const existingTab = window.children.find(
     (t) => t.type === TreeItemType.TAB && t.id === tabId,
   )
-  if (existingTab) return
+  if (existingTab) {
+    if (
+      pendingDetachedTab &&
+      existingTab.uid !== pendingDetachedTab.tab.uid
+    ) {
+      commitPendingDetachedTab(tabId, pendingDetachedTab)
+    } else if (
+      transferToken &&
+      pendingDetachedTabs.get(tabId)?.token === transferToken
+    ) {
+      pendingDetachedTabs.delete(tabId)
+    }
+    return
+  }
 
   // get the id of the tab to the right in the browser
   let tabToRight: browser.tabs.Tab[]
@@ -1064,12 +1138,7 @@ async function tabsOnAttached(
     console.error('Failed to read attached tab position:', error)
     return
   }
-  if (
-    transferToken &&
-    pendingDetachedTabs.get(tabId)?.token !== transferToken
-  ) {
-    return
-  }
+  if (!refreshPendingDetachedTab()) return
   const tabToRightId = tabToRight.length > 0 ? tabToRight[0].id : undefined
   let targetTabIndex: number | undefined
   if (tabToRightId === undefined) {
@@ -1094,6 +1163,9 @@ async function tabsOnAttached(
   }
 
   const detachedSnapshot = pendingDetachedTab?.tab
+  if (pendingDetachedTab) {
+    commitPendingDetachedTab(tabId, pendingDetachedTab)
+  }
   const parentUid =
     detachedSnapshot?.parentUid &&
     window.children.some((child) => child.uid === detachedSnapshot.parentUid)
@@ -1314,6 +1386,8 @@ async function dispatchCommandNow(
     Tree.deselectAllItems()
   } else if (message.action === 'importExternalUrls') {
     await Tree.importExternalUrls(message)
+  } else if (message.action === 'moveFirefoxNativeTabs') {
+    await Tree.moveFirefoxNativeTabs(message)
   } else if (message.action === 'moveTreeItems') {
     await Tree.moveTreeItems(
       message.itemUIDs,

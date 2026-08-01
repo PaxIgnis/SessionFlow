@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '@/defaults/settings'
 import { FaviconService } from '@/services/favicons'
 import { Settings } from '@/services/settings'
+import type { FaviconCacheEntry } from '@/types/favicons'
 import { installFakeBrowser } from '../../helpers/fake-browser'
 
 describe('favicon service', () => {
@@ -500,6 +501,52 @@ describe('favicon service', () => {
     expect(saveCacheToStorage).toHaveBeenCalledTimes(1)
   })
 
+  it('chooses the lowest live tab ID consistently when one domain exposes different icons (PD-FR-05)', async () => {
+    const cache = new Map<string, FaviconCacheEntry>()
+    const service = new FaviconService(undefined, cache)
+    const updateFavicon = vi
+      .spyOn(service, 'updateFavicon')
+      .mockImplementation(async (faviconUrl, tab) => {
+        cache.set('same.test', {
+          url: 'same.test',
+          dataUrl: faviconUrl,
+          timestamp: 10_000,
+        })
+        expect(tab?.id).toBe(10)
+      })
+    vi.spyOn(service, 'saveCacheToStorage').mockResolvedValue(undefined)
+    const lowerId = {
+      id: 10,
+      url: 'https://same.test/lower',
+      favIconUrl: 'data:image/png;base64,bG93ZXI=',
+    } as browser.tabs.Tab
+    const higherId = {
+      id: 20,
+      url: 'https://same.test/higher',
+      favIconUrl: 'data:image/png;base64,aGlnaGVy',
+    } as browser.tabs.Tab
+
+    await service.refreshFavicons(
+      ['https://same.test/saved'],
+      1_000,
+      [higherId, lowerId],
+      10_000,
+    )
+    cache.get('same.test')!.timestamp = 1
+    await service.refreshFavicons(
+      ['https://same.test/saved'],
+      1_000,
+      [lowerId, higherId],
+      20_000,
+    )
+
+    expect(updateFavicon).toHaveBeenCalledTimes(2)
+    expect(updateFavicon.mock.calls.map(([faviconUrl]) => faviconUrl)).toEqual([
+      lowerId.favIconUrl,
+      lowerId.favIconUrl,
+    ])
+  })
+
   it('keeps an expired cached icon when its refresh fails', async () => {
     const oldEntry = {
       url: 'example.test',
@@ -810,13 +857,11 @@ describe('favicon service', () => {
     } as browser.tabs.Tab)
     vi.stubGlobal(
       'fetch',
-      vi
-        .fn()
-        .mockResolvedValue(
-          fetchedImageResponse(new Blob([PNG_HEADER], { type: 'image/png' }), {
-            url: 'blob:https://page.example/123',
-          }),
-        ),
+      vi.fn().mockResolvedValue(
+        fetchedImageResponse(new Blob([PNG_HEADER], { type: 'image/png' }), {
+          url: 'blob:https://page.example/123',
+        }),
+      ),
     )
     await service.updateFavicon('blob:https://page.example/123', {
       url: 'https://blob.example/page',

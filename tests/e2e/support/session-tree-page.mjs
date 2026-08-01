@@ -577,6 +577,10 @@ export class SessionTreePage {
         const clientY = Math.floor(getDropClientY(targetRect, dropPosition))
 
         const dispatchDragEvent = (element, type) => {
+          const altKey =
+            type === 'drop'
+              ? (dragOptions.dropAltKey ?? dragOptions.altKey) === true
+              : (dragOptions.moveAltKey ?? dragOptions.altKey) === true
           element.dispatchEvent(
             new DragEvent(type, {
               bubbles: true,
@@ -584,7 +588,7 @@ export class SessionTreePage {
               clientX,
               clientY,
               dataTransfer,
-              altKey: dragOptions.altKey === true,
+              altKey,
             }),
           )
         }
@@ -610,6 +614,78 @@ export class SessionTreePage {
       source,
       target,
       position,
+      options,
+    )
+  }
+
+  async dropExternalData(targetText, position, data, options = {}) {
+    const target = targetText
+      ? await this.treeItemByText(targetText)
+      : await $('.tree-end-drop-target')
+    await expect(target).toBeDisplayed()
+
+    return browser.execute(
+      (targetElement, dropPosition, payload, dropOptions) => {
+        const dataTransfer = new DataTransfer()
+        for (const [type, value] of Object.entries(payload)) {
+          dataTransfer.setData(type, value)
+        }
+        let firefoxNativeTypeExposed = false
+        if (
+          dropOptions.firefoxTabId !== undefined &&
+          typeof dataTransfer.mozSetDataAt === 'function'
+        ) {
+          try {
+            dataTransfer.mozSetDataAt(
+              'application/x-moz-tabbrowser-tab',
+              { tabId: dropOptions.firefoxTabId },
+              0,
+            )
+            firefoxNativeTypeExposed = Array.from(dataTransfer.types).includes(
+              'application/x-moz-tabbrowser-tab',
+            )
+          } catch {
+            // Firefox prevents content scripts from forging this protected
+            // browser-chrome payload. Native moves are exercised through the
+            // background command after it revalidates the real Firefox tab ID.
+          }
+        }
+        const rect = targetElement.getBoundingClientRect()
+        const clientY =
+          dropPosition === 'above'
+            ? rect.top + 2
+            : dropPosition === 'below'
+              ? rect.bottom - 2
+              : rect.top + rect.height / 2
+        const eventOptions = {
+          bubbles: true,
+          cancelable: true,
+          clientX: rect.left + rect.width / 2,
+          clientY,
+          dataTransfer,
+        }
+        const dragEnterAccepted = !targetElement.dispatchEvent(
+          new DragEvent('dragenter', eventOptions),
+        )
+        const dragOverAccepted = !targetElement.dispatchEvent(
+          new DragEvent('dragover', eventOptions),
+        )
+        const dropAccepted = !targetElement.dispatchEvent(
+          new DragEvent('drop', eventOptions),
+        )
+        return {
+          dropEffect: dataTransfer.dropEffect,
+          firefoxNativeTypeExposed,
+          types: Array.from(dataTransfer.types),
+          plainText: dataTransfer.getData('text/plain'),
+          dragEnterAccepted,
+          dragOverAccepted,
+          dropAccepted,
+        }
+      },
+      target,
+      position,
+      data,
       options,
     )
   }

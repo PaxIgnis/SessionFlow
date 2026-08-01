@@ -158,6 +158,19 @@ describe('Firefox context-menu and presentation workflows', () => {
     await browser.switchToWindow(seed.handles[0])
     await openFixtureTab(seed, SESSION_FIXTURE_TITLES.alpha)
     await browser.switchToWindow(popup.popupHandle)
+    await sessionTree.waitForBackgroundTree(
+      (tree) =>
+        tree.some(
+          (item) =>
+            item.type === 0 &&
+            item.children.some(
+              (child) =>
+                child.type === 1 &&
+                child.title.includes(SESSION_FIXTURE_TITLES.alpha),
+            ),
+        ),
+      'Expected the mixed-selection live fixture in the background tree.',
+    )
     await sessionTree.waitForItemTextVisible(SESSION_FIXTURE_TITLES.alpha)
 
     let savedTab

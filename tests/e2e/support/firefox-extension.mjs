@@ -15,6 +15,19 @@ export async function installSessionFlowAddon() {
 }
 
 async function installAddOnWithPrivateBrowsing(addon) {
+  const persistentResult = await requestAddOnInstall(addon, false)
+  if (persistentResult.ok) return persistentResult.value
+
+  if (!persistentResult.message.includes('ERROR_SIGNEDSTATE_REQUIRED')) {
+    throw new Error(persistentResult.message)
+  }
+
+  const temporaryResult = await requestAddOnInstall(addon, true)
+  if (!temporaryResult.ok) throw new Error(temporaryResult.message)
+  return temporaryResult.value
+}
+
+async function requestAddOnInstall(addon, temporary) {
   const { hostname, path: basePath = '/', port, protocol } = browser.options
   const normalizedBasePath = basePath.endsWith('/')
     ? basePath.slice(0, -1)
@@ -25,18 +38,20 @@ async function installAddOnWithPrivateBrowsing(addon) {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       addon,
-      temporary: false,
+      temporary,
       allowPrivateBrowsing: true,
     }),
   })
   const payload = await response.json()
   if (!response.ok || payload.value?.error) {
-    throw new Error(
-      payload.value?.message ||
+    return {
+      ok: false,
+      message:
+        payload.value?.message ||
         `Firefox add-on installation failed with HTTP ${response.status}.`,
-    )
+    }
   }
-  return payload.value
+  return { ok: true, value: payload.value }
 }
 
 async function findFirefoxExtensionPackage() {

@@ -21,6 +21,7 @@ import {
 const moveTabs = vi.hoisted(() => vi.fn())
 const moveTreeItems = vi.hoisted(() => vi.fn())
 const moveWindows = vi.hoisted(() => vi.fn())
+const moveFirefoxNativeTabs = vi.hoisted(() => vi.fn())
 const importExternalUrls = vi.hoisted(() => vi.fn())
 
 const childInclusionSettings = [
@@ -31,6 +32,7 @@ const childInclusionSettings = [
 
 vi.mock('@/services/foreground-messages', () => ({
   importExternalUrls,
+  moveFirefoxNativeTabs,
   moveTabs,
   moveTreeItems,
   moveWindows,
@@ -109,6 +111,50 @@ describe('drag-and-drop onDrop command path', () => {
       false,
     )
   })
+
+  it.each([
+    {
+      label: 'copy is disabled before drop',
+      initialSetting: true,
+      finalSetting: false,
+      expectedCopy: false,
+    },
+    {
+      label: 'copy is enabled before drop',
+      initialSetting: false,
+      finalSetting: true,
+      expectedCopy: true,
+    },
+  ])(
+    'uses the final Alt and copy-setting state when $label (PD-CP-01)',
+    ({ initialSetting, finalSetting, expectedCopy }) => {
+      const tab = makeForegroundTab('tab-1' as UID)
+      const window = makeForegroundWindow('window-1' as UID, [tab])
+      resetForegroundTree([window])
+      DragAndDrop.dragInfo = { dragType: DragType.TAB, items: [tab] }
+      const target = createFakeDragTarget({ id: window.uid, type: 'window' })
+      const event = createFakeDragEvent({
+        target,
+        yRatio: 0.5,
+        altKey: true,
+      })
+      Settings.values.enableCopyOnDragAndDrop = initialSetting
+
+      DragAndDrop.onDragMove(event)
+      Settings.values.enableCopyOnDragAndDrop = finalSetting
+      DragAndDrop.onDrop(event)
+
+      expect(moveTreeItems).toHaveBeenCalledWith(
+        [tab.uid],
+        0,
+        undefined,
+        window.uid,
+        expectedCopy,
+        false,
+      )
+      expect(moveTreeItems).toHaveBeenCalledOnce()
+    },
+  )
 
   it('marks an open-tab move across the normal/private boundary invalid', () => {
     const tab = makeForegroundTab('tab-1' as UID, { state: State.OPEN })
@@ -781,15 +827,65 @@ describe('drag-and-drop onDrop command path', () => {
 
     DragAndDrop.onDrop(event)
 
-    expect(moveTreeItems).toHaveBeenCalledWith(
-      [draggedTab.uid],
+    expect(moveFirefoxNativeTabs).toHaveBeenCalledWith(
+      [draggedTab.id],
       2,
       targetTab.uid,
       window.uid,
-      false,
-      false,
     )
+    expect(moveTreeItems).not.toHaveBeenCalled()
     expect(importExternalUrls).not.toHaveBeenCalled()
+  })
+
+  it('blocks a native-tab move across the private boundary but permits a URL-copy import (PD-ED-06)', () => {
+    const draggedTab = makeForegroundTab('tab-dragged' as UID, {
+      id: 42,
+      state: State.OPEN,
+    })
+    const sourceWindow = makeForegroundWindow(
+      'window-normal' as UID,
+      [draggedTab],
+      { incognito: false, state: State.OPEN },
+    )
+    const targetWindow = makeForegroundWindow('window-private' as UID, [], {
+      incognito: true,
+      state: State.OPEN,
+    })
+    resetForegroundTree([sourceWindow, targetWindow])
+    DragAndDrop.dragState.dragEventStarted = false
+    Settings.values.enableDropFromExternalSources = true
+    const target = createFakeDragTarget({
+      id: targetWindow.uid,
+      type: 'window',
+    })
+
+    DragAndDrop.onDrop(
+      createFakeDragEvent({
+        target,
+        yRatio: 0.5,
+        data: { 'text/x-moz-text-internal': draggedTab.url },
+        types: ['application/x-moz-tabbrowser-tab', 'text/x-moz-text-internal'],
+        mozItems: [{ tabId: draggedTab.id }],
+      }),
+    )
+
+    expectNoMoveCommands()
+    expect(importExternalUrls).not.toHaveBeenCalled()
+
+    DragAndDrop.onDrop(
+      createFakeDragEvent({
+        target,
+        yRatio: 0.5,
+        data: { 'text/uri-list': draggedTab.url },
+      }),
+    )
+
+    expect(importExternalUrls).toHaveBeenCalledWith(
+      [{ url: draggedTab.url }],
+      0,
+      undefined,
+      targetWindow.uid,
+    )
   })
 
   it('rejects dropping a reliably identified native Firefox tab onto itself', () => {
@@ -968,6 +1064,10 @@ describe('drag-and-drop onDrop command path', () => {
     const enterEvent = createFakeDragEvent({ target, yRatio: 0.5 })
     const moveEvent = createFakeDragEvent({ target, yRatio: 0.5 })
     const leaveEvent = createFakeDragEvent({ target, yRatio: 0.5 })
+    const dropEvent = createFakeDragEvent({ target, yRatio: 0.5 })
+    if (dropEvent.dataTransfer) dropEvent.dataTransfer.dropEffect = 'copy'
+    target.classList.add('drag-over-mid')
+    DragAndDrop.dragState.prevEl = target as unknown as HTMLElement
     DragAndDrop.dragState.dragEventStarted = false
     DragAndDrop.dragState.destinationId = 'window-1' as UID
     DragAndDrop.dragState.isValidDropTarget = true
@@ -976,10 +1076,13 @@ describe('drag-and-drop onDrop command path', () => {
     DragAndDrop.onDragEnter(enterEvent)
     DragAndDrop.onDragMove(moveEvent)
     DragAndDrop.onDragLeave(leaveEvent)
+    DragAndDrop.onDrop(dropEvent)
 
     expect(enterEvent.dataTransfer?.dropEffect).toBe('none')
     expect(moveEvent.dataTransfer?.dropEffect).toBe('none')
     expect(leaveEvent.dataTransfer?.dropEffect).toBe('none')
+    expect(dropEvent.dataTransfer?.dropEffect).toBe('none')
+    expect(target.classList.contains('drag-over-mid')).toBe(false)
     expect(DragAndDrop.dragState.destinationId).toBeNull()
     expect(DragAndDrop.dragState.isValidDropTarget).toBe(false)
   })
@@ -2649,6 +2752,7 @@ describe('drag-and-drop onDrop command path', () => {
 })
 
 function expectNoMoveCommands(): void {
+  expect(moveFirefoxNativeTabs).not.toHaveBeenCalled()
   expect(moveTabs).not.toHaveBeenCalled()
   expect(moveTreeItems).not.toHaveBeenCalled()
   expect(moveWindows).not.toHaveBeenCalled()

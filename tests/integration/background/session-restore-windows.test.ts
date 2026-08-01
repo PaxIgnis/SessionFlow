@@ -453,6 +453,117 @@ describe('Firefox-restored windows', () => {
     ).toBe(true)
   })
 
+  it('claims a duplicated child UID at most once and adds the other browser tab fresh (PD-SR-07)', async () => {
+    const savedTab = createTab('tab-saved' as UID, {
+      id: -1,
+      state: State.SAVED,
+    })
+    const savedWindow = createWindow('window-saved' as UID, [savedTab], {
+      id: -1,
+      state: State.SAVED,
+    })
+    const first = browserTab(101, 0)
+    const second = browserTab(102, 1)
+    vi.mocked(browser.sessions.getWindowValue).mockResolvedValue({
+      version: 1,
+      uid: savedWindow.uid,
+    })
+    vi.mocked(browser.sessions.getTabValue).mockResolvedValue({
+      version: 1,
+      uid: savedTab.uid,
+    })
+    vi.mocked(browser.windows.get).mockResolvedValue({
+      alwaysOnTop: false,
+      id: 30,
+      focused: true,
+      incognito: false,
+      tabs: [first, second],
+    })
+
+    await expect(
+      handleCreatedWindow({ id: 30 } as browser.windows.Window),
+    ).resolves.toBe(true)
+
+    expect(savedTab.id).toBe(101)
+    expect(
+      Tree.getTabs(savedWindow.children).filter((tab) => tab.id === 101),
+    ).toHaveLength(1)
+    const fresh = Tree.getTabs(savedWindow.children).find(
+      (tab) => tab.id === 102,
+    )
+    expect(fresh?.uid).not.toBe(savedTab.uid)
+    expectTreeInvariants()
+  })
+
+  it('leaves a saved window untouched when a matched restored child has a missing container (PD-SR-06/PD-CT-06)', async () => {
+    const container = {
+      cookieStoreId: 'firefox-container-missing',
+      name: 'Work',
+      color: 'blue',
+      colorCode: '#37adff',
+      icon: 'briefcase',
+    }
+    const savedTab = createTab('tab-saved' as UID, {
+      id: -1,
+      state: State.SAVED,
+      container,
+    })
+    const savedWindow = createWindow('window-saved' as UID, [savedTab], {
+      id: -1,
+      state: State.SAVED,
+    })
+    vi.mocked(browser.sessions.getWindowValue).mockResolvedValue({
+      version: 1,
+      uid: savedWindow.uid,
+    })
+    vi.mocked(browser.sessions.getTabValue).mockResolvedValue({
+      version: 1,
+      uid: savedTab.uid,
+    })
+    vi.mocked(browser.windows.get).mockResolvedValue({
+      alwaysOnTop: false,
+      id: 30,
+      focused: true,
+      incognito: false,
+      tabs: [browserTab(101, 0, { cookieStoreId: 'firefox-default' })],
+    })
+
+    await expect(
+      handleCreatedWindow({ id: 30 } as browser.windows.Window),
+    ).resolves.toBe(false)
+
+    expect(savedWindow).toMatchObject({ id: -1, state: State.SAVED })
+    expect(savedTab).toMatchObject({ id: -1, state: State.SAVED, container })
+  })
+
+  it('does not claim a saved window when session identity stamping rejects (PD-SR-09)', async () => {
+    const savedWindow = createWindow('window-saved' as UID, [], {
+      id: -1,
+      state: State.SAVED,
+    })
+    vi.mocked(browser.sessions.getWindowValue).mockResolvedValue({
+      version: 1,
+      uid: savedWindow.uid,
+    })
+    vi.mocked(browser.sessions.setWindowValue).mockRejectedValue(
+      new Error('session write rejected'),
+    )
+    vi.mocked(browser.windows.get).mockResolvedValue({
+      alwaysOnTop: false,
+      id: 30,
+      focused: true,
+      incognito: false,
+      tabs: [],
+    })
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await expect(
+      handleCreatedWindow({ id: 30 } as browser.windows.Window),
+    ).resolves.toBe(false)
+
+    expect(savedWindow).toMatchObject({ id: -1, state: State.SAVED })
+  })
+
   it('restores saved browser order, pinning, and groups after window rebinding', async () => {
     const first = createTab('tab-first' as UID, {
       id: -1,

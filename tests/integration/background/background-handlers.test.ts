@@ -6,6 +6,7 @@ import {
   getDispatchCommand,
   loadBackgroundHandlers,
 } from '../../helpers/background-handler-harness'
+import { installFakeBrowser } from '../../helpers/fake-browser'
 import {
   LoadingStatus,
   State,
@@ -69,6 +70,23 @@ describe('background handlers', () => {
     expect(fakeBrowser.tabs.onCreated.listeners.length).toBeGreaterThan(0)
   })
 
+  it('registers each contextual-identities API once when availability changes (PD-CT-08)', async () => {
+    const { fakeBrowser, initializeListeners } = await loadBackgroundHandlers()
+    const firstApi = fakeBrowser.contextualIdentities
+    initializeListeners()
+    initializeListeners()
+    expect(firstApi.onCreated.listeners).toHaveLength(1)
+
+    const replacementApi = installFakeBrowser().contextualIdentities
+    initializeListeners()
+    initializeListeners()
+
+    expect(firstApi.onCreated.listeners).toHaveLength(1)
+    expect(replacementApi.onCreated.listeners).toHaveLength(1)
+    expect(replacementApi.onUpdated.listeners).toHaveLength(1)
+    expect(replacementApi.onRemoved.listeners).toHaveLength(1)
+  })
+
   it('does not register duplicate browser handlers when initialized twice (PF-08)', async () => {
     const { fakeBrowser, initializeListeners, mocks } =
       await loadBackgroundHandlers()
@@ -97,6 +115,8 @@ describe('background handlers', () => {
           id: 30,
           type: 'normal',
           incognito: false,
+          focused: false,
+          alwaysOnTop: false,
           tabs: [],
         } as browser.windows.Window),
       ),
@@ -559,6 +579,61 @@ describe('background handlers', () => {
       expect(mocks.tabGroupMembershipChanged).toHaveBeenCalledWith(10, 7)
     })
     expect(mocks.handleCreatedTab).not.toHaveBeenCalled()
+  })
+
+  it('refreshes a created tab before adding it to an existing window', async () => {
+    const { fakeBrowser, initializeListeners, mocks, setBrowserTabs } =
+      await loadBackgroundHandlers()
+    mocks.Items.push({
+      type: TreeItemType.WINDOW,
+      uid: 'window-1' as UID,
+      id: 30,
+      selected: false,
+      state: State.OPEN,
+      indentLevel: 0,
+      children: [],
+    })
+    mocks.addTab.mockReturnValue('tab-current' as UID)
+    setBrowserTabs(30, [
+      {
+        id: 10,
+        windowId: 30,
+        index: 0,
+        active: true,
+        discarded: false,
+        pinned: false,
+        status: 'complete',
+        title: 'Navigated title',
+        url: 'https://example.test/navigated',
+      } as browser.tabs.Tab,
+    ])
+    initializeListeners()
+
+    fakeBrowser.tabs.onCreated.emit({
+      id: 10,
+      windowId: 30,
+      index: 0,
+      active: true,
+      discarded: false,
+      pinned: false,
+      status: 'loading',
+      title: 'New Tab',
+      url: 'about:blank',
+    } as browser.tabs.Tab)
+
+    await vi.waitFor(() => {
+      expect(mocks.addTab).toHaveBeenCalledWith(
+        true,
+        'window-1',
+        10,
+        false,
+        State.OPEN,
+        'Navigated title',
+        'https://example.test/navigated',
+        false,
+        0,
+      )
+    })
   })
 
   it('inserts a late first browser tab at the first tree position', async () => {

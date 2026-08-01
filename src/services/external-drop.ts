@@ -184,10 +184,17 @@ function normalizeUrl(
   allowUrlSpecificSchemes: boolean,
 ): string | undefined {
   const trimmed = value.trim()
-  if (!trimmed || containsControlCharacters(trimmed)) return undefined
+  if (
+    !trimmed ||
+    containsControlCharacters(trimmed) ||
+    /%(?![\da-f]{2})/iu.test(trimmed)
+  ) {
+    return undefined
+  }
 
   try {
     const parsed = new URL(trimmed)
+    if (parsed.username || parsed.password) return undefined
     const allowedSchemes = allowUrlSpecificSchemes
       ? URL_SPECIFIC_SCHEMES
       : WEB_SCHEMES

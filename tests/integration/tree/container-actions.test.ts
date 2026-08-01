@@ -1,5 +1,9 @@
 import { Tree } from '@/services/background-tree'
-import { State, type ContainerMetadata } from '@/types/session-tree'
+import {
+  State,
+  type ContainerMetadata,
+  type Window,
+} from '@/types/session-tree'
 import { installFakeBrowser } from '../../helpers/fake-browser'
 import { createTab, createWindow, resetTree } from '../../helpers/tree-fixtures'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -234,5 +238,101 @@ describe('Firefox container actions', () => {
       ...identity,
       cookieStoreId: 'firefox-container-new',
     })
+  })
+
+  it('rolls back containers created before a later recreation rejects (PD-CT-04)', async () => {
+    const personal = {
+      ...identity,
+      cookieStoreId: 'firefox-container-personal',
+      name: 'Personal',
+    }
+    const replacement = {
+      ...identity,
+      cookieStoreId: 'firefox-container-new',
+    }
+    vi.mocked(fakeBrowser.contextualIdentities.query).mockResolvedValue([])
+    vi.mocked(fakeBrowser.contextualIdentities.create)
+      .mockResolvedValueOnce(replacement)
+      .mockRejectedValueOnce(new Error('Firefox refused recreation'))
+    const workTab = createTab('tab-work' as UID, { container: identity })
+    const personalTab = createTab('tab-personal' as UID, {
+      container: personal,
+    })
+    createWindow('window-1' as UID, [workTab, personalTab])
+
+    await expect(
+      Tree.resolveContainerRecovery([workTab, personalTab], 'recreate', [
+        identity.cookieStoreId,
+        personal.cookieStoreId,
+      ]),
+    ).rejects.toThrow('Firefox refused recreation')
+
+    expect(fakeBrowser.contextualIdentities.remove).toHaveBeenCalledWith(
+      replacement.cookieStoreId,
+    )
+    expect(workTab.container).toEqual(identity)
+    expect(personalTab.container).toEqual(personal)
+    expect(
+      Tree.containerForCookieStore(replacement.cookieStoreId),
+    ).toBeUndefined()
+  })
+
+  it('keeps identical-looking containers distinct by cookieStoreId (PD-CT-03)', async () => {
+    const twin = {
+      ...identity,
+      cookieStoreId: 'firefox-container-twin',
+    }
+    vi.mocked(fakeBrowser.contextualIdentities.query).mockResolvedValue([
+      identity,
+      twin,
+    ])
+    await Tree.initializeContainers()
+    const first = createTab('tab-first' as UID, { container: identity })
+    const second = createTab('tab-second' as UID, { container: twin })
+    const window = createWindow('window-1' as UID, [first, second])
+
+    await Tree.duplicateTreeItems([window.uid])
+
+    const clonedWindow = Tree.Items[1] as Window
+    expect(
+      Tree.getTabs(clonedWindow.children).map(
+        (tab) => tab.container?.cookieStoreId,
+      ),
+    ).toEqual([identity.cookieStoreId, twin.cookieStoreId])
+    await expect(
+      Tree.resolveContainerRecovery([first, second]),
+    ).resolves.toEqual({ rollback: expect.any(Function) })
+  })
+
+  it('does not invent container metadata in a private window when identities are unavailable (PD-CT-07)', async () => {
+    vi.mocked(fakeBrowser.contextualIdentities.query).mockRejectedValue(
+      new Error('Unavailable in private browsing'),
+    )
+    const tab = createTab('tab-private' as UID, { container: undefined })
+    createWindow('window-private' as UID, [tab], { incognito: true })
+
+    await expect(Tree.resolveContainerRecovery([tab])).resolves.toEqual({
+      rollback: expect.any(Function),
+    })
+    expect(tab.container).toBeUndefined()
+    expect(fakeBrowser.contextualIdentities.create).not.toHaveBeenCalled()
+  })
+
+  it('does not reuse a removed store ID when an identical container is recreated (PD-CT-09)', async () => {
+    await Tree.initializeContainers()
+    const tab = createTab('tab-saved' as UID, { container: identity })
+    createWindow('window-1' as UID, [tab])
+    Tree.containerRemoved({ contextualIdentity: identity })
+    const recreated = {
+      ...identity,
+      cookieStoreId: 'firefox-container-recreated',
+    }
+    Tree.containerCreated({ contextualIdentity: recreated })
+
+    expect(tab.container?.cookieStoreId).toBe(identity.cookieStoreId)
+    expect(Tree.containerForCookieStore(identity.cookieStoreId)).toBeUndefined()
+    expect(Tree.containerForCookieStore(recreated.cookieStoreId)).toEqual(
+      recreated,
+    )
   })
 })

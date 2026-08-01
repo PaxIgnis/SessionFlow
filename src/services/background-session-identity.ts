@@ -30,30 +30,34 @@ export async function readWindowUid(
   }
 }
 
-export async function writeTabUid(tabId: number, uid: UID): Promise<void> {
+export async function writeTabUid(tabId: number, uid: UID): Promise<boolean> {
   try {
     await browser.sessions.setTabValue(
       tabId,
       TAB_UID_SESSION_KEY,
       identityValue(uid),
     )
+    return true
   } catch (error) {
     console.error('Failed to write Session Flow tab identity:', error)
+    return false
   }
 }
 
 export async function writeWindowUid(
   windowId: number,
   uid: UID,
-): Promise<void> {
+): Promise<boolean> {
   try {
     await browser.sessions.setWindowValue(
       windowId,
       WINDOW_UID_SESSION_KEY,
       identityValue(uid),
     )
+    return true
   } catch (error) {
     console.error('Failed to write Session Flow window identity:', error)
+    return false
   }
 }
 

@@ -128,7 +128,7 @@ export async function updateWindowTabs(windowId: number): Promise<void> {
         Tree.tabsByUid.set(tab.uid, tab)
         if (tab.id >= 0) void writeTabUid(tab.id, tab.uid)
       }
-      Tree.recomputeSessionTree()
+      Tree.recomputeSessionTree(false)
       emitTreeDelta({
         op: 'windowUpdated',
         window: structuredClone(window),

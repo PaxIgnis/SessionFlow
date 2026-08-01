@@ -194,6 +194,118 @@ describe('favicon refresh scheduler', () => {
     })
   })
 
+  it('registers one listener and performs one startup refresh across repeated initialization (PD-FR-01)', async () => {
+    Settings.values.refreshFaviconsAfterPeriodOfTime = true
+    const scheduler = new FaviconRefreshScheduler(faviconService, () => [
+      'https://example.test/saved',
+    ])
+
+    await Promise.all([scheduler.initialize(), scheduler.initialize()])
+
+    expect(fakeBrowser.alarms.onAlarm.listeners).toHaveLength(1)
+    expect(refreshFavicons).toHaveBeenCalledOnce()
+  })
+
+  it('does not let an in-flight refresh restore an obsolete alarm schedule (PD-FR-02)', async () => {
+    const scheduler = new FaviconRefreshScheduler(faviconService, () => [
+      'https://example.test/saved',
+    ])
+    await scheduler.initialize()
+    vi.mocked(browser.alarms.create).mockClear()
+    let finishRefresh!: () => void
+    refreshFavicons.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishRefresh = () => resolve([])
+        }),
+    )
+
+    Settings.values.refreshFaviconsAfterPeriodOfTime = true
+    Settings.values.faviconRefreshTiming = 'expiration-and-startup'
+    const enabling = scheduler.handleSettingsUpdated()
+    await vi.waitFor(() => expect(refreshFavicons).toHaveBeenCalledOnce())
+
+    Settings.values.refreshFaviconsAfterPeriodOfTime = false
+    await scheduler.handleSettingsUpdated()
+    finishRefresh()
+    await enabling
+
+    expect(browser.alarms.create).not.toHaveBeenCalled()
+  })
+
+  it('rechecks permission at alarm time and resumes only after permission and settings return (PD-FR-03)', async () => {
+    Settings.values.refreshFaviconsAfterPeriodOfTime = true
+    Settings.values.faviconRefreshTiming = 'expiration-and-startup'
+    const scheduler = new FaviconRefreshScheduler(faviconService, () => [
+      'https://example.test/saved',
+    ])
+    await scheduler.initialize()
+    refreshFavicons.mockClear()
+    vi.mocked(browser.alarms.create).mockClear()
+    hasFetchPermissions.mockResolvedValue(false)
+
+    fakeBrowser.alarms.onAlarm.emit({
+      name: FAVICON_REFRESH_ALARM_NAME,
+      scheduledTime: 1,
+    })
+    await vi.waitFor(() => expect(hasFetchPermissions).toHaveBeenCalled())
+
+    expect(refreshFavicons).not.toHaveBeenCalled()
+    expect(browser.alarms.create).not.toHaveBeenCalled()
+
+    Settings.values.refreshFaviconsAfterPeriodOfTime = false
+    await scheduler.handleSettingsUpdated()
+    hasFetchPermissions.mockResolvedValue(true)
+    Settings.values.refreshFaviconsAfterPeriodOfTime = true
+    await scheduler.handleSettingsUpdated()
+
+    expect(refreshFavicons).toHaveBeenCalledOnce()
+    expect(browser.alarms.create).toHaveBeenCalledOnce()
+  })
+
+  it('coalesces concurrent alarm refresh work into one cache update broadcast (PD-FR-04)', async () => {
+    Settings.values.refreshFaviconsAfterPeriodOfTime = true
+    Settings.values.faviconRefreshTiming = 'expiration-and-startup'
+    const scheduler = new FaviconRefreshScheduler(faviconService, () => [
+      'https://example.test/saved',
+    ])
+    await scheduler.initialize()
+    refreshFavicons.mockClear()
+    vi.mocked(browser.runtime.sendMessage).mockClear()
+    let finishRefresh!: () => void
+    refreshFavicons.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishRefresh = () =>
+            resolve([
+              {
+                url: 'example.test',
+                dataUrl: 'data:image/png;base64,new',
+                timestamp: 1,
+              },
+            ])
+        }),
+    )
+
+    fakeBrowser.alarms.onAlarm.emit({
+      name: FAVICON_REFRESH_ALARM_NAME,
+      scheduledTime: 1,
+    })
+    fakeBrowser.alarms.onAlarm.emit({
+      name: FAVICON_REFRESH_ALARM_NAME,
+      scheduledTime: 1,
+    })
+    await vi.waitFor(() => expect(refreshFavicons).toHaveBeenCalledOnce())
+    finishRefresh()
+    await vi.waitFor(() =>
+      expect(browser.runtime.sendMessage).toHaveBeenCalledWith({
+        type: 'FAVICON_CACHE_UPDATED',
+      }),
+    )
+
+    expect(browser.runtime.sendMessage).toHaveBeenCalledOnce()
+  })
+
   it('applies favicon setting changes once and reschedules immediately', async () => {
     const urls = ['https://example.test/saved']
     const scheduler = new FaviconRefreshScheduler(faviconService, () => urls)

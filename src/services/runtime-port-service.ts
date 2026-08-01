@@ -272,6 +272,18 @@ function hasStringArray(value: Record<string, unknown>, key: string): boolean {
   )
 }
 
+function hasNonNegativeIntegerArray(
+  value: Record<string, unknown>,
+  key: string,
+): boolean {
+  return (
+    Array.isArray(value[key]) &&
+    value[key].every(
+      (item) => Number.isSafeInteger(item) && (item as number) >= 0,
+    )
+  )
+}
+
 function optional(
   value: Record<string, unknown>,
   key: string,
@@ -365,6 +377,13 @@ function isSessionTreeCommand(
           'includeDescendants',
           (item) => typeof item === 'boolean',
         )
+      )
+    case 'moveFirefoxNativeTabs':
+      return (
+        hasNonNegativeIntegerArray(value, 'firefoxTabIds') &&
+        hasInteger(value, 'targetIndex') &&
+        optional(value, 'parentUid', (item) => typeof item === 'string') &&
+        hasString(value, 'targetWindowUid')
       )
     case 'importExternalUrls':
       return (

@@ -383,6 +383,67 @@ describe('Firefox-restored tabs', () => {
     expect(savedTab).toMatchObject({ id: -1, state: State.SAVED })
   })
 
+  it('uses the fresh-item fallback when a restored tab cannot satisfy its saved container identity (PD-SR-06/PD-CT-06)', async () => {
+    const container = {
+      cookieStoreId: 'firefox-container-missing',
+      name: 'Work',
+      color: 'blue',
+      colorCode: '#37adff',
+      icon: 'briefcase',
+    }
+    const savedTab = createTab('tab-saved' as UID, {
+      id: -1,
+      state: State.SAVED,
+      container,
+    })
+    createWindow('window-1' as UID, [savedTab], {
+      id: 20,
+      state: State.OPEN,
+    })
+    vi.mocked(browser.sessions.getTabValue).mockResolvedValue({
+      version: 1,
+      uid: savedTab.uid,
+    })
+
+    await expect(
+      handleCreatedTab(
+        restoredTab({ cookieStoreId: 'firefox-default', windowId: 20 }),
+      ),
+    ).resolves.toBe(false)
+
+    expect(savedTab).toMatchObject({
+      id: -1,
+      state: State.SAVED,
+      container,
+    })
+    expect(browser.tabs.move).not.toHaveBeenCalled()
+  })
+
+  it('falls back without claiming the saved UID when session identity stamping rejects (PD-SR-09)', async () => {
+    const savedTab = createTab('tab-saved' as UID, {
+      id: -1,
+      state: State.SAVED,
+    })
+    createWindow('window-1' as UID, [savedTab], {
+      id: 20,
+      state: State.OPEN,
+    })
+    vi.mocked(browser.sessions.getTabValue).mockResolvedValue({
+      version: 1,
+      uid: savedTab.uid,
+    })
+    vi.mocked(browser.sessions.setTabValue).mockRejectedValue(
+      new Error('session write rejected'),
+    )
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await expect(handleCreatedTab(restoredTab({ windowId: 20 }))).resolves.toBe(
+      false,
+    )
+
+    expect(savedTab).toMatchObject({ id: -1, state: State.SAVED })
+  })
+
   it.each([
     ['setting disabled', false, { version: 1, uid: 'tab-saved' }, State.SAVED],
     ['identity missing', true, undefined, State.SAVED],

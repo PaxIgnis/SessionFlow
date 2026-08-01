@@ -282,4 +282,30 @@ describe('external drop parsing', () => {
       { url: 'file:///tmp/example.html' },
     ])
   })
+
+  it('rejects unsafe URL forms while retaining valid lines from a mixed payload (PD-ED-05)', () => {
+    const payload = parseExternalDrop(
+      makeDataTransfer({
+        data: {
+          'text/uri-list': [
+            'https://valid.example/path',
+            'https://user:password@credential.example/private',
+            'https://escape.example/%ZZ',
+            'javascript:alert(1)',
+            'data:text/html,unsafe',
+            `https://control.example/${String.fromCharCode(1)}`,
+          ].join('\r\n'),
+        },
+      }),
+    )
+
+    expect(payload.items).toEqual([{ url: 'https://valid.example/path' }])
+    expect(
+      normalizeExternalDropItems([
+        { url: 'https://valid.example/path' },
+        { url: 'https://user:password@credential.example/private' },
+        { url: 'https://escape.example/%ZZ' },
+      ]),
+    ).toEqual([{ url: 'https://valid.example/path' }])
+  })
 })

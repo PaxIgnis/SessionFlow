@@ -98,6 +98,150 @@ describe('background browser-event detach and attach ordering', () => {
     )
   })
 
+  it('keeps a normal tab in the tree when Firefox rejects a private-window transfer', async () => {
+    const { fakeBrowser, initializeListeners, mocks } =
+      await loadBackgroundHandlers()
+    const source = treeWindow(20, 'window-normal', [
+      treeTab(10, 'window-normal'),
+    ])
+    const privateWindow = treeWindow(30, 'window-private', [])
+    privateWindow.incognito = true
+    mocks.Items.push(source, privateWindow)
+    initializeListeners()
+
+    fakeBrowser.tabs.onDetached.emit(10, {
+      oldWindowId: 20,
+      oldPosition: 0,
+    })
+
+    expect(mocks.removeTab).not.toHaveBeenCalled()
+    expect(source.children).toHaveLength(1)
+    expect(source.children[0]).toMatchObject({ id: 10 })
+  })
+
+  it('ignores a stale attach when the tab remains in its source window', async () => {
+    const { fakeBrowser, initializeListeners, mocks } =
+      await loadBackgroundHandlers()
+    const source = treeWindow(20, 'window-normal', [
+      treeTab(10, 'window-normal'),
+    ])
+    const destination = treeWindow(30, 'window-destination', [])
+    mocks.Items.push(source, destination)
+    fakeBrowser.tabs.get.mockResolvedValueOnce(browserTab(10, 20, 0))
+    initializeListeners()
+
+    fakeBrowser.tabs.onDetached.emit(10, {
+      oldWindowId: 20,
+      oldPosition: 0,
+    })
+    await fakeBrowser.tabs.onAttached.emitAsync(10, {
+      newWindowId: 30,
+      newPosition: 0,
+    })
+
+    expect(mocks.removeTab).not.toHaveBeenCalled()
+    expect(mocks.addTab).not.toHaveBeenCalled()
+    expect(source.children).toHaveLength(1)
+    expect(destination.children).toHaveLength(0)
+  })
+
+  it('does not commit a pending normal tab into a private destination', async () => {
+    const { fakeBrowser, initializeListeners, mocks } =
+      await loadBackgroundHandlers()
+    const source = treeWindow(20, 'window-normal', [
+      treeTab(10, 'window-normal'),
+    ])
+    const privateWindow = treeWindow(30, 'window-private', [])
+    privateWindow.incognito = true
+    mocks.Items.push(source, privateWindow)
+    initializeListeners()
+
+    fakeBrowser.tabs.onDetached.emit(10, {
+      oldWindowId: 20,
+      oldPosition: 0,
+    })
+    await fakeBrowser.tabs.onAttached.emitAsync(10, {
+      newWindowId: 30,
+      newPosition: 0,
+    })
+
+    expect(mocks.removeTab).not.toHaveBeenCalled()
+    expect(mocks.addTab).not.toHaveBeenCalled()
+    expect(source.children).toHaveLength(1)
+    expect(privateWindow.children).toHaveLength(0)
+  })
+
+  it('commits a transfer when the destination window was populated before attach handling', async () => {
+    const { fakeBrowser, initializeListeners, mocks } =
+      await loadBackgroundHandlers()
+    const source = treeWindow(20, 'window-source', [
+      treeTab(10, 'window-source'),
+    ])
+    const destination = treeWindow(30, 'window-destination', [
+      treeTab(10, 'window-destination', { uid: 'tab-destination' as UID }),
+    ])
+    mocks.Items.push(source, destination)
+    fakeBrowser.tabs.get.mockResolvedValueOnce(browserTab(10, 30, 0))
+    fakeBrowser.tabs.query.mockResolvedValueOnce([])
+    initializeListeners()
+
+    fakeBrowser.tabs.onDetached.emit(10, {
+      oldWindowId: 20,
+      oldPosition: 0,
+    })
+    await fakeBrowser.tabs.onAttached.emitAsync(10, {
+      newWindowId: 30,
+      newPosition: 0,
+    })
+
+    expect(mocks.removeTab).toHaveBeenCalledWith('tab-10')
+    expect(mocks.addTab).not.toHaveBeenCalled()
+  })
+
+  it('reconciles an attach that began before its detach event', async () => {
+    const { fakeBrowser, initializeListeners, mocks } =
+      await loadBackgroundHandlers()
+    const source = treeWindow(20, 'window-source', [
+      treeTab(10, 'window-source'),
+    ])
+    const destination = treeWindow(30, 'window-destination', [])
+    mocks.Items.push(source, destination)
+    const getTab = deferred<browser.tabs.Tab>()
+    fakeBrowser.tabs.get.mockReturnValueOnce(getTab.promise)
+    fakeBrowser.tabs.query.mockResolvedValueOnce([])
+    mocks.removeTab.mockImplementation((uid: UID) => {
+      source.children = source.children.filter((child) => child.uid !== uid)
+    })
+    mocks.addTab.mockImplementation((...args: unknown[]) => {
+      destination.children.push(
+        treeTab(args[2] as number, 'window-destination', {
+          uid: args[10] as UID,
+        }),
+      )
+      return args[10] as UID
+    })
+    initializeListeners()
+
+    const attach = fakeBrowser.tabs.onAttached.emitAsync(10, {
+      newWindowId: 30,
+      newPosition: 0,
+    })
+    await vi.waitFor(() => {
+      expect(fakeBrowser.tabs.get).toHaveBeenCalledWith(10)
+    })
+    fakeBrowser.tabs.onDetached.emit(10, {
+      oldWindowId: 20,
+      oldPosition: 0,
+    })
+    getTab.resolve(browserTab(10, 30, 0))
+    await attach
+
+    expect(source.children).toHaveLength(0)
+    expect(destination.children.map((child) => child.uid)).toEqual([
+      'tab-10',
+    ])
+  })
+
   it('does not partially attach a tab when authoritative tab lookup rejects', async () => {
     const { fakeBrowser, initializeListeners, mocks } =
       await loadBackgroundHandlers()

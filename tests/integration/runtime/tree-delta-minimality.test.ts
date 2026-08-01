@@ -9,6 +9,7 @@ import {
   createWindow,
   resetTree,
 } from '../../helpers/tree-fixtures'
+import { installFakeBrowser } from '../../helpers/fake-browser'
 
 const emittedDeltas = vi.hoisted(() => [] as SessionTreeDelta[])
 
@@ -20,6 +21,7 @@ vi.mock('@/services/runtime-port-service', () => ({
 
 describe('minimal sufficient tree deltas', () => {
   beforeEach(() => {
+    installFakeBrowser()
     emittedDeltas.length = 0
     resetTree()
   })
@@ -56,6 +58,42 @@ describe('minimal sufficient tree deltas', () => {
       tab: {
         indentLevel: 1,
         isVisible: true,
+      },
+    })
+  })
+
+  it('emits one complete window snapshot when synchronizing its browser tabs', async () => {
+    const window = createWindow('window-1' as UID, [], {
+      id: 20,
+      isVisible: true,
+      state: State.OPEN,
+    })
+    vi.mocked(browser.windows.get).mockResolvedValue({
+      id: 20,
+      incognito: false,
+      focused: true,
+      tabs: [
+        {
+          id: 21,
+          windowId: 20,
+          index: 0,
+          active: true,
+          discarded: false,
+          pinned: false,
+          title: 'Live tab',
+          url: 'https://example.test/live',
+        },
+      ],
+    } as browser.windows.Window)
+
+    await Tree.updateWindowTabs(window.id)
+
+    expect(emittedDeltas.map((delta) => delta.op)).toEqual(['windowUpdated'])
+    expect(emittedDeltas[0]).toMatchObject({
+      op: 'windowUpdated',
+      window: {
+        uid: window.uid,
+        children: [expect.objectContaining({ id: 21 })],
       },
     })
   })

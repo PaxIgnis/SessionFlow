@@ -150,6 +150,26 @@ describe('foreground message helpers', () => {
     )
   })
 
+  it('shows a notification when an external import fails', async () => {
+    const error = new Error('1 of 2 externally dropped tabs could not be opened')
+    sendTreeCommand.mockRejectedValueOnce(error)
+    const { importExternalUrls } =
+      await import('@/services/foreground-messages')
+
+    importExternalUrls(
+      [{ url: 'https://one.example' }, { url: 'https://two.example' }],
+      0,
+      undefined,
+      'window-1' as UID,
+    )
+
+    await vi.waitFor(() => {
+      expect(showNotification).toHaveBeenCalledWith(
+        `Session Flow could not import the dropped URLs: ${error}`,
+      )
+    })
+  })
+
   it('sends generic tree item action payloads', async () => {
     const {
       duplicateTreeItems,
@@ -926,6 +946,34 @@ describe('foreground message helpers', () => {
       2,
       expect.objectContaining({ tabUid: 'tab-2', active: false }),
     )
+  })
+
+  it('opens permitted normal tabs while denied private tabs remain saved with one instruction (PD-PW-03)', async () => {
+    const { openTabs } = await import('@/services/foreground-messages')
+    const normal = makeForegroundTab('tab-normal' as UID)
+    const privateTab = makeForegroundTab('tab-private' as UID)
+    resetForegroundTree([
+      makeForegroundWindow('window-normal' as UID, [normal], {
+        incognito: false,
+      }),
+      makeForegroundWindow('window-private' as UID, [privateTab], {
+        incognito: true,
+      }),
+    ])
+    isPrivateWindowAccessAllowed.mockResolvedValue(false)
+
+    await openTabs([privateTab, normal])
+
+    expect(sendTreeCommand).toHaveBeenCalledOnce()
+    expect(sendTreeCommand).toHaveBeenCalledWith({
+      action: 'openTab',
+      tabUid: normal.uid,
+      windowUid: normal.windowUid,
+      url: normal.url,
+      active: true,
+    })
+    expect(showPrivateWindowAccessRequired).toHaveBeenCalledOnce()
+    expect(showPrivateWindowAccessRequired).toHaveBeenCalledWith('tab')
   })
 
   it('filters bulk tab actions to items eligible for each action', async () => {

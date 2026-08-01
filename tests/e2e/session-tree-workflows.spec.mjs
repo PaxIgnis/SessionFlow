@@ -33,6 +33,10 @@ import {
 } from './support/session-tree-popup.mjs'
 import { closeOptionsPage, openOptionsPage } from './support/options-page.mjs'
 import { withFirefoxChromeContext } from './support/firefox-chrome-context.mjs'
+import {
+  reloadExtensionBackgroundPage,
+  writeStoredSessionTree,
+} from './support/extension-lifecycle.mjs'
 
 const NOTE_TEXT = 'New note'
 const EDITED_NOTE_TEXT = 'Updated note'
@@ -432,6 +436,48 @@ describe('critical Firefox UI workflows', () => {
     await waitForBrowserHandleClosed(betaHandle, SESSION_FIXTURE_TITLES.beta)
     await waitForBrowserHandleClosed(alphaHandle, SESSION_FIXTURE_TITLES.alpha)
     await expectSingleOpenWindowWithRootTabs([SESSION_FIXTURE_TITLES.initial])
+  })
+
+  it('uses the Alt state at the terminal drop rather than earlier drag events (PD-CP-01)', async () => {
+    await openSeededSessionTree()
+    await sessionTree.updateSettings({ enableCopyOnDragAndDrop: true })
+    await switchToPrimaryBrowserWindow()
+    await openFixtureTab(seed, SESSION_FIXTURE_TITLES.alpha)
+    await browser.switchToWindow(popup.popupHandle)
+
+    await sessionTree.dragTreeItem(
+      SESSION_FIXTURE_TITLES.alpha,
+      SESSION_FIXTURE_TITLES.initial,
+      DropPosition.Above,
+      { moveAltKey: true, dropAltKey: false },
+    )
+    await sessionTree.waitForBackgroundTree((tree) => {
+      const tabs = tabsInWindow(onlyOpenWindow(tree))
+      return (
+        tabs.filter((tab) => tab.title === SESSION_FIXTURE_TITLES.alpha)
+          .length === 1 && tabs[0]?.title === SESSION_FIXTURE_TITLES.alpha
+      )
+    }, 'Expected releasing Alt before drop to move exactly once.')
+
+    await sessionTree.dragTreeItem(
+      SESSION_FIXTURE_TITLES.alpha,
+      SESSION_FIXTURE_TITLES.initial,
+      DropPosition.Below,
+      { moveAltKey: false, dropAltKey: true },
+    )
+    await sessionTree.waitForBackgroundTree((tree) => {
+      const matching = tabsInWindow(onlyOpenWindow(tree)).filter(
+        (tab) => tab.title === SESSION_FIXTURE_TITLES.alpha,
+      )
+      return (
+        matching.length === 2 &&
+        matching.some((tab) => tab.state === TreeItemState.Open) &&
+        matching.some((tab) => tab.state === TreeItemState.Saved)
+      )
+    }, 'Expected pressing Alt only at drop to create one saved copy.')
+
+    await removeSavedFixtureTab(SESSION_FIXTURE_TITLES.alpha)
+    await removeFixtureTab(SESSION_FIXTURE_TITLES.alpha)
   })
 
   it('drags a tab below its descendant tab without blocking or corrupting the tree', async () => {
@@ -1332,6 +1378,154 @@ describe('critical Firefox UI workflows', () => {
     await sessionTree.updateSettings({ saveWindowOnClose: false })
     await closeWindowContainingTab(SESSION_FIXTURE_TITLES.gamma)
     await expectSingleOpenWindowWithRootTabs([SESSION_FIXTURE_TITLES.initial])
+  })
+
+  it('leaves the saved original and creates a fresh tab when Firefox reconnection is disabled (PD-SR-01)', async () => {
+    await openSeededSessionTree()
+    await sessionTree.updateSettings({
+      reconnectFirefoxRestoredItems: false,
+      saveTabOnClose: true,
+    })
+    await switchToPrimaryBrowserWindow()
+    await openFixtureTab(seed, SESSION_FIXTURE_TITLES.alpha)
+    await browser.switchToWindow(popup.popupHandle)
+    const before = await sessionTree.backgroundTreeSnapshot()
+    const original = windowsInTree(before)
+      .flatMap((windowItem) => tabsInWindow(windowItem))
+      .find((tab) => tab.title === SESSION_FIXTURE_TITLES.alpha)
+    await expectFirefoxSessionIdentity('tab', original?.id, original?.uid)
+
+    await closeSeededTab(seed, SESSION_FIXTURE_TITLES.alpha)
+    await restoreMostRecentFirefoxSessionWithShortcut()
+    await browser.switchToWindow(popup.popupHandle)
+    await sessionTree.waitForBackgroundTree((tree) => {
+      const matching = windowsInTree(tree)
+        .flatMap((windowItem) => tabsInWindow(windowItem))
+        .filter((tab) => tab.title === SESSION_FIXTURE_TITLES.alpha)
+      return (
+        matching.length === 2 &&
+        matching.some(
+          (tab) =>
+            tab.uid === original?.uid && tab.state === TreeItemState.Saved,
+        ) &&
+        matching.some(
+          (tab) =>
+            tab.uid !== original?.uid && tab.state === TreeItemState.Open,
+        )
+      )
+    }, 'Expected disabled reconnection to preserve the saved source and add one fresh restored tab.')
+
+    await removeFixtureTab(SESSION_FIXTURE_TITLES.alpha, TreeItemState.Open)
+    await removeSavedFixtureTab(SESSION_FIXTURE_TITLES.alpha)
+    await sessionTree.updateSettings({ saveTabOnClose: false })
+  })
+
+  it('treats Firefox restoration as fresh after the saved item was manually reopened (PD-SR-02)', async () => {
+    await openSeededSessionTree()
+    await sessionTree.updateSettings({
+      reconnectFirefoxRestoredItems: true,
+      saveTabOnClose: true,
+    })
+    await switchToPrimaryBrowserWindow()
+    await openFixtureTab(seed, SESSION_FIXTURE_TITLES.alpha)
+    await browser.switchToWindow(popup.popupHandle)
+    const before = await sessionTree.backgroundTreeSnapshot()
+    const original = windowsInTree(before)
+      .flatMap((windowItem) => tabsInWindow(windowItem))
+      .find((tab) => tab.title === SESSION_FIXTURE_TITLES.alpha)
+    await expectFirefoxSessionIdentity('tab', original?.id, original?.uid)
+
+    await closeSeededTab(seed, SESSION_FIXTURE_TITLES.alpha)
+    await browser.switchToWindow(popup.popupHandle)
+    const saved = windowsInTree(await sessionTree.backgroundTreeSnapshot())
+      .flatMap((windowItem) => tabsInWindow(windowItem))
+      .find((tab) => tab.uid === original?.uid)
+    await sessionTree.sendTreeCommand({
+      action: 'openTab',
+      tabUid: saved.uid,
+      windowUid: saved.windowUid,
+      url: saved.url,
+    })
+    await sessionTree.waitForBackgroundTree(
+      (tree) =>
+        windowsInTree(tree)
+          .flatMap((windowItem) => tabsInWindow(windowItem))
+          .some(
+            (tab) =>
+              tab.uid === original?.uid && tab.state === TreeItemState.Open,
+          ),
+      'Expected the saved source to be manually reopened first.',
+    )
+
+    await restoreMostRecentFirefoxSessionWithShortcut()
+    await browser.switchToWindow(popup.popupHandle)
+    await sessionTree.waitForBackgroundTree((tree) => {
+      const tabs = windowsInTree(tree).flatMap((windowItem) =>
+        tabsInWindow(windowItem),
+      )
+      const manuallyReopened = tabs.find((tab) => tab.uid === original?.uid)
+      const firefoxRestored = tabs.find(
+        (tab) =>
+          tab.uid !== original?.uid &&
+          tab.title === SESSION_FIXTURE_TITLES.alpha,
+      )
+      return (
+        manuallyReopened?.state === TreeItemState.Open &&
+        firefoxRestored?.state === TreeItemState.Open
+      )
+    }, 'Expected the later Firefox restoration to create a distinct fresh item.')
+
+    await sessionTree.updateSettings({ saveTabOnClose: false })
+    await removeFixtureTab(SESSION_FIXTURE_TITLES.alpha)
+    await removeFixtureTab(extensionFixtureTitle(SESSION_FIXTURE_TITLES.alpha))
+  })
+
+  it('uses the setting at restore time after a background reload (PD-SR-04/PD-SR-08)', async () => {
+    await openSeededSessionTree()
+    await sessionTree.updateSettings({
+      reconnectFirefoxRestoredItems: false,
+      saveTabOnClose: true,
+    })
+    await switchToPrimaryBrowserWindow()
+    await openFixtureTab(seed, SESSION_FIXTURE_TITLES.alpha)
+    await browser.switchToWindow(popup.popupHandle)
+    const before = await sessionTree.backgroundTreeSnapshot()
+    const original = windowsInTree(before)
+      .flatMap((windowItem) => tabsInWindow(windowItem))
+      .find((tab) => tab.title === SESSION_FIXTURE_TITLES.alpha)
+    await expectFirefoxSessionIdentity('tab', original?.id, original?.uid)
+    await closeSeededTab(seed, SESSION_FIXTURE_TITLES.alpha)
+    await browser.switchToWindow(popup.popupHandle)
+    await sessionTree.waitForBackgroundTree(
+      (tree) =>
+        windowsInTree(tree)
+          .flatMap((windowItem) => tabsInWindow(windowItem))
+          .some(
+            (tab) =>
+              tab.uid === original?.uid && tab.state === TreeItemState.Saved,
+          ),
+      'Expected the closed tab to be saved before reloading the background.',
+    )
+    await writeStoredSessionTree(await sessionTree.backgroundTreeSnapshot())
+    await sessionTree.updateSettings({ reconnectFirefoxRestoredItems: true })
+    await reloadExtensionBackgroundPage()
+    await browser.pause(500)
+
+    await restoreMostRecentFirefoxSessionWithShortcut()
+    await browser.switchToWindow(popup.popupHandle)
+    await sessionTree.waitForBackgroundTree((tree) => {
+      const matching = windowsInTree(tree)
+        .flatMap((windowItem) => tabsInWindow(windowItem))
+        .filter((tab) => tab.title === SESSION_FIXTURE_TITLES.alpha)
+      return (
+        matching.length === 1 &&
+        matching[0].uid === original?.uid &&
+        matching[0].state === TreeItemState.Open
+      )
+    }, 'Expected the reloaded background to reconnect using the setting enabled before restoration.')
+
+    await sessionTree.updateSettings({ saveTabOnClose: false })
+    await removeFixtureTab(SESSION_FIXTURE_TITLES.alpha)
   })
 })
 

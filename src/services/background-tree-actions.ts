@@ -938,10 +938,9 @@ export async function moveTreeItems(
       includeDescendants,
     )
   ) {
-    console.error(
-      'moveTreeItems: Firefox cannot move open tabs between normal and private windows',
+    throw new Error(
+      'Firefox cannot move open tabs between normal and private windows',
     )
-    return
   }
 
   if (moveIncludesBrowserBackedTabs(itemUIDs, includeDescendants)) {

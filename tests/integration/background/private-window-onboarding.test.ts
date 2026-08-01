@@ -187,6 +187,59 @@ describe('private-window onboarding', () => {
     })
   })
 
+  it('still arms recoverable onboarding when pending-state persistence fails (PD-PW-07)', async () => {
+    const fakeBrowser = installFakeBrowser()
+    fakeBrowser.extension.isAllowedIncognitoAccess!.mockResolvedValue(false)
+    fakeBrowser.storage.local.set.mockRejectedValueOnce(
+      new Error('storage unavailable'),
+    )
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    initializePrivateWindowOnboarding()
+
+    fakeBrowser.runtime.onInstalled.emit({
+      reason: 'install',
+      temporary: false,
+    })
+
+    await vi.waitFor(() => {
+      expect(fakeBrowser.browserAction.setPopup).toHaveBeenCalledWith({
+        popup: 'private-window-onboarding.html',
+      })
+    })
+    expect(fakeBrowser.browserAction.openPopup).toHaveBeenCalledOnce()
+    expect(consoleError).toHaveBeenCalledWith(
+      'Failed to persist pending private-window onboarding:',
+      expect.any(Error),
+    )
+  })
+
+  it('keeps completion retryable when persistence fails before popup removal (PD-PW-07)', async () => {
+    const fakeBrowser = installFakeBrowser()
+    fakeBrowser.storage.local.set.mockRejectedValueOnce(
+      new Error('storage unavailable'),
+    )
+    initializePrivateWindowOnboarding()
+
+    const firstCompletion = fakeBrowser.runtime.onMessage.listeners[0]({
+      action: 'privateWindowOnboarding',
+      command: 'dismiss',
+    })
+    await expect(firstCompletion).rejects.toThrow('storage unavailable')
+    expect(fakeBrowser.browserAction.setPopup).not.toHaveBeenCalledWith({
+      popup: '',
+    })
+
+    fakeBrowser.storage.local.set.mockResolvedValue(undefined)
+    const retry = fakeBrowser.runtime.onMessage.listeners[0]({
+      action: 'privateWindowOnboarding',
+      command: 'dismiss',
+    })
+    await expect(retry).resolves.toBeUndefined()
+    expect(fakeBrowser.browserAction.setPopup).toHaveBeenCalledWith({
+      popup: '',
+    })
+  })
+
   it('leaves onboarding pending for an unsupported command', async () => {
     const fakeBrowser = installFakeBrowser()
     const openSessionTree = vi

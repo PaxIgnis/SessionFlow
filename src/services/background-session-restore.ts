@@ -125,6 +125,50 @@ export async function handleCreatedWindow(
           : readRestoredTabUid(tab.id),
       ),
     )
+    const claimedRestoredTabUids = new Set<UID>()
+    const matchedRestoredTabUids = restoredTabUids.map((restoredTabUid) => {
+      if (!restoredTabUid || claimedRestoredTabUids.has(restoredTabUid)) {
+        return undefined
+      }
+      const savedTab = Tree.tabsByUid.get(restoredTabUid)
+      if (
+        savedTab?.state !== State.SAVED ||
+        savedTab.windowUid !== savedWindow.uid
+      ) {
+        return undefined
+      }
+      claimedRestoredTabUids.add(restoredTabUid)
+      return restoredTabUid
+    })
+
+    for (const [index, restoredTab] of restoredTabs.entries()) {
+      const restoredTabUid = matchedRestoredTabUids[index]
+      const savedTab = restoredTabUid
+        ? Tree.tabsByUid.get(restoredTabUid)
+        : undefined
+      if (
+        savedTab?.state === State.SAVED &&
+        savedTab.windowUid === savedWindow.uid &&
+        !restoredContainerMatches(savedTab, restoredTab)
+      ) {
+        return false
+      }
+    }
+    if (!(await writeWindowUid(browserWindow.id, savedWindow.uid))) return false
+    for (const [index, restoredTab] of restoredTabs.entries()) {
+      const restoredTabUid = matchedRestoredTabUids[index]
+      const savedTab = restoredTabUid
+        ? Tree.tabsByUid.get(restoredTabUid)
+        : undefined
+      if (
+        restoredTab.id !== undefined &&
+        savedTab?.state === State.SAVED &&
+        savedTab.windowUid === savedWindow.uid &&
+        !(await writeTabUid(restoredTab.id, savedTab.uid))
+      ) {
+        return false
+      }
+    }
 
     Tree.updateWindowId(savedWindow.uid, browserWindow.id)
     Tree.updateWindowState(savedWindow.uid, State.OPEN)
@@ -135,7 +179,7 @@ export async function handleCreatedWindow(
 
     restoredTabs.forEach((tab, index) => {
       if (tab.id === undefined) return
-      const tabUid = restoredTabUids[index]
+      const tabUid = matchedRestoredTabUids[index]
       const savedTab = tabUid ? Tree.tabsByUid.get(tabUid) : undefined
       if (
         savedTab &&
@@ -254,7 +298,7 @@ export async function handleCreatedTab(
   ) {
     return false
   }
-  const tabUid = await readTabUid(browserTab.id)
+  const tabUid = await readRestoredTabUid(browserTab.id)
   if (!tabUid) return false
 
   const savedTab = Tree.tabsByUid.get(tabUid)
@@ -273,6 +317,8 @@ export async function handleCreatedTab(
     ) {
       return false
     }
+    if (!restoredContainerMatches(savedTab, browserTab)) return false
+    if (!(await writeTabUid(browserTab.id, savedTab.uid))) return false
 
     if (targetWindow.state === State.SAVED) {
       if (restoringWindowUids.has(targetWindow.uid)) return false
@@ -376,6 +422,18 @@ export async function handleCreatedTab(
     restoringTabUids.delete(savedTab.uid)
     if (claimedWindowUid) restoringWindowUids.delete(claimedWindowUid)
   }
+}
+
+function restoredContainerMatches(
+  savedTab: { container?: { cookieStoreId: string } },
+  browserTab: browser.tabs.Tab,
+): boolean {
+  const savedStoreId = savedTab.container?.cookieStoreId
+  if (!savedStoreId) return true
+  return (
+    Tree.containerForCookieStore(browserTab.cookieStoreId)?.cookieStoreId ===
+    savedStoreId
+  )
 }
 
 export async function stampOpenTreeIdentities(): Promise<void> {

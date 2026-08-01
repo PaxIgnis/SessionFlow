@@ -244,6 +244,66 @@ describe('favicon and redirect workflows', () => {
     expect(cache.entries.some((entry) => entry.url === '127.0.0.1')).toBe(false)
   })
 
+  it('shares an allowed private favicon cache entry with normal tabs without pruning it on private close (PD-FR-06)', async () => {
+    await navigateSeed(
+      `${origin}/page?mode=data&color=green&title=${encodeURIComponent('FV Shared Normal')}`,
+      'FV Shared Normal',
+    )
+    const normalUid = await waitForTreeTabUid('FV Shared Normal')
+    await waitForFavicon(normalUid, (src) => !isDefaultIcon(src))
+
+    await browser.switchToWindow(popup.popupHandle)
+    const privateFixture = await createPrivateFixtureTabs(seed, [
+      'FV Shared Bootstrap',
+    ])
+    const privateTabId = privateFixture.tabIds[0]
+    await browser.executeAsync(
+      (tabId, url, done) => {
+        window.browser.tabs
+          .update(tabId, { url })
+          .then(() => done({ ok: true }))
+          .catch((error) => done({ ok: false, error: String(error) }))
+      },
+      privateTabId,
+      `${origin}/page?mode=data&color=purple&title=${encodeURIComponent('FV Shared Private')}`,
+    )
+    await browser.waitUntil(
+      () =>
+        browser.executeAsync((tabId, done) => {
+          window.browser.tabs
+            .get(tabId)
+            .then((tab) =>
+              done(
+                tab.title === 'FV Shared Private' && Boolean(tab.favIconUrl),
+              ),
+            )
+            .catch(() => done(false))
+        }, privateTabId),
+      { timeoutMsg: 'Expected the shared private favicon fixture to load.' },
+    )
+    const privateUid = await waitForTreeTabUid('FV Shared Private')
+    const privateSrc = await waitForFavicon(
+      privateUid,
+      (src) => !isDefaultIcon(src),
+    )
+    expect(await waitForFavicon(normalUid, (src) => src === privateSrc)).toBe(
+      privateSrc,
+    )
+
+    await browser.executeAsync((tabId, done) => {
+      window.browser.tabs
+        .remove(tabId)
+        .then(() => done({ ok: true }))
+        .catch((error) => done({ ok: false, error: String(error) }))
+    }, privateTabId)
+    await sessionTree.waitForItemTextNotVisible('FV Shared Private')
+    const cache = await readFaviconCache()
+    expect(cache.entries.some((entry) => entry.url === '127.0.0.1')).toBe(true)
+    expect(await waitForFavicon(normalUid, (src) => src === privateSrc)).toBe(
+      privateSrc,
+    )
+  })
+
   it('renders and copies a complex privileged redirect target (FV-13/FV-14)', async () => {
     const target = `about:reader?url=${encodeURIComponent(
       'https://example.test/<img src=x onerror=alert(1)>/λ',

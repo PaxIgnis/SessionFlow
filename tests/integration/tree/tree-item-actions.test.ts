@@ -307,6 +307,86 @@ describe('generic tree item structural actions', () => {
     expectTreeInvariants()
   })
 
+  it('preserves private, container, and grouped metadata with independent clone identities (PD-CP-05)', async () => {
+    const container = {
+      cookieStoreId: 'firefox-container-private-work',
+      name: 'Private Work',
+      color: 'purple',
+      colorCode: '#8000d7',
+      icon: 'briefcase',
+    }
+    const group = {
+      uid: 'group-private' as UID,
+      id: 7,
+      title: 'Private Group',
+      color: 'purple' as const,
+      collapsed: false,
+    }
+    const tab = createTab('tab-private' as UID, {
+      container,
+      tabGroup: group,
+    })
+    const window = createWindow('window-private' as UID, [tab], {
+      incognito: true,
+    })
+
+    await Tree.duplicateTreeItems([window.uid])
+
+    const clonedWindow = Tree.Items[1] as Window
+    const clonedTab = clonedWindow.children[0] as Tab
+    expect(clonedWindow.incognito).toBe(true)
+    expect(clonedWindow.uid).not.toBe(window.uid)
+    expect(clonedTab.uid).not.toBe(tab.uid)
+    expect(clonedTab.windowUid).toBe(clonedWindow.uid)
+    expect(clonedTab.container).toEqual(container)
+    expect(clonedTab.container).not.toBe(container)
+    expect(clonedTab.tabGroup).toEqual({
+      ...group,
+      uid: expect.any(String),
+      id: -1,
+    })
+    expect(clonedTab.tabGroup?.uid).not.toBe(group.uid)
+    expectTreeInvariants()
+  })
+
+  it('duplicates a mixed cross-window selection without mutating sources (PD-CP-02)', async () => {
+    const firstTab = createTab('tab-first' as UID)
+    const firstNote = createNote('note-first' as UID)
+    const firstSeparator = createSeparator('separator-first' as UID)
+    const firstWindow = createWindow('window-first' as UID, [
+      firstTab,
+      firstNote,
+      firstSeparator,
+    ])
+    const secondTab = createTab('tab-second' as UID)
+    const secondWindow = createWindow('window-second' as UID, [secondTab])
+    Tree.recomputeSessionTree(false)
+    const sourceSnapshot = structuredClone(Tree.Items)
+
+    await Tree.duplicateTreeItems([firstWindow.uid, secondTab.uid])
+
+    const clonedWindow = Tree.Items.find(
+      (item): item is Window =>
+        item.type === TreeItemType.WINDOW &&
+        item.uid !== firstWindow.uid &&
+        item.uid !== secondWindow.uid,
+    )
+    expect(clonedWindow?.children.map((item) => item.type)).toEqual([
+      TreeItemType.TAB,
+      TreeItemType.NOTE,
+      TreeItemType.SEPARATOR,
+    ])
+    expect(secondWindow.children).toHaveLength(2)
+    expect(secondWindow.children[0]).toBe(secondTab)
+    expect(secondWindow.children[1].type).toBe(TreeItemType.TAB)
+    expect(secondWindow.children[1].uid).not.toBe(secondTab.uid)
+    expect(Tree.Items[0]).toEqual(sourceSnapshot[0])
+    expect(secondWindow.children[0]).toEqual(
+      (sourceSnapshot[1] as Window).children[0],
+    )
+    expectTreeInvariants()
+  })
+
   it('keeps disjoint selected tabs from the same group in one cloned group', async () => {
     const tabGroup = {
       uid: 'group-1' as UID,
@@ -515,6 +595,45 @@ describe('generic tree item structural actions', () => {
     await expect(Tree.duplicateTreeItems([parent.uid])).rejects.toBe(error)
 
     expect(openTabSpy).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps every failed clone saved and leaves all sources unchanged after multiple failures (PD-CP-06)', async () => {
+    Settings.values.duplicatedItemState = 'match-original'
+    const first = createTab('tab-first' as UID, {
+      id: 10,
+      state: State.OPEN,
+    })
+    const second = createTab('tab-second' as UID, {
+      id: 11,
+      state: State.OPEN,
+    })
+    const window = createWindow('window-1' as UID, [first, second], {
+      id: 20,
+      state: State.OPEN,
+    })
+    const firstError = new Error('first clone failed')
+    const openTabSpy = vi
+      .spyOn(Tree, 'openTab')
+      .mockRejectedValueOnce(firstError)
+      .mockRejectedValueOnce(new Error('second clone failed'))
+
+    await expect(Tree.duplicateTreeItems([first.uid, second.uid])).rejects.toBe(
+      firstError,
+    )
+
+    expect(openTabSpy).toHaveBeenCalledTimes(2)
+    expect(
+      window.children.filter((item) => item === first || item === second),
+    ).toEqual([first, second])
+    expect(first).toMatchObject({ id: 10, state: State.OPEN })
+    expect(second).toMatchObject({ id: 11, state: State.OPEN })
+    expect(
+      window.children.filter((item) => item !== first && item !== second),
+    ).toEqual([
+      expect.objectContaining({ id: -1, state: State.SAVED }),
+      expect.objectContaining({ id: -1, state: State.SAVED }),
+    ])
+    expectTreeInvariants()
   })
 
   it('leaves dependent discarded window clones saved when window creation fails', async () => {

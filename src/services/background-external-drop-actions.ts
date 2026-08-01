@@ -2,7 +2,10 @@ import { OnCreatedQueue } from '@/services/background-on-created-queue'
 import { Tree } from '@/services/background-tree'
 import { normalizeExternalDropItems } from '@/services/external-drop'
 import * as Utils from '@/services/utils'
-import type { ImportExternalUrlsMessage } from '@/types/messages'
+import type {
+  ImportExternalUrlsMessage,
+  MoveFirefoxNativeTabsMessage,
+} from '@/types/messages'
 import { State, TreeItemType } from '@/types/session-tree'
 
 /** Imports externally dragged URLs into an existing tree window or a new one. */
@@ -80,12 +83,64 @@ export async function importExternalUrls(
 
   if (targetWindow.state === State.SAVED) return
 
+  let failedCount = 0
   for (const tabUid of importedTabUids) {
-    await Tree.openTab({
-      tabUid,
-      windowUid: targetWindow.uid,
-    })
+    try {
+      await Tree.openTab({
+        tabUid,
+        windowUid: targetWindow.uid,
+      })
+    } catch {
+      failedCount++
+      Tree.removeTab(tabUid)
+    }
   }
+
+  if (failedCount > 0) {
+    throw new Error(
+      `${failedCount} of ${importedTabUids.length} externally dropped tabs could not be opened`,
+    )
+  }
+}
+
+/** Revalidates protected Firefox tab objects immediately before moving them. */
+export async function moveFirefoxNativeTabs(
+  message: Omit<MoveFirefoxNativeTabsMessage, 'action'>,
+): Promise<void> {
+  if (message.firefoxTabIds.length === 0) return
+
+  let browserTabs: browser.tabs.Tab[]
+  try {
+    browserTabs = await Promise.all(
+      message.firefoxTabIds.map((tabId) => browser.tabs.get(tabId)),
+    )
+  } catch {
+    return
+  }
+
+  const treeTabUids: UID[] = []
+  for (const [index, tabId] of message.firefoxTabIds.entries()) {
+    const browserTab = browserTabs[index]
+    const treeTab = [...Tree.tabsByUid.values()].find((candidate) => {
+      const window = Tree.windowsByUid.get(candidate.windowUid)
+      return (
+        candidate.id === tabId &&
+        browserTab.id === tabId &&
+        window?.id === browserTab.windowId
+      )
+    })
+    if (!treeTab) return
+    treeTabUids.push(treeTab.uid)
+  }
+
+  await Tree.moveTreeItems(
+    treeTabUids,
+    message.targetIndex,
+    message.parentUid,
+    message.targetWindowUid,
+    false,
+    false,
+  )
 }
 
 function getBrowserUrl(url: string, title?: string): string {

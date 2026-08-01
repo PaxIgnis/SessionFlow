@@ -53,8 +53,8 @@ describe('Firefox session identity values', () => {
   })
 
   it('writes versioned identities', async () => {
-    await writeTabUid(10, 'tab-1' as UID)
-    await writeWindowUid(20, 'window-1' as UID)
+    await expect(writeTabUid(10, 'tab-1' as UID)).resolves.toBe(true)
+    await expect(writeWindowUid(20, 'window-1' as UID)).resolves.toBe(true)
 
     expect(browser.sessions.setTabValue).toHaveBeenCalledWith(
       10,
@@ -75,7 +75,7 @@ describe('Firefox session identity values', () => {
     vi.mocked(browser.sessions.setWindowValue).mockRejectedValue(error)
 
     await expect(readTabUid(10)).resolves.toBeUndefined()
-    await expect(writeWindowUid(20, 'window-1' as UID)).resolves.toBeUndefined()
+    await expect(writeWindowUid(20, 'window-1' as UID)).resolves.toBe(false)
     expect(consoleError).toHaveBeenCalledWith(
       'Failed to read Session Flow tab identity:',
       error,

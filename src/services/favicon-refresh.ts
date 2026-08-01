@@ -41,6 +41,8 @@ export class FaviconRefreshScheduler {
   private missingAlarmsWarningLogged = false
   private settingsSnapshot: FaviconRefreshSettingsSnapshot | undefined
   private refreshPromise: Promise<void> | undefined
+  private settingsRevision = 0
+  private fetchPermissionGranted: boolean | undefined
 
   public constructor(
     private readonly faviconService: FaviconService = Favicons,
@@ -61,9 +63,10 @@ export class FaviconRefreshScheduler {
     this.ensureAlarmListener()
 
     this.settingsSnapshot = this.readSettings()
+    const revision = ++this.settingsRevision
     await this.applyPrivateCachePolicy(this.settingsSnapshot)
     await this.refreshOnStartup(this.settingsSnapshot)
-    await this.syncAlarm(this.settingsSnapshot)
+    await this.syncAlarm(this.settingsSnapshot, revision)
   }
 
   /**
@@ -75,6 +78,7 @@ export class FaviconRefreshScheduler {
     this.settingsSnapshot = next
 
     if (previous && this.settingsEqual(previous, next)) return
+    const revision = ++this.settingsRevision
 
     await this.applyPrivateCachePolicy(next)
 
@@ -95,7 +99,7 @@ export class FaviconRefreshScheduler {
       await this.refreshFavicons(Number.POSITIVE_INFINITY)
     }
 
-    await this.syncAlarm(next)
+    await this.syncAlarm(next, revision)
   }
 
   private readonly onAlarm = (alarm: browser.alarms.Alarm): void => {
@@ -109,16 +113,17 @@ export class FaviconRefreshScheduler {
   private async handleRefreshAlarm(): Promise<void> {
     const settings = this.readSettings()
     this.settingsSnapshot = settings
+    const revision = ++this.settingsRevision
     if (
       !settings.automaticRefresh ||
       settings.timing !== 'expiration-and-startup'
     ) {
-      await this.syncAlarm(settings)
+      await this.syncAlarm(settings, revision)
       return
     }
 
     await this.refreshExpiredFavicons(settings)
-    await this.syncAlarm(settings)
+    await this.syncAlarm(settings, revision)
   }
 
   private async refreshOnStartup(
@@ -164,7 +169,9 @@ export class FaviconRefreshScheduler {
     if (urls.length === 0) return
 
     await this.faviconService.init()
-    if (!(await this.faviconService.hasFetchPermissions())) {
+    this.fetchPermissionGranted =
+      await this.faviconService.hasFetchPermissions()
+    if (!this.fetchPermissionGranted) {
       console.info(
         'Skipping favicon refresh: website access permission is not granted',
       )
@@ -200,7 +207,9 @@ export class FaviconRefreshScheduler {
 
   private async syncAlarm(
     settings: FaviconRefreshSettingsSnapshot,
+    revision: number,
   ): Promise<void> {
+    if (revision !== this.settingsRevision) return
     const alarms = this.ensureAlarmListener()
     if (!alarms) {
       if (
@@ -217,9 +226,11 @@ export class FaviconRefreshScheduler {
     }
 
     await alarms.clear(FAVICON_REFRESH_ALARM_NAME)
+    if (revision !== this.settingsRevision) return
     if (
       !settings.automaticRefresh ||
-      settings.timing !== 'expiration-and-startup'
+      settings.timing !== 'expiration-and-startup' ||
+      this.fetchPermissionGranted === false
     ) {
       return
     }
@@ -238,6 +249,7 @@ export class FaviconRefreshScheduler {
     )
     const nextRefreshAt = this.faviconService.getNextRefreshAt(urls, intervalMs)
     if (nextRefreshAt === undefined) return
+    if (revision !== this.settingsRevision) return
 
     await alarms.create(FAVICON_REFRESH_ALARM_NAME, {
       when: nextRefreshAt,

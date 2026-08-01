@@ -179,10 +179,20 @@ export async function openTab(tabUid: UID, windowUid: UID, url: string) {
 }
 
 export async function openTabs(tabs: Array<Tab>): Promise<void> {
-  const eligibleTabs = tabsInTreeOrder(
+  let eligibleTabs = tabsInTreeOrder(
     tabs.filter((tab) => tab.state === State.SAVED),
   )
   if (eligibleTabs.length === 0) return
+  const privateTabs = eligibleTabs.filter(
+    (tab) => SessionTree.windowsByUid.get(tab.windowUid)?.incognito === true,
+  )
+  if (privateTabs.length > 0 && !(await isPrivateWindowAccessAllowed())) {
+    eligibleTabs = eligibleTabs.filter(
+      (tab) => SessionTree.windowsByUid.get(tab.windowUid)?.incognito !== true,
+    )
+    showPrivateWindowAccessRequired('tab')
+    if (eligibleTabs.length === 0) return
+  }
   const targets = eligibleTabs.map((tab, index) => ({
     ...tabRecoveryTarget(tab),
     active: Settings.values.focusTabOnOpen && index === 0,
@@ -660,19 +670,40 @@ export function moveTreeItems(
   )
 }
 
+export function moveFirefoxNativeTabs(
+  firefoxTabIds: number[],
+  targetIndex: number,
+  parentUid: UID | undefined,
+  targetWindowUid: UID,
+): Promise<void> {
+  return sendActionCommand(
+    {
+      action: 'moveFirefoxNativeTabs',
+      firefoxTabIds,
+      targetIndex,
+      parentUid,
+      targetWindowUid,
+    },
+    'Session Flow could not move the Firefox tabs',
+  )
+}
+
 export function importExternalUrls(
   items: Messages.ImportExternalUrlsMessage['items'],
   targetIndex: number,
   parentUid?: UID,
   targetWindowUid?: UID,
-) {
-  void sendTreeCommand({
-    action: 'importExternalUrls',
-    items,
-    targetIndex,
-    parentUid,
-    targetWindowUid,
-  } as Messages.ImportExternalUrlsMessage)
+): Promise<void> {
+  return sendActionCommand(
+    {
+      action: 'importExternalUrls',
+      items,
+      targetIndex,
+      parentUid,
+      targetWindowUid,
+    } as Messages.ImportExternalUrlsMessage,
+    'Session Flow could not import the dropped URLs',
+  )
 }
 
 // ==============================

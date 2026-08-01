@@ -244,6 +244,17 @@ describe('Firefox container workflows', () => {
 
     await openSavedTabFromTree(first.uid)
     await expect(await sessionTree.containerRecoveryModal()).toBeDisplayed()
+    await sessionTree.cancelContainerRecovery()
+    await expect(await sessionTree.containerRecoveryModal()).not.toExist()
+    await waitForTreeTabByUid(
+      first.uid,
+      (tab) =>
+        tab.state === TreeItemState.Saved &&
+        tab.container?.cookieStoreId === identity.cookieStoreId,
+    )
+
+    await openSavedTabFromTree(first.uid)
+    await expect(await sessionTree.containerRecoveryModal()).toBeDisplayed()
     await sessionTree.openWithoutMissingContainers()
     const reopened = await waitForTreeTabByUid(
       first.uid,
@@ -414,6 +425,7 @@ describe('Firefox container workflows', () => {
   async function trackedContainerTab(cookieStoreId, title) {
     const tab = await createContainerTab(cookieStoreId, title)
     tabIds.push(tab.id)
+    await waitForTabTitle(tab.id, extensionFixtureTitle(title))
     return tab
   }
 

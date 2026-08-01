@@ -61,9 +61,16 @@ async function restorePendingOnboarding(): Promise<void> {
 
 async function prepareOnboarding(openImmediately: boolean): Promise<void> {
   if (openImmediately) {
-    await browser.storage.local.set({
-      [ONBOARDING_STORAGE_KEY]: { status: 'pending' },
-    })
+    try {
+      await browser.storage.local.set({
+        [ONBOARDING_STORAGE_KEY]: { status: 'pending' },
+      })
+    } catch (error) {
+      console.error(
+        'Failed to persist pending private-window onboarding:',
+        error,
+      )
+    }
   }
 
   const accessAllowed = await isPrivateWindowAccessAllowed()

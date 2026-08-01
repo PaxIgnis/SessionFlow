@@ -270,13 +270,17 @@ describe('moveTreeItems tab moves', () => {
     })
     vi.spyOn(console, 'error').mockImplementation(() => {})
 
-    await Tree.moveTreeItems(
-      [note.uid],
-      0,
-      undefined,
-      targetWindow.uid,
-      false,
-      true,
+    await expect(
+      Tree.moveTreeItems(
+        [note.uid],
+        0,
+        undefined,
+        targetWindow.uid,
+        false,
+        true,
+      ),
+    ).rejects.toThrow(
+      'Firefox cannot move open tabs between normal and private windows',
     )
 
     expect(sourceWindow.children).toEqual([note, tab])

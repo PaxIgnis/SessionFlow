@@ -1,5 +1,6 @@
 import TreeItemComponent from '@/components/TreeItem.vue'
 import { DEFAULT_SETTINGS } from '@/defaults/settings'
+import { FIREFOX_CONTAINER_ICON_IDS } from '@/defaults/container-icons'
 import { getTreeItemContextMenuArgs } from '@/services/context-menu-actions'
 import { Settings } from '@/services/settings'
 import { ContextMenuType } from '@/types/context-menu'
@@ -312,6 +313,87 @@ describe('TreeItem indent guide rendering', () => {
       '/icons/usercontext.svg#future-firefox-icon',
     )
     expect(unknownMarkup).toContain('Container: Future')
+  })
+
+  it('renders every fade/side/icon combination on a deep active grouped tab (PD-CT-01)', async () => {
+    const tab = makeForegroundTab('matrix-tab' as UID, {
+      active: true,
+      indentLevel: 12,
+      container: {
+        cookieStoreId: 'firefox-container-matrix',
+        name: 'Matrix',
+        color: 'purple',
+        colorCode: '#8000d7',
+        icon: 'briefcase',
+      },
+      tabGroup: {
+        uid: 'group-matrix' as UID,
+        id: 7,
+        title: 'Adjacent Group',
+        color: 'orange',
+        collapsed: false,
+      },
+    })
+
+    for (const treatment of ['soft-fade', 'strong-fade', 'off'] as const) {
+      for (const side of ['left', 'right'] as const) {
+        for (const iconPosition of ['left', 'right', 'off'] as const) {
+          Settings.values.containerColorIndicator = treatment
+          Settings.values.containerFadeSide = side
+          Settings.values.containerIconPosition = iconPosition
+          const markup = await renderTreeItem(tab)
+
+          expect(markup).toContain('tree-item-active')
+          expect(markup).toContain('tree-item-tab-group-indicator-right')
+          expect(markup).toContain('--indent-parts:13')
+          if (treatment === 'off') {
+            expect(markup).not.toContain('tree-item-container-indicator-')
+          } else {
+            expect(markup).toContain(
+              `tree-item-container-indicator-${treatment}-${side}`,
+            )
+          }
+          if (iconPosition === 'off') {
+            expect(markup).not.toContain('tree-item-container-icon-left')
+            expect(markup).not.toContain('tree-item-container-icon-right')
+          } else {
+            expect(markup).toContain(`tree-item-container-icon-${iconPosition}`)
+          }
+        }
+      }
+    }
+  })
+
+  it('renders every current Firefox container icon with authoritative metadata color (PD-CT-02)', async () => {
+    const colors = [
+      '#37adff',
+      '#51cd00',
+      '#ff9f00',
+      '#ff4bda',
+      '#8000d7',
+      '#2b2a33',
+      '#0090ed',
+      '#d70022',
+    ]
+
+    for (const [index, icon] of FIREFOX_CONTAINER_ICON_IDS.entries()) {
+      const colorCode = colors[index % colors.length]
+      const markup = await renderTreeItem(
+        makeForegroundTab(`container-${icon}` as UID, {
+          container: {
+            cookieStoreId: `firefox-container-${icon}`,
+            name: icon,
+            color: 'blue',
+            colorCode,
+            icon,
+          },
+        }),
+      )
+
+      expect(markup).toContain(`/icons/usercontext.svg#${icon}`)
+      expect(markup).toContain(`--container-color:${colorCode}`)
+      expect(markup).toContain(`color:${colorCode}`)
+    }
   })
 
   it('uses the same right fade endpoint with and without a group marker', async () => {

@@ -374,6 +374,7 @@ export function onDragMove(e: DragEvent): void {
 
 export function onDrop(e: DragEvent): void {
   console.log(DragAndDrop.dragState)
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'none'
   if (!Settings.values.enableDragAndDrop) {
     reset()
     return
@@ -714,14 +715,12 @@ function handleExternalDrop(e: DragEvent): void {
     return
   }
 
-  if (isReliableNativeTabMove) {
-    Messages.moveTreeItems(
-      draggedTabs.map((tab) => tab.uid),
+  if (isReliableNativeTabMove && destination.targetWindowUid) {
+    Messages.moveFirefoxNativeTabs(
+      payload.firefoxTabIds,
       destination.dropIndex,
       destination.dropParentUid,
       destination.targetWindowUid,
-      false,
-      false,
     )
   } else if (payload.items.length > 0) {
     Messages.importExternalUrls(

@@ -134,6 +134,50 @@ describe('external URL imports', () => {
     })
   })
 
+  it('keeps successful live imports ordered and removes failed placeholders (PD-ED-04)', async () => {
+    const existing = createTab('tab-existing' as UID, {
+      state: State.OPEN,
+      id: 10,
+    })
+    const window = createWindow('window-1' as UID, [existing], {
+      state: State.OPEN,
+      id: 20,
+    })
+    let nextId = 30
+    vi.spyOn(Tree, 'openTab').mockImplementation(async ({ tabUid }) => {
+      const tab = Tree.tabsByUid.get(tabUid)
+      if (!tab) throw new Error('Missing imported tab')
+      if (tab.url === 'https://fail.example/') {
+        throw new Error('Firefox rejected tab creation')
+      }
+      Tree.updateTab({ tabUid }, { id: nextId++, state: State.OPEN }, false)
+    })
+
+    await expect(
+      Tree.importExternalUrls({
+        action: 'importExternalUrls',
+        items: [
+          { url: 'https://one.example' },
+          { url: 'https://fail.example' },
+          { url: 'https://three.example' },
+        ],
+        targetIndex: 1,
+        targetWindowUid: window.uid,
+      }),
+    ).rejects.toThrow('1 of 3 externally dropped tabs could not be opened')
+
+    expect(
+      Tree.getTabs(window.children).map((tab) => ({
+        url: tab.url,
+        state: tab.state,
+      })),
+    ).toEqual([
+      { url: existing.url, state: State.OPEN },
+      { url: 'https://one.example/', state: State.OPEN },
+      { url: 'https://three.example/', state: State.OPEN },
+    ])
+  })
+
   it('keeps duplicate links ordered after the last pinned tab', async () => {
     const pinnedOne = createTab('tab-pinned-one' as UID, { pinned: true })
     const pinnedTwo = createTab('tab-pinned-two' as UID, { pinned: true })
@@ -227,6 +271,45 @@ describe('external URL imports', () => {
       }),
     ).rejects.toThrow('External drop parent is not in the target window')
 
+    expect(targetWindow.children).toEqual([])
+  })
+
+  it('does not move a stale native-tab payload when Firefox rejects tabs.get (PD-ED-03)', async () => {
+    const sourceTab = createTab('tab-source' as UID, {
+      id: 42,
+      state: State.OPEN,
+    })
+    const sourceWindow = createWindow('window-source' as UID, [sourceTab], {
+      id: 10,
+      state: State.OPEN,
+    })
+    const targetWindow = createWindow('window-target' as UID, [], {
+      id: 20,
+      state: State.OPEN,
+    })
+    fakeBrowser.tabs.get.mockRejectedValueOnce(new Error('Unknown tab 42'))
+    const moveTreeItems = vi.spyOn(Tree, 'moveTreeItems')
+    const moveFirefoxNativeTabs = (
+      Tree as typeof Tree & {
+        moveFirefoxNativeTabs: (message: {
+          firefoxTabIds: number[]
+          targetIndex: number
+          parentUid?: UID
+          targetWindowUid: UID
+        }) => Promise<void>
+      }
+    ).moveFirefoxNativeTabs
+
+    await expect(
+      moveFirefoxNativeTabs({
+        firefoxTabIds: [sourceTab.id],
+        targetIndex: 0,
+        targetWindowUid: targetWindow.uid,
+      }),
+    ).resolves.toBeUndefined()
+
+    expect(moveTreeItems).not.toHaveBeenCalled()
+    expect(sourceWindow.children).toEqual([sourceTab])
     expect(targetWindow.children).toEqual([])
   })
 })

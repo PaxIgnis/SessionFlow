@@ -7,6 +7,7 @@ import {
 } from '@/types/favicons'
 
 type FaviconTabSource = Pick<browser.tabs.Tab, 'url' | 'favIconUrl'> & {
+  id?: number
   incognito?: boolean
 }
 
@@ -343,14 +344,22 @@ export class FaviconService {
     if (dueDomains.size === 0) return []
 
     const liveTabByDomain = new Map<string, FaviconTabSource>()
-    Array.from(openTabs).forEach((tab) => {
-      if (!tab.url || !tab.favIconUrl || !this.isWebUrl(tab.url)) return
-      if (!this.canUseFaviconUrl(tab.favIconUrl)) return
-      const domain = this.getDomainFromUrl(tab.url)
-      if (domain && dueDomains.has(domain) && !liveTabByDomain.has(domain)) {
-        liveTabByDomain.set(domain, tab)
-      }
-    })
+    Array.from(openTabs)
+      .map((tab, order) => ({ tab, order }))
+      .sort(
+        (left, right) =>
+          (left.tab.id ?? Number.MAX_SAFE_INTEGER) -
+            (right.tab.id ?? Number.MAX_SAFE_INTEGER) ||
+          left.order - right.order,
+      )
+      .forEach(({ tab }) => {
+        if (!tab.url || !tab.favIconUrl || !this.isWebUrl(tab.url)) return
+        if (!this.canUseFaviconUrl(tab.favIconUrl)) return
+        const domain = this.getDomainFromUrl(tab.url)
+        if (domain && dueDomains.has(domain) && !liveTabByDomain.has(domain)) {
+          liveTabByDomain.set(domain, tab)
+        }
+      })
 
     const previousEntries = new Map<string, FaviconCacheEntry | undefined>()
     const tasks = Array.from(dueDomains).map((domain) => {

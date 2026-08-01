@@ -101,6 +101,14 @@ export interface MoveTreeItemsMessage {
   includeDescendants?: boolean
 }
 
+export interface MoveFirefoxNativeTabsMessage {
+  action: 'moveFirefoxNativeTabs'
+  firefoxTabIds: number[]
+  targetIndex: number
+  parentUid?: UID
+  targetWindowUid: UID
+}
+
 export interface ImportExternalUrlsMessage {
   action: 'importExternalUrls'
   items: ExternalDropItem[]
@@ -231,6 +239,7 @@ export type SessionTreeMessage =
   | FocusTabMessage
   | FocusWindowMessage
   | ImportExternalUrlsMessage
+  | MoveFirefoxNativeTabsMessage
   | MoveTreeItemsMessage
   | MoveWindowsMessage
   | OpenTabMessage

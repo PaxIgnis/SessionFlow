@@ -57,6 +57,46 @@ describe('runtime port service', () => {
     })
   })
 
+  it('accepts native Firefox tab move commands through the runtime port', async () => {
+    const { runtime } = await loadRuntimePortService()
+    const dispatchCommand = vi.fn()
+    runtime.initializeSessionTreePort({
+      dispatchCommand,
+      getSnapshot: () => [],
+    })
+
+    const command = runtime.sendTreeCommand({
+      action: 'moveFirefoxNativeTabs',
+      firefoxTabIds: [42],
+      targetIndex: 0,
+      targetWindowUid: 'window-1' as UID,
+    })
+    let timeoutId: ReturnType<typeof setTimeout> | undefined
+
+    try {
+      await expect(
+        Promise.race([
+          command,
+          new Promise<never>((_, reject) => {
+            timeoutId = setTimeout(
+              () => reject(new Error('runtime command timed out')),
+              100,
+            )
+          }),
+        ]),
+      ).resolves.toBeUndefined()
+    } finally {
+      if (timeoutId !== undefined) clearTimeout(timeoutId)
+    }
+
+    expect(dispatchCommand).toHaveBeenCalledWith({
+      action: 'moveFirefoxNativeTabs',
+      firefoxTabIds: [42],
+      targetIndex: 0,
+      targetWindowUid: 'window-1',
+    })
+  })
+
   it('waits for async command dispatch before resolving command requests', async () => {
     const { runtime } = await loadRuntimePortService()
     let resolveDispatch: () => void = () => {}
