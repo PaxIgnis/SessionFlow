@@ -967,6 +967,100 @@ describe('background handlers', () => {
     )
   })
 
+  it('marks a discarded tab as loading while Firefox revives it', async () => {
+    const { fakeBrowser, initializeListeners, mocks } =
+      await loadBackgroundHandlers()
+    mocks.Items.push({
+      type: TreeItemType.WINDOW,
+      uid: 'window-1' as UID,
+      id: 20,
+      selected: false,
+      state: State.OPEN,
+      indentLevel: 0,
+      children: [
+        {
+          type: TreeItemType.TAB,
+          uid: 'tab-1' as UID,
+          id: 10,
+          title: 'Discarded tab',
+          url: 'https://example.test',
+          windowUid: 'window-1' as UID,
+          selected: false,
+          state: State.DISCARDED,
+          loadingStatus: LoadingStatus.COMPLETE,
+          indentLevel: 1,
+          pinned: false,
+        },
+      ],
+    })
+    initializeListeners()
+
+    fakeBrowser.tabs.onUpdated.emit(10, { discarded: false }, {
+      id: 10,
+      windowId: 20,
+      discarded: false,
+      pinned: false,
+      status: LoadingStatus.COMPLETE,
+      title: 'Discarded tab',
+      url: 'https://example.test',
+    } as browser.tabs.Tab)
+
+    expect(mocks.updateTab).toHaveBeenCalledWith(
+      { windowId: 20, tabId: 10 },
+      expect.objectContaining({
+        state: State.OPEN,
+        loadingStatus: LoadingStatus.LOADING,
+      }),
+    )
+  })
+
+  it('marks a discarded tab as loading when an empty favicon update starts its revival', async () => {
+    const { fakeBrowser, initializeListeners, mocks } =
+      await loadBackgroundHandlers()
+    mocks.Items.push({
+      type: TreeItemType.WINDOW,
+      uid: 'window-1' as UID,
+      id: 20,
+      selected: false,
+      state: State.OPEN,
+      indentLevel: 0,
+      children: [
+        {
+          type: TreeItemType.TAB,
+          uid: 'tab-1' as UID,
+          id: 10,
+          title: 'Wikipedia',
+          url: 'https://www.wikipedia.org/',
+          windowUid: 'window-1' as UID,
+          selected: false,
+          state: State.DISCARDED,
+          loadingStatus: LoadingStatus.COMPLETE,
+          indentLevel: 1,
+          pinned: false,
+        },
+      ],
+    })
+    initializeListeners()
+
+    fakeBrowser.tabs.onUpdated.emit(10, { favIconUrl: '' }, {
+      id: 10,
+      windowId: 20,
+      discarded: false,
+      pinned: false,
+      status: LoadingStatus.COMPLETE,
+      title: 'Wikipedia',
+      url: 'https://www.wikipedia.org/',
+    } as browser.tabs.Tab)
+
+    expect(mocks.updateTab).toHaveBeenCalledWith(
+      { windowId: 20, tabId: 10 },
+      expect.objectContaining({
+        state: State.OPEN,
+        loadingStatus: LoadingStatus.LOADING,
+      }),
+    )
+  })
+
   it('inserts attached tabs before the browser tab to their right', async () => {
     const { fakeBrowser, initializeListeners, mocks } =
       await loadBackgroundHandlers()

@@ -115,6 +115,34 @@ describe('background browser-event update ordering', () => {
     })
   })
 
+  it('does not mark a discarded tab as faviconless', async () => {
+    vi.useFakeTimers()
+    const { fakeBrowser, initializeListeners, mocks, setBrowserTabs } =
+      await loadBackgroundHandlers()
+    mocks.Items.push(treeWindow())
+    fakeBrowser.extension.getViews.mockReturnValue([{}])
+    const discardedTab = browserTab({
+      title: 'Unloaded Wikipedia',
+      url: 'https://www.wikipedia.org/',
+      status: 'complete',
+      favIconUrl: undefined,
+      discarded: true,
+    })
+    setBrowserTabs(20, [discardedTab])
+    initializeListeners()
+
+    await fakeBrowser.tabs.onUpdated.emitAsync(
+      10,
+      { status: 'complete' },
+      discardedTab,
+    )
+    await vi.runAllTimersAsync()
+
+    expect(fakeBrowser.runtime.sendMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'FAVICON_CLEARED' }),
+    )
+  })
+
   it('keeps the cached icon when Firefox reports the favicon shortly after completion', async () => {
     vi.useFakeTimers()
     const { fakeBrowser, initializeListeners, mocks, setBrowserTabs } =

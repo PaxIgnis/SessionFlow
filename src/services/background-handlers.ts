@@ -279,7 +279,8 @@ async function revalidateCompletedTabFavicon(
     currentTab.id !== tabId ||
     currentTab.windowId !== pending.windowId ||
     currentTab.url !== pending.url ||
-    currentTab.status !== 'complete'
+    currentTab.status !== 'complete' ||
+    currentTab.discarded
   ) {
     cancelPendingFaviconRecheck(tabId, token)
     return
@@ -730,7 +731,13 @@ async function tabsOnUpdated(
   const tabContents: Partial<Tab> = {
     state: authoritativeTab.discarded ? State.DISCARDED : State.OPEN,
   }
-  if (authoritativeTab.status) {
+  const isRevivingDiscardedTab =
+    indexedTab.state === State.DISCARDED &&
+    !authoritativeTab.discarded &&
+    changeInfo.status !== LoadingStatus.COMPLETE
+  if (isRevivingDiscardedTab) {
+    tabContents.loadingStatus = LoadingStatus.LOADING
+  } else if (authoritativeTab.status) {
     tabContents.loadingStatus = authoritativeTab.status as LoadingStatus
   }
   // only update title and url if the tab is complete
