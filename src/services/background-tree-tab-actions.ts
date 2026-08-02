@@ -23,6 +23,9 @@ import {
   WindowChild,
 } from '@/types/session-tree'
 
+let nextTabActivationRevision = 0
+const latestTabActivationRevisionByWindowId = new Map<number, number>()
+
 /**
  * Adds a tab to the session tree.
  *
@@ -402,34 +405,53 @@ export function setTabSaved(tabUid: UID): void {
  */
 export function tabOnActivated(
   activeInfo: browser.tabs._OnActivatedActiveInfo,
-  tries: number = 0,
 ): void {
+  if (activeInfo.windowId === Tree.sessionTreeWindowId) return
+
+  const revision = ++nextTabActivationRevision
+  latestTabActivationRevisionByWindowId.set(activeInfo.windowId, revision)
+  applyTabActivation(activeInfo, revision)
+}
+
+function applyTabActivation(
+  activeInfo: browser.tabs._OnActivatedActiveInfo,
+  revision: number,
+): void {
+  if (
+    latestTabActivationRevisionByWindowId.get(activeInfo.windowId) !== revision
+  ) {
+    return
+  }
+
   const window = Tree.Items.filter(Tree.isWindow).find(
     (w) => w.id === activeInfo.windowId,
   )
-  const activeTab = Tree.Items.filter(Tree.isWindow)
-    .find((w) => w.id === activeInfo.windowId)
-    ?.children.find(
-      (t): t is Tab => t.type === TreeItemType.TAB && t.id === activeInfo.tabId,
+  if (!window) {
+    DeferredEventsQueue.addDeferredWindowEvent(activeInfo.windowId, () =>
+      applyTabActivation(activeInfo, revision),
     )
-  const previousActiveTab = Tree.Items.filter(Tree.isWindow)
-    .find((w) => w.id === activeInfo.windowId)
-    ?.children.find(
-      (t): t is Tab =>
-        t.type === TreeItemType.TAB && t.id === activeInfo.previousTabId,
-    )
-  // remove active status from previous active tab (not when detached/attached)
-  if (activeInfo.previousTabId !== activeInfo.tabId && previousActiveTab) {
-    Tree.updateTab({ tabUid: previousActiveTab.uid }, { active: false })
-  }
-  // if window or activeTab is undefined, wait and try again
-  if (!window || !activeTab) {
-    if (tries > 0) {
-      setTimeout(() => {
-        tabOnActivated(activeInfo, tries - 1)
-      }, 100)
-    }
     return
+  }
+
+  const activeTab = window.children.find(
+    (item): item is Tab =>
+      item.type === TreeItemType.TAB && item.id === activeInfo.tabId,
+  )
+  if (!activeTab) {
+    DeferredEventsQueue.addDeferredTabEvent(activeInfo.tabId, () =>
+      applyTabActivation(activeInfo, revision),
+    )
+    return
+  }
+
+  const previousActiveTabs = window.children.filter(
+    (item): item is Tab =>
+      item.type === TreeItemType.TAB &&
+      item.uid !== activeTab.uid &&
+      (item.id === window.activeTabId || item.active === true),
+  )
+  for (const previousActiveTab of previousActiveTabs) {
+    Tree.updateTab({ tabUid: previousActiveTab.uid }, { active: false })
   }
   Tree.updateWindow(window.uid, { activeTabId: activeInfo.tabId })
   Tree.updateTab({ tabUid: activeTab.uid }, { active: true })

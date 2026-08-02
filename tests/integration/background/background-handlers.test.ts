@@ -895,7 +895,7 @@ describe('background handlers', () => {
 
     fakeBrowser.tabs.onActivated.emit(activeInfo)
 
-    expect(mocks.tabOnActivated).toHaveBeenCalledWith(activeInfo, 5)
+    expect(mocks.tabOnActivated).toHaveBeenCalledWith(activeInfo)
   })
 
   it('updates tab metadata and tree pinned state from browser tab updates', async () => {
@@ -1574,7 +1574,7 @@ describe('background handlers', () => {
 
     fakeBrowser.windows.onFocusChanged.emit(42)
 
-    expect(mocks.setActiveWindow).toHaveBeenCalledWith(42, 5)
+    expect(mocks.setActiveWindow).toHaveBeenCalledWith(42)
   })
 
   it('opens the session tree from browser action clicks', async () => {

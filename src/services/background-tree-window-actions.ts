@@ -19,6 +19,9 @@ import {
   WindowPosition,
 } from '@/types/session-tree'
 
+let nextWindowFocusRevision = 0
+let latestWindowFocusRevision = 0
+
 /**
  * Sets the state of the window and all tabs to SAVED and resets the IDs.
  *
@@ -133,6 +136,9 @@ export async function updateWindowTabs(windowId: number): Promise<void> {
         op: 'windowUpdated',
         window: structuredClone(window),
       })
+      for (const tab of Tree.getTabs(window.children)) {
+        DeferredEventsQueue.processDeferredTabEvents(tab.id)
+      }
       await Tree.syncOpenTabGroups()
     }
   } catch (error) {
@@ -339,9 +345,11 @@ export function updateWindowPositionInterval(): void {
  * Removes the active status from the previous active window and sets the new active window.
  *
  * @param {number} windowId - The ID of the window to set as active.
- * @param {number} tries - The number of tries left to set the active window.
  */
-export function setActiveWindow(windowId: number, tries: number = 0): void {
+export function setActiveWindow(windowId: number): void {
+  const revision = ++nextWindowFocusRevision
+  latestWindowFocusRevision = revision
+
   if (
     windowId === undefined ||
     windowId === -1 ||
@@ -350,15 +358,19 @@ export function setActiveWindow(windowId: number, tries: number = 0): void {
     return
   }
 
+  applyWindowFocus(windowId, revision)
+}
+
+function applyWindowFocus(windowId: number, revision: number): void {
+  if (latestWindowFocusRevision !== revision) return
+
   const activeWindow = Tree.Items.filter(Tree.isWindow).find(
     (w) => w.id === windowId,
   )
   if (!activeWindow) {
-    if (tries > 0) {
-      setTimeout(() => {
-        setActiveWindow(windowId, tries - 1)
-      }, 100)
-    }
+    DeferredEventsQueue.addDeferredWindowEvent(windowId, () =>
+      applyWindowFocus(windowId, revision),
+    )
     return
   }
 

@@ -53,6 +53,34 @@ describe('window actions', () => {
     expectTreeInvariants()
   })
 
+  it('replays deferred activation after tabs are populated in bulk', async () => {
+    const window = createWindow('window-1' as UID, [], {
+      activeTabId: undefined,
+      id: 20,
+      state: State.OPEN,
+    })
+    vi.mocked(browser.windows.get).mockResolvedValue({
+      id: window.id,
+      tabs: [
+        {
+          id: 10,
+          active: true,
+          discarded: false,
+          pinned: false,
+          title: 'Active tab',
+          url: 'https://example.test/active',
+        },
+      ],
+    } as browser.windows.Window)
+
+    Tree.tabOnActivated({ tabId: 10, windowId: window.id })
+    await Tree.updateWindowTabs(window.id)
+
+    expect(window.activeTabId).toBe(10)
+    expect(window.children).toHaveLength(1)
+    expectTreeInvariants()
+  })
+
   it('saves a window and descendant tabs while preserving notes and indexes', () => {
     const rootTab = createTab('tab-root' as UID, {
       active: true,
@@ -181,41 +209,61 @@ describe('window actions', () => {
     expectTreeInvariants()
   })
 
-  it('retries setting the active window when the window is not yet indexed', () => {
-    vi.useFakeTimers()
-    try {
-      Tree.setActiveWindow(20, 1)
+  it('replays window focus after a saved window receives its browser ID', () => {
+    const window = createWindow('window-1' as UID, [], {
+      active: false,
+      id: -1,
+    })
 
-      const window = createWindow('window-1' as UID, [], {
-        active: false,
-        id: 20,
-      })
-      vi.advanceTimersByTime(100)
+    Tree.setActiveWindow(20)
+    Tree.updateWindowId(window.uid, 20)
 
-      expect(window.active).toBe(true)
-      expectTreeInvariants()
-    } finally {
-      vi.useRealTimers()
-    }
+    expect(window.active).toBe(true)
+    expectTreeInvariants()
   })
 
-  it('preserves the last active window while an unknown focus target retries (EV-26)', () => {
-    vi.useFakeTimers()
-    try {
-      const active = createWindow('window-active' as UID, [], {
-        active: true,
-        id: 10,
-      })
+  it('keeps the latest focus when deferred windows are indexed out of order', () => {
+    const previous = createWindow('window-previous' as UID, [], {
+      active: true,
+      id: 10,
+    })
+    const first = createWindow('window-first' as UID, [], {
+      active: false,
+      id: -1,
+    })
+    const second = createWindow('window-second' as UID, [], {
+      active: false,
+      id: -1,
+    })
+    const latest = createWindow('window-latest' as UID, [], {
+      active: false,
+      id: -1,
+    })
 
-      Tree.setActiveWindow(999, 1)
-      expect(active.active).toBe(true)
+    Tree.setActiveWindow(20)
+    Tree.setActiveWindow(30)
+    Tree.setActiveWindow(40)
+    Tree.updateWindowId(second.uid, 30)
+    Tree.updateWindowId(latest.uid, 40)
+    Tree.updateWindowId(first.uid, 20)
 
-      vi.advanceTimersByTime(100)
-      expect(active.active).toBe(true)
-      expectTreeInvariants()
-    } finally {
-      vi.useRealTimers()
-    }
+    expect(previous.active).toBe(false)
+    expect(first.active).toBe(false)
+    expect(second.active).toBe(false)
+    expect(latest.active).toBe(true)
+    expectTreeInvariants()
+  })
+
+  it('preserves the last active window while an unknown focus target is deferred (EV-26)', () => {
+    const active = createWindow('window-active' as UID, [], {
+      active: true,
+      id: 10,
+    })
+
+    Tree.setActiveWindow(999)
+
+    expect(active.active).toBe(true)
+    expectTreeInvariants()
   })
 
   it('ignores invalid and session tree window ids when setting the active window', () => {
@@ -236,6 +284,26 @@ describe('window actions', () => {
     Tree.setActiveWindow(sessionTreeWindow.id)
     expect(active.active).toBe(true)
     expect(sessionTreeWindow.active).toBe(false)
+    expectTreeInvariants()
+  })
+
+  it('lets popup focus invalidate an older deferred normal-window focus', () => {
+    const previous = createWindow('window-previous' as UID, [], {
+      active: true,
+      id: 10,
+    })
+    const pending = createWindow('window-pending' as UID, [], {
+      active: false,
+      id: -1,
+    })
+    Tree.sessionTreeWindowId = 99
+
+    Tree.setActiveWindow(20)
+    Tree.setActiveWindow(Tree.sessionTreeWindowId)
+    Tree.updateWindowId(pending.uid, 20)
+
+    expect(previous.active).toBe(true)
+    expect(pending.active).toBe(false)
     expectTreeInvariants()
   })
 

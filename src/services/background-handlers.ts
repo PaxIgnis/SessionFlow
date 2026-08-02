@@ -1237,7 +1237,7 @@ async function tabsOnAttached(
  * When a window is focused, set the active window in the session tree.
  */
 function windowsOnFocusChanged(windowId: number): void {
-  Tree.setActiveWindow(windowId, 5)
+  Tree.setActiveWindow(windowId)
 }
 
 /**
@@ -1246,7 +1246,7 @@ function windowsOnFocusChanged(windowId: number): void {
 function tabsOnActivated(
   activeInfo: browser.tabs._OnActivatedActiveInfo,
 ): void {
-  Tree.tabOnActivated(activeInfo, 5)
+  Tree.tabOnActivated(activeInfo)
 }
 
 /**

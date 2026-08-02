@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '@/defaults/settings'
+import { DeferredEventsQueue } from '@/services/background-deferred-events-queue'
 import { OnCreatedQueue } from '@/services/background-on-created-queue'
 import { Tree } from '@/services/background-tree'
 import { Settings } from '@/services/settings'
-import { State } from '@/types/session-tree'
+import { State, Tab, TreeItemType } from '@/types/session-tree'
 import { installFakeBrowser } from '../../helpers/fake-browser'
 import {
   createNote,
@@ -229,6 +230,173 @@ describe('background browser API interactions', () => {
       expectTreeInvariants()
     },
   )
+
+  it('replays activation after a saved window and tab receive browser IDs', () => {
+    const tab = createTab('tab-saved' as UID, {
+      active: false,
+      id: -1,
+      state: State.SAVED,
+    })
+    const window = createWindow('window-saved' as UID, [tab], {
+      activeTabId: undefined,
+      id: -1,
+      state: State.SAVED,
+    })
+
+    Tree.updateWindowState(window.uid, State.OPEN)
+    Tree.updateTabState(tab.uid, State.OPEN)
+    Tree.tabOnActivated({ tabId: 31, windowId: 30 })
+    Tree.updateWindowId(window.uid, 30)
+    Tree.updateTabId(tab.uid, 31)
+
+    expect(window.activeTabId).toBe(31)
+    expect(tab.active).toBe(true)
+    expectTreeInvariants()
+  })
+
+  it('replays activation after a newly created tab is added to its window', () => {
+    const previous = createTab('tab-previous' as UID, {
+      active: true,
+      id: 10,
+      state: State.OPEN,
+    })
+    const window = createWindow('window-1' as UID, [previous], {
+      activeTabId: previous.id,
+      id: 20,
+      state: State.OPEN,
+    })
+
+    Tree.tabOnActivated({
+      tabId: 11,
+      windowId: window.id,
+      previousTabId: previous.id,
+    })
+    const createdUid = Tree.addTab(
+      false,
+      window.uid,
+      11,
+      false,
+      State.OPEN,
+      'New Tab',
+      'about:newtab',
+      false,
+    )
+
+    expect(createdUid).toBeTruthy()
+    expect(window.activeTabId).toBe(11)
+    expect(previous.active).toBe(false)
+    expect(Tree.tabsByUid.get(createdUid as UID)?.active).toBe(true)
+    expectTreeInvariants()
+  })
+
+  it('keeps the latest activation when deferred tabs are added out of order', () => {
+    const previous = createTab('tab-previous' as UID, {
+      active: true,
+      id: 10,
+      state: State.OPEN,
+    })
+    const window = createWindow('window-1' as UID, [previous], {
+      activeTabId: previous.id,
+      id: 20,
+      state: State.OPEN,
+    })
+
+    Tree.tabOnActivated({
+      tabId: 11,
+      windowId: window.id,
+      previousTabId: 10,
+    })
+    Tree.tabOnActivated({
+      tabId: 12,
+      windowId: window.id,
+      previousTabId: 11,
+    })
+    Tree.tabOnActivated({
+      tabId: 13,
+      windowId: window.id,
+      previousTabId: 12,
+    })
+
+    for (const tabId of [12, 13, 11]) {
+      Tree.addTab(
+        false,
+        window.uid,
+        tabId,
+        false,
+        State.OPEN,
+        `Tab ${tabId}`,
+        `https://example.test/${tabId}`,
+        false,
+      )
+    }
+
+    expect(window.activeTabId).toBe(13)
+    expect(
+      window.children
+        .filter(
+          (item): item is Tab =>
+            item.type === TreeItemType.TAB && item.active === true,
+        )
+        .map((item) => item.id),
+    ).toEqual([13])
+    expectTreeInvariants()
+  })
+
+  it('clears every stale active tab when applying a new activation', () => {
+    const firstStale = createTab('tab-first-stale' as UID, {
+      active: true,
+      id: 10,
+      state: State.OPEN,
+    })
+    const secondStale = createTab('tab-second-stale' as UID, {
+      active: true,
+      id: 11,
+      state: State.OPEN,
+    })
+    const target = createTab('tab-target' as UID, {
+      active: false,
+      id: 12,
+      state: State.OPEN,
+    })
+    const window = createWindow(
+      'window-1' as UID,
+      [firstStale, secondStale, target],
+      {
+        activeTabId: firstStale.id,
+        id: 20,
+        state: State.OPEN,
+      },
+    )
+
+    Tree.tabOnActivated({ tabId: target.id, windowId: window.id })
+
+    expect(firstStale.active).toBe(false)
+    expect(secondStale.active).toBe(false)
+    expect(target.active).toBe(true)
+    expect(window.activeTabId).toBe(target.id)
+    expectTreeInvariants()
+  })
+
+  it('ignores activation from the dedicated session tree popup window', () => {
+    const activeTab = createTab('tab-active' as UID, {
+      active: true,
+      id: 10,
+      state: State.OPEN,
+    })
+    const window = createWindow('window-1' as UID, [activeTab], {
+      activeTabId: activeTab.id,
+      id: 20,
+      state: State.OPEN,
+    })
+    Tree.sessionTreeWindowId = 99
+
+    Tree.tabOnActivated({ tabId: 100, windowId: 99 })
+
+    expect(DeferredEventsQueue.windows.has(99)).toBe(false)
+    expect(window.activeTabId).toBe(activeTab.id)
+    expect(activeTab.active).toBe(true)
+    expectTreeInvariants()
+  })
 
   it.each(['save', 'close'] as const)(
     '%s the only browser-backed tab preserves a note/separator window',
