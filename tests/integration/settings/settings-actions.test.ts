@@ -140,6 +140,39 @@ describe('settings actions', () => {
     })
   })
 
+  it('fills missing snapshot settings and validates snapshot intervals', async () => {
+    const { normalizeSettings } = await import('@/services/settings-actions')
+
+    expect(normalizeSettings({})).toMatchObject({
+      automaticSessionSnapshots: true,
+      sessionSnapshotInterval: 30,
+      sessionSnapshotIntervalUnit: 'minutes',
+      protectManualSessionSnapshots: true,
+      includePrivateWindowsInSessionSnapshots: true,
+    })
+    expect(
+      normalizeSettings({
+        sessionSnapshotInterval: 1,
+        sessionSnapshotIntervalUnit: 'minutes',
+      }),
+    ).toMatchObject({ sessionSnapshotInterval: 5 })
+    expect(
+      normalizeSettings({
+        sessionSnapshotInterval: 1,
+        sessionSnapshotIntervalUnit: 'hours',
+      }),
+    ).toMatchObject({ sessionSnapshotInterval: 1 })
+    expect(
+      normalizeSettings({
+        sessionSnapshotInterval: 100,
+        sessionSnapshotIntervalUnit: 'hours',
+      }),
+    ).toMatchObject({ sessionSnapshotInterval: 24 })
+    expect(
+      normalizeSettings({ sessionSnapshotIntervalUnit: 'days' }),
+    ).toMatchObject({ sessionSnapshotIntervalUnit: 'minutes' })
+  })
+
   it('keeps default settings immutable when runtime settings change', () => {
     Settings.values.refreshFaviconsAfterPeriodOfTime = true
 

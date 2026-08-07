@@ -10,6 +10,7 @@ import SettingsContainers from './components/settings.containers.vue'
 import SettingsTabs from './components/settings.tabs.vue'
 import SettingsTabGroups from './components/settings.tab-groups.vue'
 import SettingsWindows from './components/settings.windows.vue'
+import SettingsStorage from './components/settings.storage.vue'
 
 const sections = [
   { id: 'settings_general', level: 0 },
@@ -111,7 +112,7 @@ onUnmounted(() => {
       <SettingsTabGroups />
       <SettingsDragAndDrop />
       <Favicons />
-      <!-- <Storage /> -->
+      <SettingsStorage />
     </div>
   </div>
 </template>

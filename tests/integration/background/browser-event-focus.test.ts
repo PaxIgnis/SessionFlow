@@ -81,7 +81,6 @@ describe('background focus and window-type policy', () => {
 
     expect(mocks.setActiveWindow).toHaveBeenCalledWith(
       browser.windows.WINDOW_ID_NONE,
-      5,
     )
     expect(mocks.addWindow).not.toHaveBeenCalled()
   })

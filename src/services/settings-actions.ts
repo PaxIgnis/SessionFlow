@@ -84,6 +84,13 @@ export function normalizeSettings(
       )
     }
   }
+  normalized.sessionSnapshotInterval = Math.min(
+    Math.max(
+      normalized.sessionSnapshotInterval,
+      normalized.sessionSnapshotIntervalUnit === 'hours' ? 1 : 5,
+    ),
+    normalized.sessionSnapshotIntervalUnit === 'hours' ? 24 : 1440,
+  )
   return normalized
 }
 

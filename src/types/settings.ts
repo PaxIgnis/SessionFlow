@@ -10,6 +10,13 @@ export interface Settings {
   duplicatedItemState: (typeof SETTINGS_TYPES.duplicatedItemState)[number]
   reconnectFirefoxRestoredItems: boolean
 
+  // Storage
+  automaticSessionSnapshots: boolean
+  sessionSnapshotInterval: number
+  sessionSnapshotIntervalUnit: (typeof SETTINGS_TYPES.sessionSnapshotIntervalUnit)[number]
+  protectManualSessionSnapshots: boolean
+  includePrivateWindowsInSessionSnapshots: boolean
+
   // Windows
   focusWindowOnOpen: boolean
   openWindowsInSameLocation: boolean
@@ -76,6 +83,7 @@ export const SETTINGS_TYPES = {
   refreshFaviconsAfterPeriodOfTimeUnit: ['hours', 'days', 'weeks'],
   faviconRefreshTiming: ['startup-only', 'expiration-and-startup'],
   openWindowsInSameLocationUpdateIntervalUnit: ['seconds', 'minutes'],
+  sessionSnapshotIntervalUnit: ['minutes', 'hours'],
 }
 
 export const OPTIONS = {
@@ -165,5 +173,9 @@ export const OPTIONS = {
   openWindowsInSameLocationUpdateIntervalUnit: [
     { label: 'Seconds', value: 'seconds' },
     { label: 'Minutes', value: 'minutes' },
+  ],
+  sessionSnapshotIntervalUnit: [
+    { label: 'Minutes', value: 'minutes' },
+    { label: 'Hours', value: 'hours' },
   ],
 }

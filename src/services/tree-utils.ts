@@ -98,12 +98,19 @@ export interface TreeItemIndentGuideState {
   hasFollowingDirectSibling: boolean
 }
 
+interface IndentGuideItem {
+  uid: UID
+  parentUid?: UID
+  indentLevel?: number
+  isVisible?: boolean
+}
+
 /**
  * Precomputes indent-guide continuation and sibling state in one reverse pass.
  * Invisible items are skipped because they do not contribute visible guides.
  */
-export function buildIndentGuideStates(
-  items: TreeItem[],
+export function buildIndentGuideStates<T extends IndentGuideItem>(
+  items: readonly T[],
 ): Map<UID, TreeItemIndentGuideState> {
   const states = new Map<UID, TreeItemIndentGuideState>()
   const reachableLevels = new Set<number>()

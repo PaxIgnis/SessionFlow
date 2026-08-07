@@ -380,10 +380,10 @@ describe('background browser-event update ordering', () => {
       { windowId: 20, tabId: 10 },
       expect.objectContaining({ state: State.DISCARDED }),
     )
-    expect(mocks.tabOnActivated).toHaveBeenCalledWith(
-      { tabId: 10, windowId: 20 },
-      5,
-    )
+    expect(mocks.tabOnActivated).toHaveBeenCalledWith({
+      tabId: 10,
+      windowId: 20,
+    })
     expect(mocks.updateTab).toHaveBeenLastCalledWith(
       { windowId: 20, tabId: 10 },
       expect.objectContaining({ state: State.OPEN, title: 'Reloaded' }),

@@ -7,7 +7,12 @@ import { Settings } from '@/services/settings'
 import { State } from '@/types/session-tree'
 import { flushMicrotasks, installFakeBrowser } from '../../helpers/fake-browser'
 import { liveTab, liveWindow } from '../../helpers/startup-fixtures'
-import { createTab, createWindow, resetTree } from '../../helpers/tree-fixtures'
+import {
+  createNote,
+  createTab,
+  createWindow,
+  resetTree,
+} from '../../helpers/tree-fixtures'
 import { expectTreeInvariants } from '../../helpers/tree-invariants'
 
 describe('startup lifecycle', () => {
@@ -120,6 +125,33 @@ describe('startup lifecycle', () => {
     clearInterval(timer)
   })
 
+  it('does not append restored items over a concurrent tree mutation', async () => {
+    const original = createNote('persist-original' as UID, { indentLevel: 0 })
+    const restored = createNote('persist-restored' as UID, { indentLevel: 0 })
+    Tree.Items.push(original)
+    const expectedItems = structuredClone(Tree.Items)
+    const storageWrite = deferred<void>()
+    vi.mocked(browser.storage.local.set).mockReturnValue(storageWrite.promise)
+
+    const append = Tree.appendTreeItemsAfterPersist([restored], expectedItems)
+    await vi.waitFor(() => {
+      expect(browser.storage.local.set).toHaveBeenCalledTimes(1)
+    })
+
+    Tree.Items.push(
+      createNote('live-during-persist' as UID, { indentLevel: 0 }),
+    )
+    storageWrite.resolve()
+
+    await expect(append).rejects.toMatchObject({
+      name: 'SessionTreeChangedDuringPersistError',
+    })
+    expect(Tree.Items.map((item) => item.uid)).toEqual([
+      'persist-original',
+      'live-during-persist',
+    ])
+  })
+
   it('ST-22 logs a failed tick and retries on the next interval', async () => {
     vi.useFakeTimers()
     const startSessionTreePersistence = (
@@ -156,8 +188,15 @@ describe('startup lifecycle', () => {
     const initializeSettings = vi.fn(() => settingsReady.promise)
     const initializeContainers = vi.fn().mockResolvedValue(undefined)
     const initializeWindows = vi.fn().mockResolvedValue(undefined)
+    const initializeSnapshots = vi.fn().mockResolvedValue(undefined)
+    const capturePersistedStartupTree = vi.fn().mockResolvedValue(undefined)
     const stampOpenTreeIdentities = vi.fn().mockResolvedValue(undefined)
     const initializeListeners = vi.fn()
+    const snapshotSettingsUpdated = vi.fn().mockResolvedValue(undefined)
+    const faviconSettingsUpdated = vi
+      .fn()
+      .mockRejectedValue(new Error('favicon refresh failed'))
+    const setupSettingsUpdatedListener = vi.fn()
 
     vi.doMock('@/services/background-actions', () => ({
       initializeSettings,
@@ -178,6 +217,13 @@ describe('startup lifecycle', () => {
     vi.doMock('@/services/background-session-restore', () => ({
       stampOpenTreeIdentities,
     }))
+    vi.doMock('@/services/background-session-snapshots', () => ({
+      SessionSnapshots: {
+        initialize: initializeSnapshots,
+        capturePersistedStartupTree,
+        handleSettingsUpdated: snapshotSettingsUpdated,
+      },
+    }))
     vi.doMock('@/services/background-tree', () => ({
       Tree: {
         initializeContainers,
@@ -187,12 +233,16 @@ describe('startup lifecycle', () => {
     }))
     vi.doMock('@/services/favicon-refresh', () => ({
       FaviconRefresh: {
-        handleSettingsUpdated: vi.fn(),
+        handleSettingsUpdated: faviconSettingsUpdated,
         initialize: vi.fn().mockResolvedValue(undefined),
       },
     }))
     vi.doMock('@/services/settings', () => ({
-      Settings: { setupSettingsUpdatedListener: vi.fn() },
+      Settings: {
+        values: { automaticSessionSnapshots: true },
+        setupSettingsUpdatedListener,
+        setupFaviconPermissionRemovalListener: vi.fn(),
+      },
     }))
     vi.stubGlobal('defineBackground', (setup: () => void) => setup())
 
@@ -207,8 +257,14 @@ describe('startup lifecycle', () => {
     })
 
     expect(initializeSettings.mock.invocationCallOrder[0]).toBeLessThan(
-      initializeContainers.mock.invocationCallOrder[0],
+      initializeSnapshots.mock.invocationCallOrder[0],
     )
+    expect(initializeSnapshots.mock.invocationCallOrder[0]).toBeLessThan(
+      capturePersistedStartupTree.mock.invocationCallOrder[0],
+    )
+    expect(
+      capturePersistedStartupTree.mock.invocationCallOrder[0],
+    ).toBeLessThan(initializeContainers.mock.invocationCallOrder[0])
     expect(initializeContainers.mock.invocationCallOrder[0]).toBeLessThan(
       initializeWindows.mock.invocationCallOrder[0],
     )
@@ -218,6 +274,86 @@ describe('startup lifecycle', () => {
     expect(stampOpenTreeIdentities.mock.invocationCallOrder[0]).toBeLessThan(
       initializeListeners.mock.invocationCallOrder[0],
     )
+
+    const settingsUpdated = setupSettingsUpdatedListener.mock.calls[0]?.[0] as
+      | (() => Promise<void>)
+      | undefined
+    expect(settingsUpdated).toBeTypeOf('function')
+    await settingsUpdated?.().catch(() => undefined)
+    expect(snapshotSettingsUpdated).toHaveBeenCalledOnce()
+  })
+
+  it('does not capture the persisted startup tree when automatic snapshots are disabled', async () => {
+    vi.resetModules()
+    installFakeBrowser()
+    const initializeSettings = vi.fn().mockResolvedValue(undefined)
+    const initializeSnapshots = vi.fn().mockResolvedValue(undefined)
+    const capturePersistedStartupTree = vi.fn().mockResolvedValue(undefined)
+    const initializeContainers = vi.fn().mockResolvedValue(undefined)
+    const initializeWindows = vi.fn().mockResolvedValue(undefined)
+    const stampOpenTreeIdentities = vi.fn().mockResolvedValue(undefined)
+    const initializeListeners = vi.fn()
+    const setupSettingsUpdatedListener = vi.fn()
+    const settingsValues = { automaticSessionSnapshots: false }
+
+    vi.doMock('@/services/background-actions', () => ({
+      initializeSettings,
+      setupBrowserActionMenu: vi.fn(),
+      startSessionTreePersistence: vi.fn(),
+      updateBadgeOnStartup: vi.fn(),
+    }))
+    vi.doMock('@/services/background-deferred-events-queue', () => ({
+      DeferredEventsQueue: { initializeDeferredEventsQueue: vi.fn() },
+    }))
+    vi.doMock('@/services/background-handlers', () => ({
+      initializeContainerListeners: vi.fn(),
+      initializeListeners,
+    }))
+    vi.doMock('@/services/background-private-window-onboarding', () => ({
+      initializePrivateWindowOnboarding: vi.fn(),
+    }))
+    vi.doMock('@/services/background-session-restore', () => ({
+      stampOpenTreeIdentities,
+    }))
+    vi.doMock('@/services/background-session-snapshots', () => ({
+      SessionSnapshots: {
+        initialize: initializeSnapshots,
+        capturePersistedStartupTree,
+        handleSettingsUpdated: vi.fn().mockResolvedValue(undefined),
+      },
+    }))
+    vi.doMock('@/services/background-tree', () => ({
+      Tree: {
+        initializeContainers,
+        initializeWindows,
+        saveSessionTreeToStorage: vi.fn(),
+      },
+    }))
+    vi.doMock('@/services/favicon-refresh', () => ({
+      FaviconRefresh: {
+        handleSettingsUpdated: vi.fn().mockResolvedValue(undefined),
+        initialize: vi.fn().mockResolvedValue(undefined),
+      },
+    }))
+    vi.doMock('@/services/settings', () => ({
+      Settings: {
+        values: settingsValues,
+        setupSettingsUpdatedListener,
+        setupFaviconPermissionRemovalListener: vi.fn(),
+      },
+    }))
+    vi.stubGlobal('defineBackground', (setup: () => void) => setup())
+
+    await import('@/entrypoints/background')
+    await vi.waitFor(() => {
+      expect(initializeListeners).toHaveBeenCalledTimes(1)
+    })
+
+    expect(initializeSettings).toHaveBeenCalledOnce()
+    expect(initializeSnapshots).toHaveBeenCalledOnce()
+    expect(capturePersistedStartupTree).not.toHaveBeenCalled()
+    expect(initializeContainers).toHaveBeenCalledOnce()
+    expect(initializeWindows).toHaveBeenCalledOnce()
   })
 })
 

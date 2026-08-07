@@ -9,11 +9,13 @@ import {
   Tab,
   TreeItem,
   TreeItemType,
+  TopLevelTreeItem,
   Window,
 } from '@/types/session-tree'
 import { emitTreeDelta } from './runtime-port-service'
 
 const startupOpenTabUids = new Set<UID>()
+let sessionTreePersistenceQueue = Promise.resolve()
 
 function isSessionTreePopupWindow(window: browser.windows.Window): boolean {
   if (window.type !== 'popup') return false
@@ -585,9 +587,75 @@ export async function loadSessionTreeFromStorage(): Promise<void> {
  * @returns {Promise<void>} A promise that resolves when the session tree has been saved.
  */
 export async function saveSessionTreeToStorage(): Promise<void> {
-  await browser.storage.local.set({
-    [STORAGE_KEY]: structuredClone(Tree.Items),
+  await serializeSessionTreePersistence(async () => {
+    const persistedItems = structuredClone(Tree.Items)
+    await browser.storage.local.set({ [STORAGE_KEY]: persistedItems })
   })
+}
+
+/**
+ * Persists restored items and appends them to the live tree only if the tree
+ * remained unchanged throughout the asynchronous storage write.
+ *
+ * @param {TopLevelTreeItem[]} restoredItems - Items projected from the snapshot.
+ * @param {readonly TopLevelTreeItem[]} expectedCurrentItems - Tree state used to build the projection.
+ * @returns {Promise<void>} Resolves after storage and in-memory tree state are updated.
+ * @throws {Error} If the live tree changes while the restore is being persisted.
+ */
+export async function appendTreeItemsAfterPersist(
+  restoredItems: TopLevelTreeItem[],
+  expectedCurrentItems: readonly TopLevelTreeItem[],
+): Promise<void> {
+  await serializeSessionTreePersistence(async () => {
+    assertCurrentTreeUnchanged(expectedCurrentItems)
+    const persistedRestoredItems = structuredClone(restoredItems)
+    const persistedItems = [
+      ...structuredClone(Tree.Items),
+      ...persistedRestoredItems,
+    ]
+    await browser.storage.local.set({ [STORAGE_KEY]: persistedItems })
+    assertCurrentTreeUnchanged(expectedCurrentItems)
+
+    Tree.Items.push(...persistedRestoredItems)
+    rebuildUIDMaps()
+    Tree.recomputeSessionTree(false)
+    emitTreeDelta({
+      op: 'treeReplaced',
+      treeItems: structuredClone(Tree.Items),
+    })
+  })
+}
+
+/**
+ * Serializes all session-tree storage writes so saves and restores cannot
+ * overwrite each other with stale snapshots. A failed operation does not
+ * poison the queue; later operations still run.
+ */
+function serializeSessionTreePersistence<T>(
+  operation: () => Promise<T>,
+): Promise<T> {
+  const result = sessionTreePersistenceQueue.then(operation, operation)
+  sessionTreePersistenceQueue = result.then(
+    () => undefined,
+    () => undefined,
+  )
+  return result
+}
+
+/**
+ * Verifies that the live tree still matches the tree used to build a pending
+ * persistence operation.
+ *
+ * @param {readonly TopLevelTreeItem[]} expectedItems - Expected live tree state.
+ * @throws {Error} If the live tree has changed since it was captured.
+ */
+function assertCurrentTreeUnchanged(
+  expectedItems: readonly TopLevelTreeItem[],
+): void {
+  if (JSON.stringify(Tree.Items) === JSON.stringify(expectedItems)) return
+  const error = new Error('The session tree changed during persistence')
+  error.name = 'SessionTreeChangedDuringPersistError'
+  throw error
 }
 
 /**
@@ -1051,11 +1119,7 @@ function isEffectiveTreeMoveNoOp(
           new Set(movedTabs.map((tab) => tab.uid)),
         )
       : undefined
-    if (
-      movedTabs.some(
-        (tab) => tab.tabGroup?.uid !== targetGroup?.uid,
-      )
-    ) {
+    if (movedTabs.some((tab) => tab.tabGroup?.uid !== targetGroup?.uid)) {
       return false
     }
   }
@@ -1572,9 +1636,7 @@ function pinnedBoundaryInsertionIndex(
     : Math.min(requestedIndex, firstUnpinnedIndex)
 }
 
-function orderTabMoveBlocksByPinnedState(
-  moveBlocks: MoveBlock[],
-): MoveBlock[] {
+function orderTabMoveBlocksByPinnedState(moveBlocks: MoveBlock[]): MoveBlock[] {
   const tabBlocks = moveBlocks
     .filter(
       (block): block is MoveBlock & { root: Tab } =>
@@ -1584,9 +1646,7 @@ function orderTabMoveBlocksByPinnedState(
   let tabBlockIndex = 0
 
   return moveBlocks.map((block) =>
-    block.root.type === TreeItemType.TAB
-      ? tabBlocks[tabBlockIndex++]
-      : block,
+    block.root.type === TreeItemType.TAB ? tabBlocks[tabBlockIndex++] : block,
   )
 }
 

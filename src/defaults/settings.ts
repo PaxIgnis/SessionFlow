@@ -12,6 +12,13 @@ export const DEFAULT_SETTINGS: Settings = {
   duplicatedItemState: 'saved',
   reconnectFirefoxRestoredItems: true,
 
+  // Storage
+  automaticSessionSnapshots: true,
+  sessionSnapshotInterval: 30,
+  sessionSnapshotIntervalUnit: 'minutes',
+  protectManualSessionSnapshots: true,
+  includePrivateWindowsInSessionSnapshots: true,
+
   // Windows
   focusWindowOnOpen: true,
   openWindowsInSameLocation: true,

@@ -3,6 +3,8 @@ import { STORAGE_KEY } from '@/defaults/constants'
 import { DEFAULT_SETTINGS } from '@/defaults/settings'
 import { Tree } from '@/services/background-tree'
 import { Settings } from '@/services/settings'
+import { captureSessionSnapshot } from '@/services/session-snapshot-codec'
+import { projectSnapshotForRestore } from '@/services/session-snapshot-restore'
 import {
   State,
   TopLevelTreeItem,
@@ -109,6 +111,47 @@ describe('performance and long-running resilience', () => {
     expect(Tree.notesByUid.size).toBe(5_000)
     expect(Tree.separatorsByUid.size).toBe(5_000)
     expectTreeInvariants()
+  }, 30_000)
+
+  it('captures and projects a 25,000-item snapshot within the storage budget', async () => {
+    Tree.Items = buildMixedTree(250, 99)
+
+    const captureStartedAt = performance.now()
+    const capture = await captureSessionSnapshot(Tree.Items, {
+      includePrivateWindows: true,
+    })
+    const captureElapsed = performance.now() - captureStartedAt
+    const restoreStartedAt = performance.now()
+    const restored = projectSnapshotForRestore({
+      payload: capture.payload,
+      mode: 'all',
+      selectedUids: new Set(),
+      existingUids: new Set(),
+    })
+    const restoreElapsed = performance.now() - restoreStartedAt
+
+    expect(captureElapsed).toBeLessThan(PERFORMANCE_BUDGET_MS)
+    expect(restoreElapsed).toBeLessThan(PERFORMANCE_BUDGET_MS)
+    expect(totalTreeItems(restored.items)).toBe(25_000)
+  }, 30_000)
+
+  it('projects a single 25,000-item window within the storage budget', async () => {
+    Tree.Items = buildMixedTree(1, 24_999)
+
+    const capture = await captureSessionSnapshot(Tree.Items, {
+      includePrivateWindows: true,
+    })
+    const restoreStartedAt = performance.now()
+    const restored = projectSnapshotForRestore({
+      payload: capture.payload,
+      mode: 'all',
+      selectedUids: new Set(),
+      existingUids: new Set(),
+    })
+    const restoreElapsed = performance.now() - restoreStartedAt
+
+    expect(restoreElapsed).toBeLessThan(PERFORMANCE_BUDGET_MS)
+    expect(totalTreeItems(restored.items)).toBe(25_000)
   }, 30_000)
 })
 
