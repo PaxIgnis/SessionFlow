@@ -1055,10 +1055,7 @@ async function tabsOnAttached(
   let transferToken = pendingDetachedTab?.token
   const refreshPendingDetachedTab = (): boolean => {
     const latestPendingDetachedTab = pendingDetachedTabs.get(tabId)
-    if (
-      transferToken &&
-      latestPendingDetachedTab?.token !== transferToken
-    ) {
+    if (transferToken && latestPendingDetachedTab?.token !== transferToken) {
       return false
     }
     if (!transferToken && latestPendingDetachedTab) {
@@ -1104,10 +1101,7 @@ async function tabsOnAttached(
     console.error('Tab not found in window')
     return
   }
-  if (
-    tab.windowId !== undefined &&
-    tab.windowId !== attachInfo.newWindowId
-  ) {
+  if (tab.windowId !== undefined && tab.windowId !== attachInfo.newWindowId) {
     console.debug(
       'Ignoring a stale tab attachment whose tab is still in its source window:',
       tabId,
@@ -1120,10 +1114,7 @@ async function tabsOnAttached(
     (t) => t.type === TreeItemType.TAB && t.id === tabId,
   )
   if (existingTab) {
-    if (
-      pendingDetachedTab &&
-      existingTab.uid !== pendingDetachedTab.tab.uid
-    ) {
+    if (pendingDetachedTab && existingTab.uid !== pendingDetachedTab.tab.uid) {
       commitPendingDetachedTab(tabId, pendingDetachedTab)
     } else if (
       transferToken &&
@@ -1315,6 +1306,9 @@ function getCommandCoordination(message: Messages.SessionTreeMessage):
   if (message.action === 'moveWindows') {
     return { itemUids: message.windowUIDs, coalesce: false }
   }
+  if (message.action === 'deleteTreeItems') {
+    return { itemUids: message.itemUIDs, coalesce: false }
+  }
 }
 
 async function dispatchCommandNow(
@@ -1411,7 +1405,9 @@ async function dispatchCommandNow(
       message.copy,
     )
   } else if (message.action === 'duplicateTreeItems') {
-    await Tree.duplicateTreeItems(message.itemUIDs)
+    await Tree.duplicateTreeItems(message.itemUIDs, message.includeDescendants)
+  } else if (message.action === 'deleteTreeItems') {
+    await Tree.deleteTreeItems(message.itemUIDs)
   } else if (message.action === 'treeItemIndentIncrease') {
     await Tree.treeItemIndentIncrease(message.itemUIDs)
   } else if (message.action === 'treeItemIndentDecrease') {

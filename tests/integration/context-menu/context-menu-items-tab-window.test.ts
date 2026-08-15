@@ -1,53 +1,40 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Selection } from '@/services/selection'
+import { Settings } from '@/services/settings'
+import { SessionTree } from '@/services/foreground-tree'
 import { SelectionType, State } from '@/types/session-tree'
 import {
-  makeForegroundNote,
   makeForegroundTab,
   makeForegroundWindow,
+  resetForegroundTree,
 } from '../../helpers/foreground-tree-fixtures'
 
 const openTabs = vi.hoisted(() => vi.fn())
 const reloadTabs = vi.hoisted(() => vi.fn())
 const saveTabs = vi.hoisted(() => vi.fn())
-const closeTabs = vi.hoisted(() => vi.fn())
 const pinTabs = vi.hoisted(() => vi.fn())
 const unpinTabs = vi.hoisted(() => vi.fn())
 const saveWindows = vi.hoisted(() => vi.fn())
-const closeWindows = vi.hoisted(() => vi.fn())
-const createNote = vi.hoisted(() => vi.fn())
-const removeNote = vi.hoisted(() => vi.fn())
-const duplicateTreeItems = vi.hoisted(() => vi.fn())
-const treeItemIndentDecrease = vi.hoisted(() => vi.fn())
-const treeItemIndentIncrease = vi.hoisted(() => vi.fn())
 const openModal = vi.hoisted(() => vi.fn())
-const openEditNoteModal = vi.hoisted(() => vi.fn())
 
 vi.mock('@/services/foreground-messages', () => ({
   openTabs,
   reloadTabs,
   saveTabs,
-  closeTabs,
   pinTabs,
   unpinTabs,
   saveWindows,
-  closeWindows,
-  createNote,
-  removeNote,
-  duplicateTreeItems,
-  treeItemIndentDecrease,
-  treeItemIndentIncrease,
 }))
 
 vi.mock('@/services/modal-state', () => ({
   openModal,
-  openEditNoteModal,
 }))
 
 describe('tab context menu items', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     Selection.selectedItems.value = []
+    resetForegroundTree()
   })
 
   it('enables saved/open/pinned tab actions based on selected tab states', async () => {
@@ -59,9 +46,14 @@ describe('tab context menu items', () => {
       state: State.OPEN,
       pinned: true,
     })
+    resetForegroundTree([
+      makeForegroundWindow('window-1' as UID, [saved, open]),
+    ])
+    const indexedSaved = SessionTree.tabsByUid.get(saved.uid)!
+    const indexedOpen = SessionTree.tabsByUid.get(open.uid)!
     Selection.selectedItems.value = [
-      { item: saved, type: SelectionType.TAB },
-      { item: open, type: SelectionType.TAB },
+      { item: indexedSaved, type: SelectionType.TAB },
+      { item: indexedOpen, type: SelectionType.TAB },
     ]
     const { contextMenuItemsTab } =
       await import('@/services/context-menu-items-tab')
@@ -69,7 +61,6 @@ describe('tab context menu items', () => {
     expect(contextMenuItemsTab.openTab().enabled).toBe(true)
     expect(contextMenuItemsTab.reloadTab().enabled).toBe(true)
     expect(contextMenuItemsTab.saveTab().enabled).toBe(true)
-    expect(contextMenuItemsTab.closeTab().enabled).toBe(true)
     expect(contextMenuItemsTab.pinTab().enabled).toBe(true)
     expect(contextMenuItemsTab.unpinTab().enabled).toBe(true)
   })
@@ -87,19 +78,51 @@ describe('tab context menu items', () => {
     expect(reload.enabled).toBe(false)
   })
 
-  it('dispatches tab actions with selected tabs', async () => {
-    const tab = makeForegroundTab('tab-1' as UID)
-    Selection.selectedItems.value = [{ item: tab, type: SelectionType.TAB }]
+  it('applies each tab action descendant scope independently', async () => {
+    const parent = makeForegroundTab('tab-parent' as UID, {
+      state: State.OPEN,
+      collapsed: true,
+      isParent: true,
+    })
+    const child = makeForegroundTab('tab-child' as UID, {
+      state: State.OPEN,
+      parentUid: parent.uid,
+      indentLevel: 2,
+    })
+    const window = makeForegroundWindow('window-1' as UID, [parent, child])
+    resetForegroundTree([window])
+    const indexedParent = SessionTree.tabsByUid.get(parent.uid)!
+    indexedParent.selected = true
+    Selection.selectedItems.value = [
+      { item: indexedParent, type: SelectionType.TAB },
+    ]
+    Settings.values.contextMenuOpenDescendants = 'collapsed'
+    Settings.values.contextMenuReloadDescendants = 'never'
+    Settings.values.contextMenuSaveDescendants = 'collapsed'
+    Settings.values.contextMenuPinDescendants = 'collapsed'
     const { contextMenuItemsTab } =
       await import('@/services/context-menu-items-tab')
 
-    contextMenuItemsTab.duplicateTreeItem().action?.()
-    contextMenuItemsTab.treeItemIndentIncrease().action?.()
-    contextMenuItemsTab.treeItemIndentDecrease().action?.()
+    contextMenuItemsTab.openTab().action?.()
+    contextMenuItemsTab.reloadTab().action?.()
+    contextMenuItemsTab.saveTab().action?.()
+    contextMenuItemsTab.pinTab().action?.()
 
-    expect(duplicateTreeItems).toHaveBeenCalledWith([tab.uid])
-    expect(treeItemIndentIncrease).toHaveBeenCalledWith([tab.uid])
-    expect(treeItemIndentDecrease).toHaveBeenCalledWith([tab.uid])
+    expect(openTabs).toHaveBeenCalledWith([
+      expect.objectContaining({ uid: parent.uid }),
+      expect.objectContaining({ uid: child.uid }),
+    ])
+    expect(reloadTabs).toHaveBeenCalledWith([
+      expect.objectContaining({ uid: parent.uid }),
+    ])
+    expect(saveTabs).toHaveBeenCalledWith([
+      expect.objectContaining({ uid: parent.uid }),
+      expect.objectContaining({ uid: child.uid }),
+    ])
+    expect(pinTabs).toHaveBeenCalledWith([
+      expect.objectContaining({ uid: parent.uid }),
+      expect.objectContaining({ uid: child.uid }),
+    ])
   })
 
   it('opens edit custom label modal only for a single selected tab', async () => {
@@ -124,6 +147,7 @@ describe('window context menu items', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     Selection.selectedItems.value = []
+    resetForegroundTree()
   })
 
   it('enables save and close when at least one selected window is open', async () => {
@@ -141,7 +165,6 @@ describe('window context menu items', () => {
       await import('@/services/context-menu-items-window')
 
     expect(contextMenuItemsWindow.saveWindow().enabled).toBe(true)
-    expect(contextMenuItemsWindow.closeWindow().enabled).toBe(true)
   })
 
   it('dispatches window actions and opens edit title modal', async () => {
@@ -155,42 +178,12 @@ describe('window context menu items', () => {
       await import('@/services/context-menu-items-window')
 
     contextMenuItemsWindow.saveWindow().action?.()
-    contextMenuItemsWindow.closeWindow().action?.()
     contextMenuItemsWindow.editWindowTitle().action?.()
-    contextMenuItemsWindow.duplicateTreeItem().action?.()
-    contextMenuItemsWindow.treeItemIndentIncrease().action?.()
-    contextMenuItemsWindow.treeItemIndentDecrease().action?.()
 
     expect(saveWindows).toHaveBeenCalledWith([window])
-    expect(closeWindows).toHaveBeenCalledWith([window])
-    expect(duplicateTreeItems).toHaveBeenCalledWith([window.uid])
-    expect(treeItemIndentIncrease).toHaveBeenCalledWith([window.uid])
-    expect(treeItemIndentDecrease).toHaveBeenCalledWith([window.uid])
     expect(openModal).toHaveBeenCalledWith({
       kind: 'editWindowTitle',
       window,
     })
-  })
-})
-
-describe('note structural context menu items', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    Selection.selectedItems.value = []
-  })
-
-  it('dispatches duplicate and indent actions with selected note uids', async () => {
-    const note = makeForegroundNote('note-1' as UID)
-    Selection.selectedItems.value = [{ item: note, type: SelectionType.NOTE }]
-    const { contextMenuItemsNote } =
-      await import('@/services/context-menu-items-note')
-
-    contextMenuItemsNote.duplicateTreeItem().action?.()
-    contextMenuItemsNote.treeItemIndentIncrease().action?.()
-    contextMenuItemsNote.treeItemIndentDecrease().action?.()
-
-    expect(duplicateTreeItems).toHaveBeenCalledWith([note.uid])
-    expect(treeItemIndentIncrease).toHaveBeenCalledWith([note.uid])
-    expect(treeItemIndentDecrease).toHaveBeenCalledWith([note.uid])
   })
 })

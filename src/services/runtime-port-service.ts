@@ -398,10 +398,19 @@ function isSessionTreeCommand(
         optional(value, 'parentUid', (item) => typeof item === 'string') &&
         optional(value, 'targetWindowUid', (item) => typeof item === 'string')
       )
-    case 'duplicateTreeItems':
+    case 'deleteTreeItems':
     case 'treeItemIndentDecrease':
     case 'treeItemIndentIncrease':
       return hasStringArray(value, 'itemUIDs')
+    case 'duplicateTreeItems':
+      return (
+        hasStringArray(value, 'itemUIDs') &&
+        optional(
+          value,
+          'includeDescendants',
+          (item) => typeof item === 'boolean',
+        )
+      )
     case 'createNote':
       return (
         optional(value, 'parentUid', (item) => typeof item === 'string') &&

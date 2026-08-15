@@ -1781,6 +1781,43 @@ describe('background handlers', () => {
     expect(mocks.saveTab).toHaveBeenCalledTimes(1)
   })
 
+  it('serializes batch deletion after overlapping item commands', async () => {
+    const { initializeListeners, mocks } = await loadBackgroundHandlers()
+    let resolveOpenTab: () => void = () => {}
+    mocks.openTab.mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolveOpenTab = resolve
+      }),
+    )
+    initializeListeners()
+    const dispatchCommand = getDispatchCommand(mocks.initializeSessionTreePort)
+
+    const open = dispatchCommand({
+      action: 'openTab',
+      tabUid: 'tab-1' as UID,
+      windowUid: 'window-1' as UID,
+    })
+    const overlappingDelete = dispatchCommand({
+      action: 'deleteTreeItems',
+      itemUIDs: ['tab-1' as UID, 'note-1' as UID],
+    })
+    const unrelatedDelete = dispatchCommand({
+      action: 'deleteTreeItems',
+      itemUIDs: ['tab-2' as UID],
+    })
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(mocks.deleteTreeItems).toHaveBeenCalledTimes(1)
+    expect(mocks.deleteTreeItems).toHaveBeenCalledWith(['tab-2'])
+
+    resolveOpenTab()
+    await Promise.all([open, overlappingDelete, unrelatedDelete])
+
+    expect(mocks.deleteTreeItems).toHaveBeenCalledTimes(2)
+    expect(mocks.deleteTreeItems).toHaveBeenLastCalledWith(['tab-1', 'note-1'])
+  })
+
   it('allows commands for unrelated tree items to run concurrently', async () => {
     const { initializeListeners, mocks } = await loadBackgroundHandlers()
     let resolveFirstOpen: () => void = () => {}
@@ -2065,10 +2102,10 @@ describe('background handlers', () => {
       true,
     )
     expect(mocks.moveWindows).toHaveBeenCalledWith(['window-3'], 5, true)
-    expect(mocks.duplicateTreeItems).toHaveBeenCalledWith([
-      'note-1',
-      'window-1',
-    ])
+    expect(mocks.duplicateTreeItems).toHaveBeenCalledWith(
+      ['note-1', 'window-1'],
+      undefined,
+    )
     expect(mocks.treeItemIndentIncrease).toHaveBeenCalledWith(['note-2'])
     expect(mocks.treeItemIndentDecrease).toHaveBeenCalledWith(['window-2'])
     expect(mocks.pinTab).toHaveBeenCalledWith('tab-4')

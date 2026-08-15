@@ -6,7 +6,7 @@ export const WINDOW_MENU: ContextMenuConfig = [
   { type: ContextMenuItemType.Action, id: 'duplicateTreeItem' },
   // 'newTab',
   { type: ContextMenuItemType.Action, id: 'saveWindow' },
-  { type: ContextMenuItemType.Action, id: 'closeWindow' },
+  { type: ContextMenuItemType.Action, id: 'deleteTreeItem' },
   { type: ContextMenuItemType.Action, id: 'editWindowTitle' },
   { type: ContextMenuItemType.Action, id: 'treeItemIndentIncrease' },
   { type: ContextMenuItemType.Action, id: 'treeItemIndentDecrease' },
@@ -21,7 +21,7 @@ export const TAB_MENU: ContextMenuConfig = [
   { type: ContextMenuItemType.Action, id: 'openTab' },
   { type: ContextMenuItemType.Action, id: 'reloadTab' },
   { type: ContextMenuItemType.Action, id: 'saveTab' },
-  { type: ContextMenuItemType.Action, id: 'closeTab' },
+  { type: ContextMenuItemType.Action, id: 'deleteTreeItem' },
   { type: ContextMenuItemType.Action, id: 'editLabel' },
   { type: ContextMenuItemType.Action, id: 'pinTab' },
   { type: ContextMenuItemType.Action, id: 'unpinTab' },
@@ -38,7 +38,7 @@ export const NOTE_MENU: ContextMenuConfig = [
   { type: ContextMenuItemType.Action, id: 'treeItemIndentIncrease' },
   { type: ContextMenuItemType.Action, id: 'treeItemIndentDecrease' },
   { type: ContextMenuItemType.Action, id: 'editNote' },
-  { type: ContextMenuItemType.Action, id: 'removeNote' },
+  { type: ContextMenuItemType.Action, id: 'deleteTreeItem' },
 ]
 
 export const SEPARATOR_MENU: ContextMenuConfig = [
@@ -46,7 +46,7 @@ export const SEPARATOR_MENU: ContextMenuConfig = [
   { type: ContextMenuItemType.Action, id: 'createSeparatorBelow' },
   { type: ContextMenuItemType.Action, id: 'treeItemIndentIncrease' },
   { type: ContextMenuItemType.Action, id: 'treeItemIndentDecrease' },
-  { type: ContextMenuItemType.Action, id: 'removeSeparator' },
+  { type: ContextMenuItemType.Action, id: 'deleteTreeItem' },
 ]
 
 export const PANEL_MENU: ContextMenuConfig = [

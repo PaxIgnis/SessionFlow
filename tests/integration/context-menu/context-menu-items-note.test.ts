@@ -109,24 +109,4 @@ describe('note context menu items', () => {
     expect(menuItem.enabled).toBe(true)
     expect(openEditNoteModal).toHaveBeenCalledWith(note)
   })
-
-  it('removes every selected note', async () => {
-    const first = makeForegroundNote('note-1' as UID)
-    const second = makeForegroundNote('note-2' as UID)
-    Selection.selectedItems.value = [
-      { item: first, type: SelectionType.NOTE },
-      { item: second, type: SelectionType.NOTE },
-    ]
-    const { contextMenuItemsNote } =
-      await import('@/services/context-menu-items-note')
-
-    const menuItem = contextMenuItemsNote.removeNote()
-    expect(menuItem.action).toBeDefined()
-    if (!menuItem.action) return
-    menuItem.action()
-
-    expect(menuItem.enabled).toBe(true)
-    expect(removeNote).toHaveBeenCalledWith(first.uid)
-    expect(removeNote).toHaveBeenCalledWith(second.uid)
-  })
 })

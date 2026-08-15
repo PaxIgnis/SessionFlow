@@ -42,18 +42,6 @@ import { STRINGS } from '@/types/strings'
       @update="Settings.saveSettingsToStorage()"
     />
     <ToggleButton
-      label="When Indent Is Adjusted, Include Children of Selected Items"
-      v-model="Settings.values.includeChildrenOfSelectedItemsWhenIndenting"
-      :options="OPTIONS.includeChildrenOfSelectedItemsWhenIndenting"
-      @update="Settings.saveSettingsToStorage()"
-    />
-    <ToggleButton
-      label="When Duplicating Tabs or Notes"
-      v-model="Settings.values.duplicateTreeItemDescendants"
-      :options="OPTIONS.duplicateTreeItemDescendants"
-      @update="Settings.saveSettingsToStorage()"
-    />
-    <ToggleButton
       label="Duplicated Item State"
       v-model="Settings.values.duplicatedItemState"
       :options="OPTIONS.duplicatedItemState"

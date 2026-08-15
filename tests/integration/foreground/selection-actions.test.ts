@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { SessionTree } from '@/services/foreground-tree'
 import { Selection } from '@/services/selection'
 import { SelectionType } from '@/types/session-tree'
+import { collectContextMenuActionItems } from '@/services/selection-actions'
 import {
   makeForegroundNote,
   makeForegroundSeparator,
@@ -451,5 +452,85 @@ describe('selection actions', () => {
       tab.uid,
       note.uid,
     ])
+  })
+
+  it('includes descendants only for collapsed roots in collapsed scope', () => {
+    const parent = makeForegroundTab('parent' as UID, {
+      collapsed: true,
+      isParent: true,
+    })
+    const child = makeForegroundNote('child' as UID, {
+      parentUid: parent.uid,
+      indentLevel: 2,
+      isParent: true,
+    })
+    const grandchild = makeForegroundSeparator('grandchild' as UID, {
+      parentUid: child.uid,
+      indentLevel: 3,
+    })
+    const sibling = makeForegroundTab('sibling' as UID)
+    const window = makeForegroundWindow('window-1' as UID, [
+      parent,
+      child,
+      grandchild,
+      sibling,
+    ])
+    resetForegroundTree([window])
+    const indexedParent = SessionTree.tabsByUid.get(parent.uid)!
+
+    expect(
+      collectContextMenuActionItems([indexedParent], 'collapsed').map(
+        (item) => item.uid,
+      ),
+    ).toEqual([parent.uid, child.uid, grandchild.uid])
+
+    indexedParent.collapsed = false
+    expect(
+      collectContextMenuActionItems([indexedParent], 'collapsed').map(
+        (item) => item.uid,
+      ),
+    ).toEqual([parent.uid])
+  })
+
+  it('supports selected-only and complete-subtree scopes without duplicate descendants', () => {
+    const parent = makeForegroundNote('parent' as UID, {
+      windowUid: undefined,
+      indentLevel: 0,
+      isParent: true,
+    })
+    const child = makeForegroundNote('child' as UID, {
+      windowUid: undefined,
+      parentUid: parent.uid,
+      indentLevel: 1,
+    })
+    const tail = makeForegroundSeparator('tail' as UID, {
+      windowUid: undefined,
+      indentLevel: 0,
+    })
+    resetForegroundTree([parent, child, tail])
+
+    expect(
+      collectContextMenuActionItems([parent, child], 'never').map(
+        (item) => item.uid,
+      ),
+    ).toEqual([parent.uid, child.uid])
+    expect(
+      collectContextMenuActionItems([parent, child], 'always').map(
+        (item) => item.uid,
+      ),
+    ).toEqual([parent.uid, child.uid])
+  })
+
+  it('always includes window contents regardless of descendant scope', () => {
+    const tab = makeForegroundTab('tab' as UID)
+    const note = makeForegroundNote('note' as UID)
+    const window = makeForegroundWindow('window-1' as UID, [tab, note], {
+      collapsed: false,
+    })
+    resetForegroundTree([window])
+
+    expect(
+      collectContextMenuActionItems([window], 'never').map((item) => item.uid),
+    ).toEqual([window.uid, tab.uid, note.uid])
   })
 })

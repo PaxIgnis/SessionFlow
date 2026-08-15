@@ -120,6 +120,12 @@ export interface ImportExternalUrlsMessage {
 export interface DuplicateTreeItemsMessage {
   action: 'duplicateTreeItems'
   itemUIDs: UID[]
+  includeDescendants?: boolean
+}
+
+export interface DeleteTreeItemsMessage {
+  action: 'deleteTreeItems'
+  itemUIDs: UID[]
 }
 
 export interface TreeItemIndentIncreaseMessage {
@@ -235,6 +241,7 @@ export type SessionTreeMessage =
   | CreateSeparatorBelowMessage
   | CreateNoteMessage
   | DeselectAllItemsMessage
+  | DeleteTreeItemsMessage
   | DuplicateTreeItemsMessage
   | FocusTabMessage
   | FocusWindowMessage

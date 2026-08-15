@@ -13,12 +13,155 @@ import {
 import { installFakeBrowser } from '../../helpers/fake-browser'
 import { expectTreeInvariants } from '../../helpers/tree-invariants'
 
+const emitTreeDelta = vi.hoisted(() => vi.fn())
+
+vi.mock('@/services/runtime-port-service', () => ({ emitTreeDelta }))
+
 describe('generic tree item structural actions', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
+    emitTreeDelta.mockReset()
     installFakeBrowser()
     resetTree()
     Object.assign(Settings.values, structuredClone(DEFAULT_SETTINGS))
+  })
+
+  it('deletes only a selected parent and promotes its unselected child', async () => {
+    const parent = createNote('parent' as UID, { isParent: true })
+    const child = createTab('child' as UID, {
+      parentUid: parent.uid,
+      indentLevel: 2,
+    })
+    const window = createWindow('window-1' as UID, [parent, child])
+
+    await Tree.deleteTreeItems([parent.uid])
+
+    expect(window.children).toEqual([child])
+    expect(child.parentUid).toBeUndefined()
+    expect(child.indentLevel).toBe(1)
+    expect(Tree.notesByUid.has(parent.uid)).toBe(false)
+    expectTreeInvariants()
+  })
+
+  it('deletes an explicitly resolved parent subtree deepest first', async () => {
+    const parent = createNote('parent' as UID, { isParent: true })
+    const child = createTab('child' as UID, {
+      parentUid: parent.uid,
+      indentLevel: 2,
+    })
+    const tail = createSeparator('tail' as UID)
+    const window = createWindow('window-1' as UID, [parent, child, tail])
+
+    await Tree.deleteTreeItems([parent.uid, child.uid])
+
+    expect(window.children).toEqual([tail])
+    expect(Tree.notesByUid.has(parent.uid)).toBe(false)
+    expect(Tree.tabsByUid.has(child.uid)).toBe(false)
+    expectTreeInvariants()
+  })
+
+  it('closes live tabs and directly removes saved mixed items', async () => {
+    const live = createTab('live' as UID, { id: 10, state: State.OPEN })
+    const saved = createTab('saved' as UID, { id: -1, state: State.SAVED })
+    const note = createNote('note' as UID)
+    const tail = createSeparator('tail' as UID)
+    const window = createWindow('window-1' as UID, [live, saved, note, tail], {
+      id: 20,
+      state: State.OPEN,
+    })
+
+    await Tree.deleteTreeItems([live.uid, saved.uid, note.uid])
+
+    expect(browser.tabs.remove).toHaveBeenCalledWith(10)
+    expect(window.children).toEqual([tail])
+    expect(Tree.tabsByUid.has(live.uid)).toBe(false)
+    expect(Tree.tabsByUid.has(saved.uid)).toBe(false)
+    expect(Tree.notesByUid.has(note.uid)).toBe(false)
+    expectTreeInvariants()
+  })
+
+  it('does not delete a selected window child separately', async () => {
+    const tab = createTab('tab' as UID, { id: 10, state: State.OPEN })
+    const window = createWindow('window-1' as UID, [tab], {
+      id: 20,
+      state: State.OPEN,
+    })
+
+    await Tree.deleteTreeItems([window.uid, tab.uid])
+
+    expect(browser.windows.remove).toHaveBeenCalledWith(20)
+    expect(browser.tabs.remove).not.toHaveBeenCalled()
+    expect(Tree.windowsByUid.has(window.uid)).toBe(false)
+    expect(Tree.tabsByUid.has(tab.uid)).toBe(false)
+    expectTreeInvariants()
+  })
+
+  it('recomputes and publishes only once for a large mixed deletion batch', async () => {
+    const children = Array.from({ length: 300 }, (_, index) => {
+      const uid = `batch-item-${index}` as UID
+      if (index % 3 === 0) return createNote(uid)
+      if (index % 3 === 1) return createSeparator(uid)
+      return createTab(uid, { id: -1, state: State.SAVED })
+    })
+    const tail = createNote('batch-tail' as UID)
+    const window = createWindow('window-batch' as UID, [...children, tail])
+    const recompute = vi.spyOn(Tree, 'recomputeSessionTree')
+    emitTreeDelta.mockClear()
+
+    await Tree.deleteTreeItems(children.map((item) => item.uid))
+
+    expect(window.children).toEqual([tail])
+    expect(recompute).toHaveBeenCalledTimes(1)
+    expect(emitTreeDelta).toHaveBeenCalledTimes(1)
+    expect(emitTreeDelta).toHaveBeenCalledWith({
+      op: 'treeReplaced',
+      treeItems: structuredClone(Tree.Items),
+    })
+    expectTreeInvariants()
+  })
+
+  it('continues deleting after one browser removal fails and reports the aggregate failure', async () => {
+    const failed = createTab('tab-failed' as UID, {
+      id: 10,
+      state: State.OPEN,
+    })
+    const deleted = createTab('tab-deleted' as UID, {
+      id: 11,
+      state: State.OPEN,
+    })
+    const tail = createNote('tail' as UID)
+    const window = createWindow('window-1' as UID, [failed, deleted, tail], {
+      id: 20,
+      state: State.OPEN,
+    })
+    const error = new Error('Firefox refused to remove the first tab')
+    vi.mocked(browser.tabs.remove)
+      .mockRejectedValueOnce(error)
+      .mockResolvedValueOnce(undefined)
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const recompute = vi.spyOn(Tree, 'recomputeSessionTree')
+    emitTreeDelta.mockClear()
+
+    await expect(
+      Tree.deleteTreeItems([failed.uid, deleted.uid]),
+    ).rejects.toThrow('Failed to delete 1 of 2 tree items')
+
+    expect(browser.tabs.remove).toHaveBeenNthCalledWith(1, 10)
+    expect(browser.tabs.remove).toHaveBeenNthCalledWith(2, 11)
+    expect(window.children).toEqual([failed, tail])
+    expect(Tree.tabsByUid.has(failed.uid)).toBe(true)
+    expect(Tree.tabsByUid.has(deleted.uid)).toBe(false)
+    expect(consoleError).toHaveBeenCalledWith(
+      `Failed to delete tree item ${failed.uid}:`,
+      error,
+    )
+    expect(recompute).toHaveBeenCalledTimes(1)
+    expect(emitTreeDelta).toHaveBeenCalledTimes(1)
+    expect(emitTreeDelta).toHaveBeenCalledWith({
+      op: 'treeReplaced',
+      treeItems: structuredClone(Tree.Items),
+    })
+    expectTreeInvariants()
   })
 
   it('duplicates only a selected parent note after its original subtree', async () => {
@@ -56,6 +199,33 @@ describe('generic tree item structural actions', () => {
     expect(duplicate.collapsed).toBe(false)
     expect(child.parentUid).toBe(note.uid)
     expect(separator.parentUid).toBe(note.uid)
+    expectTreeInvariants()
+  })
+
+  it('defaults to duplicating only selected rows even when subtree duplication is configured', async () => {
+    Settings.values.duplicateTreeItemDescendants = 'complete-subtree'
+    const parent = createNote('note-parent-default' as UID, {
+      isParent: true,
+      collapsed: true,
+    })
+    const child = createTab('tab-child-default' as UID, {
+      parentUid: parent.uid,
+      indentLevel: 2,
+    })
+    const tail = createSeparator('separator-tail-default' as UID)
+    const window = createWindow('window-default' as UID, [parent, child, tail])
+
+    await Tree.duplicateTreeItems([parent.uid])
+
+    expect(window.children).toHaveLength(4)
+    expect(window.children[0]).toBe(parent)
+    expect(window.children[1]).toBe(child)
+    expect(window.children[2]).toMatchObject({
+      type: TreeItemType.NOTE,
+      isParent: false,
+      collapsed: false,
+    })
+    expect(window.children[3]).toBe(tail)
     expectTreeInvariants()
   })
 
@@ -157,8 +327,7 @@ describe('generic tree item structural actions', () => {
     expectTreeInvariants()
   })
 
-  it('duplicates a complete saved tab subtree when configured', async () => {
-    Settings.values.duplicateTreeItemDescendants = 'complete-subtree'
+  it('duplicates a complete saved tab subtree when requested', async () => {
     const tab = createTab('tab-parent' as UID, {
       isParent: true,
       collapsed: true,
@@ -170,7 +339,7 @@ describe('generic tree item structural actions', () => {
     const tail = createTab('tab-tail' as UID)
     const window = createWindow('window-1' as UID, [tab, child, tail])
 
-    await Tree.duplicateTreeItems([tab.uid])
+    await Tree.duplicateTreeItems([tab.uid], true)
 
     expect(window.children).toHaveLength(5)
     const duplicate = window.children[2] as Tab
@@ -219,8 +388,48 @@ describe('generic tree item structural actions', () => {
     expectTreeInvariants()
   })
 
+  it('keeps context-menu resolved descendants in parent-first order', async () => {
+    const parent = createTab('tab-parent' as UID, {
+      isParent: true,
+      collapsed: true,
+    })
+    const child = createNote('note-child' as UID, {
+      parentUid: parent.uid,
+      indentLevel: 2,
+      isParent: true,
+      collapsed: true,
+    })
+    const grandchild = createSeparator('separator-grandchild' as UID, {
+      parentUid: child.uid,
+      indentLevel: 3,
+    })
+    const tail = createTab('tab-tail' as UID)
+    const window = createWindow('window-1' as UID, [
+      parent,
+      child,
+      grandchild,
+      tail,
+    ])
+
+    await Tree.duplicateTreeItems(
+      [parent.uid, child.uid, grandchild.uid],
+      false,
+    )
+
+    expect(window.children).toHaveLength(7)
+    const clonedParent = window.children[3] as Tab
+    const clonedChild = window.children[4]
+    const clonedGrandchild = window.children[5]
+    expect(clonedParent.type).toBe(TreeItemType.TAB)
+    expect(clonedChild.type).toBe(TreeItemType.NOTE)
+    expect(clonedGrandchild.type).toBe(TreeItemType.SEPARATOR)
+    expect(clonedChild.parentUid).toBe(clonedParent.uid)
+    expect(clonedGrandchild.parentUid).toBe(clonedChild.uid)
+    expect(window.children[6]).toBe(tail)
+    expectTreeInvariants()
+  })
+
   it('duplicates a selected complete subtree only once when its descendant is also selected', async () => {
-    Settings.values.duplicateTreeItemDescendants = 'complete-subtree'
     const parent = createTab('tab-parent' as UID, { isParent: true })
     const child = createNote('note-child' as UID, {
       parentUid: parent.uid,
@@ -229,7 +438,7 @@ describe('generic tree item structural actions', () => {
     const tail = createTab('tab-tail' as UID)
     const window = createWindow('window-1' as UID, [parent, child, tail])
 
-    await Tree.duplicateTreeItems([parent.uid, child.uid])
+    await Tree.duplicateTreeItems([parent.uid, child.uid], true)
 
     expect(window.children).toHaveLength(5)
     const clonedParent = window.children[2] as Tab
@@ -434,7 +643,6 @@ describe('generic tree item structural actions', () => {
   })
 
   it('matches saved, open, and discarded tab states when configured', async () => {
-    Settings.values.duplicateTreeItemDescendants = 'complete-subtree'
     Settings.values.duplicatedItemState = 'match-original'
     const parent = createNote('note-parent' as UID, { isParent: true })
     const container = {
@@ -489,7 +697,7 @@ describe('generic tree item structural actions', () => {
         tab.active = active
       })
 
-    await Tree.duplicateTreeItems([parent.uid])
+    await Tree.duplicateTreeItems([parent.uid], true)
 
     const duplicateParent = window.children[4]
     const duplicateOpen = window.children[5] as Tab
@@ -572,7 +780,6 @@ describe('generic tree item structural actions', () => {
   })
 
   it('continues matching remaining states before reporting an open failure', async () => {
-    Settings.values.duplicateTreeItemDescendants = 'complete-subtree'
     Settings.values.duplicatedItemState = 'match-original'
     const parent = createNote('note-parent' as UID, { isParent: true })
     const first = createTab('tab-first' as UID, {
@@ -592,7 +799,9 @@ describe('generic tree item structural actions', () => {
       .mockRejectedValueOnce(error)
       .mockResolvedValueOnce(undefined)
 
-    await expect(Tree.duplicateTreeItems([parent.uid])).rejects.toBe(error)
+    await expect(Tree.duplicateTreeItems([parent.uid], true)).rejects.toBe(
+      error,
+    )
 
     expect(openTabSpy).toHaveBeenCalledTimes(2)
   })

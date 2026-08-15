@@ -13,16 +13,12 @@ const createNote = vi.hoisted(() => vi.fn())
 const createSeparator = vi.hoisted(() => vi.fn())
 const createSeparatorBelow = vi.hoisted(() => vi.fn())
 const removeSeparator = vi.hoisted(() => vi.fn())
-const treeItemIndentDecrease = vi.hoisted(() => vi.fn())
-const treeItemIndentIncrease = vi.hoisted(() => vi.fn())
 
 vi.mock('@/services/foreground-messages', () => ({
   createNote,
   createSeparator,
   createSeparatorBelow,
   removeSeparator,
-  treeItemIndentDecrease,
-  treeItemIndentIncrease,
 }))
 
 describe('separator context menu items', () => {
@@ -104,20 +100,5 @@ describe('separator context menu items', () => {
     const menuItem = contextMenuItemsSeparator.createNote()
 
     expect(menuItem.enabled).toBe(false)
-  })
-
-  it('dispatches generic indent actions with selected separator uids', async () => {
-    const separator = makeForegroundSeparator('separator-1' as UID)
-    Selection.selectedItems.value = [
-      { item: separator, type: SelectionType.SEPARATOR },
-    ]
-    const { contextMenuItemsSeparator } =
-      await import('@/services/context-menu-items-separator')
-
-    contextMenuItemsSeparator.treeItemIndentIncrease().action?.()
-    contextMenuItemsSeparator.treeItemIndentDecrease().action?.()
-
-    expect(treeItemIndentIncrease).toHaveBeenCalledWith([separator.uid])
-    expect(treeItemIndentDecrease).toHaveBeenCalledWith([separator.uid])
   })
 })

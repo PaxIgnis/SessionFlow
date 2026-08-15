@@ -74,20 +74,6 @@ export function closeTab(tabId: number, tabUid: UID): Promise<void> {
   )
 }
 
-export function closeTabs(tabs: Array<Tab>): Promise<void> {
-  const eligibleTabs = tabs.filter(isLiveTab)
-  if (eligibleTabs.length === 0) return Promise.resolve()
-  return sendBulkCommands(
-    eligibleTabs.map((tab) => ({
-      action: 'closeTab',
-      tabId: tab.id,
-      tabUid: tab.uid,
-    })),
-    (failedCount, totalCount) =>
-      `Session Flow could not close ${failedCount} of ${totalCount} tabs.`,
-  )
-}
-
 export function focusTab(tabId: number, windowId: number) {
   void sendTreeCommand({
     action: 'focusTab',
@@ -307,7 +293,7 @@ export async function tabDoubleClick(
     } else if (tabDoubleClickAction === 'reload') {
       reloadTab(tabId)
     } else if (tabDoubleClickAction === 'duplicate') {
-      duplicateTreeItems([tabUid])
+      duplicateTreeItems([tabUid], false)
     } else if (tabDoubleClickAction === 'focus') {
       focusTab(tabId, windowId)
     }
@@ -322,7 +308,7 @@ export async function tabDoubleClick(
     } else if (tabDoubleClickAction === 'remove') {
       closeTab(tabId, tabUid)
     } else if (tabDoubleClickAction === 'duplicate') {
-      duplicateTreeItems([tabUid])
+      duplicateTreeItems([tabUid], false)
     }
   }
 }
@@ -398,18 +384,6 @@ export function closeWindow(windowId: number, windowUid: UID): Promise<void> {
       windowUid: windowUid,
     },
     'Session Flow could not close the window',
-  )
-}
-
-export function closeWindows(windows: Array<Window>): Promise<void> {
-  return sendBulkCommands(
-    windows.map((window) => ({
-      action: 'closeWindow',
-      windowId: window.id,
-      windowUid: window.uid,
-    })),
-    (failedCount, totalCount) =>
-      `Session Flow could not close ${failedCount} of ${totalCount} windows.`,
   )
 }
 
@@ -730,15 +704,30 @@ export function updateWindowTitle(windowUid: UID, newTitle: string) {
   } as Messages.UpdateWindowTitleMessage)
 }
 
-export function duplicateTreeItems(itemUIDs: Array<UID>) {
+export function duplicateTreeItems(
+  itemUIDs: Array<UID>,
+  includeDescendants = false,
+) {
+  // Callers resolve descendant scope so double-click can remain single-item.
   void sendTreeCommand({
     action: 'duplicateTreeItems',
     itemUIDs,
+    includeDescendants,
   } as Messages.DuplicateTreeItemsMessage).catch((error) => {
     showNotification(
       `Session Flow could not duplicate the selected items: ${error}`,
     )
   })
+}
+
+export async function deleteTreeItems(itemUIDs: Array<UID>): Promise<void> {
+  try {
+    await sendTreeCommand({ action: 'deleteTreeItems', itemUIDs })
+  } catch (error) {
+    showNotification(
+      `Session Flow could not delete the selected items: ${error}`,
+    )
+  }
 }
 
 export function treeItemIndentIncrease(itemUIDs: Array<UID>) {

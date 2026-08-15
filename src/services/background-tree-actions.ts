@@ -1880,9 +1880,10 @@ function compareTabsByTreeOrder(a: Tab, b: Tab): number {
   return indexA - indexB
 }
 
-export async function duplicateTreeItems(itemUIDs: UID[]): Promise<void> {
-  const includeDescendants =
-    Settings.values.duplicateTreeItemDescendants === 'complete-subtree'
+export async function duplicateTreeItems(
+  itemUIDs: UID[],
+  includeDescendants = false,
+): Promise<void> {
   const moveBlocks = buildMoveBlocks(itemUIDs, includeDescendants)
   if (moveBlocks.length === 0) return
 
@@ -1929,6 +1930,65 @@ export async function duplicateTreeItems(itemUIDs: UID[]): Promise<void> {
 
   if (Settings.values.duplicatedItemState === 'match-original') {
     await restoreClonedTabStates(clonedTabPairs)
+  }
+}
+
+export async function deleteTreeItems(itemUIDs: UID[]): Promise<void> {
+  const selectedUids = new Set(itemUIDs)
+  const selectedWindowUids = new Set(
+    itemUIDs.filter((uid) => Tree.windowsByUid.has(uid)),
+  )
+  const items = [...selectedUids]
+    .map((uid) => Tree.getItemByUid(uid))
+    .filter((item): item is TreeItem => Boolean(item))
+    .filter(
+      (item) =>
+        item.type === TreeItemType.WINDOW ||
+        !item.windowUid ||
+        !selectedWindowUids.has(item.windowUid),
+    )
+    .sort((left, right) => (right.indentLevel ?? 0) - (left.indentLevel ?? 0))
+
+  if (items.length === 0) return
+
+  let failedCount = 0
+  for (const item of items) {
+    try {
+      const current = Tree.getItemByUid(item.uid)
+      if (!current) continue
+      if (current.type === TreeItemType.WINDOW) {
+        await Tree.closeWindow(
+          { windowId: current.id, windowUid: current.uid },
+          false,
+          false,
+        )
+      } else if (current.type === TreeItemType.TAB) {
+        await Tree.closeTab(
+          { tabId: current.id, tabUid: current.uid },
+          false,
+          false,
+        )
+      } else if (current.type === TreeItemType.NOTE) {
+        Tree.removeNote(current.uid, false, false)
+      } else {
+        Tree.removeSeparator(current.uid, false, false)
+      }
+    } catch (error) {
+      failedCount += 1
+      console.error(`Failed to delete tree item ${item.uid}:`, error)
+    }
+  }
+
+  Tree.recomputeSessionTree(false)
+  emitTreeDelta({
+    op: 'treeReplaced',
+    treeItems: structuredClone(Tree.Items),
+  })
+
+  if (failedCount > 0) {
+    throw new Error(
+      `Failed to delete ${failedCount} of ${items.length} tree items`,
+    )
   }
 }
 

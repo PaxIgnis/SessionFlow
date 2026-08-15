@@ -151,7 +151,11 @@ export async function updateWindowTabs(windowId: number): Promise<void> {
  *
  * @param {UID} windowUid - The UID of the window to remove.
  */
-export function removeWindow(windowUid: UID): void {
+export function removeWindow(
+  windowUid: UID,
+  emitDelta: boolean = true,
+  recompute: boolean = true,
+): void {
   const index = Tree.Items.findIndex((w) => w.uid === windowUid)
   const window = Tree.windowsByUid.get(windowUid)
   if (window && index !== -1) {
@@ -187,17 +191,19 @@ export function removeWindow(windowUid: UID): void {
     if (oldParent) {
       oldParent.isParent = Tree.hasChildrenInContainer(oldParent, Tree.Items)
     }
-    Tree.recomputeSessionTree()
-    if (oldParent) {
-      emitTreeDelta({
-        op: 'treeReplaced',
-        treeItems: structuredClone(Tree.Items),
-      })
-    } else {
-      emitTreeDelta({
-        op: 'windowRemoved',
-        windowUid,
-      })
+    if (recompute) Tree.recomputeSessionTree(emitDelta)
+    if (emitDelta) {
+      if (oldParent) {
+        emitTreeDelta({
+          op: 'treeReplaced',
+          treeItems: structuredClone(Tree.Items),
+        })
+      } else {
+        emitTreeDelta({
+          op: 'windowRemoved',
+          windowUid,
+        })
+      }
     }
     for (const url of privateFaviconUrls) {
       void Tree.cleanupPrivateFaviconDomain(url)
@@ -213,7 +219,11 @@ export function removeWindow(windowUid: UID): void {
  * @param {UID} windowUid - The UID of the window to update.
  * @param {State} state - The new state to assign to the window.
  */
-export function updateWindowState(windowUid: UID, state: State): void {
+export function updateWindowState(
+  windowUid: UID,
+  state: State,
+  emitDelta: boolean = true,
+): void {
   const window = Tree.windowsByUid.get(windowUid)
   if (window) {
     window.state = state
@@ -222,10 +232,12 @@ export function updateWindowState(windowUid: UID, state: State): void {
       window.active = false
       window.activeTabId = undefined
     }
-    emitTreeDelta({
-      op: 'windowUpdated',
-      window: structuredClone(window),
-    })
+    if (emitDelta) {
+      emitTreeDelta({
+        op: 'windowUpdated',
+        window: structuredClone(window),
+      })
+    }
   }
 }
 
@@ -258,15 +270,21 @@ export function updateWindow(
  * @param {UID} windowUid - The UID of the window to be updated.
  * @param {number} newWindowId - The new ID to assign to the window.
  */
-export function updateWindowId(windowUid: UID, newWindowId: number): void {
+export function updateWindowId(
+  windowUid: UID,
+  newWindowId: number,
+  emitDelta: boolean = true,
+): void {
   const window = Tree.windowsByUid.get(windowUid)
   if (window) {
     window.id = newWindowId
     if (newWindowId >= 0) void writeWindowUid(newWindowId, windowUid)
-    emitTreeDelta({
-      op: 'windowUpdated',
-      window: structuredClone(window),
-    })
+    if (emitDelta) {
+      emitTreeDelta({
+        op: 'windowUpdated',
+        window: structuredClone(window),
+      })
+    }
   }
   DeferredEventsQueue.processDeferredWindowEvents(newWindowId)
 }
@@ -390,17 +408,21 @@ function applyWindowFocus(windowId: number, revision: number): void {
  * @param {number} message.windowId - The ID of the window to be closed.
  * @param {UID} message.windowUid - The UID of the window to be closed.
  */
-export async function closeWindow(message: {
-  windowId: number
-  windowUid: UID
-}): Promise<void> {
+export async function closeWindow(
+  message: {
+    windowId: number
+    windowUid: UID
+  },
+  emitDelta: boolean = true,
+  recompute: boolean = true,
+): Promise<void> {
   if (message.windowId === -1 || message.windowId === 0) {
-    Tree.removeWindow(message.windowUid)
+    Tree.removeWindow(message.windowUid, emitDelta, recompute)
     return
   }
   await removeBrowserWindow(message.windowId)
   if (Tree.windowsByUid.has(message.windowUid)) {
-    Tree.removeWindow(message.windowUid)
+    Tree.removeWindow(message.windowUid, emitDelta, recompute)
   }
 }
 

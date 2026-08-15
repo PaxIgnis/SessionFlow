@@ -12,6 +12,13 @@ export const DEFAULT_SETTINGS: Settings = {
   duplicatedItemState: 'saved',
   reconnectFirefoxRestoredItems: true,
 
+  // Context Menu
+  contextMenuDeleteDescendants: 'collapsed',
+  contextMenuOpenDescendants: 'collapsed',
+  contextMenuReloadDescendants: 'collapsed',
+  contextMenuSaveDescendants: 'collapsed',
+  contextMenuPinDescendants: 'collapsed',
+
   // Storage
   automaticSessionSnapshots: true,
   sessionSnapshotInterval: 30,

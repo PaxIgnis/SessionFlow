@@ -9,6 +9,7 @@ import { NOTE_MENU } from '@/defaults/context-menu'
 import { contextMenuItemsNote } from './context-menu-items-note'
 import { contextMenuItemsSeparator } from './context-menu-items-separator'
 import { contextMenuItemsTab } from './context-menu-items-tab'
+import { contextMenuItemsTree } from './context-menu-items-tree'
 import { contextMenuItemsWindow } from './context-menu-items-window'
 
 export const ContextMenu = {
@@ -23,6 +24,7 @@ export const ContextMenu = {
     ...contextMenuItemsWindow,
     ...contextMenuItemsNote,
     ...contextMenuItemsSeparator,
+    ...contextMenuItemsTree,
   },
   ...Actions,
 }

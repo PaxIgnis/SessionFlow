@@ -627,6 +627,46 @@ describe('settings actions', () => {
     expect(DEFAULT_SETTINGS.duplicatedItemState).toBe('saved')
   })
 
+  it('defaults new context-menu actions to collapsed descendants while preserving existing scopes', () => {
+    expect(DEFAULT_SETTINGS.contextMenuDeleteDescendants).toBe('collapsed')
+    expect(DEFAULT_SETTINGS.contextMenuOpenDescendants).toBe('collapsed')
+    expect(DEFAULT_SETTINGS.contextMenuReloadDescendants).toBe('collapsed')
+    expect(DEFAULT_SETTINGS.contextMenuSaveDescendants).toBe('collapsed')
+    expect(DEFAULT_SETTINGS.contextMenuPinDescendants).toBe('collapsed')
+    expect(DEFAULT_SETTINGS.duplicateTreeItemDescendants).toBe('selected-only')
+    expect(DEFAULT_SETTINGS.includeChildrenOfSelectedItemsWhenIndenting).toBe(
+      'always',
+    )
+  })
+
+  it('loads independent context-menu descendant scopes including collapsed duplication', async () => {
+    vi.mocked(browser.storage.local.get).mockResolvedValue({
+      settings: {
+        contextMenuDeleteDescendants: 'never',
+        contextMenuOpenDescendants: 'always',
+        contextMenuReloadDescendants: 'never',
+        contextMenuSaveDescendants: 'always',
+        contextMenuPinDescendants: 'never',
+        duplicateTreeItemDescendants: 'collapsed',
+        includeChildrenOfSelectedItemsWhenIndenting: 'collapsed',
+      },
+    })
+    const { loadSettingsFromStorage } =
+      await import('@/services/settings-actions')
+
+    await loadSettingsFromStorage()
+
+    expect(Settings.values.contextMenuDeleteDescendants).toBe('never')
+    expect(Settings.values.contextMenuOpenDescendants).toBe('always')
+    expect(Settings.values.contextMenuReloadDescendants).toBe('never')
+    expect(Settings.values.contextMenuSaveDescendants).toBe('always')
+    expect(Settings.values.contextMenuPinDescendants).toBe('never')
+    expect(Settings.values.duplicateTreeItemDescendants).toBe('collapsed')
+    expect(Settings.values.includeChildrenOfSelectedItemsWhenIndenting).toBe(
+      'collapsed',
+    )
+  })
+
   it('reconnects Firefox-restored items by default', () => {
     expect(DEFAULT_SETTINGS.reconnectFirefoxRestoredItems).toBe(true)
   })

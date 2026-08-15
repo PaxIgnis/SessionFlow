@@ -1,20 +1,11 @@
 import * as Messages from '@/services/foreground-messages'
 import { openEditNoteModal } from '@/services/modal-state'
 import { Selection } from '@/services/selection'
-import {
-  canDecreaseIndentSelectedItems,
-  canIncreaseIndentSelectedItems,
-} from '@/services/context-menu-actions'
 import { ContextMenuItem } from '@/types/context-menu'
-import type { TreeItem } from '@/types/session-tree'
 
 function selectedParentUid(): UID | undefined {
   const selected = Selection.selectedItems.value[0]?.item
   return selected?.uid
-}
-
-function selectedItemUids(): UID[] {
-  return Selection.selectedItems.value.map((selected) => selected.item.uid)
 }
 
 export const contextMenuItemsNote: Record<string, () => ContextMenuItem> = {
@@ -25,36 +16,6 @@ export const contextMenuItemsNote: Record<string, () => ContextMenuItem> = {
       icon: 'note',
       enabled: Selection.selectedItems.value.length <= 1,
       action: () => Messages.createNote(selectedParentUid()),
-    }
-  },
-
-  duplicateTreeItem: () => {
-    return {
-      id: 'duplicateTreeItem',
-      label: 'Duplicate',
-      icon: 'duplicate',
-      enabled: Selection.selectedItems.value.length > 0,
-      action: () => Messages.duplicateTreeItems(selectedItemUids()),
-    }
-  },
-
-  treeItemIndentIncrease: () => {
-    return {
-      id: 'treeItemIndentIncrease',
-      label: 'Increase Indent',
-      icon: 'indent-increase',
-      enabled: canIncreaseIndentSelectedItems(selectedItems()),
-      action: () => Messages.treeItemIndentIncrease(selectedItemUids()),
-    }
-  },
-
-  treeItemIndentDecrease: () => {
-    return {
-      id: 'treeItemIndentDecrease',
-      label: 'Decrease Indent',
-      icon: 'indent-decrease',
-      enabled: canDecreaseIndentSelectedItems(selectedItems()),
-      action: () => Messages.treeItemIndentDecrease(selectedItemUids()),
     }
   },
 
@@ -70,22 +31,4 @@ export const contextMenuItemsNote: Record<string, () => ContextMenuItem> = {
       },
     }
   },
-
-  removeNote: () => {
-    return {
-      id: 'removeNote',
-      label: 'Remove Note',
-      icon: 'close',
-      enabled: Selection.getSelectedNotes().length > 0,
-      action: () => {
-        Selection.getSelectedNotes().forEach((note) =>
-          Messages.removeNote(note.uid),
-        )
-      },
-    }
-  },
-}
-
-function selectedItems(): TreeItem[] {
-  return Selection.selectedItems.value.map((selected) => selected.item)
 }

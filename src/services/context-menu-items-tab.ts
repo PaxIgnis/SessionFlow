@@ -2,109 +2,72 @@ import * as Messages from '@/services/foreground-messages'
 import { openModal } from '@/services/modal-state'
 import { Selection } from '@/services/selection'
 import {
-  canDecreaseIndentSelectedItems,
-  canIncreaseIndentSelectedItems,
-} from '@/services/context-menu-actions'
+  collectContextMenuActionItems,
+  type ContextMenuDescendantScope,
+} from '@/services/selection-actions'
+import { Settings } from '@/services/settings'
 import { ContextMenuItem } from '@/types/context-menu'
-import { State } from '@/types/session-tree'
+import { State, type Tab, TreeItemType } from '@/types/session-tree'
 
 export const contextMenuItemsTab: Record<string, () => ContextMenuItem> = {
-  duplicateTreeItem: () => {
-    return {
-      id: 'duplicateTreeItem',
-      label: 'Duplicate',
-      icon: 'duplicate',
-      enabled: Selection.getSelectedTabs().length > 0,
-      action: () =>
-        Messages.duplicateTreeItems(
-          Selection.getSelectedTabs().map((tab) => tab.uid),
-        ),
-    }
-  },
-
   openTab: () => {
+    const tabs = selectedTabsForScope(
+      Settings.values.contextMenuOpenDescendants,
+    )
     return {
       id: 'openTab',
       label: 'Open',
       icon: 'open',
-      enabled: atLeastOneSelectedTabSaved(),
-      action: () => Messages.openTabs(Selection.getSelectedTabs()),
+      enabled: tabs.some((tab) => tab.state === State.SAVED),
+      action: () => Messages.openTabs(tabs),
     }
   },
 
   reloadTab: () => {
+    const tabs = selectedTabsForScope(
+      Settings.values.contextMenuReloadDescendants,
+    )
     return {
       id: 'reloadTab',
       label: 'Reload',
       icon: 'reload',
-      enabled: atLeastOneSelectedTabOpen(),
-      action: () => Messages.reloadTabs(Selection.getSelectedTabs()),
+      enabled: tabs.some(isOpenTab),
+      action: () => Messages.reloadTabs(tabs),
     }
   },
 
   saveTab: () => {
+    const tabs = selectedTabsForScope(
+      Settings.values.contextMenuSaveDescendants,
+    )
     return {
       id: 'saveTab',
       label: 'Save',
       icon: 'save',
-      enabled: atLeastOneSelectedTabOpen(),
-      action: () => Messages.saveTabs(Selection.getSelectedTabs()),
-    }
-  },
-
-  closeTab: () => {
-    return {
-      id: 'closeTab',
-      label: 'Close',
-      icon: 'close',
-      enabled: atLeastOneSelectedTabOpen(),
-      action: () => Messages.closeTabs(Selection.getSelectedTabs()),
+      enabled: tabs.some(isOpenTab),
+      action: () => Messages.saveTabs(tabs),
     }
   },
 
   pinTab: () => {
+    const tabs = selectedTabsForScope(Settings.values.contextMenuPinDescendants)
     return {
       id: 'pinTab',
       label: 'Pin',
       icon: 'pin',
-      enabled: atLeastOneSelectedTabUnpinned(),
-      action: () => Messages.pinTabs(Selection.getSelectedTabs()),
+      enabled: tabs.some((tab) => !tab.pinned),
+      action: () => Messages.pinTabs(tabs),
     }
   },
 
   unpinTab: () => {
+    const tabs = selectedTabsForScope(Settings.values.contextMenuPinDescendants)
     return {
       id: 'unpinTab',
       label: 'Unpin',
       icon: 'unpin',
-      enabled: atLeastOneSelectedTabPinned(),
-      action: () => Messages.unpinTabs(Selection.getSelectedTabs()),
-    }
-  },
-
-  treeItemIndentIncrease: () => {
-    return {
-      id: 'treeItemIndentIncrease',
-      label: 'Increase Indent',
-      icon: 'indent-increase',
-      enabled: canIncreaseIndentSelectedItems(Selection.getSelectedTabs()),
-      action: () =>
-        Messages.treeItemIndentIncrease(
-          Selection.getSelectedTabs().map((tab) => tab.uid),
-        ),
-    }
-  },
-
-  treeItemIndentDecrease: () => {
-    return {
-      id: 'treeItemIndentDecrease',
-      label: 'Decrease Indent',
-      icon: 'indent-decrease',
-      enabled: canDecreaseIndentSelectedItems(Selection.getSelectedTabs()),
-      action: () =>
-        Messages.treeItemIndentDecrease(
-          Selection.getSelectedTabs().map((tab) => tab.uid),
-        ),
+      enabled: tabs.some((tab) => tab.pinned),
+      action: () => Messages.unpinTabs(tabs),
     }
   },
 
@@ -128,44 +91,15 @@ export const contextMenuItemsTab: Record<string, () => ContextMenuItem> = {
   },
 }
 
-function atLeastOneSelectedTabOpen(): boolean {
-  const selectedTabs = Selection.getSelectedTabs()
-  for (const tab of selectedTabs) {
-    if (tab.state === State.OPEN || tab.state === State.DISCARDED) {
-      return true
-    }
-  }
-  return false
+function selectedTabsForScope(scope: ContextMenuDescendantScope): Tab[] {
+  return collectContextMenuActionItems(
+    Selection.selectedItems.value.map((selected) => selected.item),
+    scope,
+  ).filter((item): item is Tab => item.type === TreeItemType.TAB)
 }
 
-function atLeastOneSelectedTabSaved(): boolean {
-  const selectedTabs = Selection.getSelectedTabs()
-  for (const tab of selectedTabs) {
-    if (tab.state === State.SAVED) {
-      return true
-    }
-  }
-  return false
-}
-
-function atLeastOneSelectedTabPinned(): boolean {
-  const selectedTabs = Selection.getSelectedTabs()
-  for (const tab of selectedTabs) {
-    if (tab.pinned) {
-      return true
-    }
-  }
-  return false
-}
-
-function atLeastOneSelectedTabUnpinned(): boolean {
-  const selectedTabs = Selection.getSelectedTabs()
-  for (const tab of selectedTabs) {
-    if (!tab.pinned) {
-      return true
-    }
-  }
-  return false
+function isOpenTab(tab: Tab): boolean {
+  return tab.state === State.OPEN || tab.state === State.DISCARDED
 }
 
 function onlySingleTabSelected(): boolean {

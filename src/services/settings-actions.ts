@@ -27,8 +27,9 @@ function validateSettingValue<K extends keyof Settings>(
   value: unknown,
 ): Settings[K] {
   if (key in SETTINGS_TYPES) {
-    const allowedValues = SETTINGS_TYPES[key as keyof typeof SETTINGS_TYPES]
-    if (!allowedValues.includes(value as (typeof allowedValues)[number])) {
+    const allowedValues: readonly string[] =
+      SETTINGS_TYPES[key as keyof typeof SETTINGS_TYPES]
+    if (typeof value !== 'string' || !allowedValues.includes(value)) {
       throw new Error(
         `Invalid value for ${String(key)}: ${String(
           value,

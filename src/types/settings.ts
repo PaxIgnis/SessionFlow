@@ -10,6 +10,13 @@ export interface Settings {
   duplicatedItemState: (typeof SETTINGS_TYPES.duplicatedItemState)[number]
   reconnectFirefoxRestoredItems: boolean
 
+  // Context Menu
+  contextMenuDeleteDescendants: (typeof SETTINGS_TYPES.contextMenuDeleteDescendants)[number]
+  contextMenuOpenDescendants: (typeof SETTINGS_TYPES.contextMenuOpenDescendants)[number]
+  contextMenuReloadDescendants: (typeof SETTINGS_TYPES.contextMenuReloadDescendants)[number]
+  contextMenuSaveDescendants: (typeof SETTINGS_TYPES.contextMenuSaveDescendants)[number]
+  contextMenuPinDescendants: (typeof SETTINGS_TYPES.contextMenuPinDescendants)[number]
+
   // Storage
   automaticSessionSnapshots: boolean
   sessionSnapshotInterval: number
@@ -72,7 +79,16 @@ export const SETTINGS_TYPES = {
   doubleClickOnSavedTab: ['open', 'remove', 'duplicate'],
   includeChildrenOfSelectedItems: ['always', 'collapsed', 'never'],
   includeChildrenOfSelectedItemsWhenIndenting: ['always', 'collapsed', 'never'],
-  duplicateTreeItemDescendants: ['selected-only', 'complete-subtree'],
+  duplicateTreeItemDescendants: [
+    'selected-only',
+    'collapsed',
+    'complete-subtree',
+  ],
+  contextMenuDeleteDescendants: ['always', 'collapsed', 'never'],
+  contextMenuOpenDescendants: ['always', 'collapsed', 'never'],
+  contextMenuReloadDescendants: ['always', 'collapsed', 'never'],
+  contextMenuSaveDescendants: ['always', 'collapsed', 'never'],
+  contextMenuPinDescendants: ['always', 'collapsed', 'never'],
   duplicatedItemState: ['saved', 'match-original'],
   tabGroupDropBehavior: ['same-group-both-adjacent', 'any-adjacent-group'],
   tabGroupColorIndicator: ['right', 'left', 'hidden'],
@@ -84,7 +100,7 @@ export const SETTINGS_TYPES = {
   faviconRefreshTiming: ['startup-only', 'expiration-and-startup'],
   openWindowsInSameLocationUpdateIntervalUnit: ['seconds', 'minutes'],
   sessionSnapshotIntervalUnit: ['minutes', 'hours'],
-}
+} as const
 
 export const OPTIONS = {
   boolean: [
@@ -104,11 +120,9 @@ export const OPTIONS = {
     { label: 'Duplicate', value: 'duplicate' },
   ],
   duplicateTreeItemDescendants: [
-    { label: 'Selected Items Only', value: 'selected-only' },
-    {
-      label: 'Selected Items and Complete Subtree',
-      value: 'complete-subtree',
-    },
+    { label: 'Always', value: 'complete-subtree' },
+    { label: 'Only if Collapsed', value: 'collapsed' },
+    { label: 'Never', value: 'selected-only' },
   ],
   duplicatedItemState: [
     { label: 'Always Saved', value: 'saved' },

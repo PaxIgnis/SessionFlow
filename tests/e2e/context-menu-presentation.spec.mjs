@@ -74,17 +74,17 @@ describe('Firefox context-menu and presentation workflows', () => {
         name: 'tab',
         open: () =>
           sessionTree.openTabContextMenu(SESSION_FIXTURE_TITLES.initial),
-        labels: ['Add Note', 'Open', 'Reload', 'Save', 'Close'],
+        labels: ['Add Note', 'Open', 'Reload', 'Save', 'Delete'],
       },
       {
         name: 'note',
         open: () => sessionTree.openNoteContextMenu(NOTE_TEXT),
-        labels: ['Add Note', 'Duplicate', 'Edit Note', 'Remove Note'],
+        labels: ['Add Note', 'Duplicate', 'Edit Note', 'Delete'],
       },
       {
         name: 'separator',
         open: () => sessionTree.openSeparatorContextMenu(),
-        labels: ['Add Note', 'Add Separator', 'Remove Separator'],
+        labels: ['Add Note', 'Add Separator', 'Delete'],
       },
       {
         name: 'panel',
@@ -218,7 +218,7 @@ describe('Firefox context-menu and presentation workflows', () => {
     const menu = await readFirefoxContextMenu()
     const byLabel = new Map(menu.items.map((item) => [item.label, item]))
 
-    for (const label of ['Open', 'Reload', 'Save', 'Close', 'Pin', 'Unpin']) {
+    for (const label of ['Open', 'Reload', 'Save', 'Delete', 'Pin', 'Unpin']) {
       expect(byLabel.get(label)?.disabled).toBe(false)
     }
   })
@@ -412,6 +412,43 @@ describe('Firefox context-menu and presentation workflows', () => {
         timeout: 10_000,
         timeoutMsg:
           'Expected Escape to close the modal and restore note-row focus.',
+      },
+    )
+  })
+
+  it('traps delete confirmation focus and restores its tree row', async () => {
+    await sessionTree.sendTreeCommand({
+      action: 'createNote',
+      text: 'Delete focus note',
+    })
+    await sessionTree.expectNoteVisible('Delete focus note')
+    const note = await sessionTree.noteItemByText('Delete focus note')
+    await sessionTree.captureContextMenuItems()
+    await sessionTree.openNoteContextMenu('Delete focus note')
+    await sessionTree.clickCapturedContextMenuItem('Delete')
+    await sessionTree.expectDeleteConfirmation()
+
+    const confirm = await $('.delete-tree-items-confirm')
+    const cancel = await $('.delete-tree-items-cancel')
+    await expect(confirm).toBeFocused()
+    await browser.keys([Key.Shift, Key.Tab])
+    await expect(cancel).toBeFocused()
+    await browser.keys(Key.Tab)
+    await expect(confirm).toBeFocused()
+    await browser.keys(Key.Escape)
+
+    await browser.waitUntil(
+      async () =>
+        browser.execute(
+          (element) =>
+            !document.querySelector('.delete-tree-items-modal') &&
+            document.activeElement === element,
+          note,
+        ),
+      {
+        timeout: 10_000,
+        timeoutMsg:
+          'Expected Escape to close Delete and restore the originating row focus.',
       },
     )
   })

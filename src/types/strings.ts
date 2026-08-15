@@ -1,5 +1,6 @@
 export const STRINGS: Record<string, string> = {
   settings_general: 'General',
+  settings_context_menu: 'Context Menu',
   settings_windows: 'Windows',
   settings_tabs: 'Tabs',
   settings_containers: 'Containers',

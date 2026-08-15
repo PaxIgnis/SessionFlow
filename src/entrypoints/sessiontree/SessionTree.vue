@@ -2,6 +2,7 @@
 import IconChevronRight from '@/assets/chevron-right.svg'
 import IconPinned from '@/assets/pinned.svg'
 import ContainerRecoveryModal from '@/components/ContainerRecoveryModal.vue'
+import DeleteTreeItemsModal from '@/components/DeleteTreeItemsModal.vue'
 import EditTextModal from '@/components/EditTextModal.vue'
 import SessionTreeNotification from '@/components/SessionTreeNotification.vue'
 import SessionTreeToolbar from '@/components/SessionTreeToolbar.vue'
@@ -53,8 +54,11 @@ window.onbeforeunload = () => {
 const faviconService = Favicons
 const faviconRevision = ref(0)
 const containerRecoveryPending = ref(false)
-const containerRecoveryActive = computed(
-  () => ModalState.active?.kind === 'containerRecovery',
+const deleteTreeItemsPending = ref(false)
+const blockingModalActive = computed(
+  () =>
+    ModalState.active?.kind === 'containerRecovery' ||
+    ModalState.active?.kind === 'deleteTreeItems',
 )
 
 const visibleTreeItems = computed<SessionTreeItem[]>(() => {
@@ -246,6 +250,24 @@ async function handleContainerRecovery(strategy: ContainerRecoveryStrategy) {
   }
 }
 
+async function handleDeleteTreeItemsConfirm(): Promise<void> {
+  if (
+    deleteTreeItemsPending.value ||
+    ModalState.active?.kind !== 'deleteTreeItems'
+  ) {
+    return
+  }
+  const itemUids = [...ModalState.active.itemUids]
+  deleteTreeItemsPending.value = true
+  try {
+    await Messages.deleteTreeItems(itemUids)
+  } finally {
+    closeModal()
+    Selection.clearSelection()
+    deleteTreeItemsPending.value = false
+  }
+}
+
 function runToolbarAction(action: () => void | Promise<void>): void {
   Selection.clearSelection()
   Promise.resolve(action()).catch((error) => {
@@ -263,8 +285,8 @@ function runToolbarAction(action: () => void | Promise<void>): void {
     <div
       class="sessiontree-content"
       tabindex="-1"
-      :inert="containerRecoveryActive"
-      :aria-hidden="containerRecoveryActive"
+      :inert="blockingModalActive"
+      :aria-hidden="blockingModalActive"
       @contextmenu.stop="openPanelContextMenu"
       @dragend="DragAndDrop.onDragEnd"
       @dragenter.stop.prevent="DragAndDrop.onDragEnter"
@@ -303,13 +325,13 @@ function runToolbarAction(action: () => void | Promise<void>): void {
     </div>
 
     <SessionTreeNotification
-      :inert="containerRecoveryActive"
-      :aria-hidden="containerRecoveryActive"
+      :inert="blockingModalActive"
+      :aria-hidden="blockingModalActive"
     />
 
     <SessionTreeToolbar
-      :inert="containerRecoveryActive"
-      :aria-hidden="containerRecoveryActive"
+      :inert="blockingModalActive"
+      :aria-hidden="blockingModalActive"
       @add-note="runToolbarAction(ToolbarActions.addRootNote)"
       @add-separator="runToolbarAction(ToolbarActions.addRootSeparator)"
       @new-window="runToolbarAction(ToolbarActions.createNewWindow)"
@@ -354,6 +376,14 @@ function runToolbarAction(action: () => void | Promise<void>): void {
       :pending="containerRecoveryPending"
       @recreate="handleContainerRecovery('recreate')"
       @without-container="handleContainerRecovery('without-container')"
+      @cancel="closeModal()"
+    />
+
+    <DeleteTreeItemsModal
+      v-if="ModalState.active?.kind === 'deleteTreeItems'"
+      :counts="ModalState.active.counts"
+      :pending="deleteTreeItemsPending"
+      @confirm="handleDeleteTreeItemsConfirm"
       @cancel="closeModal()"
     />
   </div>

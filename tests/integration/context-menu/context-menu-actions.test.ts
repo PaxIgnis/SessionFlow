@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ContextMenu } from '@/services/context-menu'
+import { SessionTree } from '@/services/foreground-tree'
 import {
   clear,
   createContextMenu,
@@ -29,7 +30,6 @@ import {
 const openTabs = vi.hoisted(() => vi.fn())
 const reloadTabs = vi.hoisted(() => vi.fn())
 const saveTabs = vi.hoisted(() => vi.fn())
-const closeTabs = vi.hoisted(() => vi.fn())
 const pinTabs = vi.hoisted(() => vi.fn())
 const unpinTabs = vi.hoisted(() => vi.fn())
 const createNote = vi.hoisted(() => vi.fn())
@@ -40,12 +40,12 @@ const duplicateTreeItems = vi.hoisted(() => vi.fn())
 const treeItemIndentDecrease = vi.hoisted(() => vi.fn())
 const treeItemIndentIncrease = vi.hoisted(() => vi.fn())
 const openModal = vi.hoisted(() => vi.fn())
+const openDeleteTreeItemsModal = vi.hoisted(() => vi.fn())
 
 vi.mock('@/services/foreground-messages', () => ({
   openTabs,
   reloadTabs,
   saveTabs,
-  closeTabs,
   pinTabs,
   unpinTabs,
   createNote,
@@ -59,6 +59,7 @@ vi.mock('@/services/foreground-messages', () => ({
 
 vi.mock('@/services/modal-state', () => ({
   openModal,
+  openDeleteTreeItemsModal,
 }))
 
 describe('context menu actions', () => {
@@ -228,24 +229,38 @@ describe('context menu actions', () => {
     const later = makeForegroundTab('tab-later' as UID, {
       state: State.OPEN,
     })
-    original.selected = true
+    resetForegroundTree([
+      makeForegroundWindow('window-1' as UID, [original, later]),
+    ])
+    const indexedOriginal = SessionTree.tabsByUid.get(original.uid)!
+    const indexedLater = SessionTree.tabsByUid.get(later.uid)!
+    indexedOriginal.selected = true
     Selection.selectedItems.value = [
-      { item: original, type: SelectionType.TAB },
+      { item: indexedOriginal, type: SelectionType.TAB },
     ]
 
     createContextMenu(createContextMenuItems(ContextMenu.tabConfig))
-    const closeMenu = vi
+    const deleteMenu = vi
       .mocked(browser.menus.create)
       .mock.calls.map(([properties]) => properties)
-      .find((properties) => properties.title === 'Close')!
+      .find((properties) => properties.title === 'Delete')!
 
-    original.selected = false
-    later.selected = true
-    Selection.selectedItems.value = [{ item: later, type: SelectionType.TAB }]
-    closeMenu.onclick?.({} as browser.menus.OnClickData, {} as browser.tabs.Tab)
+    indexedOriginal.selected = false
+    indexedLater.selected = true
+    Selection.selectedItems.value = [
+      { item: indexedLater, type: SelectionType.TAB },
+    ]
+    deleteMenu.onclick?.(
+      {} as browser.menus.OnClickData,
+      {} as browser.tabs.Tab,
+    )
 
-    expect(closeTabs).toHaveBeenCalledWith([original])
-    expect(closeTabs).not.toHaveBeenCalledWith([later])
+    expect(openDeleteTreeItemsModal).toHaveBeenCalledWith([
+      expect.objectContaining({ uid: original.uid }),
+    ])
+    expect(openDeleteTreeItemsModal).not.toHaveBeenCalledWith([
+      expect.objectContaining({ uid: later.uid }),
+    ])
   })
 
   it('opens a tab context menu by overriding defaults, clearing old items, and creating configured items', () => {
@@ -266,7 +281,7 @@ describe('context menu actions', () => {
       .mocked(browser.menus.create)
       .mock.calls.map(([properties]) => properties.title)
     expect(createdTitles).toContain('Open')
-    expect(createdTitles).toContain('Close')
+    expect(createdTitles).toContain('Delete')
     expect(browser.menus.create).toHaveBeenCalledWith(
       expect.objectContaining({
         title: 'Open',
@@ -338,7 +353,7 @@ describe('context menu actions', () => {
     const decreaseItem = items.find(
       (item) => item.id === 'treeItemIndentDecrease',
     )
-    const removeItem = items.find((item) => item.id === 'removeSeparator')
+    const deleteItem = items.find((item) => item.id === 'deleteTreeItem')
 
     expect(createNoteItem).toMatchObject({
       label: 'Add Note',
@@ -356,8 +371,8 @@ describe('context menu actions', () => {
       label: 'Decrease Indent',
       enabled: true,
     })
-    expect(removeItem).toMatchObject({
-      label: 'Remove Separator',
+    expect(deleteItem).toMatchObject({
+      label: 'Delete',
       enabled: true,
     })
 
@@ -365,13 +380,15 @@ describe('context menu actions', () => {
     createBelowItem?.action?.()
     increaseItem?.action?.()
     decreaseItem?.action?.()
-    removeItem?.action?.()
+    deleteItem?.action?.()
 
     expect(createNote).toHaveBeenCalledWith(window.uid, 2)
     expect(createSeparatorBelow).toHaveBeenCalledWith(separator.uid)
     expect(treeItemIndentIncrease).toHaveBeenCalledWith([separator.uid])
     expect(treeItemIndentDecrease).toHaveBeenCalledWith([separator.uid])
-    expect(removeSeparator).toHaveBeenCalledWith(separator.uid)
+    expect(openDeleteTreeItemsModal).toHaveBeenCalledWith([
+      expect.objectContaining({ uid: separator.uid }),
+    ])
   })
 
   it.each([
@@ -510,7 +527,7 @@ describe('context menu actions', () => {
       decreaseItem?.action?.()
 
       if (hasDuplicateTreeItem) {
-        expect(duplicateTreeItems).toHaveBeenCalledWith([selected.uid])
+        expect(duplicateTreeItems).toHaveBeenCalledWith([selected.uid], false)
       } else {
         expect(duplicateTreeItems).not.toHaveBeenCalled()
       }

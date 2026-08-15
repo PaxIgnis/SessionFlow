@@ -170,7 +170,7 @@ describe('critical Firefox UI workflows', () => {
     await expectSingleOpenWindowWithRootTabs([SESSION_FIXTURE_TITLES.initial])
   })
 
-  it('closes a window from the session tree context menu and removes it from the tree', async () => {
+  it('deletes a window from the session tree context menu after confirmation', async () => {
     await openSeededSessionTree()
 
     await switchToPrimaryBrowserWindow()
@@ -188,7 +188,9 @@ describe('critical Firefox UI workflows', () => {
     await sessionTree.openWindowContextMenuByText(
       SESSION_FIXTURE_TITLES.secondWindow,
     )
-    await sessionTree.clickCapturedContextMenuItem('Close')
+    await sessionTree.clickCapturedContextMenuItem('Delete')
+    await sessionTree.expectDeleteConfirmation()
+    await sessionTree.confirmDelete()
 
     await waitForBrowserHandleClosed(
       secondWindowHandle,
@@ -222,7 +224,7 @@ describe('critical Firefox UI workflows', () => {
     }, 'Expected one root tab with one child note.')
   })
 
-  it('edits and removes a note from the note context menu', async () => {
+  it('edits and deletes a note from the note context menu', async () => {
     await openSeededSessionTree()
 
     await addNoteFromTabContextMenu(SESSION_FIXTURE_TITLES.initial)
@@ -240,7 +242,9 @@ describe('critical Firefox UI workflows', () => {
 
     await sessionTree.captureContextMenuItems()
     await sessionTree.openNoteContextMenu(EDITED_NOTE_TEXT)
-    await sessionTree.clickCapturedContextMenuItem('Remove Note')
+    await sessionTree.clickCapturedContextMenuItem('Delete')
+    await sessionTree.expectDeleteConfirmation()
+    await sessionTree.confirmDelete()
 
     await expectNoNotes()
     await sessionTree.expectNoteNotVisible(EDITED_NOTE_TEXT)
@@ -823,7 +827,7 @@ describe('critical Firefox UI workflows', () => {
     await expectSingleOpenWindowWithRootTabs([SESSION_FIXTURE_TITLES.initial])
   })
 
-  it('closes a tab from the session tree context menu and removes it from the tree', async () => {
+  it('cancels and then confirms tab deletion from the context menu', async () => {
     await openSeededSessionTree()
 
     await switchToPrimaryBrowserWindow()
@@ -836,10 +840,30 @@ describe('critical Firefox UI workflows', () => {
     ])
     await sessionTree.captureContextMenuItems()
     await sessionTree.openTabContextMenu(SESSION_FIXTURE_TITLES.alpha)
-    await sessionTree.clickCapturedContextMenuItem('Close')
+    await sessionTree.clickCapturedContextMenuItem('Delete')
+    await sessionTree.expectDeleteConfirmation()
+    await sessionTree.cancelDelete()
+    await sessionTree.waitForItemTextVisible(SESSION_FIXTURE_TITLES.alpha)
+
+    await sessionTree.captureContextMenuItems()
+    await sessionTree.openTabContextMenu(SESSION_FIXTURE_TITLES.alpha)
+    await sessionTree.clickCapturedContextMenuItem('Delete')
+    await sessionTree.expectDeleteConfirmation()
+    await sessionTree.confirmDelete()
 
     await waitForBrowserHandleClosed(alphaHandle, SESSION_FIXTURE_TITLES.alpha)
     await expectSingleOpenWindowWithRootTabs([SESSION_FIXTURE_TITLES.initial])
+    await browser.waitUntil(
+      () =>
+        browser.execute(
+          () =>
+            document.activeElement?.classList.contains('tree-item') === true,
+        ),
+      {
+        timeout: 10_000,
+        timeoutMsg: 'Expected deletion to focus a surviving Session Tree row.',
+      },
+    )
   })
 
   it('saves a tab from the session tree context menu and keeps it in the tree', async () => {

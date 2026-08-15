@@ -153,7 +153,11 @@ export function toggleCollapseNote(noteUid: UID): void {
  *
  * @param {UID} noteUid - The UID of the note to remove.
  */
-export function removeNote(noteUid: UID): void {
+export function removeNote(
+  noteUid: UID,
+  emitDelta: boolean = true,
+  recompute: boolean = true,
+): void {
   const location = Tree.findItemLocation(noteUid)
   if (!location || location.item.type !== TreeItemType.NOTE) return
 
@@ -180,13 +184,15 @@ export function removeNote(noteUid: UID): void {
   }
 
   if (window && window.children.length === 0) {
-    Tree.removeWindow(window.uid)
+    Tree.removeWindow(window.uid, emitDelta, recompute)
     return
   }
 
-  Tree.recomputeSessionTree(false)
-  emitTreeDelta({
-    op: 'treeReplaced',
-    treeItems: structuredClone(Tree.Items),
-  })
+  if (recompute) Tree.recomputeSessionTree(false)
+  if (emitDelta) {
+    emitTreeDelta({
+      op: 'treeReplaced',
+      treeItems: structuredClone(Tree.Items),
+    })
+  }
 }

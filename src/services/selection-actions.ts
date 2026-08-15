@@ -10,6 +10,8 @@ import {
   Window,
 } from '@/types/session-tree'
 
+export type ContextMenuDescendantScope = 'always' | 'collapsed' | 'never'
+
 export function selectItem(item: TreeItem, type: SelectionType, e: MouseEvent) {
   const firstItem = Selection.selectedItems.value[0]
 
@@ -84,6 +86,46 @@ export function getLogicalTreeOrder(): TreeItem[] {
   return SessionTree.reactiveItems.value.flatMap((item) =>
     item.type === TreeItemType.WINDOW ? [item, ...item.children] : [item],
   )
+}
+
+export function collectContextMenuActionItems(
+  items: readonly TreeItem[],
+  scope: ContextMenuDescendantScope,
+): TreeItem[] {
+  const logicalItems = getLogicalTreeOrder()
+  const currentByUid = new Map(logicalItems.map((item) => [item.uid, item]))
+  const includedUids = new Set<UID>()
+
+  for (const selectedItem of items) {
+    const item = currentByUid.get(selectedItem.uid) ?? selectedItem
+    includedUids.add(item.uid)
+    if (item.type === TreeItemType.WINDOW) {
+      item.children.forEach((child) => includedUids.add(child.uid))
+      continue
+    }
+    if (scope === 'never' || (scope === 'collapsed' && !item.collapsed)) {
+      continue
+    }
+
+    const containingItems = item.windowUid
+      ? (SessionTree.windowsByUid.get(item.windowUid)?.children ?? [])
+      : (SessionTree.reactiveItems.value as TreeItem[])
+    const itemIndex = containingItems.findIndex(
+      (candidate) => candidate.uid === item.uid,
+    )
+    if (itemIndex === -1) continue
+    const itemIndent = item.indentLevel ?? 0
+    for (let index = itemIndex + 1; index < containingItems.length; index++) {
+      const candidate = containingItems[index]
+      if ((candidate.indentLevel ?? 0) <= itemIndent) break
+      includedUids.add(candidate.uid)
+      if (candidate.type === TreeItemType.WINDOW) {
+        candidate.children.forEach((child) => includedUids.add(child.uid))
+      }
+    }
+  }
+
+  return logicalItems.filter((item) => includedUids.has(item.uid))
 }
 
 function addSelectedItem(item: TreeItem | undefined): void {

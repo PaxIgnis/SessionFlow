@@ -58,6 +58,7 @@ export async function loadBackgroundHandlers() {
     updateNoteText: vi.fn(),
     toggleCollapseNote: vi.fn(),
     removeNote: vi.fn(),
+    deleteTreeItems: vi.fn(),
     duplicateTreeItems: vi.fn(),
     deselectAllItems: vi.fn(),
     treeItemIndentIncrease: vi.fn(),

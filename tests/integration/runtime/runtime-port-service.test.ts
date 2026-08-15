@@ -57,6 +57,25 @@ describe('runtime port service', () => {
     })
   })
 
+  it('accepts bulk delete commands through the runtime port', async () => {
+    const { runtime } = await loadRuntimePortService()
+    const dispatchCommand = vi.fn()
+    runtime.initializeSessionTreePort({
+      dispatchCommand,
+      getSnapshot: () => [],
+    })
+
+    await runtime.sendTreeCommand({
+      action: 'deleteTreeItems',
+      itemUIDs: ['window-1' as UID, 'note-1' as UID],
+    })
+
+    expect(dispatchCommand).toHaveBeenCalledWith({
+      action: 'deleteTreeItems',
+      itemUIDs: ['window-1', 'note-1'],
+    })
+  })
+
   it('accepts native Firefox tab move commands through the runtime port', async () => {
     const { runtime } = await loadRuntimePortService()
     const dispatchCommand = vi.fn()
@@ -1003,6 +1022,15 @@ describe('runtime port service', () => {
       type: 'command',
       requestId: 'unknown-action',
       command: { action: 'notARealAction' },
+    })
+    requestingPort.postMessage({
+      type: 'command',
+      requestId: 'malformed-duplicate-descendants',
+      command: {
+        action: 'duplicateTreeItems',
+        itemUIDs: ['tab-1'],
+        includeDescendants: 'false',
+      },
     })
     requestingPort.postMessage({ type: 'unknown', requestId: 'unknown' })
     await flushMicrotasks()

@@ -247,6 +247,26 @@ export class SessionTreePage {
     )
   }
 
+  deleteConfirmation() {
+    return $('.delete-tree-items-modal')
+  }
+
+  async expectDeleteConfirmation() {
+    await expect(await this.deleteConfirmation()).toBeDisplayed()
+  }
+
+  async confirmDelete() {
+    const button = await $('.delete-tree-items-confirm')
+    await expect(button).toBeDisplayed()
+    await button.click()
+  }
+
+  async cancelDelete() {
+    const button = await $('.delete-tree-items-cancel')
+    await expect(button).toBeDisplayed()
+    await button.click()
+  }
+
   async firstWindowItem() {
     await browser.waitUntil(async () => (await this.windowItems()).length > 0, {
       timeout: 10_000,

@@ -88,7 +88,7 @@ describe('foreground message helpers', () => {
     )
   })
 
-  it('aggregates bulk close failures into one notification', async () => {
+  it('aggregates bulk save failures into one notification', async () => {
     const firstTab = makeForegroundTab('tab-1' as UID, {
       windowUid: 'window-1' as UID,
       state: State.OPEN,
@@ -100,14 +100,14 @@ describe('foreground message helpers', () => {
     sendTreeCommand
       .mockRejectedValueOnce(new Error('first failed'))
       .mockResolvedValueOnce(undefined)
-    const { closeTabs } = await import('@/services/foreground-messages')
+    const { saveTabs } = await import('@/services/foreground-messages')
 
-    await closeTabs([firstTab, secondTab])
+    await saveTabs([firstTab, secondTab])
 
     expect(sendTreeCommand).toHaveBeenCalledTimes(2)
     expect(showNotification).toHaveBeenCalledOnce()
     expect(showNotification).toHaveBeenCalledWith(
-      'Session Flow could not close 1 of 2 tabs.',
+      'Session Flow could not save 1 of 2 tabs.',
     )
   })
 
@@ -151,7 +151,9 @@ describe('foreground message helpers', () => {
   })
 
   it('shows a notification when an external import fails', async () => {
-    const error = new Error('1 of 2 externally dropped tabs could not be opened')
+    const error = new Error(
+      '1 of 2 externally dropped tabs could not be opened',
+    )
     sendTreeCommand.mockRejectedValueOnce(error)
     const { importExternalUrls } =
       await import('@/services/foreground-messages')
@@ -172,27 +174,49 @@ describe('foreground message helpers', () => {
 
   it('sends generic tree item action payloads', async () => {
     const {
+      deleteTreeItems,
       duplicateTreeItems,
       treeItemIndentDecrease,
       treeItemIndentIncrease,
     } = await import('@/services/foreground-messages')
 
+    deleteTreeItems(['tab-1' as UID, 'note-1' as UID])
     duplicateTreeItems(['note-1' as UID, 'window-1' as UID])
     treeItemIndentIncrease(['note-1' as UID])
     treeItemIndentDecrease(['window-1' as UID])
 
     expect(sendTreeCommand).toHaveBeenNthCalledWith(1, {
-      action: 'duplicateTreeItems',
-      itemUIDs: ['note-1', 'window-1'],
+      action: 'deleteTreeItems',
+      itemUIDs: ['tab-1', 'note-1'],
     })
     expect(sendTreeCommand).toHaveBeenNthCalledWith(2, {
+      action: 'duplicateTreeItems',
+      itemUIDs: ['note-1', 'window-1'],
+      includeDescendants: false,
+    })
+    expect(sendTreeCommand).toHaveBeenNthCalledWith(3, {
       action: 'treeItemIndentIncrease',
       itemUIDs: ['note-1'],
     })
-    expect(sendTreeCommand).toHaveBeenNthCalledWith(3, {
+    expect(sendTreeCommand).toHaveBeenNthCalledWith(4, {
       action: 'treeItemIndentDecrease',
       itemUIDs: ['window-1'],
     })
+  })
+
+  it('notifies without rejecting when generic tree item deletion fails', async () => {
+    const error = new Error('Firefox refused to remove the tab')
+    const { deleteTreeItems } = await import('@/services/foreground-messages')
+
+    await expect(deleteTreeItems(['tab-1' as UID])).resolves.toBeUndefined()
+    expect(showNotification).not.toHaveBeenCalled()
+
+    sendTreeCommand.mockRejectedValueOnce(error)
+    await expect(deleteTreeItems(['tab-1' as UID])).resolves.toBeUndefined()
+
+    expect(showNotification).toHaveBeenCalledWith(
+      `Session Flow could not delete the selected items: ${error}`,
+    )
   })
 
   it('shows a notification when duplicate state restoration fails', async () => {
@@ -337,6 +361,27 @@ describe('foreground message helpers', () => {
       )
     },
   )
+
+  it('duplicates only the double-clicked tab regardless of context-menu scope', async () => {
+    const { tabDoubleClick } = await import('@/services/foreground-messages')
+    Settings.values.doubleClickOnSavedTab = 'duplicate'
+    Settings.values.duplicateTreeItemDescendants = 'complete-subtree'
+
+    await tabDoubleClick(
+      -1,
+      -1,
+      'tab-1' as UID,
+      'window-1' as UID,
+      State.SAVED,
+      'https://example.test',
+    )
+
+    expect(sendTreeCommand).toHaveBeenCalledWith({
+      action: 'duplicateTreeItems',
+      itemUIDs: ['tab-1'],
+      includeDescendants: false,
+    })
+  })
 
   it.each([
     ['open', 'openTab'],
@@ -857,7 +902,7 @@ describe('foreground message helpers', () => {
   })
 
   it('sends multi-tab helper commands in item order', async () => {
-    const { closeTabs, unpinTabs } =
+    const { saveTabs, unpinTabs } =
       await import('@/services/foreground-messages')
     const tabs = [
       makeForegroundTab('tab-1' as UID, {
@@ -872,16 +917,16 @@ describe('foreground message helpers', () => {
       }),
     ]
 
-    await closeTabs(tabs)
+    await saveTabs(tabs)
     unpinTabs(tabs)
 
     expect(sendTreeCommand).toHaveBeenNthCalledWith(
       1,
-      expect.objectContaining({ action: 'closeTab', tabUid: 'tab-1' }),
+      expect.objectContaining({ action: 'saveTab', tabUid: 'tab-1' }),
     )
     expect(sendTreeCommand).toHaveBeenNthCalledWith(
       2,
-      expect.objectContaining({ action: 'closeTab', tabUid: 'tab-2' }),
+      expect.objectContaining({ action: 'saveTab', tabUid: 'tab-2' }),
     )
     expect(sendTreeCommand).toHaveBeenNthCalledWith(
       3,
@@ -977,7 +1022,7 @@ describe('foreground message helpers', () => {
   })
 
   it('filters bulk tab actions to items eligible for each action', async () => {
-    const { closeTabs, pinTabs, reloadTabs, saveTabs, unpinTabs } =
+    const { pinTabs, reloadTabs, saveTabs, unpinTabs } =
       await import('@/services/foreground-messages')
     const saved = makeForegroundTab('saved' as UID, {
       id: -1,
@@ -994,13 +1039,6 @@ describe('foreground message helpers', () => {
       pinned: true,
     })
 
-    await closeTabs([saved, open, discarded])
-    expect(sendTreeCommand.mock.calls.map(([message]) => message)).toEqual([
-      expect.objectContaining({ action: 'closeTab', tabUid: 'open' }),
-      expect.objectContaining({ action: 'closeTab', tabUid: 'discarded' }),
-    ])
-
-    sendTreeCommand.mockClear()
     await saveTabs([saved, open, discarded])
     expect(sendTreeCommand.mock.calls.map(([message]) => message)).toEqual([
       expect.objectContaining({ action: 'saveTab', tabUid: 'open' }),
@@ -1032,7 +1070,7 @@ describe('foreground message helpers', () => {
   })
 
   it('does not send a bulk command when no selected tab is eligible', async () => {
-    const { closeTabs, openTabs, pinTabs, reloadTabs, saveTabs, unpinTabs } =
+    const { openTabs, pinTabs, reloadTabs, saveTabs, unpinTabs } =
       await import('@/services/foreground-messages')
     const savedPinned = makeForegroundTab('saved-pinned' as UID, {
       id: -1,
@@ -1040,7 +1078,6 @@ describe('foreground message helpers', () => {
       pinned: true,
     })
 
-    await closeTabs([savedPinned])
     await pinTabs([savedPinned])
     await reloadTabs([savedPinned])
     await saveTabs([savedPinned])

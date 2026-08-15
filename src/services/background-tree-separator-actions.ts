@@ -209,7 +209,11 @@ function subtreeEndIndex(items: TreeItem[], parentIndex: number): number {
   return index
 }
 
-export function removeSeparator(separatorUid: UID): void {
+export function removeSeparator(
+  separatorUid: UID,
+  emitDelta: boolean = true,
+  recompute: boolean = true,
+): void {
   const location = Tree.findItemLocation(separatorUid)
   if (!location || location.item.type !== TreeItemType.SEPARATOR) return
 
@@ -226,13 +230,15 @@ export function removeSeparator(separatorUid: UID): void {
     parent.isParent = Tree.hasChildrenInContainer(parent, location.children)
 
   if (window && window.children.length === 0) {
-    Tree.removeWindow(window.uid)
+    Tree.removeWindow(window.uid, emitDelta, recompute)
     return
   }
 
-  Tree.recomputeSessionTree(false)
-  emitTreeDelta({
-    op: 'treeReplaced',
-    treeItems: structuredClone(Tree.Items),
-  })
+  if (recompute) Tree.recomputeSessionTree(false)
+  if (emitDelta) {
+    emitTreeDelta({
+      op: 'treeReplaced',
+      treeItems: structuredClone(Tree.Items),
+    })
+  }
 }

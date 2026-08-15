@@ -1,20 +1,12 @@
 import * as Messages from '@/services/foreground-messages'
 import { SessionTree } from '@/services/foreground-tree'
 import { Selection } from '@/services/selection'
-import {
-  canDecreaseIndentSelectedItems,
-  canIncreaseIndentSelectedItems,
-} from '@/services/context-menu-actions'
 import { ContextMenuItem } from '@/types/context-menu'
 import type { Separator, TreeItem } from '@/types/session-tree'
 
 function selectedParentUid(): UID | undefined {
   const selected = Selection.selectedItems.value[0]?.item
   return selected?.uid
-}
-
-function selectedItemUids(): UID[] {
-  return Selection.selectedItems.value.map((selected) => selected.item.uid)
 }
 
 function getCreateNoteTargetBelowSeparator(separator: Separator): {
@@ -84,46 +76,4 @@ export const contextMenuItemsSeparator: Record<string, () => ContextMenuItem> =
         },
       }
     },
-
-    treeItemIndentIncrease: () => {
-      return {
-        id: 'treeItemIndentIncrease',
-        label: 'Increase Indent',
-        icon: 'indent-increase',
-        enabled: canIncreaseIndentSelectedItems(selectedItems()),
-        action: () => {
-          Messages.treeItemIndentIncrease(selectedItemUids())
-        },
-      }
-    },
-
-    treeItemIndentDecrease: () => {
-      return {
-        id: 'treeItemIndentDecrease',
-        label: 'Decrease Indent',
-        icon: 'indent-decrease',
-        enabled: canDecreaseIndentSelectedItems(selectedItems()),
-        action: () => {
-          Messages.treeItemIndentDecrease(selectedItemUids())
-        },
-      }
-    },
-
-    removeSeparator: () => {
-      return {
-        id: 'removeSeparator',
-        label: 'Remove Separator',
-        icon: 'close',
-        enabled: Selection.getSelectedSeparators().length > 0,
-        action: () => {
-          Selection.getSelectedSeparators().forEach((separator) =>
-            Messages.removeSeparator(separator.uid),
-          )
-        },
-      }
-    },
   }
-
-function selectedItems(): TreeItem[] {
-  return Selection.selectedItems.value.map((selected) => selected.item)
-}

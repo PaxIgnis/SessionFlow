@@ -170,7 +170,11 @@ export function addTab(
  * @param {UID} tabUid - The UID of the tab to be removed.
  * @param {boolean = true} emitDelta - Whether to emit a tree delta event.
  */
-export function removeTab(tabUid: UID, emitDelta: boolean = true): void {
+export function removeTab(
+  tabUid: UID,
+  emitDelta: boolean = true,
+  recompute: boolean = true,
+): void {
   const tab = Tree.tabsByUid.get(tabUid)
   if (!tab) {
     console.error('Error removing tab, could not find tab:', tabUid)
@@ -244,14 +248,15 @@ export function removeTab(tabUid: UID, emitDelta: boolean = true): void {
       tabUid: tab.uid,
     })
   }
-  // if this was the last tab in the window, remove the window
-  if (window.children.length === 0) {
-    Tree.removeWindow(window.uid)
-  }
-  Tree.recomputeSessionTree(emitDelta)
   if (privateFaviconUrl) {
     void cleanupPrivateFaviconDomain(privateFaviconUrl)
   }
+  // if this was the last tab in the window, remove the window
+  if (window.children.length === 0) {
+    Tree.removeWindow(window.uid, emitDelta, recompute)
+    return
+  }
+  if (recompute) Tree.recomputeSessionTree(emitDelta)
 }
 
 /**
@@ -492,10 +497,14 @@ export function getTabState(tabUid: UID): State {
  * @param {number} message.tabId - The ID of the tab to be closed.
  * @param {UID} message.tabUid - The UID of the tab to be closed.
  */
-export async function closeTab(message: {
-  tabId: number
-  tabUid: UID
-}): Promise<void> {
+export async function closeTab(
+  message: {
+    tabId: number
+    tabUid: UID
+  },
+  emitDelta: boolean = true,
+  recompute: boolean = true,
+): Promise<void> {
   const initialTab = Tree.tabsByUid.get(message.tabUid)
   if (!initialTab) {
     console.error('Error closing tab, could not find tab:', message.tabUid)
@@ -507,21 +516,21 @@ export async function closeTab(message: {
 
   const initialWindow = Tree.windowsByUid.get(initialTab.windowUid)
   if (initialWindow?.activeTabId === message.tabId) {
-    Tree.updateWindow(initialWindow.uid, { activeTabId: undefined })
+    Tree.updateWindow(initialWindow.uid, { activeTabId: undefined }, emitDelta)
   }
 
   const tab = Tree.tabsByUid.get(message.tabUid)
   if (!tab) return
   const windowUid = tab.windowUid
-  Tree.removeTab(message.tabUid)
+  Tree.removeTab(message.tabUid, emitDelta, recompute)
   const window = Tree.windowsByUid.get(windowUid)
   if (!window) return
   const openTabs = Tree.getTabs(window.children).filter(
     (child) => child.state === State.OPEN || child.state === State.DISCARDED,
   )
   if (window.children.length > 0 && openTabs.length === 0) {
-    Tree.updateWindowState(window.uid, State.SAVED)
-    Tree.updateWindowId(window.uid, -1)
+    Tree.updateWindowState(window.uid, State.SAVED, emitDelta)
+    Tree.updateWindowId(window.uid, -1, emitDelta)
   }
 }
 
