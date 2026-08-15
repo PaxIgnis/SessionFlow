@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '@/defaults/settings'
 import {
   initializeSettings,
+  scheduleSessionTreeOpenOnStartup,
   setupBrowserActionMenu,
   updateBadge,
   updateBadgeOnStartup,
@@ -101,7 +102,7 @@ describe('background actions', () => {
     expect(browser.browserAction.setTitle).toHaveBeenCalledTimes(10)
   })
 
-  it('loads settings, opens the session tree after one second when enabled, and starts the window position interval', async () => {
+  it('loads settings without starting the popup deadline during initialization', async () => {
     vi.useFakeTimers()
     Settings.values.openSessionTreeOnStartup = true
     const loadSettings = vi
@@ -114,12 +115,20 @@ describe('background actions', () => {
     expect(mocks.updateWindowPositionInterval).toHaveBeenCalledTimes(1)
     expect(mocks.openSessionTree).not.toHaveBeenCalled()
 
-    await vi.advanceTimersByTimeAsync(999)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(mocks.openSessionTree).not.toHaveBeenCalled()
+    expect(vi.getTimerCount()).toBe(0)
+  })
 
+  it('opens the session tree one second after ready startup scheduling', async () => {
+    vi.useFakeTimers()
+    Settings.values.openSessionTreeOnStartup = true
+
+    scheduleSessionTreeOpenOnStartup()
+    await vi.advanceTimersByTimeAsync(999)
     expect(mocks.openSessionTree).not.toHaveBeenCalled()
 
     await vi.advanceTimersByTimeAsync(1)
-
     expect(mocks.openSessionTree).toHaveBeenCalledTimes(1)
   })
 
@@ -128,17 +137,15 @@ describe('background actions', () => {
     Settings.values.openSessionTreeOnStartup = true
     const openError = new Error('open failed')
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
-    vi.spyOn(Settings, 'loadSettingsFromStorage').mockResolvedValue(undefined)
     mocks.openSessionTree.mockRejectedValue(openError)
 
-    await initializeSettings()
+    scheduleSessionTreeOpenOnStartup()
     await vi.advanceTimersByTimeAsync(1000)
 
     expect(consoleError).toHaveBeenCalledWith(
       'Failed to open session tree on startup:',
       openError,
     )
-    expect(mocks.updateWindowPositionInterval).toHaveBeenCalledTimes(1)
   })
 
   it('loads settings without scheduling the session tree to open when startup opening is disabled', async () => {
@@ -149,6 +156,7 @@ describe('background actions', () => {
       .mockResolvedValue(undefined)
 
     await initializeSettings()
+    scheduleSessionTreeOpenOnStartup()
 
     expect(loadSettings).toHaveBeenCalledTimes(1)
     expect(mocks.updateWindowPositionInterval).toHaveBeenCalledTimes(1)

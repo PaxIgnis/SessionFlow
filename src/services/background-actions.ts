@@ -30,17 +30,19 @@ export async function updateBadgeOnStartup() {
 export const initializeSettings = async () => {
   try {
     await Settings.loadSettingsFromStorage()
-    if (Settings.values.openSessionTreeOnStartup) {
-      setTimeout(() => {
-        openSessionTree().catch((error) => {
-          console.error('Failed to open session tree on startup:', error)
-        })
-      }, 1000)
-    }
     updateWindowPositionInterval()
   } catch (error) {
     console.error('Failed to initialize settings:', error)
   }
+}
+
+export function scheduleSessionTreeOpenOnStartup(): NodeJS.Timeout | undefined {
+  if (!Settings.values.openSessionTreeOnStartup) return undefined
+  return setTimeout(() => {
+    openSessionTree().catch((error) => {
+      console.error('Failed to open session tree on startup:', error)
+    })
+  }, 1000)
 }
 
 export function startSessionTreePersistence(): NodeJS.Timeout {

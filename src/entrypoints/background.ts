@@ -46,6 +46,7 @@ async function initializeBackground(): Promise<void> {
   await stampOpenTreeIdentities()
 
   BackgroundHandlers.initializeListeners()
+  Actions.scheduleSessionTreeOpenOnStartup()
   Settings.setupSettingsUpdatedListener(async () => {
     try {
       await FaviconRefresh.handleSettingsUpdated()

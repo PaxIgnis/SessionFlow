@@ -192,6 +192,7 @@ describe('startup lifecycle', () => {
     const capturePersistedStartupTree = vi.fn().mockResolvedValue(undefined)
     const stampOpenTreeIdentities = vi.fn().mockResolvedValue(undefined)
     const initializeListeners = vi.fn()
+    const scheduleSessionTreeOpenOnStartup = vi.fn()
     const snapshotSettingsUpdated = vi.fn().mockResolvedValue(undefined)
     const faviconSettingsUpdated = vi
       .fn()
@@ -200,6 +201,7 @@ describe('startup lifecycle', () => {
 
     vi.doMock('@/services/background-actions', () => ({
       initializeSettings,
+      scheduleSessionTreeOpenOnStartup,
       setupBrowserActionMenu: vi.fn(),
       startSessionTreePersistence: vi.fn(),
       updateBadgeOnStartup: vi.fn(),
@@ -274,6 +276,9 @@ describe('startup lifecycle', () => {
     expect(stampOpenTreeIdentities.mock.invocationCallOrder[0]).toBeLessThan(
       initializeListeners.mock.invocationCallOrder[0],
     )
+    expect(initializeListeners.mock.invocationCallOrder[0]).toBeLessThan(
+      scheduleSessionTreeOpenOnStartup.mock.invocationCallOrder[0],
+    )
 
     const settingsUpdated = setupSettingsUpdatedListener.mock.calls[0]?.[0] as
       | (() => Promise<void>)
@@ -293,11 +298,13 @@ describe('startup lifecycle', () => {
     const initializeWindows = vi.fn().mockResolvedValue(undefined)
     const stampOpenTreeIdentities = vi.fn().mockResolvedValue(undefined)
     const initializeListeners = vi.fn()
+    const scheduleSessionTreeOpenOnStartup = vi.fn()
     const setupSettingsUpdatedListener = vi.fn()
     const settingsValues = { automaticSessionSnapshots: false }
 
     vi.doMock('@/services/background-actions', () => ({
       initializeSettings,
+      scheduleSessionTreeOpenOnStartup,
       setupBrowserActionMenu: vi.fn(),
       startSessionTreePersistence: vi.fn(),
       updateBadgeOnStartup: vi.fn(),
