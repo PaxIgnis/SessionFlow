@@ -1453,6 +1453,10 @@ describe('critical Firefox UI workflows', () => {
     await switchToPrimaryBrowserWindow()
     await openFixtureTab(seed, SESSION_FIXTURE_TITLES.alpha)
     await browser.switchToWindow(popup.popupHandle)
+    await expectSingleOpenWindowWithRootTabs([
+      SESSION_FIXTURE_TITLES.initial,
+      SESSION_FIXTURE_TITLES.alpha,
+    ])
     const before = await sessionTree.backgroundTreeSnapshot()
     const original = windowsInTree(before)
       .flatMap((windowItem) => tabsInWindow(windowItem))
@@ -1500,8 +1504,7 @@ describe('critical Firefox UI workflows', () => {
     }, 'Expected the later Firefox restoration to create a distinct fresh item.')
 
     await sessionTree.updateSettings({ saveTabOnClose: false })
-    await removeFixtureTab(SESSION_FIXTURE_TITLES.alpha)
-    await removeFixtureTab(extensionFixtureTitle(SESSION_FIXTURE_TITLES.alpha))
+    await removeFixtureTabs(SESSION_FIXTURE_TITLES.alpha, 2)
   })
 
   it('uses the setting at restore time after a background reload (PD-SR-04/PD-SR-08)', async () => {
