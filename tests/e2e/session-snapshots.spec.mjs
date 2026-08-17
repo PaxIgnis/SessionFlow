@@ -39,8 +39,8 @@ describe('session snapshot workflows', () => {
       const snapshotId = list.data.snapshots[0].id
       expect(await snapshotEntry.$$('button')).toHaveLength(0)
 
-      let selectedActions = await $('.snapshot-selected-actions')
-      await (await selectedActions.$('button=Unprotect')).click()
+      let recordActions = await $('.snapshot-record-actions')
+      await (await recordActions.$('button=Unprotect')).click()
       await browser.waitUntil(
         async () => {
           const current = await sendSnapshotRequest({
@@ -50,8 +50,8 @@ describe('session snapshot workflows', () => {
         },
         { timeout: 10_000, timeoutMsg: 'Expected snapshot to be unprotected.' },
       )
-      selectedActions = await $('.snapshot-selected-actions')
-      await (await selectedActions.$('button=Protect')).click()
+      recordActions = await $('.snapshot-record-actions')
+      await (await recordActions.$('button=Protect')).click()
       await browser.waitUntil(
         async () => {
           const current = await sendSnapshotRequest({
@@ -75,7 +75,7 @@ describe('session snapshot workflows', () => {
         },
       })
 
-      selectedActions = await $('.snapshot-selected-actions')
+      const selectedActions = await $('.snapshot-selected-actions')
       await (await selectedActions.$('button=Copy JSON')).click()
       const successToast = await $('.snapshot-success-toast')
       await expect(successToast).toBeDisplayed()
@@ -100,7 +100,7 @@ describe('session snapshot workflows', () => {
       expect(activeTreeAfter.length).toBeGreaterThan(activeTreeBefore.length)
       expect(await browser.getWindowHandles()).toEqual(handlesBefore)
 
-      await (await $('button=Delete All Snapshots')).click()
+      await (await $('button=Delete all snapshots')).click()
       const deleteDialog = await $('[role="dialog"]')
       await expect(deleteDialog).toBeDisplayed()
       await (await deleteDialog.$('button=Delete All')).click()
@@ -185,17 +185,17 @@ describe('session snapshot workflows', () => {
       const treeBefore = await readPersistedSessionTree()
       const handlesBefore = await browser.getWindowHandles()
 
-      await (await $('button=Restore Selected Items')).click()
+      await (await $('button=Restore 1 item')).click()
       const restoreDialog = await $('[role="dialog"]')
       await expect(restoreDialog).toBeDisplayed()
       await expect(restoreDialog).toHaveText(
-        expect.stringContaining('Append 1 windows'),
+        expect.stringContaining('Append 1 window'),
       )
-      await (await restoreDialog.$('button=Restore Selected Items')).click()
+      await (await restoreDialog.$('button=Restore 1 item')).click()
       const restoreToast = await $('.snapshot-success-toast')
       await expect(restoreToast).toBeDisplayed()
       await expect(restoreToast).toHaveText(
-        expect.stringContaining('Restored 1 windows'),
+        expect.stringContaining('Restored 1 window'),
       )
 
       const treeAfter = await readPersistedSessionTree()
@@ -228,7 +228,7 @@ describe('session snapshot workflows', () => {
     try {
       await options.page.selectSection('settings_storage')
       const interval = await $(
-        '//div[contains(@class, "number-container")][.//label[normalize-space()="Create a Snapshot Every"]]',
+        '//div[contains(@class, "number-container")][.//label[normalize-space()="Snapshot every"]]',
       )
       const hours = await interval.$('button=Hours')
       await hours.click()

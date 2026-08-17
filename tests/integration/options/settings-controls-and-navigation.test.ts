@@ -136,6 +136,6 @@ describe('settings controls and navigation', () => {
     expect(source).toContain(
       'v-model="Settings.values.cachePrivateTabFavicons"',
     )
-    expect(source).toContain('Show and Cache Favicons for Private Tabs')
+    expect(source).toContain('Show and cache favicons for private tabs')
   })
 })

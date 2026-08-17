@@ -65,6 +65,19 @@
   --options-input-border-color-hover: rgb(21, 99, 163);
   --options-list-divider-color: rgb(97, 97, 97);
 
+  /* Redesigned options page */
+  --options-hairline: rgba(255, 255, 255, 0.07);
+  --options-hairline-strong: rgba(255, 255, 255, 0.13);
+  --options-surface: #242424;
+  --options-text-muted: #8a8a8a;
+  --options-text-faint: #6b6b6b;
+  --options-accent-wash: rgba(100, 140, 89, 0.14);
+  --options-focus: #4a9eea;
+  --options-measure: 760px;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --data-bar: #6fa35f;
+  --data-track: rgba(255, 255, 255, 0.06);
+
   /* Prepend width for indenting */
   --prepend-width: 18px;
 }

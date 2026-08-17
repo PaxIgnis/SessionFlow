@@ -44,47 +44,55 @@ async function onAutomaticFaviconRefreshUpdate(
 <template>
   <section
     id="settings_favicons"
-    class="content-panel-section"
+    class="content-panel-section section"
   >
-    <h2>{{ STRINGS.settings_favicons }}</h2>
-    <ToggleButton
-      label="Show and Cache Favicons for Private Tabs"
-      v-model="Settings.values.cachePrivateTabFavicons"
-      :options="OPTIONS.boolean"
-      @update="Settings.saveSettingsToStorage()"
-    />
-    <ToggleButton
-      label="Fetch Missing Favicons When Firefox Starts (Requires Website Access)"
-      v-model="Settings.values.fetchMissingFaviconsOnStartup"
-      :options="OPTIONS.boolean"
-      @update="onFetchFaviconsOnStartupUpdate"
-    />
-    <ToggleButton
-      label="Automatically Keep Favicons Up to Date (Requires Website Access)"
-      v-model="Settings.values.refreshFaviconsAfterPeriodOfTime"
-      :options="OPTIONS.boolean"
-      @update="onAutomaticFaviconRefreshUpdate"
-    />
-    <NumberInput
-      class="child-setting"
-      label="Refresh Favicons Every"
-      v-model:value="Settings.values.refreshFaviconsAfterPeriodOfTimeValue"
-      v-model:selected-unit="
-        Settings.values.refreshFaviconsAfterPeriodOfTimeUnit
-      "
-      :units="OPTIONS.refreshFaviconsAfterPeriodOfTimeUnit"
-      :min="1"
-      :max="999"
-      :disabled="Settings.values.refreshFaviconsAfterPeriodOfTime === false"
-      @update="Settings.saveSettingsToStorage()"
-    />
-    <ToggleButton
-      label="Automatic Refresh Timing"
-      class="child-setting"
-      v-model="Settings.values.faviconRefreshTiming"
-      :disabled="Settings.values.refreshFaviconsAfterPeriodOfTime === false"
-      :options="OPTIONS.faviconRefreshTiming"
-      @update="Settings.saveSettingsToStorage()"
-    />
+    <h2 class="section-title">{{ STRINGS.settings_favicons }}</h2>
+    <div class="section-body rows">
+      <ToggleButton
+        label="Show and cache favicons for private tabs"
+        v-model="Settings.values.cachePrivateTabFavicons"
+        :options="OPTIONS.boolean"
+        @update="Settings.saveSettingsToStorage()"
+      />
+      <ToggleButton
+        label="Fetch missing favicons at startup"
+        description="Requires website access permission."
+        v-model="Settings.values.fetchMissingFaviconsOnStartup"
+        :options="OPTIONS.boolean"
+        @update="onFetchFaviconsOnStartupUpdate"
+      />
+      <ToggleButton
+        label="Keep favicons up to date"
+        description="Requires website access permission."
+        v-model="Settings.values.refreshFaviconsAfterPeriodOfTime"
+        :options="OPTIONS.boolean"
+        @update="onAutomaticFaviconRefreshUpdate"
+      />
+    </div>
+    <div
+      class="dependents"
+      :data-disabled="!Settings.values.refreshFaviconsAfterPeriodOfTime"
+      :inert="!Settings.values.refreshFaviconsAfterPeriodOfTime"
+    >
+      <NumberInput
+        label="Refresh every"
+        v-model:value="Settings.values.refreshFaviconsAfterPeriodOfTimeValue"
+        v-model:selected-unit="
+          Settings.values.refreshFaviconsAfterPeriodOfTimeUnit
+        "
+        :units="OPTIONS.refreshFaviconsAfterPeriodOfTimeUnit"
+        :min="1"
+        :max="999"
+        :disabled="Settings.values.refreshFaviconsAfterPeriodOfTime === false"
+        @update="Settings.saveSettingsToStorage()"
+      />
+      <ToggleButton
+        label="Refresh timing"
+        v-model="Settings.values.faviconRefreshTiming"
+        :disabled="Settings.values.refreshFaviconsAfterPeriodOfTime === false"
+        :options="OPTIONS.faviconRefreshTiming"
+        @update="Settings.saveSettingsToStorage()"
+      />
+    </div>
   </section>
 </template>

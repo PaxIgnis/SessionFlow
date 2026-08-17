@@ -800,7 +800,7 @@ describe('critical Firefox UI workflows', () => {
     await openSeededSessionTree()
 
     const options = await openOptionsPage()
-    await options.page.setToggle('Save Tab When Closed', 'On')
+    await options.page.setToggle('Save tabs when they close', 'On')
     await options.page.expectStoredSetting('saveTabOnClose', true)
     await closeOptionsPage(options.optionsHandle, popup.popupHandle)
     await sessionTree.expectLoaded()

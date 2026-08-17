@@ -109,14 +109,14 @@ export const OPTIONS = {
   ],
   doubleClickOnOpenTab: [
     { label: 'Save', value: 'save' },
-    { label: 'Close', value: 'close' },
+    { label: 'Delete', value: 'close' },
     { label: 'Reload', value: 'reload' },
     { label: 'Duplicate', value: 'duplicate' },
     { label: 'Focus', value: 'focus' },
   ],
   doubleClickOnSavedTab: [
     { label: 'Open', value: 'open' },
-    { label: 'Remove', value: 'remove' },
+    { label: 'Delete', value: 'remove' },
     { label: 'Duplicate', value: 'duplicate' },
   ],
   duplicateTreeItemDescendants: [
@@ -129,18 +129,12 @@ export const OPTIONS = {
     { label: 'Match Original Items', value: 'match-original' },
   ],
   tabGroupDropBehavior: [
-    {
-      label: 'Both Adjacent Tabs in the Same Group',
-      value: 'same-group-both-adjacent',
-    },
-    {
-      label: 'At Least One Adjacent Tab in a Group',
-      value: 'any-adjacent-group',
-    },
+    { label: 'Same group', value: 'same-group-both-adjacent' },
+    { label: 'Any adjacent', value: 'any-adjacent-group' },
   ],
   tabGroupColorIndicator: [
-    { label: 'Right Edge', value: 'right' },
     { label: 'Left Edge', value: 'left' },
+    { label: 'Right Edge', value: 'right' },
     { label: 'Hidden', value: 'hidden' },
   ],
   tabGroupInfoOnHover: [

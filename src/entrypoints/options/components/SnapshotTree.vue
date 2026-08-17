@@ -4,10 +4,11 @@ import IconChevronRight from '@/assets/chevron-right.svg'
 import IconPinned from '@/assets/pinned.svg'
 import type { FaviconService } from '@/services/favicons'
 import {
+  buildSnapshotLocationIndex,
   cycleSnapshotSelection,
   flattenSnapshotItems,
   snapshotDescendantItems,
-  snapshotSelectionState,
+  snapshotSelectionStates,
   type SnapshotVisibleRow,
 } from '@/services/session-snapshot-selection'
 import {
@@ -77,8 +78,66 @@ const indentGuideStates = computed(() => {
   return states
 })
 
+const locations = computed(() => buildSnapshotLocationIndex(props.payload))
+
+// Resolved for every visible row in one pass.
+const selectionStates = computed(() =>
+  snapshotSelectionStates(
+    props.payload,
+    selected.value,
+    rows.value.map((row) => row.item.uid),
+  ),
+)
+
+// Per-row facts the template used to recompute inline.
+const rowMeta = computed(() => {
+  const parentUids = new Set<string>()
+  const collectParents = (items: readonly SnapshotItem[]) => {
+    for (const item of items) if (item.parentUid) parentUids.add(item.parentUid)
+  }
+  collectParents(props.payload.items)
+  for (const item of props.payload.items) {
+    if (item.type === TreeItemType.WINDOW) collectParents(item.children)
+  }
+
+  const meta = new Map<
+    string,
+    { hasChildren: boolean; childCount: number; childrenOpen: boolean }
+  >()
+  for (const row of rows.value) {
+    const item = row.item
+    const descendants = snapshotDescendantItems(
+      props.payload,
+      item,
+      locations.value,
+    )
+    meta.set(item.uid, {
+      hasChildren:
+        item.type === TreeItemType.WINDOW
+          ? item.children.length > 0
+          : parentUids.has(item.uid),
+      childCount: descendants.length,
+      childrenOpen: descendants.some(
+        (candidate) =>
+          candidate.type === TreeItemType.TAB &&
+          (candidate.state === State.OPEN ||
+            candidate.state === State.DISCARDED),
+      ),
+    })
+  }
+  return meta
+})
+
+const EMPTY_META = { hasChildren: false, childCount: 0, childrenOpen: false }
+
+function meta(uid: string) {
+  return rowMeta.value.get(uid) ?? EMPTY_META
+}
+
 function selectionState(uid: string) {
-  return snapshotSelectionState(props.payload, selected.value, uid)
+  return (
+    selectionStates.value.get(uid) ?? { checked: false, indeterminate: false }
+  )
 }
 
 function select(uid: string) {
@@ -98,34 +157,6 @@ function containingWindow(row: SnapshotVisibleRow): SnapshotWindow | undefined {
   return props.payload.items.find(
     (item): item is SnapshotWindow =>
       item.type === TreeItemType.WINDOW && item.uid === row.containingWindowUid,
-  )
-}
-
-function containingItems(item: SnapshotItem): readonly SnapshotItem[] {
-  const window = props.payload.items.find(
-    (candidate): candidate is SnapshotWindow =>
-      candidate.type === TreeItemType.WINDOW &&
-      candidate.children.some((child) => child.uid === item.uid),
-  )
-  return window?.children ?? props.payload.items
-}
-
-function hasChildren(item: SnapshotItem): boolean {
-  if (item.type === TreeItemType.WINDOW) return item.children.length > 0
-  return containingItems(item).some(
-    (candidate) => candidate.parentUid === item.uid,
-  )
-}
-
-function descendantItems(item: SnapshotItem): SnapshotItem[] {
-  return snapshotDescendantItems(props.payload, item)
-}
-
-function childrenOpen(item: SnapshotItem): boolean {
-  return descendantItems(item).some(
-    (candidate) =>
-      candidate.type === TreeItemType.TAB &&
-      (candidate.state === State.OPEN || candidate.state === State.DISCARDED),
   )
 }
 </script>
@@ -148,9 +179,9 @@ function childrenOpen(item: SnapshotItem): boolean {
       :checked="selectionState(row.item.uid).checked"
       :indeterminate="selectionState(row.item.uid).indeterminate"
       :collapsed="collapsed.has(row.item.uid)"
-      :has-children="hasChildren(row.item)"
-      :child-count="descendantItems(row.item).length"
-      :children-open="childrenOpen(row.item)"
+      :has-children="meta(row.item.uid).hasChildren"
+      :child-count="meta(row.item.uid).childCount"
+      :children-open="meta(row.item.uid).childrenOpen"
       :private-item="containingWindow(row)?.incognito === true"
       :favicon-service="faviconService"
       :indent-guide-state="indentGuideStates.get(row.item.uid)"

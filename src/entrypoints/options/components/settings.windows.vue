@@ -18,83 +18,83 @@ function updateLocation() {
 <template>
   <section
     id="settings_windows"
-    class="content-panel-section"
+    class="content-panel-section section"
   >
-    <h2>{{ STRINGS.settings_windows }}</h2>
-    <ToggleButton
-      label="Focus Window When Opened"
-      v-model="Settings.values.focusWindowOnOpen"
-      :options="OPTIONS.boolean"
-      @update="Settings.saveSettingsToStorage()"
-    />
-    <ToggleButton
-      label="Open Saved Window with Tabs Discarded (lazy loading)"
-      v-model="Settings.values.openWindowWithTabsDiscarded"
-      :options="OPTIONS.boolean"
-      @update="Settings.saveSettingsToStorage()"
-    />
-    <ToggleButton
-      label="Reopen Windows In The Same Location"
-      v-model="Settings.values.openWindowsInSameLocation"
-      :options="OPTIONS.boolean"
-      @update="updateLocation()"
-    />
-    <NumberInput
-      class="child-setting"
-      label="Interval to Update Open Windows Location"
-      v-model:value="Settings.values.openWindowsInSameLocationUpdateInterval"
-      v-model:selected-unit="
-        Settings.values.openWindowsInSameLocationUpdateIntervalUnit
-      "
-      :units="OPTIONS.openWindowsInSameLocationUpdateIntervalUnit"
-      :min="1"
-      :max="3600"
-      :disabled="!Settings.values.openWindowsInSameLocation"
-      @update="updateLocation()"
-    />
-    <ToggleButton
-      label="When a Window is Closed, Always Save It"
-      v-model="Settings.values.saveWindowOnClose"
-      :options="OPTIONS.boolean"
-      @update="Settings.saveSettingsToStorage()"
-    />
-    <ToggleButton
-      class="child-setting"
-      label="Save Window When Closed: If It Contains Saved Tabs"
-      v-model="Settings.values.saveWindowOnCloseIfContainsSavedTabs"
-      :options="OPTIONS.boolean"
-      :disabled="Settings.values.saveWindowOnClose"
-      @update="Settings.saveSettingsToStorage()"
-    />
-    <ToggleButton
-      class="child-setting"
-      label="Save Window When Closed: If It Was Previously Saved"
-      v-model="Settings.values.saveWindowOnCloseIfPreviouslySaved"
-      :options="OPTIONS.boolean"
-      :disabled="Settings.values.saveWindowOnClose"
-      @update="Settings.saveSettingsToStorage()"
-    />
-    <ToggleButton
-      class="child-setting"
-      label="Save Window When Closed: If It Has Existing Notes"
-      v-model="Settings.values.saveWindowOnCloseIfContainsNotes"
-      :options="OPTIONS.boolean"
-      :disabled="Settings.values.saveWindowOnClose"
-      @update="Settings.saveSettingsToStorage()"
-    />
+    <h2 class="section-title">{{ STRINGS.settings_windows }}</h2>
+    <div class="section-body rows">
+      <ToggleButton
+        label="Focus a window when it opens"
+        v-model="Settings.values.focusWindowOnOpen"
+        :options="OPTIONS.boolean"
+        @update="Settings.saveSettingsToStorage()"
+      />
+      <ToggleButton
+        label="Open saved windows lazily"
+        description="Tabs load the first time you click them, not when the window opens."
+        v-model="Settings.values.openWindowWithTabsDiscarded"
+        :options="OPTIONS.boolean"
+        @update="Settings.saveSettingsToStorage()"
+      />
+      <ToggleButton
+        label="Reopen windows in their last position"
+        v-model="Settings.values.openWindowsInSameLocation"
+        :options="OPTIONS.boolean"
+        @update="updateLocation()"
+      />
+    </div>
+    <div
+      class="dependents"
+      :data-disabled="!Settings.values.openWindowsInSameLocation"
+      :inert="!Settings.values.openWindowsInSameLocation"
+    >
+      <NumberInput
+        label="Track window positions every"
+        v-model:value="Settings.values.openWindowsInSameLocationUpdateInterval"
+        v-model:selected-unit="
+          Settings.values.openWindowsInSameLocationUpdateIntervalUnit
+        "
+        :units="OPTIONS.openWindowsInSameLocationUpdateIntervalUnit"
+        :min="1"
+        :max="3600"
+        :disabled="!Settings.values.openWindowsInSameLocation"
+        @update="updateLocation()"
+      />
+    </div>
+    <p class="eyebrow">When a window closes</p>
+    <div class="rows">
+      <ToggleButton
+        label="Always save it"
+        v-model="Settings.values.saveWindowOnClose"
+        :options="OPTIONS.boolean"
+        @update="Settings.saveSettingsToStorage()"
+      />
+    </div>
+    <div
+      class="dependents"
+      :data-disabled="Settings.values.saveWindowOnClose"
+      :inert="Settings.values.saveWindowOnClose"
+    >
+      <ToggleButton
+        label="Save it if it contains saved tabs"
+        v-model="Settings.values.saveWindowOnCloseIfContainsSavedTabs"
+        :options="OPTIONS.boolean"
+        :disabled="Settings.values.saveWindowOnClose"
+        @update="Settings.saveSettingsToStorage()"
+      />
+      <ToggleButton
+        label="Save it if it was previously saved"
+        v-model="Settings.values.saveWindowOnCloseIfPreviouslySaved"
+        :options="OPTIONS.boolean"
+        :disabled="Settings.values.saveWindowOnClose"
+        @update="Settings.saveSettingsToStorage()"
+      />
+      <ToggleButton
+        label="Save it if it contains notes"
+        v-model="Settings.values.saveWindowOnCloseIfContainsNotes"
+        :options="OPTIONS.boolean"
+        :disabled="Settings.values.saveWindowOnClose"
+        @update="Settings.saveSettingsToStorage()"
+      />
+    </div>
   </section>
 </template>
-
-<style scoped>
-.child-setting {
-  margin-left: 20px;
-  opacity: var(--child-opacity, 1);
-  pointer-events: var(--child-events, auto);
-}
-
-.child-setting:has(input:disabled),
-.child-setting:has(button:disabled) {
-  --child-opacity: 0.5;
-  --child-events: none;
-}
-</style>

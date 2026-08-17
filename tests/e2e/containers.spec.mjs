@@ -372,9 +372,9 @@ describe('Firefox container workflows', () => {
     ).toBeExisting()
 
     const fadeOptions = await openOptionsPage()
-    await fadeOptions.page.setToggle('Container Color Indicator', 'Strong Fade')
-    await fadeOptions.page.setToggle('Fade Side', 'Left')
-    await fadeOptions.page.setToggle('Container Icon', 'Right')
+    await fadeOptions.page.setToggle('Color indicator', 'Strong Fade')
+    await fadeOptions.page.setToggle('Fade side', 'Left')
+    await fadeOptions.page.setToggle('Container icon', 'Right')
     await fadeOptions.page.expectStoredSetting(
       'containerColorIndicator',
       'strong-fade',
@@ -395,8 +395,8 @@ describe('Firefox container workflows', () => {
     )
 
     const hiddenOptions = await openOptionsPage()
-    await hiddenOptions.page.setToggle('Container Color Indicator', 'Off')
-    await hiddenOptions.page.setToggle('Container Icon', 'Off')
+    await hiddenOptions.page.setToggle('Color indicator', 'Off')
+    await hiddenOptions.page.setToggle('Container icon', 'Off')
     await hiddenOptions.page.expectStoredSetting(
       'containerColorIndicator',
       'off',

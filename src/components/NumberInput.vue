@@ -16,6 +16,7 @@ const props = defineProps<{
   units?: Units[]
   selectedUnit?: string | number | boolean
   disabled?: boolean
+  description?: string
 }>()
 
 const emit = defineEmits<{
@@ -84,39 +85,78 @@ const handleUnitToggle = (value: string | number | boolean) => {
   emit('update:selectedUnit', value)
   emit('update', props.value)
 }
+
+const changeValue = (delta: number) => {
+  if (props.disabled) return
+  const value = normalizeBoundedNumberInput(
+    String(props.value + delta),
+    props.min,
+    props.max,
+  )
+  if (value === undefined || value === props.value) return
+  emit('update:value', value)
+  emit('update', value)
+}
 </script>
 
 <template>
-  <div class="number-container">
-    <label
-      class="number-label"
-      :for="id"
-      >{{ props.label }}</label
-    >
-    <div class="number-input-group">
-      <input
-        :id="id"
-        type="number"
-        :value="value"
-        :min="min"
-        :max="max"
-        :disabled="disabled"
-        class="number-input"
-        @input="handleInput"
-        @blur="handleBlur"
-        @keydown="handleKeyDown"
-        inputmode="numeric"
-        pattern="[0-9]*"
-      />
+  <div class="number-container row">
+    <div class="row-text">
+      <label
+        class="number-label row-label"
+        :for="id"
+        >{{ props.label }}</label
+      >
+      <p
+        v-if="props.description"
+        class="row-desc"
+      >
+        {{ props.description }}
+      </p>
+    </div>
+    <div class="number-input-group stepper-group">
+      <div class="stepper">
+        <button
+          type="button"
+          :disabled="disabled || value <= (min ?? -Infinity)"
+          :aria-label="`Decrease ${label}`"
+          @click="changeValue(-1)"
+        >
+          −
+        </button>
+        <input
+          :id="id"
+          type="number"
+          :value="value"
+          :min="min"
+          :max="max"
+          :disabled="disabled"
+          class="number-input stepper-value"
+          @input="handleInput"
+          @blur="handleBlur"
+          @keydown="handleKeyDown"
+          inputmode="numeric"
+          pattern="[0-9]*"
+        />
+        <button
+          type="button"
+          :disabled="disabled || value >= (max ?? Infinity)"
+          :aria-label="`Increase ${label}`"
+          @click="changeValue(1)"
+        >
+          +
+        </button>
+      </div>
       <div
         v-if="units"
-        class="unit-button-group"
+        class="unit-button-group segmented"
       >
         <button
           v-for="unit in units"
           :key="String(unit.value)"
           :disabled="disabled"
           :class="['unit-button', { active: selectedUnit === unit.value }]"
+          :aria-pressed="selectedUnit === unit.value"
           @click="handleUnitToggle(unit.value)"
           type="button"
         >
@@ -128,44 +168,22 @@ const handleUnitToggle = (value: string | number | boolean) => {
 </template>
 
 <style scoped>
-.number-container {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 0;
-  border-bottom: 1px solid var(--options-list-divider-color);
-}
-
 .number-label {
-  font-size: var(--font-size-sm);
-  color: var(--text-color-primary);
-}
-
-.number-input-group {
-  display: flex;
-  gap: 0px;
-  border-radius: 4px;
-  padding: 1px;
+  cursor: default;
 }
 
 .number-input {
   width: 40px;
-  padding: 6px 12px;
-  background-color: var(--background-color-secondary);
-  color: var(--text-color-primary);
-  border-width: 1px;
-  border-style: solid;
-  border-color: var(--options-input-border-color);
-  border-radius: 4px;
-  font-size: var(--font-size-sm);
-  text-align: right;
-  margin-right: 5px;
+  border: 0;
+  background: transparent;
+  font-family: var(--font-mono);
 }
 
 .number-input:focus,
 .number-input:focus:hover {
   outline: none;
-  border-color: var(--options-input-border-color-hover);
+  outline: 2px solid var(--options-focus);
+  outline-offset: -2px;
 }
 
 .number-input::-webkit-outer-spin-button,
@@ -178,37 +196,7 @@ const handleUnitToggle = (value: string | number | boolean) => {
   -moz-appearance: textfield;
 }
 
-.unit-button-group {
-  display: flex;
-  gap: 0px;
-  border-radius: 4px;
-  padding: 1px;
-}
-
 .unit-button {
-  color: var(--text-color-primary);
-  padding: 6px 12px;
   background: transparent;
-  border-width: 0px;
-  cursor: pointer;
-  font-size: var(--font-size-sm);
-  transition: background-color 0.2s;
-}
-
-.unit-button {
-  border-radius: 4px;
-}
-
-.unit-button:hover {
-  background: var(--nav-panel-hover-color);
-}
-
-.unit-button.active {
-  background: var(--button-active-background);
-  color: var(--button-active-foreground);
-}
-
-.unit-button.active:hover {
-  background: var(--button-active-background-hover);
 }
 </style>

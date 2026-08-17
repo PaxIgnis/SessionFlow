@@ -23,11 +23,15 @@ export function flattenSnapshotItems(
 export function snapshotDescendantItems(
   payload: SessionSnapshotPayload,
   item: SnapshotTreeItem,
+  locations?: Map<UID, ItemLocation>,
 ): SnapshotTreeItem[] {
   if (item.type === TreeItemType.WINDOW) return [...item.children]
 
-  const items = containingSnapshotItems(payload, item)
-  const index = items.findIndex((candidate) => candidate.uid === item.uid)
+  const location = locations?.get(item.uid)
+  const items = location?.container ?? containingSnapshotItems(payload, item)
+  const index =
+    location?.index ??
+    items.findIndex((candidate) => candidate.uid === item.uid)
   if (index === -1) return []
 
   const descendants: SnapshotTreeItem[] = []
@@ -93,7 +97,33 @@ export function snapshotSelectionState(
   selected: ReadonlySet<UID>,
   uid: UID,
 ): { checked: boolean; indeterminate: boolean } {
-  const target = findSelectionTarget(payload, uid)
+  return selectionStateFor(payload, selected, uid)
+}
+
+/**
+ * Resolves every row's state against one shared location index, so a full
+ * tree costs a single pass rather than one scan per row.
+ */
+export function snapshotSelectionStates(
+  payload: SessionSnapshotPayload,
+  selected: ReadonlySet<UID>,
+  uids: readonly UID[],
+): Map<UID, { checked: boolean; indeterminate: boolean }> {
+  const locations = buildSnapshotLocationIndex(payload)
+  const states = new Map<UID, { checked: boolean; indeterminate: boolean }>()
+  for (const uid of uids) {
+    states.set(uid, selectionStateFor(payload, selected, uid, locations))
+  }
+  return states
+}
+
+function selectionStateFor(
+  payload: SessionSnapshotPayload,
+  selected: ReadonlySet<UID>,
+  uid: UID,
+  locations?: Map<UID, ItemLocation>,
+): { checked: boolean; indeterminate: boolean } {
+  const target = findSelectionTarget(payload, uid, locations)
   if (!target || target.descendantUids.length === 0) {
     return { checked: selected.has(uid), indeterminate: false }
   }
@@ -128,38 +158,54 @@ interface SelectionTarget {
   isWindow: boolean
 }
 
+interface ItemLocation {
+  container: readonly SnapshotTreeItem[]
+  index: number
+}
+
+/**
+ * Maps every uid to its container and position in one pass. Without this,
+ * resolving a single uid scans every window's children, so resolving all of
+ * them is quadratic — which locks up the page on large snapshots.
+ */
+export function buildSnapshotLocationIndex(
+  payload: SessionSnapshotPayload,
+): Map<UID, ItemLocation> {
+  const locations = new Map<UID, ItemLocation>()
+  payload.items.forEach((item, index) => {
+    locations.set(item.uid, { container: payload.items, index })
+    if (item.type !== TreeItemType.WINDOW) return
+    item.children.forEach((child, childIndex) => {
+      locations.set(child.uid, { container: item.children, index: childIndex })
+    })
+  })
+  return locations
+}
+
 function findSelectionTarget(
   payload: SessionSnapshotPayload,
   uid: UID,
+  locations: Map<UID, ItemLocation> = buildSnapshotLocationIndex(payload),
 ): SelectionTarget | undefined {
-  const topLevelIndex = payload.items.findIndex((item) => item.uid === uid)
-  if (topLevelIndex !== -1) {
-    const item = payload.items[topLevelIndex]
-    if (item.type === TreeItemType.WINDOW) {
-      return {
-        descendantUids: item.children.map((child) => child.uid),
-        aggregateDescendantSelection: true,
-        isWindow: true,
-      }
-    }
-    return {
-      descendantUids: descendantUidsInContainer(payload.items, topLevelIndex),
-      aggregateDescendantSelection: false,
-      isWindow: false,
-    }
-  }
+  const location = locations.get(uid)
+  if (!location) return undefined
 
-  for (const item of payload.items) {
-    if (item.type !== TreeItemType.WINDOW) continue
-    const childIndex = item.children.findIndex((child) => child.uid === uid)
-    if (childIndex === -1) continue
+  const item = location.container[location.index]
+  if (item.type === TreeItemType.WINDOW) {
     return {
-      descendantUids: descendantUidsInContainer(item.children, childIndex),
-      aggregateDescendantSelection: false,
-      isWindow: false,
+      descendantUids: item.children.map((child) => child.uid),
+      aggregateDescendantSelection: true,
+      isWindow: true,
     }
   }
-  return undefined
+  return {
+    descendantUids: descendantUidsInContainer(
+      location.container,
+      location.index,
+    ),
+    aggregateDescendantSelection: false,
+    isWindow: false,
+  }
 }
 
 function descendantUidsInContainer<T extends SnapshotTreeItem>(

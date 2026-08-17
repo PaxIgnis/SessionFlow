@@ -179,6 +179,79 @@ describe('settings actions', () => {
     expect(DEFAULT_SETTINGS.refreshFaviconsAfterPeriodOfTime).toBe(false)
   })
 
+  it('does not let a slow earlier save overwrite a newer one', async () => {
+    const { loadSettingsFromStorage, saveSettingsToStorage } =
+      await import('@/services/settings-actions')
+
+    // Storage that behaves like the real thing: reads see the last write.
+    let storedSettings = structuredClone(DEFAULT_SETTINGS)
+    vi.mocked(browser.storage.local.get).mockImplementation(async () => ({
+      settings: structuredClone(storedSettings),
+    }))
+    vi.mocked(browser.storage.local.set).mockImplementation(async (items) => {
+      storedSettings = structuredClone(
+        (items as { settings: typeof storedSettings }).settings,
+      )
+    })
+    await loadSettingsFromStorage()
+
+    // Only now start delaying reads, so the slow one belongs to the first
+    // save rather than to the load above. An unserialised first write would
+    // then merge onto fresher data and still land last, reverting the newer
+    // choice in storage even though memory looks right.
+    let reads = 0
+    vi.mocked(browser.storage.local.get).mockImplementation(async () => {
+      reads += 1
+      if (reads === 1) await new Promise((resolve) => setTimeout(resolve, 20))
+      return { settings: structuredClone(storedSettings) }
+    })
+
+    Settings.values.contextMenuDeleteDescendants = 'always'
+    const first = saveSettingsToStorage()
+    Settings.values.contextMenuDeleteDescendants = 'never'
+    const second = saveSettingsToStorage()
+    await Promise.all([first, second])
+
+    expect(Settings.values.contextMenuDeleteDescendants).toBe('never')
+    expect(storedSettings.contextMenuDeleteDescendants).toBe('never')
+  })
+
+  it('keeps a change made while an earlier save is still in flight', async () => {
+    const { loadSettingsFromStorage, saveSettingsToStorage } =
+      await import('@/services/settings-actions')
+    vi.mocked(browser.storage.local.get).mockResolvedValue({
+      settings: structuredClone(DEFAULT_SETTINGS),
+    })
+    await loadSettingsFromStorage()
+
+    // Hold the first save inside its storage read, the way a real round trip
+    // does, then make a second change before it resolves. Writes are queued,
+    // so wait for the read to actually begin rather than assuming it starts
+    // synchronously.
+    let releaseRead = () => {}
+    const readStarted = new Promise<void>((readHasStarted) => {
+      vi.mocked(browser.storage.local.get).mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            releaseRead = () =>
+              resolve({ settings: structuredClone(DEFAULT_SETTINGS) })
+            readHasStarted()
+          }),
+      )
+    })
+
+    Settings.values.contextMenuDeleteDescendants = 'always'
+    const firstSave = saveSettingsToStorage()
+    await readStarted
+    Settings.values.contextMenuDeleteDescendants = 'never'
+    releaseRead()
+    await firstSave
+
+    // The in-flight save must not restore its own stale snapshot over the
+    // newer choice.
+    expect(Settings.values.contextMenuDeleteDescendants).toBe('never')
+  })
+
   it('saves settings and broadcasts the update message', async () => {
     const { saveSettingsToStorage } =
       await import('@/services/settings-actions')

@@ -228,7 +228,7 @@ describe('favicon and redirect workflows', () => {
 
     const options = await openOptionsPage()
     await options.page.setToggle(
-      'Show and Cache Favicons for Private Tabs',
+      'Show and cache favicons for private tabs',
       'Off',
     )
     await closeOptionsPage(options.optionsHandle, popup.popupHandle)

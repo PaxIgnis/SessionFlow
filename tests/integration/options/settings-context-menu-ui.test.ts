@@ -31,17 +31,28 @@ describe('context menu settings UI', () => {
     )
 
     expect(componentSource).toContain('id="settings_context_menu"')
-    expect(componentSource).toContain('When Deleting')
-    expect(componentSource).toContain('When Duplicating')
-    expect(componentSource).toContain('When Opening Saved Tabs')
-    expect(componentSource).toContain('When Reloading Tabs')
-    expect(componentSource).toContain('When Saving Tabs')
-    expect(componentSource).toContain('When Pinning or Unpinning Tabs')
-    expect(componentSource).toContain('When Adjusting Indent')
-    expect(componentSource).toContain(
-      'When to Apply Actions to Unselected Descendant Items:',
+    expect(componentSource).toContain('DescendantScopeMatrix')
+    const matrixSource = await fs.readFile(
+      path.resolve(
+        repositoryRoot,
+        'src/entrypoints/options/components/DescendantScopeMatrix.vue',
+      ),
+      'utf8',
     )
-    expect(componentSource.match(/class="child-setting"/g)).toHaveLength(7)
+    for (const label of [
+      'Delete',
+      'Duplicate',
+      'Open saved tabs',
+      'Reload tabs',
+      'Save tabs',
+      'Pin and unpin',
+      'Change indent',
+    ]) {
+      expect(matrixSource).toContain(`label: '${label}'`)
+    }
+    expect(matrixSource).toContain('type="radio"')
+    expect(matrixSource).toContain(':name="`descendant-scope-${row.key}`"')
+    expect(matrixSource).toContain('Settings.saveSettingsToStorage()')
     for (const setting of [
       'contextMenuDeleteDescendants',
       'duplicateTreeItemDescendants',
@@ -51,8 +62,11 @@ describe('context menu settings UI', () => {
       'contextMenuPinDescendants',
       'includeChildrenOfSelectedItemsWhenIndenting',
     ]) {
-      expect(componentSource).toContain(`Settings.values.${setting}`)
+      expect(matrixSource).toContain(`Settings.values.${setting}`)
     }
+    expect(matrixSource).toContain('OPTIONS.duplicateTreeItemDescendants')
+    expect(matrixSource).toContain("'complete-subtree'")
+    expect(matrixSource).toContain("'selected-only'")
   })
 
   it('moves duplicate and indent descendant controls out of General', async () => {

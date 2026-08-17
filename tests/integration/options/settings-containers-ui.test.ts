@@ -41,15 +41,15 @@ describe('container settings UI', () => {
     )
 
     expect(componentSource).toContain('id="settings_containers"')
-    expect(componentSource).toContain('label="Container Color Indicator"')
+    expect(componentSource).toContain('label="Color indicator"')
     expect(componentSource).toContain(
       'v-model="Settings.values.containerColorIndicator"',
     )
     expect(componentSource).toContain(
       ':options="OPTIONS.containerColorIndicator"',
     )
-    expect(componentSource).toContain('class="child-setting"')
-    expect(componentSource).toContain('label="Fade Side"')
+    expect(componentSource).toContain('class="dependents"')
+    expect(componentSource).toContain('label="Fade side"')
     expect(componentSource).toContain(
       'v-model="Settings.values.containerFadeSide"',
     )
@@ -57,7 +57,7 @@ describe('container settings UI', () => {
     expect(componentSource).toContain(
       ':disabled="Settings.values.containerColorIndicator === \'off\'"',
     )
-    expect(componentSource).toContain('label="Container Icon"')
+    expect(componentSource).toContain('label="Container icon"')
     expect(componentSource).toContain(
       'v-model="Settings.values.containerIconPosition"',
     )

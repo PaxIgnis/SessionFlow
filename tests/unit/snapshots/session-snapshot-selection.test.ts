@@ -4,6 +4,7 @@ import {
   flattenSnapshotItems,
   snapshotDescendantItems,
   snapshotSelectionState,
+  snapshotSelectionStates,
 } from '@/services/session-snapshot-selection'
 import { State, TreeItemType } from '@/types/session-tree'
 import type { SessionSnapshotPayload } from '@/types/session-snapshots'
@@ -324,5 +325,74 @@ describe('snapshot tree selection', () => {
         nestedWindowPayload.items[0],
       ).map((item) => item.uid),
     ).toEqual(['nested-window', 'nested-tab'])
+  })
+})
+
+describe('large snapshot selection performance', () => {
+  function largePayload(tabCount: number): SessionSnapshotPayload {
+    return {
+      schemaVersion: 1,
+      items: [
+        {
+          type: TreeItemType.WINDOW,
+          uid: 'window-big' as UID,
+          incognito: false,
+          state: State.OPEN,
+          indentLevel: 0,
+          children: Array.from({ length: tabCount }, (_, index) => ({
+            type: TreeItemType.TAB as const,
+            uid: `tab-${index}` as UID,
+            state: State.SAVED,
+            title: `Tab ${index}`,
+            url: `https://example.test/${index}`,
+            windowUid: 'window-big' as UID,
+            indentLevel: 1,
+            pinned: false,
+            collapsed: false,
+            isParent: false,
+          })),
+        },
+      ],
+    }
+  }
+
+  // Resolving each uid used to scan every window's child list, so a snapshot
+  // of this size locked up the options page. Under that behaviour this takes
+  // tens of seconds; resolved in one pass it is milliseconds.
+  it('resolves every row without scanning the payload per row', () => {
+    const payload = largePayload(6000)
+    const uids =
+      payload.items[0].type === TreeItemType.WINDOW
+        ? payload.items[0].children.map((child) => child.uid)
+        : []
+    const selected = new Set<UID>([uids[0], uids[1]])
+
+    const started = Date.now()
+    const states = snapshotSelectionStates(payload, selected, uids)
+    const elapsed = Date.now() - started
+
+    expect(states.size).toBe(uids.length)
+    expect(states.get(uids[0])).toEqual({ checked: true, indeterminate: false })
+    expect(states.get(uids[2])).toEqual({
+      checked: false,
+      indeterminate: false,
+    })
+    expect(elapsed).toBeLessThan(2_000)
+  })
+
+  it('matches the single-uid resolver', () => {
+    const payload = largePayload(200)
+    const uids =
+      payload.items[0].type === TreeItemType.WINDOW
+        ? payload.items[0].children.map((child) => child.uid)
+        : []
+    const selected = new Set<UID>([uids[5]])
+    const batch = snapshotSelectionStates(payload, selected, uids)
+
+    for (const uid of uids) {
+      expect(batch.get(uid)).toEqual(
+        snapshotSelectionState(payload, selected, uid),
+      )
+    }
   })
 })

@@ -1,4 +1,4 @@
-import { browser } from '@wdio/globals'
+import { $, $$, browser, expect } from '@wdio/globals'
 import { closeOptionsPage, openOptionsPage } from './support/options-page.mjs'
 
 describe('settings workflows', () => {
@@ -27,6 +27,7 @@ describe('settings workflows', () => {
                 showTabUrlOnHover: true,
                 saveTabOnClose: false,
                 saveTabOnCloseIfPreviouslySaved: true,
+                contextMenuDeleteDescendants: 'collapsed',
               },
             }),
           )
@@ -55,21 +56,21 @@ describe('settings workflows', () => {
     const second = await trackOptionsPage()
 
     await browser.switchToWindow(first.optionsHandle)
-    await first.page.setToggle('Show Tab Title On Hover', 'Off')
+    await first.page.setToggle('Tab title', 'Off')
     await first.page.expectStoredSetting('showTabTitleOnHover', false)
 
     await browser.switchToWindow(second.optionsHandle)
-    await second.page.setToggle('Show Tab URL On Hover', 'Off')
+    await second.page.setToggle('Tab URL', 'Off')
     await second.page.expectStoredSetting('showTabUrlOnHover', false)
 
     await browser.switchToWindow(first.optionsHandle)
-    await first.page.expectToggleActive('Show Tab URL On Hover', 'Off')
+    await first.page.expectToggleActive('Tab URL', 'Off')
     await first.page.expectStoredSetting('showTabTitleOnHover', false)
     await first.page.expectStoredSetting('showTabUrlOnHover', false)
 
     await browser.switchToWindow(second.optionsHandle)
-    await second.page.setToggle('Show Tab Title On Hover', 'On')
-    await second.page.setToggle('Show Tab URL On Hover', 'On')
+    await second.page.setToggle('Tab title', 'On')
+    await second.page.setToggle('Tab URL', 'On')
     await second.page.expectStoredSetting('showTabTitleOnHover', true)
     await second.page.expectStoredSetting('showTabUrlOnHover', true)
   })
@@ -84,38 +85,56 @@ describe('settings workflows', () => {
     openOptionsHandles.delete(options.optionsHandle)
   })
 
+  it('moves descendant scope choices with arrow keys and saves the row', async () => {
+    const options = await trackOptionsPage()
+    await options.page.selectSection('settings_context_menu')
+
+    const radios = await $$(
+      'input[name="descendant-scope-contextMenuDeleteDescendants"]',
+    )
+    expect(radios).toHaveLength(3)
+
+    await radios[0].scrollIntoView({ block: 'center' })
+    await radios[0].click()
+    await expect(radios[0]).toBeSelected()
+    // Arrow keys only move a native radio group when a radio actually holds
+    // focus, so assert that separately — otherwise a focus failure is
+    // indistinguishable from a broken binding.
+    await expect(radios[0]).toBeFocused()
+
+    await browser.keys(['ArrowRight'])
+
+    await expect(radios[1]).toBeSelected()
+    await options.page.expectStoredSetting(
+      'contextMenuDeleteDescendants',
+      'collapsed',
+    )
+  })
+
   it('disables dependent controls without changing their saved value', async () => {
     const options = await trackOptionsPage()
-
-    await options.page.setToggle(
-      'Save Tab When Closed If It Previously Was Saved',
-      'Off',
+    const tabSection = await $('#settings_tabs')
+    const previouslySavedOff = await tabSection.$(
+      './/div[contains(concat(" ", normalize-space(@class), " "), " toggle-container ")][.//label[normalize-space()="Save it if it was previously saved"]]//button[normalize-space()="Off"]',
     )
+
+    await previouslySavedOff.scrollIntoView({ block: 'center' })
+    await previouslySavedOff.click()
     await options.page.expectStoredSetting(
       'saveTabOnCloseIfPreviouslySaved',
       false,
     )
 
-    await options.page.setToggle('Save Tab When Closed', 'On')
-    await options.page.expectToggleDisabled(
-      'Save Tab When Closed If It Previously Was Saved',
-      'Off',
-    )
+    await options.page.setToggle('Save tabs when they close', 'On')
+    await expect(previouslySavedOff).toBeDisabled()
     await options.page.expectStoredSetting(
       'saveTabOnCloseIfPreviouslySaved',
       false,
     )
 
-    await options.page.setToggle('Save Tab When Closed', 'Off')
-    await options.page.expectToggleDisabled(
-      'Save Tab When Closed If It Previously Was Saved',
-      'Off',
-      false,
-    )
-    await options.page.expectToggleActive(
-      'Save Tab When Closed If It Previously Was Saved',
-      'Off',
-    )
+    await options.page.setToggle('Save tabs when they close', 'Off')
+    await expect(previouslySavedOff).toBeEnabled()
+    expect(await previouslySavedOff.getAttribute('class')).toContain('active')
   })
 
   async function trackOptionsPage() {

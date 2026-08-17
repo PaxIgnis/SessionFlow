@@ -21,6 +21,7 @@ type InvalidSettingReporter = (key: string, error: Error) => void
 
 let lastSynchronizedSettings = structuredClone(DEFAULT_SETTINGS)
 let settingsUpdateQueue = Promise.resolve()
+let settingsWriteQueue: Promise<unknown> = Promise.resolve()
 
 function validateSettingValue<K extends keyof Settings>(
   key: K,
@@ -99,6 +100,24 @@ function replaceSettingsValues(settings: Settings): void {
   Object.assign(SettingsValues.values, settings)
 }
 
+/**
+ * Applies a settings snapshot without discarding edits made while the write
+ * that produced it was in flight. `saveSettingsToStorage` awaits storage
+ * twice, so a second change — arrow-keying along a row of options, say —
+ * would otherwise be overwritten by the first change's stale snapshot.
+ */
+function applySettingsPreservingLiveEdits(
+  settings: Settings,
+  snapshotAtStart: Settings,
+): void {
+  const live = toRaw(SettingsValues.values)
+  const next = { ...settings } as Record<keyof Settings, unknown>
+  for (const key of Object.keys(DEFAULT_SETTINGS) as Array<keyof Settings>) {
+    if (!Object.is(live[key], snapshotAtStart[key])) next[key] = live[key]
+  }
+  Object.assign(SettingsValues.values, next)
+}
+
 function disableFaviconPermissionSettings(): void {
   SettingsValues.values.fetchMissingFaviconsOnStartup = false
   SettingsValues.values.refreshFaviconsAfterPeriodOfTime = false
@@ -152,9 +171,25 @@ export async function loadSettingsFromStorage(): Promise<void> {
  * Saves the settings from the global Settings object to the browser storage.
  * And send out a message that settings in local storage have been updated.
  *
+ * Writes are serialized: each one reads, merges and rewrites the whole
+ * settings object, so two overlapping writes would both merge onto the same
+ * pre-write snapshot and the last to land would drop the other's change.
+ * Queueing also means each write snapshots the live values when it actually
+ * runs rather than when it was requested.
+ *
  * @returns a Promise that resolves when the settings have been saved
  */
-export async function saveSettingsToStorage(): Promise<void> {
+export function saveSettingsToStorage(): Promise<void> {
+  const write = settingsWriteQueue.then(
+    writeSettingsToStorage,
+    writeSettingsToStorage,
+  )
+  // The queue itself must survive a failed write, while callers still see it.
+  settingsWriteQueue = write.catch(() => undefined)
+  return write
+}
+
+async function writeSettingsToStorage(): Promise<void> {
   const previous = structuredClone(lastSynchronizedSettings)
   const current = normalizeSettings(toRaw(SettingsValues.values))
   const patch = settingsPatch(current, previous)
@@ -163,7 +198,7 @@ export async function saveSettingsToStorage(): Promise<void> {
   try {
     stored = await browser.storage.local.get('settings')
   } catch (error) {
-    replaceSettingsValues(previous)
+    applySettingsPreservingLiveEdits(previous, current)
     throw contextualError('Failed to read latest settings before saving', error)
   }
   const latest = normalizeSettings(stored.settings)
@@ -172,11 +207,11 @@ export async function saveSettingsToStorage(): Promise<void> {
   try {
     await browser.storage.local.set({ settings: merged })
   } catch (error) {
-    replaceSettingsValues(previous)
+    applySettingsPreservingLiveEdits(previous, current)
     throw contextualError('Failed to write settings to storage', error)
   }
 
-  replaceSettingsValues(merged)
+  applySettingsPreservingLiveEdits(merged, current)
   lastSynchronizedSettings = structuredClone(merged)
   try {
     await browser.runtime.sendMessage({ type: 'settingsUpdated' })

@@ -19,14 +19,20 @@ describe('duplication settings UI', () => {
       'utf8',
     )
 
-    expect(contextMenuSource).toContain('label="When Duplicating"')
-    expect(contextMenuSource).toContain(
-      'v-model="Settings.values.duplicateTreeItemDescendants"',
+    expect(contextMenuSource).toContain('DescendantScopeMatrix')
+    const matrixSource = readFileSync(
+      new URL(
+        '../../../src/entrypoints/options/components/DescendantScopeMatrix.vue',
+        import.meta.url,
+      ),
+      'utf8',
     )
-    expect(contextMenuSource).toContain(
-      ':options="OPTIONS.duplicateTreeItemDescendants"',
+    expect(matrixSource).toContain("label: 'Duplicate'")
+    expect(matrixSource).toContain(
+      'Settings.values.duplicateTreeItemDescendants',
     )
-    expect(generalSource).toContain('label="Duplicated Item State"')
+    expect(matrixSource).toContain('OPTIONS.duplicateTreeItemDescendants')
+    expect(generalSource).toContain('label="State of duplicated items"')
     expect(generalSource).toContain(
       'v-model="Settings.values.duplicatedItemState"',
     )
