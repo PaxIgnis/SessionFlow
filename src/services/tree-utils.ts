@@ -1,4 +1,5 @@
 import {
+  State,
   TreeItemType,
   type Note,
   type Separator,
@@ -30,6 +31,73 @@ export function getChildren(item: TreeItem): TreeItem[] {
 
 export function getTabs(children: TreeItem[]): Tab[] {
   return children.filter(isTab)
+}
+
+/*
+ * What a window or the whole session is made of: tabs split by session state,
+ * and the non-tab items sitting alongside them. Shared so the window row and
+ * the session row describe their contents in the same words.
+ */
+export interface TreeItemTally {
+  open: number
+  unloaded: number
+  saved: number
+  tabs: number
+  notes: number
+  separators: number
+}
+
+export function createTreeItemTally(): TreeItemTally {
+  return { open: 0, unloaded: 0, saved: 0, tabs: 0, notes: 0, separators: 0 }
+}
+
+export function tallyTreeItem(tally: TreeItemTally, item: TreeItem): void {
+  if (isNote(item)) {
+    tally.notes++
+    return
+  }
+  if (isSeparator(item)) {
+    tally.separators++
+    return
+  }
+  if (!isTab(item)) return
+
+  tally.tabs++
+  if (item.state === State.OPEN) tally.open++
+  else if (item.state === State.DISCARDED) tally.unloaded++
+  else if (item.state === State.SAVED) tally.saved++
+}
+
+/* "8 open \u00b7 3 unloaded \u00b7 1 saved". Empty buckets are dropped, so the
+   summary only names states the thing actually has. */
+export function formatStateBreakdown(counts: {
+  open: number
+  unloaded: number
+  saved: number
+}): string {
+  const parts: string[] = []
+  if (counts.open > 0) parts.push(`${counts.open} open`)
+  if (counts.unloaded > 0) parts.push(`${counts.unloaded} unloaded`)
+  if (counts.saved > 0) parts.push(`${counts.saved} saved`)
+  return parts.join(' \u00b7 ')
+}
+
+export function formatTallyLine(label: string, total: number, breakdown = '') {
+  return breakdown ? `${label}: ${total} (${breakdown})` : `${label}: ${total}`
+}
+
+/* The shared tail of the window and session hover summaries. Tabs always
+   appear, even at zero, because "no tabs" is itself worth knowing; the other
+   categories stay quiet unless they are actually present. */
+export function formatTallyLines(tally: TreeItemTally): string[] {
+  const lines = [
+    formatTallyLine('Tabs', tally.tabs, formatStateBreakdown(tally)),
+  ]
+  if (tally.notes > 0) lines.push(formatTallyLine('Notes', tally.notes))
+  if (tally.separators > 0) {
+    lines.push(formatTallyLine('Separators', tally.separators))
+  }
+  return lines
 }
 
 export function walkTreeItems(

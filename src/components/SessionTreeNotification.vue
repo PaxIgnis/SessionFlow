@@ -18,7 +18,7 @@ import { NotificationState } from '@/services/notification-state'
   border: 1px solid rgb(170, 124, 62);
   border-radius: 6px;
   box-sizing: border-box;
-  bottom: 44px;
+  bottom: 36px;
   color: rgb(245, 225, 190);
   font-size: 12px;
   left: 8px;

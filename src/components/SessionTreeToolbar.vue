@@ -17,34 +17,17 @@ defineEmits<{
     <button
       class="toolbar-button"
       type="button"
-      aria-label="Add note"
-      title="Add note"
-      @click="$emit('addNote')"
+      aria-label="New tab"
+      title="New tab"
+      @click="$emit('newTab')"
     >
       <svg
         viewBox="0 0 24 24"
         aria-hidden="true"
       >
-        <path d="M5 3.5h9l4 4V20.5H5z" />
-        <path d="M14 3.5v4h4M8 14h6M11 11v6" />
+        <path d="M3.5 7.5h6l1.5 2h9.5v10h-17zM13 13v4M11 15h4" />
       </svg>
     </button>
-
-    <button
-      class="toolbar-button"
-      type="button"
-      aria-label="Add separator"
-      title="Add separator"
-      @click="$emit('addSeparator')"
-    >
-      <svg
-        viewBox="0 0 24 24"
-        aria-hidden="true"
-      >
-        <path d="M3 15h18M12 4v7M8.5 7.5h7" />
-      </svg>
-    </button>
-
     <button
       class="toolbar-button"
       type="button"
@@ -66,24 +49,40 @@ defineEmits<{
         <path d="M3.5 8.5h17M12 11.5v5M9.5 14h5" />
       </svg>
     </button>
-
     <button
       class="toolbar-button"
       type="button"
-      aria-label="New tab"
-      title="New tab"
-      @click="$emit('newTab')"
+      aria-label="Add note"
+      title="Add note"
+      @click="$emit('addNote')"
     >
       <svg
         viewBox="0 0 24 24"
         aria-hidden="true"
       >
-        <path d="M3.5 7.5h6l1.5 2h9.5v10h-17zM13 13v4M11 15h4" />
+        <path d="M5 3.5h9l4 4V20.5H5z" />
+        <path d="M14 3.5v4h4M8 14h6M11 11v6" />
+      </svg>
+    </button>
+    <button
+      class="toolbar-button"
+      type="button"
+      aria-label="Add separator"
+      title="Add separator"
+      @click="$emit('addSeparator')"
+    >
+      <svg
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+      >
+        <path d="M3 15h18M12 4v7M8.5 7.5h7" />
       </svg>
     </button>
 
+    <span class="toolbar-spacer"></span>
+
     <button
-      class="toolbar-button"
+      class="toolbar-button settings-button"
       type="button"
       aria-label="Settings"
       title="Settings"
@@ -107,28 +106,47 @@ defineEmits<{
 </template>
 
 <style scoped>
+/* Buttons stretched across the full width read as a tab bar. Grouping the
+   creative actions left and pushing settings right separates "add something"
+   from "configure", and 34px returns eight pixels to the tree. */
 .session-tree-toolbar {
   z-index: 30;
   display: flex;
-  flex: 0 0 42px;
-  align-items: stretch;
+  flex: 0 0 34px;
+  align-items: center;
+  gap: 1px;
   width: 100%;
-  border-top: 1px solid var(--options-list-divider-color);
-  background-color: var(--background-color-primary);
+  padding: 0 5px;
+  border-top: 1px solid var(--tree-edge);
+  background-color: var(--tree-background);
 }
 
 .toolbar-button {
   display: flex;
-  flex: 1 1 0;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  min-width: 36px;
+  width: 28px;
+  height: 24px;
+  min-width: 28px;
   margin: 0;
-  padding: 8px;
+  padding: 0;
   border: 0;
-  color: var(--list-icon-foreground);
+  border-radius: 4px;
+  color: var(--list-item-discarded-foreground);
   background: transparent;
   cursor: pointer;
+}
+
+/* After .toolbar-button, so its margin reset does not win on source order.
+   Holds the settings button clear of the window's resize corner. */
+.settings-button {
+  margin-inline-end: 10px;
+}
+
+.toolbar-spacer {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .toolbar-button:hover {
@@ -141,16 +159,16 @@ defineEmits<{
 }
 
 .toolbar-button:focus-visible {
-  outline: 2px solid var(--list-item-open-foreground);
-  outline-offset: -3px;
+  outline: 2px solid var(--state-live);
+  outline-offset: -2px;
 }
 
 .toolbar-button svg {
-  width: 22px;
-  height: 22px;
+  width: 15px;
+  height: 15px;
   fill: none;
   stroke: currentColor;
-  stroke-width: 1.7;
+  stroke-width: 1.6;
   stroke-linecap: round;
   stroke-linejoin: round;
 }

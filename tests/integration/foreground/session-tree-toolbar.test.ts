@@ -129,7 +129,7 @@ describe('SessionTreeToolbar', () => {
       'utf8',
     )
 
-    expect(toolbarSource).toContain('flex: 0 0 42px')
+    expect(toolbarSource).toContain('flex: 0 0 34px')
     expect(treeSource).toMatch(
       /\.sessiontree-content\s*\{[\s\S]*?flex:\s*1 1 auto/,
     )

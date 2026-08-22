@@ -19,13 +19,22 @@ import * as ToolbarActions from '@/services/session-tree-toolbar-actions'
 import { Settings } from '@/services/settings'
 import {
   buildIndentGuideStates,
+  createTreeItemTally,
+  formatStateBreakdown,
+  formatTallyLine,
+  formatTallyLines,
+  tallyTreeItem,
   type TreeItemIndentGuideState,
 } from '@/services/tree-utils'
 import { normalizeEditTextValue } from '@/services/utils'
 import '@/styles/variables.css'
 import { ContextMenuType } from '@/types/context-menu'
 import type { ContainerRecoveryStrategy } from '@/types/messages'
-import { TreeItem as SessionTreeItem, TreeItemType } from '@/types/session-tree'
+import {
+  State,
+  TreeItem as SessionTreeItem,
+  TreeItemType,
+} from '@/types/session-tree'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 
 let unsubscribeFromTreeUpdates: (() => void) | undefined
@@ -61,7 +70,79 @@ const blockingModalActive = computed(
     ModalState.active?.kind === 'deleteTreeItems',
 )
 
+// Persisted here rather than in Settings: this is view state for one window,
+// not a preference worth syncing.
+const ROOT_COLLAPSED_KEY = 'sessionTreeRootCollapsed'
+const rootCollapsed = ref(localStorage.getItem(ROOT_COLLAPSED_KEY) === 'true')
+
+function toggleRootCollapsed() {
+  rootCollapsed.value = !rootCollapsed.value
+  localStorage.setItem(ROOT_COLLAPSED_KEY, String(rootCollapsed.value))
+}
+
+/*
+ * Tallies every tab in the tree by session state. This is what makes
+ * collapsing the root worth doing: the whole session in one row.
+ */
+const treeComposition = computed(() => {
+  const tally = createTreeItemTally()
+
+  for (const item of SessionTree.reactiveItems.value as SessionTreeItem[]) {
+    if (item.type !== TreeItemType.WINDOW) continue
+    for (const child of item.children) tallyTreeItem(tally, child)
+  }
+
+  // Summed from the three drawn states rather than tally.tabs, so the number
+  // always matches what the bar beside it accounts for.
+  const breakdown = formatStateBreakdown(tally)
+  return {
+    open: tally.open,
+    unloaded: tally.unloaded,
+    saved: tally.saved,
+    total: tally.open + tally.unloaded + tally.saved,
+    title: breakdown || 'No tabs',
+  }
+})
+
+/*
+ * The same summary a window row gives, one level up. Items parked at the root
+ * are counted alongside the ones inside windows: the row stands for the whole
+ * session, so its tally has to as well.
+ */
+const sessionHoverDetails = computed(() => {
+  const tally = createTreeItemTally()
+  let windowsOpen = 0
+  let windowsSaved = 0
+  let windows = 0
+
+  for (const item of SessionTree.reactiveItems.value as SessionTreeItem[]) {
+    if (item.type !== TreeItemType.WINDOW) {
+      tallyTreeItem(tally, item)
+      continue
+    }
+    windows++
+    if (item.state === State.OPEN) windowsOpen++
+    else if (item.state === State.SAVED) windowsSaved++
+    for (const child of item.children) tallyTreeItem(tally, child)
+  }
+
+  return [
+    'Session',
+    formatTallyLine(
+      'Windows',
+      windows,
+      formatStateBreakdown({
+        open: windowsOpen,
+        unloaded: 0,
+        saved: windowsSaved,
+      }),
+    ),
+    ...formatTallyLines(tally),
+  ].join('\n')
+})
+
 const visibleTreeItems = computed<SessionTreeItem[]>(() => {
+  if (rootCollapsed.value) return []
   const items: SessionTreeItem[] = []
   const appendVisibleList = (list: SessionTreeItem[]) => {
     list.forEach((item) => {
@@ -304,6 +385,57 @@ function runToolbarAction(action: () => void | Promise<void>): void {
         </svg>
       </div>
 
+      <div
+        class="session-root"
+        :title="sessionHoverDetails"
+      >
+        <div
+          class="session-root-toggle"
+          role="button"
+          tabindex="0"
+          :aria-expanded="!rootCollapsed"
+          :aria-label="
+            rootCollapsed ? 'Expand all windows' : 'Collapse all windows'
+          "
+          :title="rootCollapsed ? 'Expand all windows' : 'Collapse all windows'"
+          @click.stop="toggleRootCollapsed()"
+          @keydown.enter.prevent="toggleRootCollapsed()"
+          @keydown.space.prevent="toggleRootCollapsed()"
+        >
+          <svg
+            class="session-root-arrow"
+            :class="{ collapsed: rootCollapsed }"
+          >
+            <use :xlink:href="'#chevron-right'" />
+          </svg>
+        </div>
+        <span class="session-root-label">Session</span>
+        <div class="session-root-meta">
+          <span
+            class="session-root-composition"
+            role="img"
+            :aria-label="treeComposition.title"
+          >
+            <i
+              v-if="treeComposition.open"
+              class="session-root-composition-open"
+              :style="{ flexGrow: treeComposition.open }"
+            ></i>
+            <i
+              v-if="treeComposition.unloaded"
+              class="session-root-composition-unloaded"
+              :style="{ flexGrow: treeComposition.unloaded }"
+            ></i>
+            <i
+              v-if="treeComposition.saved"
+              class="session-root-composition-saved"
+              :style="{ flexGrow: treeComposition.saved }"
+            ></i>
+          </span>
+          <span class="session-root-count">{{ treeComposition.total }}</span>
+        </div>
+      </div>
+
       <template
         v-for="item in visibleTreeItems"
         :key="item.uid"
@@ -400,7 +532,96 @@ function runToolbarAction(action: () => void | Promise<void>): void {
   height: 100vh;
   position: relative;
   margin: 0;
-  background-color: var(--background-color-secondary);
+  background-color: var(--tree-background);
+}
+
+/* The one row every top-level item hangs from. Collapsing it reduces the
+   whole session to a single line and its composition bar. */
+.session-root {
+  align-items: center;
+  background-color: var(--tree-background);
+  border-bottom: 1px solid var(--tree-edge);
+  display: flex;
+  position: sticky;
+  top: 0;
+  z-index: 25;
+  gap: 5px;
+  margin-bottom: 4px;
+  min-height: 24px;
+  padding: 0 16px 2px 8px;
+}
+
+.session-root-toggle {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  flex: 0 0 12px;
+  height: 12px;
+  justify-content: center;
+}
+
+.session-root-toggle:focus-visible {
+  outline: 2px solid var(--state-live);
+  outline-offset: 2px;
+}
+
+.session-root-arrow {
+  height: 12px;
+  stroke: var(--list-icon-foreground);
+  transform: rotate(90deg);
+  transition: transform 0.2s linear;
+  width: 12px;
+}
+
+.session-root-arrow.collapsed {
+  transform: rotate(0deg);
+}
+
+.session-root-label {
+  color: var(--list-item-discarded-foreground);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xxs);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.session-root-meta {
+  align-items: center;
+  display: flex;
+  gap: 7px;
+  margin-inline-start: auto;
+}
+
+.session-root-composition {
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 2px;
+  display: flex;
+  gap: 1px;
+  height: 3px;
+  overflow: hidden;
+  width: 56px;
+}
+
+.session-root-composition-open {
+  background: var(--state-live);
+}
+
+.session-root-composition-unloaded {
+  background: color-mix(in srgb, var(--state-live) 45%, transparent);
+}
+
+.session-root-composition-saved {
+  background: color-mix(in srgb, var(--state-rest) 62%, transparent);
+}
+
+.session-root-count {
+  color: var(--list-item-discarded-foreground);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-2xs);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  min-width: 17px;
+  text-align: end;
 }
 
 .sessiontree-content {
@@ -412,7 +633,7 @@ function runToolbarAction(action: () => void | Promise<void>): void {
 
 .tree-end-drop-target {
   position: relative;
-  min-height: calc(95vh - 42px);
+  min-height: calc(95vh - 34px);
 }
 </style>
 
@@ -431,7 +652,8 @@ body {
   content: '';
   position: absolute;
   left: calc(
-    16px + var(--prepend-width, 16px) * (var(--drop-indent-level, 0) + 1)
+    16px + var(--tree-root-step) + var(--prepend-width, 16px) *
+      (var(--drop-indent-level, 0) + 1)
   );
   right: 8px;
   height: 2px;

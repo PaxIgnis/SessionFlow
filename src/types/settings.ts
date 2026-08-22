@@ -72,6 +72,7 @@ export interface Settings {
   refreshFaviconsAfterPeriodOfTimeValue: number
   refreshFaviconsAfterPeriodOfTimeUnit: (typeof SETTINGS_TYPES.refreshFaviconsAfterPeriodOfTimeUnit)[number]
   faviconRefreshTiming: (typeof SETTINGS_TYPES.faviconRefreshTiming)[number]
+  dimUnloadedAndSavedFavicons: boolean
 }
 
 export const SETTINGS_TYPES = {

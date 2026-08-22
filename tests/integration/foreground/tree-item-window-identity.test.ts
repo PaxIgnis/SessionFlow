@@ -61,7 +61,11 @@ describe('window tree item identity', () => {
     expect(markup).toContain('tree-item-window-label-private')
     expect(markup).toContain('tree-item-window-private-badge')
     expect(markup).toContain('aria-label="Private window: Research"')
-    expect(markup).toContain('title="Private window"')
+    // The row tooltip now summarises the window's contents, so it leads with
+    // the private label rather than being only that label.
+    expect(markup).toContain(
+      'title="Private window: Research\nState: Saved\nTabs: 0"',
+    )
     expect(markup).toContain('Private')
   })
 })

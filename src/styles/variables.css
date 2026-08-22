@@ -3,6 +3,7 @@
   --font-family: system-ui;
   --font-family-session-tree: Tahoma, Geneva, sans-serif;
   --font-size-xxs: 0.55rem;
+  --font-size-2xs: 0.6875rem;
   --font-size-xs: 0.75rem;
   --font-size-sm: 0.875rem;
   --font-size-md: 1rem;
@@ -13,32 +14,49 @@
   --background-color-primary: rgb(31, 31, 31);
   --background-color-secondary: rgb(24, 24, 24);
 
+  /* Session tree surfaces */
+  --tree-background: rgb(20, 23, 28);
+  --tree-edge: rgba(255, 255, 255, 0.07);
+  --tree-root-step: 10px;
+
+  /* Session tree state axis.
+     Cool = the browser holds the tab. Warm = only the ledger holds it.
+     Shape (the state mark) and colour (the title) encode this twice, so
+     neither channel is load-bearing on its own. */
+  --state-live: rgb(127, 198, 232);
+  --state-rest: rgb(200, 162, 104);
+
   /* Session tree list items */
   --list-icon-foreground: rgb(204, 204, 204);
   --list-indent-guide-stroke: rgb(140, 140, 140);
   --list-item-active-foreground: rgb(255, 255, 255);
-  --list-item-child-open-foreground: rgb(40, 190, 0);
-  --list-item-discarded-foreground: rgb(100, 140, 89);
+  --list-item-child-open-foreground: rgb(127, 198, 232);
+  --list-item-discarded-foreground: rgb(136, 146, 160);
   --list-item-focused-border-color-gradient-1: rgb(209, 113, 37);
   --list-item-focused-border-color-gradient-2: rgb(209, 54, 72);
   --list-item-focused-border-color-gradient-3: rgb(145, 37, 209);
   --list-item-focused-border-color-gradient-4: rgb(37, 85, 209);
-  --list-item-hover-background: rgb(25, 34, 42);
-  --list-item-open-foreground: rgb(156, 183, 211);
-  --list-item-saved-foreground: rgb(140, 140, 140);
-  --list-item-custom-label-foreground: rgb(214, 169, 85);
-  --list-item-selected-background: rgb(27, 54, 82);
+  --list-item-hover-background: rgb(33, 38, 48);
+  --list-item-open-foreground: rgb(215, 220, 227);
+  --list-item-saved-foreground: rgb(158, 146, 128);
+  --list-item-custom-label-foreground: rgb(200, 162, 104);
+  --list-item-selected-background: rgb(29, 42, 52);
   --window-item-background: rgba(93, 116, 140, 0.2);
   --window-item-border: rgba(156, 183, 211, 0.28);
   --private-window-item-background: rgba(104, 65, 151, 0.34);
   --private-window-item-border: rgba(205, 174, 255, 0.5);
   --private-window-item-accent: rgb(177, 123, 255);
   --private-window-item-foreground: rgb(225, 207, 255);
+  /* Green now has exactly one job: transient drag-and-drop feedback. */
   --drag-and-drop-foreground: rgba(40, 190, 0, 0.8);
   --drag-and-drop-background: rgba(106, 255, 0, 0.1);
   --drag-and-drop-hover: rgba(255, 255, 255, 0.03);
-  --pin-icon-foreground: rgb(204, 204, 204);
-  --note-text-foreground: rgb(20, 120, 0);
+  --pin-icon-foreground: rgb(136, 146, 160);
+  /* Notes sit outside the cool/warm state axis -- they are neither running
+     nor kept -- so they carry no accent hue at all. Brightness does the work:
+     above open-tab titles, with a faint warm cast so it never reads as the
+     active tab's pure white. Drives the note text and its rule. */
+  --note-text-foreground: rgb(242, 236, 224);
   /* Firefox tab group colors */
   --tab-group-color-blue: #b5d3ff;
   --tab-group-color-cyan: #aaf2ff;

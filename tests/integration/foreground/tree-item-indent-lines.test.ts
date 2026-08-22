@@ -453,7 +453,7 @@ describe('TreeItem indent guide rendering', () => {
     expect(leftFadeBounds).toContain('bottom: 2px;')
     expect(leftFadeBounds).toContain('top: 2px;')
     expect(source).toMatch(
-      /--tree-item-title-start:\s*calc\(\s*64px\s*\+\s*\(var\(--prepend-width, 16px\)\s*\*\s*var\(--indent-level, 0\)\)\s*\);/s,
+      /--tree-item-title-start:\s*calc\(\s*58px\s*\+\s*var\(--tree-root-step\)\s*\+\s*\(var\(--prepend-width, 16px\)\s*\*\s*var\(--indent-level, 0\)\)\s*\);/s,
     )
     expect(source).toMatch(
       /\.tree-item-container-fade-title-after-icon\s*\{[^}]*left:\s*calc\(var\(--tree-item-title-start\) \+ 18px\);/s,
@@ -540,7 +540,7 @@ describe('TreeItem indent guide rendering', () => {
     Settings.values.showTabTitleOnHover = false
     const hiddenMarkup = await renderTreeItem(tab)
 
-    expect(hiddenMarkup).not.toContain('title=')
+    expect(hiddenMarkup).not.toMatch(/<div class="tree-item[^>]*\stitle="/)
   })
 
   it('hides group hover information only for ungrouped tabs when configured', async () => {

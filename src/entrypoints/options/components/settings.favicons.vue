@@ -55,6 +55,13 @@ async function onAutomaticFaviconRefreshUpdate(
         @update="Settings.saveSettingsToStorage()"
       />
       <ToggleButton
+        label="Dim favicons of unloaded and saved tabs"
+        description="When off, they look the same as favicons of open tabs."
+        v-model="Settings.values.dimUnloadedAndSavedFavicons"
+        :options="OPTIONS.boolean"
+        @update="Settings.saveSettingsToStorage()"
+      />
+      <ToggleButton
         label="Fetch missing favicons at startup"
         description="Requires website access permission."
         v-model="Settings.values.fetchMissingFaviconsOnStartup"

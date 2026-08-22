@@ -86,6 +86,10 @@ describe('snapshot tree presentation', () => {
     expect(markup).toContain(
       'class="tree-item indentLevel-1 tree-item-selected',
     )
+    expect(markup).toContain('tree-item-root-spine')
+    expect(markup).toContain('tree-item-state-saved')
+    expect(markup).toContain('tree-item-state-mark-saved')
+    expect(markup).toContain('tree-item-favicon-slot')
     expect(markup).toContain('tree-item-text-saved')
     expect(markup).toContain('tree-item-pinned')
     expect(markup).toContain('child-count')
@@ -108,6 +112,9 @@ describe('snapshot tree presentation', () => {
     })
 
     expect(normalMarkup).toContain('tree-item-window-label')
+    expect(normalMarkup).toContain('tree-item-window-label-saved')
+    expect(normalMarkup).toContain('tree-item-window-meta')
+    expect(normalMarkup).toContain('tree-item-composition-saved')
     expect(normalMarkup).toContain('src="/icon/16.png"')
     expect(privateMarkup).toContain('tree-item-window-private')
     expect(privateMarkup).toContain('tree-item-window-label-private')
@@ -126,6 +133,20 @@ describe('snapshot tree presentation', () => {
     expect(separatorMarkup).toContain('tree-item-separator')
     expect(separatorMarkup).toContain('tree-item-separator-line')
     expect(tabMarkup).toContain('src="/icon/16.png"')
+  })
+
+  it('follows the favicon dimming setting for unloaded and saved tabs', async () => {
+    Settings.values.dimUnloadedAndSavedFavicons = false
+
+    const unloadedMarkup = await renderSnapshotItem(
+      tab({ state: State.DISCARDED }),
+    )
+    const savedMarkup = await renderSnapshotItem(tab({ state: State.SAVED }))
+
+    expect(unloadedMarkup).not.toContain('tree-item-state-unloaded')
+    expect(savedMarkup).not.toContain('tree-item-state-saved')
+    expect(unloadedMarkup).toContain('tree-item-state-mark-unloaded')
+    expect(savedMarkup).toContain('tree-item-state-mark-saved')
   })
 
   it('contains no live tree interaction surfaces and uses the shared indent algorithm', async () => {
@@ -148,9 +169,10 @@ describe('snapshot tree presentation', () => {
     expect(itemSource).not.toContain('@contextmenu')
     expect(itemSource).not.toContain('@dblclick')
     expect(itemSource).not.toContain('foreground-messages')
+    expect(itemSource).toContain('@click.stop="emit(\'select\')"')
     expect(treeSource).toContain('buildIndentGuideStates')
     expect(itemSource).toMatch(
-      /\.tree-item-separator\.indentLevel-0\s*\{[\s\S]*?padding-inline-start:\s*16px[\s\S]*?padding-inline-end:\s*0/,
+      /\.tree-item-separator\.indentLevel-0\s*\{[\s\S]*?padding-inline-end:\s*0\s*!important;[\s\S]*?padding-inline-start:\s*calc\(8px \+ var\(--tree-root-step\)\)/,
     )
     expect(itemSource).toMatch(
       /\.tree-item-separator \.tree-item-spacer\s*\{[\s\S]*?display:\s*none/,
@@ -188,7 +210,7 @@ function windowItem(incognito: boolean): SnapshotWindow {
     uid: `${incognito ? 'private' : 'normal'}-window` as UID,
     incognito,
     state: State.SAVED,
-    children: [],
+    children: [tab({ state: State.SAVED })],
     indentLevel: 0,
     title: incognito ? 'Private Research' : 'Research',
   }

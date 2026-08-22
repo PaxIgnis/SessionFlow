@@ -164,6 +164,143 @@ describe('tree item presentation', () => {
     expect(markup).toContain('Tab group: Research')
   })
 
+  it('dims unloaded and saved favicons only while the setting is on', async () => {
+    const unloaded = makeForegroundTab('unloaded-tab' as UID, {
+      state: State.DISCARDED,
+    })
+    const saved = makeForegroundTab('saved-tab' as UID, {
+      state: State.SAVED,
+    })
+
+    Settings.values.dimUnloadedAndSavedFavicons = true
+    expect(await renderTreeItem(unloaded)).toContain('tree-item-state-unloaded')
+    expect(await renderTreeItem(saved)).toContain('tree-item-state-saved')
+
+    Settings.values.dimUnloadedAndSavedFavicons = false
+    const plainUnloaded = await renderTreeItem(unloaded)
+    const plainSaved = await renderTreeItem(saved)
+
+    expect(plainUnloaded).not.toContain('tree-item-state-unloaded')
+    expect(plainSaved).not.toContain('tree-item-state-saved')
+    // The other two state cues stay, so the row is still readable undimmed.
+    expect(plainUnloaded).toContain('tree-item-state-mark-unloaded')
+    expect(plainUnloaded).toContain('tree-item-text-discarded')
+    expect(plainSaved).toContain('tree-item-state-mark-saved')
+    expect(plainSaved).toContain('tree-item-text-saved')
+  })
+
+  it('marks a collapsed row that is hiding the focused tab', async () => {
+    const parent = makeForegroundTab('tab-parent' as UID, {
+      collapsed: true,
+      isParent: true,
+      indentLevel: 1,
+      state: State.OPEN,
+    })
+    const focused = makeForegroundTab('tab-focused' as UID, {
+      active: true,
+      indentLevel: 2,
+      parentUid: parent.uid,
+      state: State.OPEN,
+    })
+    const quiet = makeForegroundTab('tab-quiet' as UID, {
+      collapsed: true,
+      isParent: true,
+      indentLevel: 1,
+      state: State.OPEN,
+    })
+    const quietChild = makeForegroundTab('tab-quiet-child' as UID, {
+      indentLevel: 2,
+      parentUid: quiet.uid,
+      state: State.OPEN,
+    })
+    const window = makeForegroundWindow(
+      'window-focused' as UID,
+      [parent, focused, quiet, quietChild],
+      { active: true, state: State.OPEN },
+    )
+    resetForegroundTree([window])
+
+    expect(await renderTreeItem(parent)).toContain(
+      'tree-item-action-button-hiding-focus',
+    )
+    expect(await renderTreeItem(quiet)).not.toContain(
+      'tree-item-action-button-hiding-focus',
+    )
+  })
+
+  it('leaves an expanded row unmarked, since the focused tab is on screen', async () => {
+    const parent = makeForegroundTab('tab-parent' as UID, {
+      collapsed: false,
+      isParent: true,
+      indentLevel: 1,
+      state: State.OPEN,
+    })
+    const focused = makeForegroundTab('tab-focused' as UID, {
+      active: true,
+      indentLevel: 2,
+      parentUid: parent.uid,
+      state: State.OPEN,
+    })
+    const window = makeForegroundWindow(
+      'window-focused' as UID,
+      [parent, focused],
+      { active: true, state: State.OPEN },
+    )
+    resetForegroundTree([window])
+
+    expect(await renderTreeItem(parent)).not.toContain(
+      'tree-item-action-button-hiding-focus',
+    )
+  })
+
+  it('marks a collapsed window only while that window is the focused one', async () => {
+    const makeWindow = (uid: string, active: boolean) => {
+      const focused = makeForegroundTab(`${uid}-tab` as UID, {
+        active: true,
+        indentLevel: 1,
+        state: State.OPEN,
+      })
+      return makeForegroundWindow(uid as UID, [focused], {
+        active,
+        collapsed: true,
+        state: State.OPEN,
+      })
+    }
+    const focusedWindow = makeWindow('window-focused', true)
+    const backgroundWindow = makeWindow('window-background', false)
+    resetForegroundTree([focusedWindow, backgroundWindow])
+
+    expect(await renderTreeItem(focusedWindow)).toContain(
+      'tree-item-action-button-hiding-focus',
+    )
+    expect(await renderTreeItem(backgroundWindow)).not.toContain(
+      'tree-item-action-button-hiding-focus',
+    )
+  })
+
+  it('labels the hover menu destructive action exactly as the context menu does', async () => {
+    const [itemSource, contextMenuSource] = await Promise.all([
+      fs.readFile(
+        new URL('../../../src/components/TreeItem.vue', import.meta.url),
+        'utf8',
+      ),
+      fs.readFile(
+        new URL(
+          '../../../src/services/context-menu-items-tree.ts',
+          import.meta.url,
+        ),
+        'utf8',
+      ),
+    ])
+
+    // Same outcome, so the same word: a hover button reading "Close" beside a
+    // menu entry reading "Delete" implies two different actions.
+    expect(contextMenuSource).toContain("label: 'Delete'")
+    expect(itemSource).toContain('aria-label="Delete"')
+    expect(itemSource).toContain('title="Delete"')
+    expect(itemSource).not.toContain('aria-label="Close"')
+  })
+
   it('isolates every nested action surface from row double-click handling', async () => {
     const source = await fs.readFile(
       new URL('../../../src/components/TreeItem.vue', import.meta.url),

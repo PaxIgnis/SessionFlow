@@ -179,7 +179,11 @@ describe('session snapshot workflows', () => {
       expect(await checkboxes[checkboxIndex].isSelected()).toBe(false)
       expect(checkboxIndex).toBeGreaterThanOrEqual(0)
       expect(checkboxIndex).toBeLessThan(checkboxes.length)
-      await checkboxes[checkboxIndex].click()
+      const selectableRows = await $$('.snapshot-tree .tree-item')
+      await (
+        await selectableRows[checkboxIndex].$('.tree-item-content')
+      ).click()
+      checkboxes = await $$('.snapshot-tree-checkbox')
       await expect(checkboxes[checkboxIndex]).toBeSelected()
 
       const treeBefore = await readPersistedSessionTree()
