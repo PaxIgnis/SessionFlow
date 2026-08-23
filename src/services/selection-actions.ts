@@ -14,15 +14,20 @@ export type ContextMenuDescendantScope = 'always' | 'collapsed' | 'never'
 
 export function selectItem(item: TreeItem, type: SelectionType, e: MouseEvent) {
   const firstItem = Selection.selectedItems.value[0]
+  const anchorItem = Selection.anchor.value ?? firstItem?.item
 
   const ctrlKey = e.ctrlKey || e.metaKey
   const shiftKey = e.shiftKey
-  if (shiftKey && firstItem) {
-    if (selectItemRange(firstItem.item, item, ctrlKey)) return
+  if (shiftKey && anchorItem) {
+    if (selectItemRange(anchorItem, item, ctrlKey)) return
     clearSelection()
     addSelectedItem(item)
+    Selection.anchor.value = item
     return
   }
+
+  // Every non-range click re-anchors; only shift-ranges leave the anchor put.
+  Selection.anchor.value = item
 
   if (item.selected && ctrlKey) {
     // If the item is already selected and ctrl/meta key is pressed, deselect & remove from selection
@@ -79,6 +84,9 @@ function selectItemRange(
   for (let i = minIndex; i <= maxIndex; i++) {
     addSelectedItem(logicalItems[i])
   }
+  // The fill runs in tree order and clearSelection drops the anchor, so put it
+  // back: extending upward must keep ranging from where the user started.
+  Selection.anchor.value = firstItem
   return true
 }
 
@@ -213,6 +221,7 @@ export function clearSelection() {
     }
   })
   Selection.selectedItems.value = []
+  Selection.anchor.value = undefined
 }
 
 export function getSelectedWindows(): Array<Window> {
@@ -271,10 +280,12 @@ export function selectItemForContextMenu(
     // If item is not selected and ctrl/meta key is pressed, select & add to selection
     item.selected = true
     Selection.selectedItems.value.push({ item, type })
+    Selection.anchor.value = item
   } else if (!item.selected && !ctrlKey) {
     // If ctrl/meta is not pressed, clear all selection and select item
     clearSelection()
     item.selected = true
     Selection.selectedItems.value.push({ item, type })
+    Selection.anchor.value = item
   }
 }
