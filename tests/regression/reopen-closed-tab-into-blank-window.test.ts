@@ -35,6 +35,16 @@ async function loadHandlersWithRealTree() {
     setupBrowserActionMenu: vi.fn(),
     updateBadge: vi.fn(),
   }))
+  // The real queue polls on a 100ms interval before reporting that a tab was
+  // user-created. That wall-clock wait is unrelated to the window lifecycle
+  // under test and gets starved when the whole suite runs instrumented, so
+  // answer immediately instead.
+  vi.doMock('@/services/background-on-created-queue', () => ({
+    OnCreatedQueue: {
+      isNewTabExtensionGenerated: vi.fn().mockResolvedValue(false),
+      isNewWindowExtensionGenerated: vi.fn().mockResolvedValue(false),
+    },
+  }))
 
   const { Tree } = await import('@/services/background-tree')
   const { Settings } = await import('@/services/settings')
@@ -90,6 +100,7 @@ describe('reopening a closed tab into a window holding one blank tab', () => {
     vi.doUnmock('@/services/runtime-port-service')
     vi.doUnmock('@/services/favicons')
     vi.doUnmock('@/services/background-actions')
+    vi.doUnmock('@/services/background-on-created-queue')
   })
 
   it('keeps the window tracked and adopts the restored tab', async () => {
