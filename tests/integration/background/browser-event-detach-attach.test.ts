@@ -237,9 +237,7 @@ describe('background browser-event detach and attach ordering', () => {
     await attach
 
     expect(source.children).toHaveLength(0)
-    expect(destination.children.map((child) => child.uid)).toEqual([
-      'tab-10',
-    ])
+    expect(destination.children.map((child) => child.uid)).toEqual(['tab-10'])
   })
 
   it('does not partially attach a tab when authoritative tab lookup rejects', async () => {

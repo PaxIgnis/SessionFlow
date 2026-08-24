@@ -136,11 +136,7 @@ describe('minimal sufficient tree deltas', () => {
       parentUid: child.uid,
       indentLevel: 3,
     })
-    const window = createWindow('window-1' as UID, [
-      parent,
-      child,
-      grandchild,
-    ])
+    const window = createWindow('window-1' as UID, [parent, child, grandchild])
     Tree.recomputeSessionTree(false)
 
     Tree.toggleCollapseTab(parent.uid)

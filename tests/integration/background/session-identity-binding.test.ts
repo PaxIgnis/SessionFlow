@@ -7,11 +7,7 @@ import { stampOpenTreeIdentities } from '@/services/background-session-restore'
 import { Tree } from '@/services/background-tree'
 import { State } from '@/types/session-tree'
 import { installFakeBrowser } from '../../helpers/fake-browser'
-import {
-  createTab,
-  createWindow,
-  resetTree,
-} from '../../helpers/tree-fixtures'
+import { createTab, createWindow, resetTree } from '../../helpers/tree-fixtures'
 
 describe('session identity binding', () => {
   beforeEach(() => {

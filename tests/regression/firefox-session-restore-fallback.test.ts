@@ -9,11 +9,7 @@ import { Settings } from '@/services/settings'
 import { Tree } from '@/services/background-tree'
 import { State } from '@/types/session-tree'
 import { installFakeBrowser } from '../helpers/fake-browser'
-import {
-  createTab,
-  createWindow,
-  resetTree,
-} from '../helpers/tree-fixtures'
+import { createTab, createWindow, resetTree } from '../helpers/tree-fixtures'
 
 function restoredTab(overrides: Partial<browser.tabs.Tab> = {}) {
   return {
@@ -90,9 +86,9 @@ describe('Firefox session restoration fallback', () => {
       .mockResolvedValue(undefined)
     vi.spyOn(console, 'error').mockImplementation(() => {})
 
-    await expect(
-      handleCreatedTab(restoredTab({ windowId: 20 })),
-    ).resolves.toBe(true)
+    await expect(handleCreatedTab(restoredTab({ windowId: 20 }))).resolves.toBe(
+      true,
+    )
 
     expect(savedTab).toMatchObject({ id: 101, state: State.OPEN })
     expect(restoreTabGroup).toHaveBeenCalledWith(savedTab.uid)
