@@ -84,6 +84,11 @@ const pendingGroupRemovalTimers = new Map<
   }
 >()
 const pendingTabCreations = new Map<number, symbol>()
+const pendingEmptyWindowChecks = new Map<
+  number,
+  ReturnType<typeof setTimeout>
+>()
+const EMPTY_WINDOW_RECHECK_DELAY_MS = 1_000
 const pendingWindowMoves = new Map<number, symbol>()
 const pendingFaviconRechecks = new Map<number, PendingFaviconRecheck>()
 const FAVICON_RECHECK_DELAYS_MS = [100, 250, 500, 1_000]
@@ -353,6 +358,11 @@ async function windowsOnCreated(window: browser.windows.Window): Promise<void> {
  * If the window only has 1 tab, save the window instead of removing.
  */
 function windowsOnRemoved(windowId: number): void {
+  const pendingEmptyWindowCheck = pendingEmptyWindowChecks.get(windowId)
+  if (pendingEmptyWindowCheck !== undefined) {
+    clearTimeout(pendingEmptyWindowCheck)
+    pendingEmptyWindowChecks.delete(windowId)
+  }
   if (isCommandOwnedWindowRemoval(windowId)) return
   Tree.removeSessionWindowId(windowId)
   const window = Tree.Items.filter(Tree.isWindow).find((w) => w.id === windowId)
@@ -631,7 +641,56 @@ function finishTabRemoval(
     Tree.setTabSaved(tabs[index].uid)
     return
   }
+  // Reopening a closed tab (Ctrl+Shift+T) into a window whose only tab is a
+  // blank new tab makes Firefox remove that blank tab first and create the
+  // restored tab second. Dropping the window here, the moment its last child
+  // goes, would leave the restored tab with no window to join and the Firefox
+  // window untracked for good. While the window is not closing its lifetime
+  // belongs to windows.onRemoved, so keep it and confirm out of band.
+  if (
+    !removeInfo.isWindowClosing &&
+    window.children.length === 1 &&
+    removeInfo.windowId !== undefined
+  ) {
+    const windowUid = window.uid
+    Tree.removeTab(tabs[index].uid, true, true, false)
+    scheduleEmptyWindowCheck(windowUid, removeInfo.windowId)
+    return
+  }
   Tree.removeTab(tabs[index].uid)
+}
+
+/**
+ * Confirms that a tree window left without children really is gone from
+ * Firefox. windows.onRemoved normally cleans it up first; this is the fallback
+ * for the orderings where that event never arrives.
+ */
+function scheduleEmptyWindowCheck(windowUid: UID, windowId: number): void {
+  const existingTimer = pendingEmptyWindowChecks.get(windowId)
+  if (existingTimer !== undefined) clearTimeout(existingTimer)
+  pendingEmptyWindowChecks.set(
+    windowId,
+    setTimeout(() => {
+      pendingEmptyWindowChecks.delete(windowId)
+      void reconcileEmptyWindow(windowUid, windowId)
+    }, EMPTY_WINDOW_RECHECK_DELAY_MS),
+  )
+}
+
+async function reconcileEmptyWindow(
+  windowUid: UID,
+  windowId: number,
+): Promise<void> {
+  if (Tree.windowsByUid.get(windowUid)?.children.length !== 0) return
+  let liveTabCount = 0
+  try {
+    liveTabCount = (await browser.tabs.query({ windowId })).length
+  } catch (error) {
+    console.debug('Emptied window is no longer available in Firefox:', error)
+  }
+  if (liveTabCount > 0) return
+  if (Tree.windowsByUid.get(windowUid)?.children.length !== 0) return
+  Tree.removeWindow(windowUid)
 }
 
 function tabGroupsOnRemoved(

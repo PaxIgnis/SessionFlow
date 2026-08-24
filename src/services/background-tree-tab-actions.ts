@@ -169,11 +169,17 @@ export function addTab(
  *
  * @param {UID} tabUid - The UID of the tab to be removed.
  * @param {boolean = true} emitDelta - Whether to emit a tree delta event.
+ * @param {boolean = true} recompute - Whether to recompute the session tree.
+ * @param {boolean = true} removeEmptiedWindow - Whether to drop the window when
+ *   this was its last child. Browser event handlers pass false while the
+ *   Firefox window is still open, because the window's lifetime is owned by
+ *   windows.onRemoved rather than by its child count.
  */
 export function removeTab(
   tabUid: UID,
   emitDelta: boolean = true,
   recompute: boolean = true,
+  removeEmptiedWindow: boolean = true,
 ): void {
   const tab = Tree.tabsByUid.get(tabUid)
   if (!tab) {
@@ -252,7 +258,7 @@ export function removeTab(
     void cleanupPrivateFaviconDomain(privateFaviconUrl)
   }
   // if this was the last tab in the window, remove the window
-  if (window.children.length === 0) {
+  if (window.children.length === 0 && removeEmptiedWindow) {
     Tree.removeWindow(window.uid, emitDelta, recompute)
     return
   }
