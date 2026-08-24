@@ -497,6 +497,25 @@ export function getTabState(tabUid: UID): State {
 }
 
 /**
+ * Resolves the Firefox tab id a command should act on.
+ *
+ * The id a sender captured can be stale: openTab publishes a tab as open before
+ * Firefox has handed back its id, so a command issued in that window carries
+ * the saved-tab sentinel. Tab commands are serialized per tab uid, so by the
+ * time one runs the tree holds the id Firefox actually assigned. Falls back to
+ * the requested id when the tree has no open tab under that uid, so a command
+ * that outlives its tree item still targets the right browser tab.
+ *
+ * @param {UID} tabUid - The UID of the tab the command targets.
+ * @param {number} requestedTabId - The tab id the sender captured.
+ */
+export function resolveTabId(tabUid: UID, requestedTabId: number): number {
+  const tab = Tree.tabsByUid.get(tabUid)
+  if (tab && tab.id !== -1 && tab.id !== 0) return tab.id
+  return requestedTabId
+}
+
+/**
  * Closes a tab by removing it from the browser and removing it from the session tree.
  *
  * @param {Object} message - The message object containing tab and window information.
@@ -516,12 +535,13 @@ export async function closeTab(
     console.error('Error closing tab, could not find tab:', message.tabUid)
     return
   }
-  if (message.tabId !== -1 && message.tabId !== 0) {
-    await removeBrowserTab(message.tabId)
+  const tabId = resolveTabId(message.tabUid, message.tabId)
+  if (tabId !== -1 && tabId !== 0) {
+    await removeBrowserTab(tabId)
   }
 
   const initialWindow = Tree.windowsByUid.get(initialTab.windowUid)
-  if (initialWindow?.activeTabId === message.tabId) {
+  if (initialWindow?.activeTabId === tabId) {
     Tree.updateWindow(initialWindow.uid, { activeTabId: undefined }, emitDelta)
   }
 
@@ -537,58 +557,6 @@ export async function closeTab(
   if (window.children.length > 0 && openTabs.length === 0) {
     Tree.updateWindowState(window.uid, State.SAVED, emitDelta)
     Tree.updateWindowId(window.uid, -1, emitDelta)
-  }
-}
-
-/**
- *
- * Duplicates a tab by creating a new tab in the browser with the same URL and title,
- * and adding it to the session tree as a sibling of the original tab.
- *
- * @param {Object} message - The message object containing the tab id and UID
- * @param {number} message.tabId - The ID of the tab to be duplicated
- * @param {UID} message.tabUid - The UID of the tab to be duplicated
- */
-export function duplicateTab(message: { tabId: number; tabUid: UID }): void {
-  const tab = Tree.tabsByUid.get(message.tabUid)
-  // if tab open let browser duplicate the tab and handle logic in onCreated handler
-  if (tab && tab.state === State.OPEN) {
-    browser.tabs.duplicate(message.tabId).catch((error) => {
-      console.error('Error duplicating tab:', error)
-    })
-  }
-  // if tab is saved create a new tab with the same URL and title and add to session tree
-  else if (tab && tab.state === State.SAVED) {
-    const window = Tree.windowsByUid.get(tab.windowUid)
-    if (!window) {
-      console.error(
-        'Error duplicating tab, could not find window:',
-        tab.windowUid,
-      )
-      return
-    }
-    const index = window.children.indexOf(tab)
-    const nextBoundaryIndex = window.children.findIndex(
-      (t, i) => i > index && t.indentLevel <= tab.indentLevel,
-    )
-    const newIndex =
-      nextBoundaryIndex === -1 ? window.children.length : nextBoundaryIndex
-    addTab(
-      false,
-      tab.windowUid,
-      -1,
-      false,
-      tab.state,
-      tab.title,
-      tab.url,
-      false,
-      newIndex,
-      tab.parentUid,
-      undefined,
-      true,
-      tab.tabGroup,
-      tab.container,
-    )
   }
 }
 
@@ -772,12 +740,13 @@ export async function saveTab(message: {
     return
   }
   if (initialTab.state === State.SAVED) return
-  if (message.tabId !== -1 && message.tabId !== 0) {
-    await removeBrowserTab(message.tabId)
+  const tabId = resolveTabId(message.tabUid, message.tabId)
+  if (tabId !== -1 && tabId !== 0) {
+    await removeBrowserTab(tabId)
   }
 
   const initialWindow = Tree.windowsByUid.get(initialTab.windowUid)
-  if (initialWindow?.activeTabId === message.tabId) {
+  if (initialWindow?.activeTabId === tabId) {
     Tree.updateWindow(initialWindow.uid, { activeTabId: undefined })
   }
 

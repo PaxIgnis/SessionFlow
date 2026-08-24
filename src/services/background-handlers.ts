@@ -1344,7 +1344,12 @@ function getCommandCoordination(message: Messages.SessionTreeMessage):
       coalesce: true,
     }
   }
-  if (message.action === 'closeTab' || message.action === 'saveTab') {
+  if (
+    message.action === 'closeTab' ||
+    message.action === 'saveTab' ||
+    message.action === 'focusTab' ||
+    message.action === 'reloadTab'
+  ) {
     return { itemUids: [message.tabUid], coalesce: true }
   }
   if (
@@ -1380,7 +1385,9 @@ async function dispatchCommandNow(
   } else if (message.action === 'openTab') {
     await Tree.openTab(message)
   } else if (message.action === 'reloadTab') {
-    Browser.reloadTab(message)
+    Browser.reloadTab({
+      tabId: Tree.resolveTabId(message.tabUid, message.tabId),
+    })
   } else if (message.action === 'closeWindow') {
     await Tree.closeWindow(message)
   } else if (message.action === 'saveWindow') {
@@ -1388,7 +1395,10 @@ async function dispatchCommandNow(
   } else if (message.action === 'openWindow') {
     return Tree.openWindow(message)
   } else if (message.action === 'focusTab') {
-    Browser.focusTabAndWindow(message)
+    Browser.focusTabAndWindow({
+      tabId: Tree.resolveTabId(message.tabUid, message.tabId),
+      windowId: message.windowId,
+    })
   } else if (message.action === 'focusWindow') {
     Browser.focusWindow(message)
   } else if (message.action === 'openWindowsInSameLocationUpdated') {

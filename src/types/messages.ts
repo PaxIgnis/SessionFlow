@@ -22,6 +22,7 @@ export interface CloseTabMessage {
 export interface FocusTabMessage {
   action: 'focusTab'
   tabId: number
+  tabUid: UID
   windowId: number
 }
 
@@ -45,6 +46,7 @@ export interface PinTabMessage {
 export interface ReloadTabMessage {
   action: 'reloadTab'
   tabId: number
+  tabUid: UID
 }
 
 export interface SaveTabMessage {

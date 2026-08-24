@@ -6,6 +6,7 @@ import {
   getDispatchCommand,
   loadBackgroundHandlers,
 } from '../../helpers/background-handler-harness'
+import type { FakeBrowser } from '../../helpers/fake-browser'
 import { installFakeBrowser } from '../../helpers/fake-browser'
 import {
   LoadingStatus,
@@ -1781,6 +1782,69 @@ describe('background handlers', () => {
     expect(mocks.saveTab).toHaveBeenCalledTimes(1)
   })
 
+  it.each([
+    {
+      action: 'focusTab' as const,
+      message: {
+        action: 'focusTab' as const,
+        tabId: -1,
+        tabUid: 'tab-4' as UID,
+        windowId: 20,
+      },
+      assertBrowserCall: (fakeBrowser: FakeBrowser) => {
+        expect(fakeBrowser.tabs.update).toHaveBeenCalledWith(44, {
+          active: true,
+        })
+      },
+    },
+    {
+      action: 'reloadTab' as const,
+      message: {
+        action: 'reloadTab' as const,
+        tabId: -1,
+        tabUid: 'tab-4' as UID,
+      },
+      assertBrowserCall: (fakeBrowser: FakeBrowser) => {
+        expect(fakeBrowser.tabs.reload).toHaveBeenCalledWith(44)
+      },
+    },
+  ])(
+    'defers $action behind an in-flight open and targets the resolved id',
+    async ({ message, assertBrowserCall }) => {
+      const { fakeBrowser, initializeListeners, mocks } =
+        await loadBackgroundHandlers()
+      let resolveOpenTab: () => void = () => {}
+      mocks.openTab.mockReturnValue(
+        new Promise<void>((resolve) => {
+          resolveOpenTab = resolve
+        }),
+      )
+      // Firefox assigns the real id while the open is still in flight.
+      mocks.resolveTabId.mockReturnValue(44)
+      initializeListeners()
+      const dispatchCommand = getDispatchCommand(
+        mocks.initializeSessionTreePort,
+      )
+
+      const open = dispatchCommand({
+        action: 'openTab',
+        tabUid: 'tab-4' as UID,
+        windowUid: 'window-1' as UID,
+      })
+      const followUp = dispatchCommand(message)
+      await Promise.resolve()
+      await Promise.resolve()
+
+      expect(fakeBrowser.tabs.update).not.toHaveBeenCalled()
+      expect(fakeBrowser.tabs.reload).not.toHaveBeenCalled()
+
+      resolveOpenTab()
+      await Promise.all([open, followUp])
+
+      assertBrowserCall(fakeBrowser)
+    },
+  )
+
   it('serializes batch deletion after overlapping item commands', async () => {
     const { initializeListeners, mocks } = await loadBackgroundHandlers()
     let resolveOpenTab: () => void = () => {}
@@ -1963,8 +2027,17 @@ describe('background handlers', () => {
     initializeListeners()
     const dispatchCommand = getDispatchCommand(mocks.initializeSessionTreePort)
 
-    dispatchCommand({ action: 'reloadTab', tabId: 31 })
-    dispatchCommand({ action: 'focusTab', tabId: 32, windowId: 42 })
+    dispatchCommand({
+      action: 'reloadTab',
+      tabId: 31,
+      tabUid: 'tab-31' as UID,
+    })
+    dispatchCommand({
+      action: 'focusTab',
+      tabId: 32,
+      tabUid: 'tab-32' as UID,
+      windowId: 42,
+    })
     dispatchCommand({ action: 'focusWindow', windowId: 43 })
 
     expect(fakeBrowser.tabs.reload).toHaveBeenCalledWith(31)

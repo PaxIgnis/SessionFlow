@@ -324,6 +324,7 @@ describe('foreground message helpers', () => {
     expect(sendTreeCommand).toHaveBeenNthCalledWith(1, {
       action: 'focusTab',
       tabId: 10,
+      tabUid: 'tab-open',
       windowId: 20,
     })
     expect(sendTreeCommand).toHaveBeenNthCalledWith(2, {
@@ -868,6 +869,7 @@ describe('foreground message helpers', () => {
     expect(sendTreeCommand).toHaveBeenNthCalledWith(1, {
       action: 'focusTab',
       tabId: 10,
+      tabUid: 'tab-private',
       windowId: 20,
     })
     expect(sendTreeCommand).toHaveBeenNthCalledWith(2, {
@@ -1048,8 +1050,8 @@ describe('foreground message helpers', () => {
     sendTreeCommand.mockClear()
     await reloadTabs([saved, open, discarded])
     expect(sendTreeCommand.mock.calls.map(([message]) => message)).toEqual([
-      { action: 'reloadTab', tabId: 10 },
-      { action: 'reloadTab', tabId: 11 },
+      { action: 'reloadTab', tabId: 10, tabUid: 'open' },
+      { action: 'reloadTab', tabId: 11, tabUid: 'discarded' },
     ])
 
     sendTreeCommand.mockClear()

@@ -74,10 +74,11 @@ export function closeTab(tabId: number, tabUid: UID): Promise<void> {
   )
 }
 
-export function focusTab(tabId: number, windowId: number) {
+export function focusTab(tabId: number, tabUid: UID, windowId: number) {
   void sendTreeCommand({
     action: 'focusTab',
     tabId: tabId,
+    tabUid: tabUid,
     windowId: windowId,
   } as Messages.FocusTabMessage)
 }
@@ -228,11 +229,12 @@ export function pinTabs(tabs: Array<Tab>): Promise<void> {
   )
 }
 
-export function reloadTab(tabId: number) {
+export function reloadTab(tabId: number, tabUid: UID) {
   void sendTreeCommand({
     action: 'reloadTab',
     tabId: tabId,
-  })
+    tabUid: tabUid,
+  } as Messages.ReloadTabMessage)
 }
 
 export function reloadTabs(tabs: Array<Tab>): Promise<void> {
@@ -242,6 +244,7 @@ export function reloadTabs(tabs: Array<Tab>): Promise<void> {
     eligibleTabs.map((tab) => ({
       action: 'reloadTab',
       tabId: tab.id,
+      tabUid: tab.uid,
     })),
     (failedCount, totalCount) =>
       `Session Flow could not reload ${failedCount} of ${totalCount} tabs.`,
@@ -291,11 +294,11 @@ export async function tabDoubleClick(
     if (tabDoubleClickAction === 'close') {
       closeTab(tabId, tabUid)
     } else if (tabDoubleClickAction === 'reload') {
-      reloadTab(tabId)
+      reloadTab(tabId, tabUid)
     } else if (tabDoubleClickAction === 'duplicate') {
       duplicateTreeItems([tabUid], false)
     } else if (tabDoubleClickAction === 'focus') {
-      focusTab(tabId, windowId)
+      focusTab(tabId, tabUid, windowId)
     }
   } else if (state === State.SAVED) {
     const tabDoubleClickAction = Settings.values.doubleClickOnSavedTab

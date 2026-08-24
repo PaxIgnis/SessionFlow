@@ -257,6 +257,13 @@ describe('critical Firefox UI workflows', () => {
     await switchToPrimaryBrowserWindow()
     await openFixtureTab(seed, SESSION_FIXTURE_TITLES.alpha)
     await browser.switchToWindow(popup.popupHandle)
+    // The background registers a new browser tab asynchronously. Adding the
+    // note first would leave it occupying the slot the tab is inserted into,
+    // and the tab would inherit the note's parent instead of staying a root.
+    await expectSingleOpenWindowWithRootTabs([
+      SESSION_FIXTURE_TITLES.initial,
+      SESSION_FIXTURE_TITLES.alpha,
+    ])
     await addNoteFromTabContextMenu(SESSION_FIXTURE_TITLES.initial)
 
     await sessionTree.waitForBackgroundTree((tree) => {

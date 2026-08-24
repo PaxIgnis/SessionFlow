@@ -68,6 +68,9 @@ export async function loadBackgroundHandlers() {
     moveTreeItems: vi.fn(),
     moveWindows: vi.fn(),
     removeTab: vi.fn(),
+    resolveTabId: vi.fn(
+      (_tabUid: UID, requestedTabId: number) => requestedTabId,
+    ),
     removeSessionWindowId: vi.fn(),
     recomputeSessionTree: vi.fn(),
     getTabs: vi.fn((items: Array<{ type: TreeItemType }>) =>
