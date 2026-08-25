@@ -46,6 +46,9 @@ async function initializeBackground(): Promise<void> {
   await stampOpenTreeIdentities()
 
   BackgroundHandlers.initializeListeners()
+  // After the listeners exist, so restored windows can complete their creation
+  // handshake instead of waiting out the creation timeout.
+  await Tree.restoreStartupTabs()
   Actions.scheduleSessionTreeOpenOnStartup()
   Settings.setupSettingsUpdatedListener(async () => {
     try {

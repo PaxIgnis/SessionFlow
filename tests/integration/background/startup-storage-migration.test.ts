@@ -120,6 +120,7 @@ describe('startup storage migration', () => {
     const openTab = vi.spyOn(Tree, 'openTab').mockResolvedValue(undefined)
 
     await Tree.initializeWindows()
+    await Tree.restoreStartupTabs()
 
     const window = Tree.Items.find(Tree.isWindow)!
     const [tab] = Tree.getTabs(window.children)

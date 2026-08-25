@@ -188,6 +188,7 @@ describe('startup lifecycle', () => {
     const initializeSettings = vi.fn(() => settingsReady.promise)
     const initializeContainers = vi.fn().mockResolvedValue(undefined)
     const initializeWindows = vi.fn().mockResolvedValue(undefined)
+    const restoreStartupTabs = vi.fn().mockResolvedValue(undefined)
     const initializeSnapshots = vi.fn().mockResolvedValue(undefined)
     const capturePersistedStartupTree = vi.fn().mockResolvedValue(undefined)
     const stampOpenTreeIdentities = vi.fn().mockResolvedValue(undefined)
@@ -230,6 +231,7 @@ describe('startup lifecycle', () => {
       Tree: {
         initializeContainers,
         initializeWindows,
+        restoreStartupTabs,
         saveSessionTreeToStorage: vi.fn(),
       },
     }))
@@ -276,7 +278,12 @@ describe('startup lifecycle', () => {
     expect(stampOpenTreeIdentities.mock.invocationCallOrder[0]).toBeLessThan(
       initializeListeners.mock.invocationCallOrder[0],
     )
+    // Startup restoration creates browser windows, and that creation handshake
+    // only completes once the listeners are live, so it has to run after them.
     expect(initializeListeners.mock.invocationCallOrder[0]).toBeLessThan(
+      restoreStartupTabs.mock.invocationCallOrder[0],
+    )
+    expect(restoreStartupTabs.mock.invocationCallOrder[0]).toBeLessThan(
       scheduleSessionTreeOpenOnStartup.mock.invocationCallOrder[0],
     )
 
@@ -296,6 +303,7 @@ describe('startup lifecycle', () => {
     const capturePersistedStartupTree = vi.fn().mockResolvedValue(undefined)
     const initializeContainers = vi.fn().mockResolvedValue(undefined)
     const initializeWindows = vi.fn().mockResolvedValue(undefined)
+    const restoreStartupTabs = vi.fn().mockResolvedValue(undefined)
     const stampOpenTreeIdentities = vi.fn().mockResolvedValue(undefined)
     const initializeListeners = vi.fn()
     const scheduleSessionTreeOpenOnStartup = vi.fn()
@@ -333,6 +341,7 @@ describe('startup lifecycle', () => {
       Tree: {
         initializeContainers,
         initializeWindows,
+        restoreStartupTabs,
         saveSessionTreeToStorage: vi.fn(),
       },
     }))

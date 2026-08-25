@@ -318,6 +318,7 @@ describe('startup reconciliation', () => {
     const openTab = vi.spyOn(Tree, 'openTab').mockResolvedValue(undefined)
 
     await Tree.initializeWindows()
+    await Tree.restoreStartupTabs()
 
     expect(openTab.mock.calls.map(([request]) => request.tabUid)).toEqual([
       'tab-parent',
@@ -355,6 +356,7 @@ describe('startup reconciliation', () => {
       .mockResolvedValueOnce(undefined)
 
     await Tree.initializeWindows()
+    await Tree.restoreStartupTabs()
 
     expect(openTab.mock.calls.map(([request]) => request.tabUid)).toEqual([
       'tab-fails',
@@ -380,6 +382,7 @@ describe('startup reconciliation', () => {
       const openTab = vi.spyOn(Tree, 'openTab').mockResolvedValue(undefined)
 
       await Tree.initializeWindows()
+      await Tree.restoreStartupTabs()
 
       expect(openTab).toHaveBeenCalledWith(
         expect.objectContaining({

@@ -15,6 +15,7 @@ import {
 import { emitTreeDelta } from './runtime-port-service'
 
 const startupOpenTabUids = new Set<UID>()
+const pendingStartupTabUids = new Set<UID>()
 let sessionTreePersistenceQueue = Promise.resolve()
 
 function isSessionTreePopupWindow(window: browser.windows.Window): boolean {
@@ -137,25 +138,47 @@ export async function initializeWindows(): Promise<void> {
     Tree.recomputeSessionTree()
     Tree.initialized = true
     await Tree.syncOpenTabGroups()
-    // Open tabs for any saved windows that were not matched to open windows, if the setting is enabled.
+    // Hand the unmatched tabs to restoreStartupTabs rather than opening them
+    // here: opening a tab whose window is saved creates a browser window, and
+    // that handshake only completes once the browser event listeners exist.
+    pendingStartupTabUids.clear()
     if (Settings.values.restorePreviousSessionOnStartup) {
       for (const tabUid of tabUIDsToOpenOnStartup) {
-        const tab = Tree.tabsByUid.get(tabUid)
-        if (!tab) {
-          continue
-        }
-        await Tree.openTab({
-          tabUid: tab.uid,
-          windowUid: tab.windowUid,
-          discarded: Settings.values.openWindowWithTabsDiscarded,
-          url: tab.url,
-        }).catch((error) => {
-          console.error('Error restoring startup tab:', error)
-        })
+        pendingStartupTabUids.add(tabUid)
       }
     }
   } catch (error) {
     console.error('Error initializing windows:', error)
+  }
+}
+
+/**
+ * Opens the tabs that startup matching could not account for.
+ *
+ * Must run after the browser event listeners are registered. Restoring a tab
+ * whose window is saved goes through OnCreatedQueue.createWindowAndWait, which
+ * waits for windows.onCreated to acknowledge the new window; with no listener
+ * registered that wait can only end in the creation timeout.
+ *
+ * @returns {Promise<void>} A promise that resolves once restoration finishes.
+ */
+export async function restoreStartupTabs(): Promise<void> {
+  if (pendingStartupTabUids.size === 0) return
+  const tabUids = [...pendingStartupTabUids]
+  pendingStartupTabUids.clear()
+  for (const tabUid of tabUids) {
+    const tab = Tree.tabsByUid.get(tabUid)
+    if (!tab) {
+      continue
+    }
+    await Tree.openTab({
+      tabUid: tab.uid,
+      windowUid: tab.windowUid,
+      discarded: Settings.values.openWindowWithTabsDiscarded,
+      url: tab.url,
+    }).catch((error) => {
+      console.error('Error restoring startup tab:', error)
+    })
   }
 }
 

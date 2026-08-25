@@ -390,6 +390,7 @@ describe('startup initialization', () => {
     const openTab = vi.spyOn(Tree, 'openTab').mockResolvedValue(undefined)
 
     await Tree.initializeWindows()
+    await Tree.restoreStartupTabs()
 
     const normalizedTab = Tree.getTabs(
       Tree.windowsByUid.get('window-legacy' as UID)!.children,
