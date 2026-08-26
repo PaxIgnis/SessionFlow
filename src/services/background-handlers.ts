@@ -14,7 +14,7 @@ import { initializeSessionTreePort } from '@/services/runtime-port-service'
 import * as SessionRestore from '@/services/background-session-restore'
 import { Selection } from '@/services/selection'
 import { Settings } from '@/services/settings'
-import { normalizeEditTextValue } from '@/services/utils'
+import { normalizeEditTextValue, storedTabIdentity } from '@/services/utils'
 import * as Messages from '@/types/messages'
 import type { SessionTreeCommandResult } from '@/types/runtime-port-service'
 import {
@@ -802,8 +802,14 @@ async function tabsOnUpdated(
   // only update title and url if the tab is complete
   // this is to prevent the tab from being updated with eroneous data such as new tab
   if (authoritativeTab.status === 'complete') {
-    if (authoritativeTab.title) tabContents.title = authoritativeTab.title
-    if (authoritativeTab.url) tabContents.url = authoritativeTab.url
+    // Unwrap the redirect page so a restored privileged tab keeps describing
+    // the page the user saved rather than the stand-in Firefox let us open.
+    const identity = storedTabIdentity(
+      authoritativeTab.url,
+      authoritativeTab.title,
+    )
+    if (identity.title) tabContents.title = identity.title
+    if (identity.url) tabContents.url = identity.url
   }
   if (changeInfo.pinned !== undefined) {
     tabContents.pinned = authoritativeTab.pinned

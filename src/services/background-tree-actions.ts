@@ -86,20 +86,23 @@ export async function initializeWindows(): Promise<void> {
           incognito: win.incognito,
           indentLevel: 0,
           type: TreeItemType.WINDOW,
-          children: win.tabs!.map((tab) => ({
-            type: TreeItemType.TAB,
-            uid: Utils.createUid(Tree.existingUidsSet),
-            active: tab.active,
-            id: tab.id!,
-            selected: false,
-            state: tab.discarded ? State.DISCARDED : State.OPEN,
-            title: tab.title || 'Untitled',
-            url: tab.url || '',
-            windowUid: windowUid,
-            indentLevel: 1,
-            pinned: tab.pinned || false,
-            container: Tree.containerForCookieStore(tab.cookieStoreId),
-          })),
+          children: win.tabs!.map((tab) => {
+            const identity = Utils.storedTabIdentity(tab.url, tab.title)
+            return {
+              type: TreeItemType.TAB,
+              uid: Utils.createUid(Tree.existingUidsSet),
+              active: tab.active,
+              id: tab.id!,
+              selected: false,
+              state: tab.discarded ? State.DISCARDED : State.OPEN,
+              title: identity.title || 'Untitled',
+              url: identity.url || '',
+              windowUid: windowUid,
+              indentLevel: 1,
+              pinned: tab.pinned || false,
+              container: Tree.containerForCookieStore(tab.cookieStoreId),
+            }
+          }),
         }
         Tree.Items.push(newWindow)
       }
@@ -308,8 +311,12 @@ function reconcileSavedWindowWithOpenWindow(
     savedTab.state = matchedOpenTab.discarded ? State.DISCARDED : State.OPEN
     savedTab.active = matchedOpenTab.active
     savedTab.selected = false
-    savedTab.title = matchedOpenTab.title || savedTab.title || 'Untitled'
-    savedTab.url = matchedOpenTab.url || savedTab.url || ''
+    const identity = Utils.storedTabIdentity(
+      matchedOpenTab.url,
+      matchedOpenTab.title,
+    )
+    savedTab.title = identity.title || savedTab.title || 'Untitled'
+    savedTab.url = identity.url || savedTab.url || ''
     savedTab.pinned = matchedOpenTab.pinned || false
     savedTab.windowUid = savedWindow.uid
     savedTab.container = Tree.containerForCookieStore(
@@ -416,10 +423,17 @@ function scoreTabMatch(savedTab: Tab, openTab: browser.tabs.Tab): number {
     return -1
   }
   let score = 0
-  if (savedTab.url && openTab.url && savedTab.url === openTab.url) {
+  // Compare against the page a redirect tab stands in for, since that is the
+  // identity the saved tab holds.
+  const openIdentity = Utils.storedTabIdentity(openTab.url, openTab.title)
+  if (savedTab.url && openIdentity.url && savedTab.url === openIdentity.url) {
     score += 3
   }
-  if (savedTab.title && openTab.title && savedTab.title === openTab.title) {
+  if (
+    savedTab.title &&
+    openIdentity.title &&
+    savedTab.title === openIdentity.title
+  ) {
     score += 1
   }
   if ((savedTab.pinned || false) === (openTab.pinned || false)) {

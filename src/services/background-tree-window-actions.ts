@@ -113,20 +113,25 @@ export async function updateWindowTabs(windowId: number): Promise<void> {
     )
     if (window) {
       // TODO: convert this to use addTab() in the future
-      window.children = win.tabs!.map((tab) => ({
-        type: TreeItemType.TAB,
-        uid: Utils.createUid(Tree.existingUidsSet),
-        active: tab.active,
-        id: tab.id!,
-        selected: false,
-        state: tab.discarded ? State.DISCARDED : State.OPEN,
-        windowUid: window.uid,
-        title: tab.title!,
-        url: tab.url!,
-        pinned: tab.pinned || false,
-        indentLevel: 1,
-        container: Tree.containerForCookieStore(tab.cookieStoreId),
-      }))
+      window.children = win.tabs!.map((tab) => {
+        // Unwrap the redirect page so a restored privileged tab keeps its own
+        // identity rather than the stand-in Firefox let us open.
+        const identity = Utils.storedTabIdentity(tab.url, tab.title)
+        return {
+          type: TreeItemType.TAB,
+          uid: Utils.createUid(Tree.existingUidsSet),
+          active: tab.active,
+          id: tab.id!,
+          selected: false,
+          state: tab.discarded ? State.DISCARDED : State.OPEN,
+          windowUid: window.uid,
+          title: identity.title!,
+          url: identity.url!,
+          pinned: tab.pinned || false,
+          indentLevel: 1,
+          container: Tree.containerForCookieStore(tab.cookieStoreId),
+        }
+      })
       for (const tab of Tree.getTabs(window.children)) {
         Tree.tabsByUid.set(tab.uid, tab)
         if (tab.id >= 0) void writeTabUid(tab.id, tab.uid)

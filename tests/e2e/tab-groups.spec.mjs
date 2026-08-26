@@ -755,6 +755,22 @@ describe('native Firefox tab-group workflows', () => {
 
     await trackFixtureHandleByTitle(seed, restoredAlphaTitle)
     await browser.switchToWindow(popup.popupHandle)
+    // Close the window this test restored. Its tabs carry the same tree titles
+    // as the fixtures, so leaving it behind makes the next test's title lookups
+    // find these tabs instead of its own.
+    const reopenedWindowId = await waitForOpenTreeWindowId(groupedWindow.uid)
+    await sessionTree.sendTreeCommand({
+      action: 'closeWindow',
+      windowId: reopenedWindowId,
+      windowUid: groupedWindow.uid,
+    })
+    await sessionTree.waitForBackgroundTree(
+      (tree) =>
+        !windowsInTree(tree).some(
+          (windowItem) => windowItem.uid === groupedWindow.uid,
+        ),
+      'Expected the restored grouped window to be closed again.',
+    )
   })
 
   it('restores two saved groups with distinct native metadata (TG-33)', async () => {
@@ -799,12 +815,16 @@ describe('native Firefox tab-group workflows', () => {
       windowUid: groupedWindow.uid,
     })
 
-    const restoredTitles = [
+    // The fixtures use privileged data: URLs, so reopening them lands on the
+    // redirect page: the browser shows its title while the tree keeps the
+    // page's own identity.
+    const restoredTreeTitles = [
       SESSION_FIXTURE_TITLES.alpha,
       SESSION_FIXTURE_TITLES.beta,
       SESSION_FIXTURE_TITLES.gamma,
       deltaTitle,
-    ].map(extensionFixtureTitle)
+    ]
+    const restoredTitles = restoredTreeTitles.map(extensionFixtureTitle)
     const restoredWindowId = await waitForOpenTreeWindowId(groupedWindow.uid)
     await waitForNativeGroup(
       restoredTitles,
@@ -830,13 +850,13 @@ describe('native Firefox tab-group workflows', () => {
       restoredTitles,
     )
     await waitForTreeTabs(
-      restoredTitles,
+      restoredTreeTitles,
       (tabs) => {
         const firstMembers = tabs.filter((tab) =>
-          [restoredTitles[0], restoredTitles[1]].includes(tab.title),
+          [restoredTreeTitles[0], restoredTreeTitles[1]].includes(tab.title),
         )
         const secondMembers = tabs.filter((tab) =>
-          [restoredTitles[2], restoredTitles[3]].includes(tab.title),
+          [restoredTreeTitles[2], restoredTreeTitles[3]].includes(tab.title),
         )
         return (
           firstMembers.every((tab) => tab.tabGroup?.uid === firstStableUid) &&
@@ -846,6 +866,21 @@ describe('native Firefox tab-group workflows', () => {
       'Expected both restored groups to retain their stable identities.',
       10_000,
       groupedWindow.uid,
+    )
+
+    // See the previous test: the restored tabs share the fixture tree titles,
+    // so this window has to go before the next test looks anything up.
+    await sessionTree.sendTreeCommand({
+      action: 'closeWindow',
+      windowId: restoredWindowId,
+      windowUid: groupedWindow.uid,
+    })
+    await sessionTree.waitForBackgroundTree(
+      (tree) =>
+        !windowsInTree(tree).some(
+          (windowItem) => windowItem.uid === groupedWindow.uid,
+        ),
+      'Expected the restored grouped window to be closed again.',
     )
   })
 
@@ -925,8 +960,10 @@ describe('native Firefox tab-group workflows', () => {
       restoredAlphaTitle,
       restoredBetaTitle,
     ])
+    // The reopened tabs are redirect pages in the browser, because the data:
+    // fixture URLs are privileged, but the tree keeps their own identity.
     await waitForTreeTabs(
-      [restoredAlphaTitle, restoredBetaTitle],
+      [SESSION_FIXTURE_TITLES.alpha, SESSION_FIXTURE_TITLES.beta],
       (tabs) => tabs.every((tab) => tab.tabGroup?.uid === stableGroupUid),
       'Expected both reopened members to retain stable group identity.',
       20_000,

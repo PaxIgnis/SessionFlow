@@ -187,6 +187,7 @@ export async function handleCreatedWindow(
         savedTab.windowUid === savedWindow.uid
       ) {
         Tree.updateTabId(savedTab.uid, tab.id)
+        const identity = Utils.storedTabIdentity(tab.url, tab.title)
         Tree.updateTab(
           { tabUid: savedTab.uid },
           {
@@ -194,8 +195,8 @@ export async function handleCreatedWindow(
             container: Tree.containerForCookieStore(tab.cookieStoreId),
             loadingStatus: tab.status as LoadingStatus | undefined,
             state: tab.discarded ? State.DISCARDED : State.OPEN,
-            title: tab.title || savedTab.title,
-            url: tab.url || savedTab.url,
+            title: identity.title || savedTab.title,
+            url: identity.url || savedTab.url,
           },
         )
         return

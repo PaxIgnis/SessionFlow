@@ -97,8 +97,55 @@ export function prepareRestorableUrl(
 }
 
 function isSessionFlowRedirectUrl(url: string): boolean {
+  // Cheap reject first: this runs for every tab in the startup matching loop,
+  // and resolving the extension URL is far more expensive than a prefix test.
+  if (!url.startsWith('moz-extension://')) return false
   const redirectPageUrl = browser.runtime.getURL('/redirect.html')
   return url === redirectPageUrl || url.startsWith(`${redirectPageUrl}?`)
+}
+
+/**
+ * Recovers the page a redirect tab stands in for.
+ *
+ * Firefox refuses to let an extension open a privileged URL, so restoring one
+ * opens the redirect page instead. The tree should keep describing the page the
+ * user saved rather than the stand-in, so browser state is unwrapped back to
+ * the target before it is stored.
+ *
+ * @param {string | undefined} url - The live browser tab URL.
+ * @returns {{ url: string; title?: string } | undefined} The original page, or
+ *   undefined when the URL is not a Session Flow redirect.
+ */
+export function readRedirectTarget(
+  url: string | undefined,
+): { url: string; title?: string } | undefined {
+  if (!url || !isSessionFlowRedirectUrl(url)) return undefined
+  let params: URLSearchParams
+  try {
+    params = new URL(url).searchParams
+  } catch {
+    return undefined
+  }
+  const targetUrl = params.get('targetUrl')
+  if (!targetUrl) return undefined
+  return { url: targetUrl, title: params.get('targetTitle') || undefined }
+}
+
+/**
+ * Resolves the url and title to store for a tab, unwrapping the redirect page
+ * so a restored privileged tab keeps its own identity in the session tree.
+ *
+ * @param {string | undefined} url - The live browser tab URL.
+ * @param {string | undefined} title - The live browser tab title.
+ * @returns {{ url?: string; title?: string }} The identity to store.
+ */
+export function storedTabIdentity(
+  url: string | undefined,
+  title: string | undefined,
+): { url?: string; title?: string } {
+  const target = readRedirectTarget(url)
+  if (!target) return { url, title }
+  return { url: target.url, title: target.title ?? title }
 }
 
 function isValidAbsoluteUrl(value: string): boolean {
