@@ -1,9 +1,19 @@
 {
   "name": "session-flow",
-  "description": "manifest.json description",
+  "description": "A vertical tree-style manager for windows and tabs, with saved sessions, notes, and separators.",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
+  "license": "MIT",
+  "author": "PaxIgnis",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PaxIgnis/SessionFlow.git"
+  },
+  "homepage": "https://github.com/PaxIgnis/SessionFlow#readme",
+  "bugs": {
+    "url": "https://github.com/PaxIgnis/SessionFlow/issues"
+  },
   "scripts": {
     "dev": "wxt",
     "dev:firefox": "wxt -b firefox",
