@@ -25,7 +25,7 @@ async function renderTreeItem(item: TreeItem): Promise<string> {
   const app = createSSRApp(TreeItemComponent, {
     item,
     faviconService: {
-      getFavicon: vi.fn(() => '/icon/16.png'),
+      getFavicon: vi.fn(() => '/icons/default-favicon.svg'),
     },
   })
   return renderToString(app)

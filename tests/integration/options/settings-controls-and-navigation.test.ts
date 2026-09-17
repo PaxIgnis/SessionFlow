@@ -9,6 +9,16 @@ import {
 const projectRoot = process.cwd()
 
 describe('settings controls and navigation', () => {
+  it('uses the Session Flow logo as the settings page favicon', () => {
+    const source = fs.readFileSync(
+      path.join(projectRoot, 'src/entrypoints/options/index.html'),
+      'utf8',
+    )
+
+    expect(source).toContain('rel="icon"')
+    expect(source).toContain('href="/icon/session-flow.svg"')
+  })
+
   it.each([
     ['', 1, 999, undefined],
     ['   ', 1, 999, undefined],

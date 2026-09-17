@@ -11,7 +11,12 @@ import {
   getDragImageTextWidth,
   populateInternalDragData,
 } from '@/services/drag-and-drop-actions'
-import { FaviconService } from '@/services/favicons'
+import {
+  type FaviconService,
+  firefoxInternalPageIconStyle,
+  isFirefoxInternalPageIcon,
+  onFaviconError,
+} from '@/services/favicons'
 import * as Messages from '@/services/foreground-messages'
 import { SessionTree } from '@/services/foreground-tree'
 import { Selection } from '@/services/selection'
@@ -762,10 +767,19 @@ function isFocusedTab(item: TreeItem): boolean {
         v-if="isTab(item)"
         class="tree-item-favicon-slot"
       >
+        <span
+          v-if="isFirefoxInternalPageIcon(getTabFavicon(item))"
+          class="tree-item-favicon tree-item-firefox-internal-page-icon"
+          :style="firefoxInternalPageIconStyle(getTabFavicon(item))"
+          aria-hidden="true"
+          @dblclick.stop
+        ></span>
         <img
+          v-else
           class="tree-item-favicon"
           :src="getTabFavicon(item)"
           @dblclick.stop
+          @error="onFaviconError"
         />
         <svg
           v-if="isTab(item) && item.pinned"
@@ -793,12 +807,9 @@ function isFocusedTab(item: TreeItem): boolean {
           "
         >
           <img
+            v-if="props.item.incognito"
             class="tree-item-favicon tree-item-window-favicon"
-            :src="
-              props.item.incognito
-                ? '/icons/private-browsing.svg'
-                : '/icon/16.png'
-            "
+            :src="'/icons/private-browsing.svg'"
             alt=""
             @dblclick.stop
           />
@@ -1558,6 +1569,14 @@ function isFocusedTab(item: TreeItem): boolean {
   min-width: 1em;
   height: 1em;
   width: 1em;
+}
+
+.tree-item-firefox-internal-page-icon {
+  background-color: var(--firefox-internal-page-icon);
+  mask-image: var(--firefox-internal-page-icon-mask);
+  mask-position: center;
+  mask-repeat: no-repeat;
+  mask-size: contain;
 }
 
 .tree-item-prepend .tree-item-favicon {

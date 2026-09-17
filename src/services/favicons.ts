@@ -1,3 +1,4 @@
+import { DEFAULT_FAVICON_URL } from '@/defaults/favicons'
 import { Settings } from '@/services/settings'
 import {
   FaviconCacheEntry,
@@ -20,6 +21,65 @@ const FAVICON_PERMISSION_ORIGINS = ['http://*/*', 'https://*/*']
 const FAVICON_FETCH_TIMEOUT_MS = 10_000
 const MAX_FAVICON_BYTES = 1024 * 1024
 const PRIVATE_BROWSING_ICON = '/icons/private-browsing.svg'
+const FIREFOX_INTERNAL_PAGE_ICON_PREFIX = '/icons/firefox/'
+
+/**
+ * Icons for Firefox's own pages.
+ *
+ * Firefox reports a favIconUrl for most about: pages as a privileged URL.
+ * Extension pages cannot load every one of those URLs, so the tree uses
+ * bundled Firefox artwork. This also gives saved and closed tabs the
+ * same icon as currently open tabs.
+ */
+export const PRIVILEGED_PAGE_ICONS: ReadonlyArray<
+  readonly [prefix: string, iconUrl: string]
+> = [
+  ['chrome://browser/content/blanktab.html', '/icons/firefox/firefox.svg'],
+  ['about:blank', '/icons/firefox/firefox.svg'],
+  ['about:addons', '/icons/firefox/addons.svg'],
+  ['about:debugging', '/icons/firefox/developer.svg'],
+  ['about:preferences', '/icons/firefox/settings.svg'],
+  ['about:config', '/icons/firefox/settings.svg'],
+  ['about:processes', '/icons/firefox/performance.svg'],
+  ['about:protections', '/icons/firefox/dashboard.svg'],
+  ['about:sessionrestore', '/icons/firefox/info.svg'],
+  ['about:logins', '/icons/firefox/firefox.svg'],
+  ['about:profiles', '/icons/firefox/firefox.svg'],
+  ['about:support', '/icons/firefox/firefox.svg'],
+  ['about:newtab', '/icons/firefox/firefox.svg'],
+  ['about:home', '/icons/firefox/firefox.svg'],
+]
+
+/** Resolves the Firefox-supplied icon for a privileged page, if there is one. */
+export function privilegedPageIcon(url: string): string | undefined {
+  const internalPage = url.startsWith('about:') || url.startsWith('chrome:')
+  if (!internalPage) return undefined
+  return (
+    PRIVILEGED_PAGE_ICONS.find(([prefix]) => url.startsWith(prefix))?.[1] ??
+    DEFAULT_FAVICON_URL
+  )
+}
+
+export function isFirefoxInternalPageIcon(url: string): boolean {
+  return url.startsWith(FIREFOX_INTERNAL_PAGE_ICON_PREFIX)
+}
+
+export function firefoxInternalPageIconStyle(
+  url: string,
+): Record<string, string> {
+  return {
+    '--firefox-internal-page-icon-mask': `url("${url}")`,
+  }
+}
+
+/**
+ * Replaces a broken favicon without retaining state from the URL that failed.
+ */
+export function onFaviconError(event: Event): void {
+  const image = event.currentTarget as HTMLImageElement
+  if (image.getAttribute('src') === DEFAULT_FAVICON_URL) return
+  image.src = DEFAULT_FAVICON_URL
+}
 
 export class FaviconService {
   private static readonly DEFAULT_CONFIG: FaviconStorageConfig = {
@@ -232,7 +292,11 @@ export class FaviconService {
     if (privateTab && !Settings.values.cachePrivateTabFavicons) {
       return PRIVATE_BROWSING_ICON
     }
-    if (this.faviconlessPages.has(url)) return '/icon/16.png'
+    // Firefox's own pages carry an icon the domain cache cannot hold, so they
+    // resolve from the static table before anything else.
+    const privilegedIcon = privilegedPageIcon(url)
+    if (privilegedIcon) return privilegedIcon
+    if (this.faviconlessPages.has(url)) return DEFAULT_FAVICON_URL
     // extract the domain from the URL
     const domain = this.getDomainFromUrl(url)
     // check if the favicon is in the cache
@@ -240,8 +304,7 @@ export class FaviconService {
     if (entry && entry.dataUrl && entry.dataUrl !== '') {
       return entry.dataUrl
     }
-    // TODO: Implement logic if favicon is missing, before setting default icon
-    return '/icon/16.png'
+    return DEFAULT_FAVICON_URL
   }
 
   /** Removes cached domains referenced by private items but no normal items. */

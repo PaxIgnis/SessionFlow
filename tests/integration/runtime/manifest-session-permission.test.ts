@@ -2,6 +2,18 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 describe('Firefox manifest compatibility contract', () => {
+  it('uses the Session Flow logo for add-on and toolbar icons', () => {
+    const source = readFileSync(
+      new URL('../../../wxt.config.ts', import.meta.url),
+      'utf8',
+    )
+
+    expect(source).toContain("'128': 'icon/session-flow.svg'")
+    expect(source).toContain("'16': 'icon/session-flow.svg'")
+    expect(source).toContain("'32': 'icon/session-flow.svg'")
+    expect(source).toContain("'48': 'icon/session-flow.svg'")
+  })
+
   it('declares the sessions permission used for restored-item identity', () => {
     const source = readFileSync(
       new URL('../../../wxt.config.ts', import.meta.url),

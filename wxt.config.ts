@@ -5,10 +5,14 @@ import { defineConfig } from 'wxt'
 // See https://wxt.dev/api/config.html
 export default defineConfig({
   manifest: {
+    icons: {
+      '128': 'icon/session-flow.svg',
+    },
     action: {
       default_icon: {
-        '16': 'icon/16.png',
-        '32': 'icon/32.png',
+        '16': 'icon/session-flow.svg',
+        '32': 'icon/session-flow.svg',
+        '48': 'icon/session-flow.svg',
       },
       default_title: 'Session Flow',
     },

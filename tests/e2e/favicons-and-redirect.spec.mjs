@@ -449,7 +449,7 @@ function faviconSvg(color) {
 }
 
 function isDefaultIcon(src) {
-  return src.endsWith('/icon/16.png')
+  return src.endsWith('/icons/default-favicon.svg')
 }
 
 function escapeHtml(value) {

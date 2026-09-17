@@ -38,7 +38,7 @@ async function renderSnapshotItem(
       childrenOpen: false,
       privateItem: options.privateItem ?? false,
       faviconService: {
-        getFavicon: options.getFavicon ?? (() => '/icon/16.png'),
+        getFavicon: options.getFavicon ?? (() => '/icons/default-favicon.svg'),
       },
       indentGuideState: {
         verticalLevels: [],
@@ -50,6 +50,26 @@ async function renderSnapshotItem(
 }
 
 describe('snapshot tree presentation', () => {
+  it('paints Firefox internal-page SVGs with the browser icon white', async () => {
+    const source = await fs.readFile(
+      new URL(
+        '../../../src/entrypoints/options/components/SnapshotTreeItem.vue',
+        import.meta.url,
+      ),
+      'utf8',
+    )
+
+    expect(source).toMatch(
+      /\.tree-item-firefox-internal-page-icon\s*\{[^}]*background-color: var\(--firefox-internal-page-icon\)/,
+    )
+    expect(source).toContain(
+      'mask-image: var(--firefox-internal-page-icon-mask)',
+    )
+    expect(source).toContain(
+      'firefoxInternalPageIconStyle(getTabFavicon(item))',
+    )
+  })
+
   beforeEach(() => {
     Object.assign(Settings.values, structuredClone(DEFAULT_SETTINGS))
   })
@@ -105,7 +125,7 @@ describe('snapshot tree presentation', () => {
     )
   })
 
-  it('renders normal and private window labels with the live icons', async () => {
+  it('renders normal and private window labels like the session tree', async () => {
     const normalMarkup = await renderSnapshotItem(windowItem(false))
     const privateMarkup = await renderSnapshotItem(windowItem(true), {
       privateItem: true,
@@ -115,7 +135,8 @@ describe('snapshot tree presentation', () => {
     expect(normalMarkup).toContain('tree-item-window-label-saved')
     expect(normalMarkup).toContain('tree-item-window-meta')
     expect(normalMarkup).toContain('tree-item-composition-saved')
-    expect(normalMarkup).toContain('src="/icon/16.png"')
+    // Only private windows carry an icon, matching the session tree.
+    expect(normalMarkup).not.toContain('tree-item-window-favicon')
     expect(privateMarkup).toContain('tree-item-window-private')
     expect(privateMarkup).toContain('tree-item-window-label-private')
     expect(privateMarkup).toContain('src="/icons/private-browsing.svg"')
@@ -132,7 +153,7 @@ describe('snapshot tree presentation', () => {
     expect(noteMarkup).toContain('indent-line-connector')
     expect(separatorMarkup).toContain('tree-item-separator')
     expect(separatorMarkup).toContain('tree-item-separator-line')
-    expect(tabMarkup).toContain('src="/icon/16.png"')
+    expect(tabMarkup).toContain('src="/icons/default-favicon.svg"')
   })
 
   it('follows the favicon dimming setting for unloaded and saved tabs', async () => {

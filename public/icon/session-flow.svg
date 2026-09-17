@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640">
+  <rect
+    x="12"
+    y="12"
+    width="616"
+    height="616"
+    rx="112"
+    fill="#f8f1cf"
+  />
+
+  <g transform="translate(80 0)">
+
+  <!-- LEFT HALF -->
+  <g transform="translate(-5 0)">
+    <path d="M237 52
+             L126 414
+             L142 469
+             L236 606
+             Z"
+          fill="#080b0e"/>
+
+    <path d="M237 52
+             L126 414
+             L160 423
+             Z"
+          fill="#2e353a"/>
+
+    <path d="M237 52
+             L160 423
+             L236.2 423
+             Z"
+          fill="#101417"/>
+
+    <path d="M126 414
+             L142 469
+             L160 423
+             Z"
+          fill="#1d2226"/>
+
+    <path d="M160 423
+             L236.2 423
+             L236 606
+             L142 469
+             Z"
+          fill="#080b0e"/>
+  </g>
+
+  <!-- RIGHT HALF -->
+  <g transform="translate(5 0)">
+    <path d="M243 52
+             L354 414
+             L338 469
+             L244 606
+             Z"
+          fill="#080b0e"/>
+
+    <path d="M243 52
+             L354 414
+             L320 423
+             Z"
+          fill="#2e353a"/>
+
+    <path d="M243 52
+             L320 423
+             L243.8 423
+             Z"
+          fill="#101417"/>
+
+    <path d="M354 414
+             L338 469
+             L320 423
+             Z"
+          fill="#1d2226"/>
+
+    <path d="M320 423
+             L243.8 423
+             L244 606
+             L338 469
+             Z"
+          fill="#080b0e"/>
+  </g>
+
+  </g>
+</svg>

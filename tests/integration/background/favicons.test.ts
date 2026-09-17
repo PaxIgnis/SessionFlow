@@ -144,8 +144,10 @@ describe('favicon service', () => {
     const service = new FaviconService()
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
 
-    expect(service.getFavicon('https://missing.example')).toBe('/icon/16.png')
-    expect(service.getFavicon('not a url')).toBe('/icon/16.png')
+    expect(service.getFavicon('https://missing.example')).toBe(
+      '/icons/default-favicon.svg',
+    )
+    expect(service.getFavicon('not a url')).toBe('/icons/default-favicon.svg')
     expect(consoleError).toHaveBeenCalledWith(
       'Failed to parse URL',
       expect.any(Error),
@@ -171,7 +173,7 @@ describe('favicon service', () => {
     service.markPageWithoutFavicon('https://example.test/no-icon')
 
     expect(service.getFavicon('https://example.test/no-icon')).toBe(
-      '/icon/16.png',
+      '/icons/default-favicon.svg',
     )
     expect(service.getFavicon('https://example.test/with-icon')).toBe(
       'data:image/png;base64,cached',
@@ -189,7 +191,9 @@ describe('favicon service', () => {
     })
 
     await expect(service.init()).resolves.toBe(undefined)
-    expect(service.getFavicon('https://example.test/page')).toBe('/icon/16.png')
+    expect(service.getFavicon('https://example.test/page')).toBe(
+      '/icons/default-favicon.svg',
+    )
     expect(consoleError).toHaveBeenCalledWith(
       'Failed to load favicon cache from storage',
       expect.any(SyntaxError),
@@ -236,10 +240,10 @@ describe('favicon service', () => {
       'data:image/png;base64,dmFsaWQ=',
     )
     expect(service.getFavicon('https://bad-time.test/page')).toBe(
-      '/icon/16.png',
+      '/icons/default-favicon.svg',
     )
     expect(service.getFavicon('https://bad-data.test/page')).toBe(
-      '/icon/16.png',
+      '/icons/default-favicon.svg',
     )
   })
 
@@ -638,7 +642,9 @@ describe('favicon service', () => {
 
     await service.reloadCacheFromStorage()
 
-    expect(service.getFavicon('https://old.test')).toBe('/icon/16.png')
+    expect(service.getFavicon('https://old.test')).toBe(
+      '/icons/default-favicon.svg',
+    )
     expect(service.getFavicon('https://new.test')).toBe(
       'data:image/png;base64,new',
     )

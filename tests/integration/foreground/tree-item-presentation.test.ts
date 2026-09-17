@@ -16,7 +16,7 @@ import fs from 'node:fs/promises'
 async function renderTreeItem(
   item: TreeItem,
   getFavicon: (url: string, privateTab?: boolean) => string = vi.fn(
-    () => '/icon/16.png',
+    () => '/icons/default-favicon.svg',
   ),
 ): Promise<string> {
   ;(
@@ -33,6 +33,32 @@ async function renderTreeItem(
 }
 
 describe('tree item presentation', () => {
+  it('paints Firefox internal-page SVGs with the browser icon white', async () => {
+    const [source, variables] = await Promise.all([
+      fs.readFile(
+        new URL('../../../src/components/TreeItem.vue', import.meta.url),
+        'utf8',
+      ),
+      fs.readFile(
+        new URL('../../../src/styles/variables.css', import.meta.url),
+        'utf8',
+      ),
+    ])
+
+    expect(source).toMatch(
+      /\.tree-item-firefox-internal-page-icon\s*\{[^}]*background-color: var\(--firefox-internal-page-icon\)/,
+    )
+    expect(source).toContain(
+      'mask-image: var(--firefox-internal-page-icon-mask)',
+    )
+    expect(source).toContain(
+      'firefoxInternalPageIconStyle(getTabFavicon(item))',
+    )
+    expect(variables).toContain(
+      '--firefox-internal-page-icon: rgb(251, 251, 254)',
+    )
+  })
+
   beforeEach(() => {
     Object.assign(Settings.values, structuredClone(DEFAULT_SETTINGS))
   })
@@ -76,7 +102,7 @@ describe('tree item presentation', () => {
     expect(markup).toContain('tree-item-custom-label')
     expect(markup).toContain('Project α')
     expect(markup).toContain('tree-item-tab-group-indicator-right')
-    expect(markup).toContain('src="/icon/16.png"')
+    expect(markup).toContain('src="/icons/default-favicon.svg"')
   })
 
   it('keeps a long note on one ellipsized tree row', async () => {
@@ -101,7 +127,9 @@ describe('tree item presentation', () => {
 
   it('identifies private tabs when resolving their favicon', async () => {
     const getFavicon = vi.fn((_url: string, privateTab?: boolean) =>
-      privateTab ? '/assets/private-browsing.svg' : '/icon/16.png',
+      privateTab
+        ? '/assets/private-browsing.svg'
+        : '/icons/default-favicon.svg',
     )
     const tab = makeForegroundTab('private-tab' as UID)
     const window = makeForegroundWindow('private-window' as UID, [tab], {
@@ -126,7 +154,8 @@ describe('tree item presentation', () => {
     )
 
     expect(privateMarkup).toContain('src="/icons/private-browsing.svg"')
-    expect(normalMarkup).toContain('src="/icon/16.png"')
+    // Normal windows carry no icon at all, so the private one stays a signal.
+    expect(normalMarkup).not.toContain('tree-item-window-favicon')
     expect(normalMarkup).not.toContain('private-browsing.svg')
   })
 

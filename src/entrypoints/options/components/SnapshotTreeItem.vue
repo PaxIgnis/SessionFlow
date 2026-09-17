@@ -1,7 +1,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { isKnownFirefoxContainerIcon } from '@/defaults/container-icons'
-import type { FaviconService } from '@/services/favicons'
+import {
+  type FaviconService,
+  firefoxInternalPageIconStyle,
+  isFirefoxInternalPageIcon,
+  onFaviconError,
+} from '@/services/favicons'
 import { Settings } from '@/services/settings'
 import {
   createTreeItemTally,
@@ -351,10 +356,18 @@ const windowHoverDetails = computed(() => {
         v-if="isTab(item)"
         class="tree-item-favicon-slot"
       >
+        <span
+          v-if="isFirefoxInternalPageIcon(getTabFavicon(item))"
+          class="tree-item-favicon tree-item-firefox-internal-page-icon"
+          :style="firefoxInternalPageIconStyle(getTabFavicon(item))"
+          aria-hidden="true"
+        ></span>
         <img
+          v-else
           class="tree-item-favicon"
           :src="getTabFavicon(item)"
           alt=""
+          @error="onFaviconError"
         />
         <svg
           v-if="item.pinned"
@@ -382,10 +395,9 @@ const windowHoverDetails = computed(() => {
           "
         >
           <img
+            v-if="item.incognito"
             class="tree-item-favicon tree-item-window-favicon"
-            :src="
-              item.incognito ? '/icons/private-browsing.svg' : '/icon/16.png'
-            "
+            :src="'/icons/private-browsing.svg'"
             alt=""
           />
           <div
@@ -954,6 +966,13 @@ const windowHoverDetails = computed(() => {
   min-width: 1em;
   height: 1em;
   width: 1em;
+}
+.tree-item-firefox-internal-page-icon {
+  background-color: var(--firefox-internal-page-icon);
+  mask-image: var(--firefox-internal-page-icon-mask);
+  mask-position: center;
+  mask-repeat: no-repeat;
+  mask-size: contain;
 }
 .tree-item-prepend .tree-item-favicon {
   margin-inline-end: 2px;

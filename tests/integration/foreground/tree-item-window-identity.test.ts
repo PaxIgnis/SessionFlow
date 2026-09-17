@@ -19,7 +19,7 @@ async function renderTreeItem(item: TreeItem): Promise<string> {
   const app = createSSRApp(TreeItemComponent, {
     item,
     faviconService: {
-      getFavicon: vi.fn(() => '/icon/16.png'),
+      getFavicon: vi.fn(() => '/icons/default-favicon.svg'),
     },
   })
   return renderToString(app)
@@ -34,7 +34,7 @@ describe('window tree item identity', () => {
     resetForegroundTree()
   })
 
-  it('renders every window with a distinct icon-and-title label', async () => {
+  it('renders every window with a distinct label and no icon', async () => {
     const window = makeForegroundWindow('window-normal' as UID, [], {
       incognito: false,
       title: 'Work',
@@ -44,7 +44,9 @@ describe('window tree item identity', () => {
 
     expect(markup).toContain('tree-item-window')
     expect(markup).toContain('tree-item-window-label')
-    expect(markup).toContain('tree-item-window-favicon')
+    // The pill's own background, border, and composition bar identify a
+    // window, so only private windows add an icon.
+    expect(markup).not.toContain('tree-item-window-favicon')
     expect(markup).not.toContain('tree-item-window-label-private')
     expect(markup).not.toContain('tree-item-window-private-badge')
   })

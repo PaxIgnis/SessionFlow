@@ -1,0 +1,8 @@
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at https://mozilla.org/MPL/2.0/. -->
+<!-- Adapted from Firefox's toolkit/themes/shared/icons/info.svg. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="context-fill" fill-opacity="context-fill-opacity">
+  <path d="M8.25 6.938a.625.625 0 0 0-1.25 0v4.438a.625.625 0 0 0 1.25-.001V6.938zM8 4h-.75L7 4.25V5l.25.25H8L8.25 5v-.75z"/>
+  <path d="M7.625 1.75c3.446 0 6.25 2.804 6.25 6.25s-2.804 6.25-6.25 6.25S1.375 11.446 1.375 8s2.804-6.25 6.25-6.25m0-1.25a7.5 7.5 0 1 0 0 15 7.5 7.5 0 0 0 0-15z"/>
+</svg>
