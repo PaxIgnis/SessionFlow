@@ -1,14 +1,14 @@
 import process from 'process'
 import {
-  FIREFOX_EXTENSION_ID,
-  FIREFOX_EXTENSION_UUID,
-  installSessionFlowAddon,
-} from './tests/e2e/support/firefox-extension.mjs'
-import {
   collectCoverageFromOpenWindows,
   resetE2eCoverage,
   writeE2eCoverageReport,
 } from './tests/e2e/support/e2e-coverage.mjs'
+import {
+  FIREFOX_EXTENSION_ID,
+  FIREFOX_EXTENSION_UUID,
+  installSessionFlowAddon,
+} from './tests/e2e/support/firefox-extension.mjs'
 
 const isHeadlessRun = process.env.WDIO_HEADLESS === 'true'
 
@@ -22,9 +22,7 @@ export const config = {
       browserName: 'firefox',
       acceptInsecureCerts: true,
       'moz:firefoxOptions': {
-        args: isHeadlessRun
-          ? ['-headless', '-remote-allow-system-access']
-          : ['-remote-allow-system-access'],
+        args: isHeadlessRun ? ['-headless'] : [],
         ...(process.env.WDIO_FIREFOX_BINARY
           ? { binary: process.env.WDIO_FIREFOX_BINARY }
           : {}),
@@ -34,6 +32,9 @@ export const config = {
           }),
           'xpinstall.signatures.required': false,
         },
+      },
+      'wdio:geckodriverOptions': {
+        allowSystemAccess: true,
       },
     },
   ],
