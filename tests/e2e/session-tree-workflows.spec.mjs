@@ -811,7 +811,6 @@ describe('critical Firefox UI workflows', () => {
     await options.page.expectStoredSetting('saveTabOnClose', true)
     await closeOptionsPage(options.optionsHandle, popup.popupHandle)
     await sessionTree.expectLoaded()
-    await removeOnlySavedWindow()
     await expectSingleOpenWindowWithRootTabs([SESSION_FIXTURE_TITLES.initial])
 
     await switchToPrimaryBrowserWindow()

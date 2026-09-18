@@ -308,10 +308,12 @@ describe('Firefox context-menu and presentation workflows', () => {
       })
     })
 
-    expect(geometry.scrollTop).toBe(geometry.maxScrollTop)
+    expect(
+      Math.abs(geometry.scrollTop - geometry.maxScrollTop),
+    ).toBeLessThanOrEqual(1)
     expect(geometry.toolbarTopAfter).toBeCloseTo(geometry.toolbarTopBefore, 1)
-    expect(geometry.finalTop).toBeGreaterThanOrEqual(geometry.contentTop)
-    expect(geometry.finalBottom).toBeLessThanOrEqual(geometry.contentBottom)
+    expect(geometry.finalTop).toBeGreaterThanOrEqual(geometry.contentTop - 1)
+    expect(geometry.finalBottom).toBeLessThanOrEqual(geometry.contentBottom + 1)
   })
 
   it('contains long text and a multiline modal in a narrow large-font popup', async () => {

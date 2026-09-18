@@ -77,6 +77,21 @@ export async function clickFirefoxExtensionAction(extensionId) {
   )
 }
 
+export async function openFirefoxExtensionTab(url) {
+  return withFirefoxChromeContext(async () => {
+    const response = await executeFirefoxChromeScript(
+      (targetUrl) => {
+        const browserWindow =
+          window.BrowserWindowTracker?.getTopWindow?.() ?? window
+        browserWindow.gBrowser.selectedTab =
+          browserWindow.gBrowser.addTrustedTab(targetUrl)
+        return true
+      },
+      [url],
+    )
+    return response.value
+  })
+}
 export async function readFirefoxContextMenu() {
   let lastSnapshot = { open: false, popupId: undefined, items: [] }
   await browser.waitUntil(

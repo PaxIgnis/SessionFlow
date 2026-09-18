@@ -1,4 +1,5 @@
 import { browser, expect } from '@wdio/globals'
+import { Key } from 'webdriverio'
 import {
   closeSessionTreePopup,
   openSessionTreePopup,
@@ -39,14 +40,14 @@ describe('reopening a closed tab', () => {
   })
 
   it('keeps the window when the restored tab replaces a lone blank tab', async () => {
-    const windowId = await createBlankWindow()
+    const { windowHandle, windowId } = await createBlankWindow()
     const fixtureTabId = await createFixtureTab(windowId)
     await waitForTrackedTabCount(windowId, 2)
 
     await removeTab(fixtureTabId)
     await waitForTrackedTabCount(windowId, 1)
 
-    await undoCloseTab(windowId)
+    await undoCloseTab(windowHandle)
 
     const trackedWindow = await waitForTrackedTabCount(windowId, 1)
     const [restoredTab] = tabsInWindow(trackedWindow)
@@ -57,7 +58,7 @@ describe('reopening a closed tab', () => {
   })
 
   it('still drops the window when its last tab closes for good', async () => {
-    const windowId = await createBlankWindow()
+    const { windowId } = await createBlankWindow()
     const fixtureTabId = await createFixtureTab(windowId)
     await waitForTrackedTabCount(windowId, 2)
 
@@ -108,6 +109,7 @@ async function waitForTrackedTabCount(windowId, expectedTabCount) {
 
 async function createBlankWindow() {
   await browser.switchToWindow(popup.popupHandle)
+  const handlesBeforeCreate = new Set(await browser.getWindowHandles())
   const response = await browser.executeAsync((done) => {
     window.browser.windows
       .create({})
@@ -115,7 +117,23 @@ async function createBlankWindow() {
       .catch((error) => done({ ok: false, error: String(error) }))
   })
   if (!response.ok) throw new Error(response.error)
-  return response.id
+
+  let windowHandle
+  await browser.waitUntil(
+    async () => {
+      windowHandle = (await browser.getWindowHandles()).find(
+        (handle) => !handlesBeforeCreate.has(handle),
+      )
+      return windowHandle !== undefined
+    },
+    {
+      timeout: 10_000,
+      timeoutMsg:
+        'Expected the blank Firefox window to expose a WebDriver handle.',
+    },
+  )
+
+  return { windowHandle, windowId: response.id }
 }
 
 async function createFixtureTab(windowId) {
@@ -166,55 +184,17 @@ async function removeWindow(windowId) {
   }, windowId)
 }
 
-/** Runs exactly what Ctrl+Shift+T runs, in the chrome process. */
-async function undoCloseTab(windowId) {
-  const result = await withFirefoxChromeContext(() =>
-    executeChromeScript(
-      (targetWindowId) => {
-        const { ExtensionParent } = ChromeUtils.importESModule(
-          'resource://gre/modules/ExtensionParent.sys.mjs',
-        )
-        const { SessionWindowUI } = ChromeUtils.importESModule(
-          'resource:///modules/sessionstore/SessionWindowUI.sys.mjs',
-        )
-        const targetWindow =
-          ExtensionParent.apiManager.global.windowTracker.getWindow(
-            targetWindowId,
-          )
-        SessionWindowUI.undoCloseTab(targetWindow, 0)
-        return true
-      },
-      [windowId],
-    ),
-  )
-  if (result?.error) {
-    throw new Error(`undoCloseTab failed: ${JSON.stringify(result)}`)
-  }
-}
-
-async function executeChromeScript(scriptFunction, args = []) {
-  const protocol = browser.options.protocol ?? 'http'
-  const hostname = browser.options.hostname ?? 'localhost'
-  const port = browser.options.port
-  const basePath = browser.options.path ?? '/'
-  const normalizedPath = basePath.endsWith('/')
-    ? basePath.slice(0, -1)
-    : basePath
-  const response = await fetch(
-    `${protocol}://${hostname}:${port}${normalizedPath}/session/${browser.sessionId}/execute/sync`,
-    {
-      method: 'POST',
-      headers: { 'content-type': 'application/json; charset=utf-8' },
-      body: JSON.stringify({
-        script: `return (${scriptFunction.toString()})(...arguments)`,
-        args,
-      }),
-    },
-  )
-  if (!response.ok) {
-    throw new Error(
-      `Failed to execute Firefox chrome script: ${response.status} ${await response.text()}`,
-    )
-  }
-  return (await response.json()).value
+async function undoCloseTab(windowHandle) {
+  await browser.switchToWindow(windowHandle)
+  await withFirefoxChromeContext(async () => {
+    await browser
+      .action('key')
+      .down(Key.Ctrl)
+      .down(Key.Shift)
+      .down('t')
+      .up('t')
+      .up(Key.Shift)
+      .up(Key.Ctrl)
+      .perform()
+  })
 }

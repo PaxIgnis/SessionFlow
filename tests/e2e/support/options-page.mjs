@@ -1,5 +1,6 @@
 import { $, browser, expect } from '@wdio/globals'
 import { FIREFOX_EXTENSION_UUID } from './firefox-extension.mjs'
+import { openFirefoxExtensionTab } from './firefox-chrome-context.mjs'
 import { collectCoverageFromCurrentWindow } from './e2e-coverage.mjs'
 
 export const OPTIONS_URL = `moz-extension://${FIREFOX_EXTENSION_UUID}/options.html`
@@ -148,8 +149,24 @@ export class OptionsPage {
 
 export async function openOptionsPage() {
   const originalHandle = await browser.getWindowHandle()
-  await browser.newWindow(OPTIONS_URL)
-  const optionsHandle = await browser.getWindowHandle()
+  const handlesBeforeOpen = await browser.getWindowHandles()
+  await openFirefoxExtensionTab(OPTIONS_URL)
+  await browser.waitUntil(
+    async () =>
+      (await browser.getWindowHandles()).some(
+        (handle) => !handlesBeforeOpen.includes(handle),
+      ),
+    {
+      timeout: 10_000,
+      timeoutMsg: 'Expected the options page tab to open.',
+    },
+  )
+  const optionsHandle = (await browser.getWindowHandles()).find(
+    (handle) => !handlesBeforeOpen.includes(handle),
+  )
+  if (!optionsHandle)
+    throw new Error('Could not identify the options page tab.')
+  await browser.switchToWindow(optionsHandle)
   const page = new OptionsPage()
 
   await page.expectLoaded()
@@ -160,7 +177,6 @@ export async function openOptionsPage() {
     page,
   }
 }
-
 export async function closeOptionsPage(optionsHandle, nextHandle) {
   await browser.switchToWindow(optionsHandle)
   await collectCoverageFromCurrentWindow('options-page-close')
