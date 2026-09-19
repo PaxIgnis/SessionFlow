@@ -1,4 +1,7 @@
 import { $, $$, browser, expect } from '@wdio/globals'
+import { mkdtemp, writeFile, rm, readFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
 import { closeOptionsPage, openOptionsPage } from './support/options-page.mjs'
 import {
   readPersistedSessionTree,
@@ -7,6 +10,335 @@ import {
 } from './support/session-snapshots.mjs'
 
 describe('session snapshot workflows', () => {
+  it('imports Tab Session Manager sessions with hierarchy and a persistent protected import label', async () => {
+    const options = await openOptionsPage()
+    try {
+      await sendSnapshotRequest({ action: 'clearSessionSnapshots' })
+      await browser.refresh()
+      await options.page.expectLoaded()
+      await options.page.selectSection('settings_storage')
+      const treeBefore = await readPersistedSessionTree()
+      const handlesBefore = await browser.getWindowHandles()
+      const input = await $('[data-testid="import-snapshot-file"]')
+      await browser.execute((element) => {
+        element.hidden = false
+      }, input)
+      await input.setValue(
+        path.resolve('tests/fixtures/tab-session-manager-export.json'),
+      )
+      await expect($('.snapshot-success-toast')).toHaveText(
+        'Snapshot imported and protected.',
+      )
+      const list = await sendSnapshotRequest({ action: 'listSessionSnapshots' })
+      expect(list.data.snapshots).toHaveLength(1)
+      const imported = list.data.snapshots[0]
+      expect(imported).toMatchObject({
+        protected: true,
+        trigger: 'import',
+        containsPrivateWindows: true,
+        counts: { windows: 2, tabs: 4, notes: 3, separators: 0 },
+        importSummary: { source: 'tab-session-manager' },
+      })
+      const record = await sendSnapshotRequest({
+        action: 'getSessionSnapshot',
+        snapshotId: imported.id,
+      })
+      expect(record.data.payload.items[0]).toMatchObject({ text: 'Research' })
+      const windows = record.data.payload.items.filter(
+        (item) => item.type === 0,
+      )
+      const [parent, child] = windows[0].children
+      expect(parent).toMatchObject({
+        title: 'Example',
+        pinned: true,
+        tabGroup: { title: 'Reading', color: 'blue', collapsed: true },
+      })
+      expect(child).toMatchObject({
+        title: 'Article',
+        parentUid: parent.uid,
+        indentLevel: 3,
+      })
+      expect(await readPersistedSessionTree()).toEqual(treeBefore)
+      expect(await browser.getWindowHandles()).toEqual(handlesBefore)
+      await browser.refresh()
+      await options.page.expectLoaded()
+      await options.page.selectSection('settings_storage')
+      await expect($('[data-testid="snapshot-import-source"]')).toHaveText(
+        'Imported from Tab Session Manager',
+      )
+      await expect(
+        $('.snapshot-entry [aria-label="Imported snapshot"]'),
+      ).toBeDisplayed()
+      await expect(
+        $('.snapshot-entry [aria-label="Protected snapshot"]'),
+      ).toBeDisplayed()
+      const details = await $('[data-testid="snapshot-import-warnings"]')
+      await details.$('summary').click()
+      await expect(details).toHaveText(
+        expect.stringContaining('Container assignments were not imported'),
+      )
+    } finally {
+      await sendSnapshotRequest({ action: 'clearSessionSnapshots' }).catch(
+        () => undefined,
+      )
+      await closeOptionsPage(options.optionsHandle, options.originalHandle)
+    }
+  })
+
+  it('imports Session Buddy collections as a protected snapshot with a persistent source label', async () => {
+    const options = await openOptionsPage()
+    try {
+      await sendSnapshotRequest({ action: 'clearSessionSnapshots' })
+      await browser.refresh()
+      await options.page.expectLoaded()
+      await options.page.selectSection('settings_storage')
+      const treeBefore = await readPersistedSessionTree()
+      const handlesBefore = await browser.getWindowHandles()
+      const input = await $('[data-testid="import-snapshot-file"]')
+      await browser.execute((element) => {
+        element.hidden = false
+      }, input)
+      await input.setValue(
+        path.resolve('tests/fixtures/session-buddy-export.json'),
+      )
+      await expect($('.snapshot-success-toast')).toHaveText(
+        'Snapshot imported and protected.',
+      )
+      const list = await sendSnapshotRequest({ action: 'listSessionSnapshots' })
+      expect(list.data.snapshots).toHaveLength(1)
+      const imported = list.data.snapshots[0]
+      expect(imported).toMatchObject({
+        protected: true,
+        trigger: 'import',
+        containsPrivateWindows: true,
+        counts: { windows: 3, tabs: 4, notes: 2, separators: 0 },
+        importSummary: { source: 'session-buddy' },
+      })
+      const record = await sendSnapshotRequest({
+        action: 'getSessionSnapshot',
+        snapshotId: imported.id,
+      })
+      expect(record.data.payload.items[0]).toMatchObject({ text: 'Research' })
+      const windows = record.data.payload.items.filter(
+        (item) => item.type === 0,
+      )
+      expect(windows.map((window) => window.title)).toEqual([
+        'Reading',
+        'Private reading',
+        'Browser',
+      ])
+      expect(windows[0].children[0]).toMatchObject({
+        title: 'Example article',
+        customLabel: 'Read this first',
+        pinned: true,
+      })
+      expect(await readPersistedSessionTree()).toEqual(treeBefore)
+      expect(await browser.getWindowHandles()).toEqual(handlesBefore)
+      await browser.refresh()
+      await options.page.expectLoaded()
+      await options.page.selectSection('settings_storage')
+      await expect($('[data-testid="snapshot-import-source"]')).toHaveText(
+        'Imported from Session Buddy',
+      )
+      await expect(
+        $('.snapshot-entry [aria-label="Imported snapshot"]'),
+      ).toBeDisplayed()
+      await expect(
+        $('.snapshot-entry [aria-label="Protected snapshot"]'),
+      ).toBeDisplayed()
+      const details = await $('[data-testid="snapshot-import-warnings"]')
+      await details.$('summary').click()
+      await expect(details).toHaveText(
+        expect.stringContaining('Collections were preserved as note branches'),
+      )
+    } finally {
+      await sendSnapshotRequest({ action: 'clearSessionSnapshots' }).catch(
+        () => undefined,
+      )
+      await closeOptionsPage(options.optionsHandle, options.originalHandle)
+    }
+  })
+
+  it('imports a Tabs Outliner backup and retains its conversion details after reload', async () => {
+    const options = await openOptionsPage()
+    try {
+      await sendSnapshotRequest({ action: 'clearSessionSnapshots' })
+      await browser.refresh()
+      await options.page.expectLoaded()
+      await options.page.selectSection('settings_storage')
+      const treeBefore = await readPersistedSessionTree()
+      const handlesBefore = await browser.getWindowHandles()
+      const fixturePath = path.resolve(
+        'tests/fixtures/tabs-outliner-backup.json',
+      )
+      const input = await $('[data-testid="import-snapshot-file"]')
+      await browser.execute((element) => {
+        element.hidden = false
+      }, input)
+      await input.setValue(fixturePath)
+      await expect($('.snapshot-success-toast')).toHaveText(
+        'Snapshot imported and protected.',
+      )
+      const list = await sendSnapshotRequest({ action: 'listSessionSnapshots' })
+      expect(list.data.snapshots).toHaveLength(1)
+      const imported = list.data.snapshots[0]
+      expect(imported).toMatchObject({
+        protected: true,
+        trigger: 'import',
+        counts: { windows: 3, tabs: 4, notes: 4, separators: 1 },
+        importSummary: {
+          source: 'tabs-outliner',
+          sourceCreatedAt: 1700000000000,
+        },
+      })
+      const record = await sendSnapshotRequest({
+        action: 'getSessionSnapshot',
+        snapshotId: imported.id,
+      })
+      const windows = record.data.payload.items.filter(
+        (item) => item.type === 0,
+      )
+      expect(windows.map((window) => window.title)).toEqual([
+        'Main',
+        'Nested',
+        'Deep',
+      ])
+      expect(windows[0].children[0].url).toBe('https://example.com/a')
+      expect(
+        windows.every((window) => window.parentUid === windows[0].parentUid),
+      ).toBe(true)
+      expect(await readPersistedSessionTree()).toEqual(treeBefore)
+      expect(await browser.getWindowHandles()).toEqual(handlesBefore)
+      await browser.refresh()
+      await options.page.expectLoaded()
+      await options.page.selectSection('settings_storage')
+      await expect($('[data-testid="snapshot-import-source"]')).toHaveText(
+        expect.stringContaining('Imported from Tabs Outliner'),
+      )
+      await expect(
+        $('.snapshot-entry [aria-label="Imported snapshot"]'),
+      ).toBeDisplayed()
+      await expect(
+        $('.snapshot-entry [aria-label="Protected snapshot"]'),
+      ).toBeDisplayed()
+      const details = await $('[data-testid="snapshot-import-warnings"]')
+      await details.$('summary').click()
+      await expect(details).toHaveText(
+        expect.stringContaining(
+          'Nested windows were moved below their containing window as siblings. (2)',
+        ),
+      )
+
+      // The older, unwrapped DevTools dump uses the same adapter through the runtime API.
+      const backup = JSON.parse(await readFile(fixturePath, 'utf8'))
+      const rawImport = await sendSnapshotRequest({
+        action: 'importSessionSnapshot',
+        json: JSON.stringify(backup.data),
+      })
+      expect(rawImport.ok).toBe(true)
+      expect(rawImport.data.importSummary).toEqual(imported.importSummary)
+    } finally {
+      await sendSnapshotRequest({ action: 'clearSessionSnapshots' }).catch(
+        () => undefined,
+      )
+      await closeOptionsPage(options.optionsHandle, options.originalHandle)
+    }
+  })
+
+  it('imports a JSON file as a protected snapshot and rejects invalid files', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'session-flow-import-'))
+    const options = await openOptionsPage()
+    try {
+      await sendSnapshotRequest({ action: 'clearSessionSnapshots' })
+      const created = await sendSnapshotRequest({
+        action: 'createSessionSnapshot',
+      })
+      const exported = await sendSnapshotRequest({
+        action: 'getSessionSnapshotExport',
+        snapshotId: created.data.id,
+      })
+      expect(exported.ok).toBe(true)
+      await sendSnapshotRequest({ action: 'clearSessionSnapshots' })
+      await browser.refresh()
+      await options.page.expectLoaded()
+      await options.page.selectSection('settings_storage')
+      await expect($('[data-testid="import-snapshot"]')).toBeEnabled()
+      const treeBefore = await readPersistedSessionTree()
+      const handlesBefore = await browser.getWindowHandles()
+      const filePath = path.join(directory, 'snapshot.json')
+      const input = await $('[data-testid="import-snapshot-file"]')
+      // WebDriver supplies the file directly instead of interacting with the OS dialog.
+      await browser.execute((element) => {
+        element.hidden = false
+      }, input)
+      await writeFile(filePath, '{', 'utf8')
+      await input.setValue(filePath)
+      await expect($('[role="dialog"]')).toHaveText(
+        expect.stringContaining('not a valid snapshot file'),
+      )
+      expect(
+        (await sendSnapshotRequest({ action: 'listSessionSnapshots' })).data
+          .snapshots,
+      ).toHaveLength(0)
+      await $('button=Dismiss').click()
+
+      await writeFile(filePath, JSON.stringify(exported.data), 'utf8')
+      await input.setValue(filePath)
+      await expect($('.snapshot-success-toast')).toHaveText(
+        'Snapshot imported and protected.',
+      )
+      const list = await sendSnapshotRequest({ action: 'listSessionSnapshots' })
+      expect(list.data.snapshots).toHaveLength(1)
+      const imported = list.data.snapshots[0]
+      expect(imported).toMatchObject({
+        trigger: 'import',
+        protected: true,
+        available: true,
+        counts: exported.data.metadata.counts,
+      })
+      expect(imported.id).not.toBe(exported.data.metadata.id)
+      await expect(
+        $('.snapshot-entry.active [aria-label="Protected snapshot"]'),
+      ).toBeDisplayed()
+      await expect(
+        $('.snapshot-entry.active [aria-label="Imported snapshot"]'),
+      ).toBeDisplayed()
+      await expect($('.snapshot-preview')).toBeDisplayed()
+      const record = await sendSnapshotRequest({
+        action: 'getSessionSnapshot',
+        snapshotId: imported.id,
+      })
+      expect(record.data.payload).toEqual(exported.data.payload)
+      expect(await readPersistedSessionTree()).toEqual(treeBefore)
+      expect(await browser.getWindowHandles()).toHaveLength(
+        handlesBefore.length,
+      )
+      await browser.refresh()
+      await options.page.expectLoaded()
+      await options.page.selectSection('settings_storage')
+      await expect(
+        $('.snapshot-entry [aria-label="Protected snapshot"]'),
+      ).toBeDisplayed()
+      await expect(
+        $('.snapshot-entry [aria-label="Imported snapshot"]'),
+      ).toBeDisplayed()
+      const recordActions = await $('.snapshot-record-actions')
+      await (await recordActions.$('button=Unprotect')).click()
+      await expect(
+        $('.snapshot-entry [aria-label="Protected snapshot"]'),
+      ).not.toBeExisting()
+      await expect(
+        $('.snapshot-entry [aria-label="Imported snapshot"]'),
+      ).toBeDisplayed()
+    } finally {
+      await sendSnapshotRequest({ action: 'clearSessionSnapshots' }).catch(
+        () => undefined,
+      )
+      await closeOptionsPage(options.optionsHandle, options.originalHandle)
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
   it('creates, browses, exports, and restores a protected manual snapshot', async () => {
     const options = await openOptionsPage()
     try {
@@ -38,6 +370,9 @@ describe('session snapshot workflows', () => {
       })
       const snapshotId = list.data.snapshots[0].id
       expect(await snapshotEntry.$$('button')).toHaveLength(0)
+      await expect(
+        snapshotEntry.$('[aria-label="Imported snapshot"]'),
+      ).not.toBeExisting()
 
       let recordActions = await $('.snapshot-record-actions')
       await (await recordActions.$('button=Unprotect')).click()

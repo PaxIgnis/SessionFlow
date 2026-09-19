@@ -1,5 +1,6 @@
 import type {
   SessionSnapshotExport,
+  SessionSnapshotImportResult,
   SessionSnapshotListResult,
   SessionSnapshotMetadata,
   SessionSnapshotRecord,
@@ -33,6 +34,11 @@ export const SessionSnapshotClient = {
   create: () =>
     request<SessionSnapshotMetadata | undefined>({
       action: 'createSessionSnapshot',
+    }),
+  import: (json: string) =>
+    request<SessionSnapshotImportResult>({
+      action: 'importSessionSnapshot',
+      json,
     }),
   setProtected: (snapshotId: string, protectedValue: boolean) =>
     request<Record<string, never>>({

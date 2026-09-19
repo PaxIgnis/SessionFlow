@@ -31,8 +31,8 @@ import '@/styles/variables.css'
 import { ContextMenuType } from '@/types/context-menu'
 import type { ContainerRecoveryStrategy } from '@/types/messages'
 import {
-  State,
   TreeItem as SessionTreeItem,
+  State,
   TreeItemType,
 } from '@/types/session-tree'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'

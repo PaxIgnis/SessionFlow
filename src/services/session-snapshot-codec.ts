@@ -49,6 +49,12 @@ export async function captureSessionSnapshot(
     schemaVersion: SESSION_SNAPSHOT_SCHEMA_VERSION,
     items: sourceItems.map(snapshotTopLevelItem),
   }
+  return describeSessionSnapshot(payload)
+}
+
+export async function describeSessionSnapshot(
+  payload: SessionSnapshotPayload,
+): Promise<CapturedSessionSnapshot> {
   const json = JSON.stringify(payload)
   return {
     payload,

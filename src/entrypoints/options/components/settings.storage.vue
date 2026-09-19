@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import NumberInput from '@/components/NumberInput.vue'
 import ToggleButton from '@/components/ToggleButton.vue'
 import { Favicons } from '@/services/favicons'
@@ -11,9 +10,11 @@ import type {
   SessionSnapshotRecord,
   SessionSnapshotRestoreMode,
 } from '@/types/session-snapshots'
+import { SESSION_SNAPSHOT_IMPORT_SOURCE_LABELS } from '@/types/session-snapshots'
 import { OPTIONS } from '@/types/settings'
-import SnapshotTree from './SnapshotTree.vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import SnapshotConfirmationModal from './SnapshotConfirmationModal.vue'
+import SnapshotTree from './SnapshotTree.vue'
 
 interface ConfirmationState {
   kind: 'confirm' | 'error'
@@ -31,6 +32,7 @@ const selectedUids = ref<string[]>([])
 const totalBytes = ref(0)
 const activeTreeEmpty = ref(true)
 const loading = ref(false)
+const importFileInput = ref<HTMLInputElement>()
 const successMessage = ref('')
 const confirmation = ref<ConfirmationState>()
 const groupedSnapshots = computed(() => groupSnapshotsByPeriod(snapshots.value))
@@ -147,6 +149,19 @@ async function createSnapshot() {
     }
     await refresh(created?.id)
     showSuccess('Snapshot created.')
+  })
+}
+
+async function importSnapshot(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  // Reset before reading so the same file can be selected again after an error.
+  input.value = ''
+  if (!file) return
+  await run(async () => {
+    const imported = await SessionSnapshotClient.import(await file.text())
+    await refresh(imported.id)
+    showSuccess('Snapshot imported and protected.')
   })
 }
 
@@ -360,6 +375,7 @@ function triggerLabel(trigger: SessionSnapshotMetadata['trigger']) {
     startup: 'Taken at startup',
     'before-restore': 'Taken before a restore',
     manual: 'Taken by you',
+    import: 'Imported',
   }[trigger]
 }
 function snapshotBarWidth(snapshot: SessionSnapshotMetadata) {
@@ -466,6 +482,25 @@ function fileTimestamp(value: number) {
       >
         Take a snapshot now
       </button>
+      <button
+        type="button"
+        class="btn"
+        data-testid="import-snapshot"
+        :disabled="loading"
+        title="Import a snapshot"
+        @click="importFileInput?.click()"
+      >
+        Import snapshot
+      </button>
+      <input
+        ref="importFileInput"
+        type="file"
+        accept=".json,application/json"
+        aria-label="Import a snapshot"
+        data-testid="import-snapshot-file"
+        hidden
+        @change="importSnapshot"
+      />
       <span class="snapshot-toolbar-summary workspace-summary"
         >{{ snapshots.length }} snapshots · {{ formatBytes(totalBytes) }}</span
       >
@@ -478,6 +513,25 @@ function fileTimestamp(value: number) {
         Delete all snapshots
       </button>
     </div>
+    <details class="snapshot-import-help">
+      <summary>Supported Import Formats</summary>
+      <ul>
+        <li
+          v-for="(label, source) in SESSION_SNAPSHOT_IMPORT_SOURCE_LABELS"
+          :key="source"
+        >
+          {{ label }} — (.json)
+        </li>
+      </ul>
+      <p>Imported snapshots are protected automatically.</p>
+      <a
+        href="https://github.com/PaxIgnis/SessionFlowExtension/blob/main/docs/importing-snapshots.md"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        How to export and import snapshots
+      </a>
+    </details>
     <small
       v-if="activeTreeEmpty"
       id="empty-tree-snapshot-help"
@@ -507,7 +561,7 @@ function fileTimestamp(value: number) {
               unavailable: !snapshot.available,
             }"
             :aria-current="selectedSnapshotId === snapshot.id"
-            :aria-label="`${formatDate(snapshot.createdAt)}, ${formatCounts(snapshot.counts)}`"
+            :aria-label="`${formatDate(snapshot.createdAt)}, ${formatCounts(snapshot.counts)}, ${triggerLabel(snapshot.trigger)}${snapshot.protected ? ', Protected snapshot' : ''}`"
             @click="selectSnapshot(snapshot.id)"
           >
             <span class="snapshot-entry-line">
@@ -536,6 +590,23 @@ function fileTimestamp(value: number) {
                     stroke-width="1.5"
                   />
                 </svg>
+                <svg
+                  v-if="snapshot.trigger === 'import'"
+                  class="snapshot-imported-icon"
+                  viewBox="0 0 16 16"
+                  role="img"
+                  aria-label="Imported snapshot"
+                >
+                  <title>Imported snapshot</title>
+                  <path
+                    d="M8 2v7m-3-3 3 3 3-3M3 10v3h10v-3"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
               </strong>
               <span class="snapshot-tab-count"
                 >{{ snapshot.counts.tabs }} <small>tabs</small></span
@@ -562,6 +633,31 @@ function fileTimestamp(value: number) {
         <template v-if="selectedRecord">
           <header class="snapshot-detail-head">
             <h3>{{ formatDate(selectedRecord.metadata.createdAt) }}</h3>
+            <p
+              v-if="selectedRecord.metadata.importSummary"
+              class="snapshot-detail-meta"
+              data-testid="snapshot-import-source"
+            >
+              Imported from
+              {{
+                SESSION_SNAPSHOT_IMPORT_SOURCE_LABELS[
+                  selectedRecord.metadata.importSummary.source
+                ]
+              }}
+              <template
+                v-if="
+                  selectedRecord.metadata.importSummary.sourceCreatedAt !==
+                  undefined
+                "
+              >
+                · source saved
+                {{
+                  formatDate(
+                    selectedRecord.metadata.importSummary.sourceCreatedAt,
+                  )
+                }}
+              </template>
+            </p>
             <p class="snapshot-detail-meta">
               {{ triggerLabel(selectedRecord.metadata.trigger) }} ·
               {{ formatBytes(selectedRecord.metadata.sizeBytes)
@@ -586,6 +682,26 @@ function fileTimestamp(value: number) {
                 <span>{{ stat[0] }}</span>
               </div>
             </div>
+            <details
+              v-if="selectedRecord.metadata.importSummary?.warnings.length"
+              class="snapshot-import-warnings"
+              data-testid="snapshot-import-warnings"
+            >
+              <summary>
+                Import conversion details ({{
+                  selectedRecord.metadata.importSummary.warnings.length
+                }})
+              </summary>
+              <ul>
+                <li
+                  v-for="warning in selectedRecord.metadata.importSummary
+                    .warnings"
+                  :key="warning.code"
+                >
+                  {{ warning.message }} ({{ warning.count }})
+                </li>
+              </ul>
+            </details>
           </header>
           <div class="snapshot-tree-scroll">
             <SnapshotTree
@@ -704,6 +820,33 @@ function fileTimestamp(value: number) {
   font-size: 0.8125rem;
 }
 
+.snapshot-import-help {
+  margin-bottom: 16px;
+  color: var(--options-text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+
+.snapshot-import-help summary {
+  width: fit-content;
+  cursor: pointer;
+}
+
+.snapshot-import-help ul {
+  margin: 8px 0;
+  padding-left: 24px;
+}
+
+.snapshot-import-help p {
+  margin: 8px 0;
+}
+
+.snapshot-import-help a {
+  color: var(--text-color-primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .snapshot-browser {
   display: grid;
   grid-template-columns: 288px minmax(0, 1fr);
@@ -803,6 +946,13 @@ function fileTimestamp(value: number) {
   color: var(--button-active-background);
 }
 
+.snapshot-imported-icon {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  color: var(--options-text-muted);
+}
+
 .snapshot-tab-count {
   color: var(--header-text-color);
   font-family: var(--font-mono);
@@ -896,6 +1046,23 @@ function fileTimestamp(value: number) {
   overflow: hidden;
   border-radius: 8px;
   background: var(--options-hairline);
+}
+
+.snapshot-import-warnings {
+  margin-top: 12px;
+  color: var(--options-text-muted);
+  font-size: 0.8125rem;
+}
+
+.snapshot-import-warnings summary {
+  cursor: pointer;
+}
+
+.snapshot-import-warnings ul {
+  max-height: 100px;
+  overflow-y: auto;
+  margin: 8px 0 0;
+  padding-left: 20px;
 }
 
 .snapshot-stat {

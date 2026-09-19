@@ -1,0 +1,88 @@
+{
+  "key": "currentSessionSnapshot",
+  "data": [
+    {
+      "type": 2000,
+      "node": {
+        "type": "session",
+        "data": { "treeId": "synthetic-tree", "nextDId": 20, "nonDumpedDId": 0 }
+      }
+    },
+    [
+      2001,
+      {
+        "type": "group",
+        "data": {},
+        "marks": { "customTitle": "Projects" },
+        "colapsed": true
+      },
+      [0]
+    ],
+    [
+      2001,
+      {
+        "type": "win",
+        "data": { "id": 99, "rect": "0_0_800_600" },
+        "marks": { "customTitle": "Main" }
+      },
+      [0, 0]
+    ],
+    [
+      2001,
+      {
+        "data": {
+          "url": "",
+          "pendingUrl": "https://example.com/a",
+          "title": "A",
+          "pinned": true,
+          "active": true,
+          "id": 100
+        },
+        "marks": { "customTitle": "Read later" },
+        "colapsed": true
+      },
+      [0, 0, 0]
+    ],
+    [
+      2001,
+      {
+        "type": "tab",
+        "data": { "url": "chrome://settings", "title": "Settings" }
+      },
+      [0, 0, 0, 0]
+    ],
+    [2001, { "type": "textnote", "data": { "note": "Memo" } }, [0, 0, 1]],
+    [
+      2001,
+      { "type": "savedwin", "data": {}, "marks": { "customTitle": "Nested" } },
+      [0, 0, 1, 0]
+    ],
+    [
+      2001,
+      { "data": { "url": "https://example.com/c", "title": "C" } },
+      [0, 0, 1, 0, 0]
+    ],
+    [
+      2001,
+      { "type": "savedwin", "data": {}, "marks": { "customTitle": "Deep" } },
+      [0, 0, 1, 0, 1]
+    ],
+    [
+      2001,
+      { "data": { "url": "https://example.com/d", "title": "D" } },
+      [0, 0, 1, 0, 1, 0]
+    ],
+    [
+      2001,
+      { "type": "separatorline", "data": { "separatorIndx": 2 } },
+      [0, 0, 2]
+    ],
+    [
+      2001,
+      { "type": "textnote", "data": { "note": "Below separator" } },
+      [0, 0, 2, 0]
+    ],
+    [2001, { "type": "textnote", "data": { "note": "End" } }, [1]],
+    { "type": 11111, "time": 1700000000000 }
+  ]
+}

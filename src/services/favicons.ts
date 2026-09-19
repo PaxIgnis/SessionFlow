@@ -300,6 +300,7 @@ export class FaviconService {
     // extract the domain from the URL
     const domain = this.getDomainFromUrl(url)
     // check if the favicon is in the cache
+    if (!domain) return DEFAULT_FAVICON_URL
     const entry = this.cache.get(domain)
     if (entry && entry.dataUrl && entry.dataUrl !== '') {
       return entry.dataUrl
@@ -872,10 +873,12 @@ export class FaviconService {
    * @returns {string} - The domain extracted from the URL
    */
   private getDomainFromUrl(url: string): string {
+    if (!url.trim()) return ''
     try {
       return new URL(url).hostname
-    } catch (error) {
-      console.error('Failed to parse URL', error, url)
+    } catch {
+      // Imported and saved tabs can have incomplete URLs. They have no domain
+      // favicon, so use the normal fallback without logging on every render.
       return ''
     }
   }

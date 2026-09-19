@@ -2,17 +2,20 @@ import { Tree } from '@/services/background-tree'
 import {
   captureSessionSnapshot,
   createSessionSnapshotExport,
+  describeSessionSnapshot,
 } from '@/services/session-snapshot-codec'
 import {
   IndexedDbSessionSnapshotRepository,
   type SessionSnapshotRepository,
 } from '@/services/session-snapshot-repository'
+import { parseSessionSnapshotImport } from '@/services/session-snapshot-import'
 import { snapshotIdsToRetain } from '@/services/session-snapshot-retention'
 import { projectSnapshotForRestore } from '@/services/session-snapshot-restore'
 import { Settings } from '@/services/settings'
 import type {
   SessionSnapshotCounts,
   SessionSnapshotExport,
+  SessionSnapshotImportResult,
   SessionSnapshotListResult,
   SessionSnapshotMetadata,
   SessionSnapshotRecord,
@@ -123,6 +126,9 @@ export class SessionSnapshotService {
       if (message.action === 'createSessionSnapshot') {
         return { ok: true, data: await this.capture('manual') }
       }
+      if (message.action === 'importSessionSnapshot') {
+        return { ok: true, data: await this.importSnapshot(message.json) }
+      }
       if (message.action === 'setSessionSnapshotProtected') {
         await this.setProtected(message.snapshotId, message.protected)
         return { ok: true, data: {} }
@@ -199,6 +205,30 @@ export class SessionSnapshotService {
   async exportSnapshot(id: string): Promise<SessionSnapshotExport> {
     const record = await this.repository.get(id)
     return createSessionSnapshotExport(record.metadata, record.payload)
+  }
+
+  importSnapshot(json: string): Promise<SessionSnapshotImportResult> {
+    return this.serialize(async () => {
+      const { payload, summary } = parseSessionSnapshotImport(json)
+      const capture = await describeSessionSnapshot(payload)
+      const metadata: SessionSnapshotImportResult = {
+        id: this.createId(),
+        schemaVersion: payload.schemaVersion,
+        createdAt: this.now(),
+        trigger: 'import',
+        protected: true,
+        digest: capture.digest,
+        sizeBytes: capture.sizeBytes,
+        counts: capture.counts,
+        containsPrivateWindows: capture.containsPrivateWindows,
+        available: true,
+        importSummary: summary,
+      }
+      await this.repository.create(metadata, payload)
+      this.pruneRetryPending = true
+      await this.retryPendingPrune()
+      return metadata
+    })
   }
 
   restore(options: RestoreOptions): Promise<SessionSnapshotCounts> {
@@ -411,6 +441,9 @@ function isSnapshotRequest(value: unknown): value is SessionSnapshotRequest {
     message.action === 'getSessionSnapshotExport'
   ) {
     return typeof message.snapshotId === 'string'
+  }
+  if (message.action === 'importSessionSnapshot') {
+    return typeof message.json === 'string'
   }
   if (message.action === 'setSessionSnapshotProtected') {
     return (

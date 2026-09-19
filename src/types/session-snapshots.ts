@@ -13,12 +13,65 @@ export type SessionSnapshotTrigger =
   | 'startup'
   | 'before-restore'
   | 'manual'
+  | 'import'
 
 export interface SessionSnapshotCounts {
   windows: number
   tabs: number
   notes: number
   separators: number
+}
+
+export type SessionSnapshotImportSource =
+  | 'session-flow'
+  | 'tabs-outliner'
+  | 'session-buddy'
+  | 'tab-session-manager'
+
+export const SESSION_SNAPSHOT_IMPORT_SOURCE_LABELS: Record<
+  SessionSnapshotImportSource,
+  string
+> = {
+  'session-flow': 'Session Flow',
+  'tabs-outliner': 'Tabs Outliner',
+  'session-buddy': 'Session Buddy',
+  'tab-session-manager': 'Tab Session Manager',
+}
+
+export interface SessionSnapshotImportWarning {
+  code:
+    | 'nested-windows'
+    | 'groups-as-notes'
+    | 'tabs-without-window'
+    | 'separator-children'
+    | 'browser-specific-urls'
+    | 'unsupported-appearance'
+    | 'collections-as-notes'
+    | 'history-not-imported'
+    | 'tab-group-metadata'
+    | 'window-presentation'
+    | 'sessions-as-notes'
+    | 'containers-not-imported'
+    | 'invalid-parent-links'
+    | 'tab-order'
+  count: number
+  message: string
+}
+
+export interface SessionSnapshotImportSummary {
+  source: SessionSnapshotImportSource
+  sourceCreatedAt?: number
+  counts: SessionSnapshotCounts
+  warnings: SessionSnapshotImportWarning[]
+}
+
+export interface ParsedSessionSnapshotImport {
+  payload: SessionSnapshotPayload
+  summary: SessionSnapshotImportSummary
+}
+
+export interface SessionSnapshotImportResult extends SessionSnapshotMetadata {
+  importSummary: SessionSnapshotImportSummary
 }
 
 export interface SessionSnapshotMetadata {
@@ -32,6 +85,7 @@ export interface SessionSnapshotMetadata {
   counts: SessionSnapshotCounts
   containsPrivateWindows: boolean
   available: boolean
+  importSummary?: SessionSnapshotImportSummary
 }
 
 export type SnapshotTabGroupMetadata = Omit<TabGroupMetadata, 'id'>
@@ -78,6 +132,7 @@ export type SessionSnapshotRequest =
   | { action: 'listSessionSnapshots' }
   | { action: 'getSessionSnapshot'; snapshotId: string }
   | { action: 'createSessionSnapshot' }
+  | { action: 'importSessionSnapshot'; json: string }
   | {
       action: 'setSessionSnapshotProtected'
       snapshotId: string

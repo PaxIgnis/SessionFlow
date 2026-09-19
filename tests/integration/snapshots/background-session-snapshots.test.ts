@@ -11,6 +11,9 @@ import type {
 import type { TopLevelTreeItem } from '@/types/session-tree'
 import { State, TreeItemType } from '@/types/session-tree'
 import { installFakeBrowser } from '../../helpers/fake-browser'
+import tabsOutlinerBackup from '../../fixtures/tabs-outliner-backup.json'
+import sessionBuddyExport from '../../fixtures/session-buddy-export.json'
+import tabSessionManagerExport from '../../fixtures/tab-session-manager-export.json'
 
 describe('background session snapshots', () => {
   let repository: MemoryRepository
@@ -355,6 +358,247 @@ describe('background session snapshots', () => {
     expect(
       rebasedItems?.some((item) => item.uid === 'live-during-commit'),
     ).toBe(true)
+  })
+
+  it('imports a fresh protected snapshot through runtime messaging without changing the active tree', async () => {
+    Settings.values.protectManualSessionSnapshots = false
+    const original = await service.capture('manual')
+    const exported = await service.exportSnapshot(original!.id)
+    const originalTree = structuredClone(treeItems)
+    exported.metadata.digest = 'untrusted'
+    exported.metadata.counts.notes = 999
+    exported.metadata.sizeBytes = 0
+    exported.metadata.available = false
+    exported.metadata.importSummary = {
+      source: 'tabs-outliner',
+      counts: { windows: 999, tabs: 999, notes: 999, separators: 999 },
+      warnings: [],
+    }
+
+    const response = await service.handleRuntimeMessage({
+      action: 'importSessionSnapshot',
+      json: JSON.stringify(exported),
+    })
+
+    expect(response).toMatchObject({
+      ok: true,
+      data: {
+        id: 'snapshot-2',
+        trigger: 'import',
+        protected: true,
+        createdAt: 1_000,
+        available: true,
+        counts: { windows: 0, tabs: 0, notes: 1, separators: 0 },
+        importSummary: {
+          source: 'session-flow',
+          sourceCreatedAt: 1_000,
+          counts: { windows: 0, tabs: 0, notes: 1, separators: 0 },
+          warnings: [],
+        },
+      },
+    })
+    const imported = await service.get('snapshot-2')
+    expect(imported.payload).toEqual(exported.payload)
+    expect(imported.metadata.digest).toBe(original!.digest)
+    expect(imported.metadata.sizeBytes).toBe(original!.sizeBytes)
+    expect(treeItems).toEqual(originalTree)
+    expect(repository.records.size).toBe(2)
+    expect(browser.tabs.create).not.toHaveBeenCalled()
+    expect(browser.windows.create).not.toHaveBeenCalled()
+
+    // Reimporting a file creates another record instead of replacing one.
+    await service.importSnapshot(JSON.stringify(exported))
+    expect(repository.records.size).toBe(3)
+  })
+
+  it('persists Tabs Outliner conversion details and rejects incomplete backups atomically', async () => {
+    const originalTree = structuredClone(treeItems)
+    await expect(
+      service.importSnapshot(
+        JSON.stringify(tabsOutlinerBackup.data.slice(0, -1)),
+      ),
+    ).rejects.toThrow('Tabs Outliner')
+    expect(repository.records.size).toBe(0)
+    const imported = await service.importSnapshot(
+      JSON.stringify(tabsOutlinerBackup),
+    )
+    expect(imported).toMatchObject({
+      trigger: 'import',
+      protected: true,
+      createdAt: 1_000,
+      counts: { windows: 3, tabs: 4, notes: 4, separators: 1 },
+      importSummary: {
+        source: 'tabs-outliner',
+        sourceCreatedAt: 1700000000000,
+        warnings: expect.arrayContaining([
+          expect.objectContaining({ code: 'nested-windows', count: 2 }),
+        ]),
+      },
+    })
+    expect((await service.get(imported.id)).metadata.importSummary).toEqual(
+      imported.importSummary,
+    )
+    expect(
+      (await service.exportSnapshot(imported.id)).metadata.importSummary,
+    ).toEqual(imported.importSummary)
+    expect(
+      await service.restoreSummary({
+        snapshotId: imported.id,
+        mode: 'all',
+        selectedUids: [],
+      }),
+    ).toEqual(imported.counts)
+    expect(treeItems).toEqual(originalTree)
+    expect(browser.tabs.create).not.toHaveBeenCalled()
+    expect(browser.windows.create).not.toHaveBeenCalled()
+  })
+
+  it('imports Session Buddy through runtime messaging without touching the active tree', async () => {
+    const originalTree = structuredClone(treeItems)
+    const response = await service.handleRuntimeMessage({
+      action: 'importSessionSnapshot',
+      json: JSON.stringify(sessionBuddyExport),
+    })
+    expect(response).toMatchObject({
+      ok: true,
+      data: {
+        id: 'snapshot-1',
+        protected: true,
+        trigger: 'import',
+        containsPrivateWindows: true,
+        counts: { windows: 3, tabs: 4, notes: 2, separators: 0 },
+        importSummary: { source: 'session-buddy' },
+      },
+    })
+    const record = await service.get('snapshot-1')
+    expect(record.metadata.importSummary?.counts).toEqual(
+      record.metadata.counts,
+    )
+    expect(
+      await service.restoreSummary({
+        snapshotId: 'snapshot-1',
+        mode: 'all',
+        selectedUids: [],
+      }),
+    ).toEqual(record.metadata.counts)
+    expect((await service.exportSnapshot('snapshot-1')).payload).toEqual(
+      record.payload,
+    )
+    expect(treeItems).toEqual(originalTree)
+    expect(browser.tabs.create).not.toHaveBeenCalled()
+    expect(browser.windows.create).not.toHaveBeenCalled()
+
+    await expect(
+      service.importSnapshot(
+        JSON.stringify({
+          collections: [
+            { folders: [{ links: [{ url: 'https://example.com' }, null] }] },
+          ],
+        }),
+      ),
+    ).rejects.toThrow('Session Buddy')
+    expect(repository.records.size).toBe(1)
+  })
+
+  it('imports Tab Session Manager atomically as a protected snapshot through runtime messaging', async () => {
+    const originalTree = structuredClone(treeItems)
+    const response = await service.handleRuntimeMessage({
+      action: 'importSessionSnapshot',
+      json: JSON.stringify(tabSessionManagerExport),
+    })
+    expect(response).toMatchObject({
+      ok: true,
+      data: {
+        id: 'snapshot-1',
+        protected: true,
+        trigger: 'import',
+        containsPrivateWindows: true,
+        counts: { windows: 2, tabs: 4, notes: 3, separators: 0 },
+        importSummary: { source: 'tab-session-manager' },
+      },
+    })
+    const record = await service.get('snapshot-1')
+    expect(record.metadata.importSummary?.counts).toEqual(
+      record.metadata.counts,
+    )
+    expect(
+      await service.restoreSummary({
+        snapshotId: 'snapshot-1',
+        mode: 'all',
+        selectedUids: [],
+      }),
+    ).toEqual(record.metadata.counts)
+    expect((await service.exportSnapshot('snapshot-1')).payload).toEqual(
+      record.payload,
+    )
+    expect(treeItems).toEqual(originalTree)
+    expect(browser.tabs.create).not.toHaveBeenCalled()
+    expect(browser.windows.create).not.toHaveBeenCalled()
+    await expect(
+      service.importSnapshot(
+        JSON.stringify([
+          ...tabSessionManagerExport,
+          { ...tabSessionManagerExport[0], windows: { '1': { '1': {} } } },
+        ]),
+      ),
+    ).rejects.toThrow('Tab Session Manager')
+    expect(repository.records.size).toBe(1)
+  })
+
+  it('rejects invalid imports without writing and allows a subsequent valid import', async () => {
+    const create = vi.spyOn(repository, 'create')
+    await expect(
+      service.handleRuntimeMessage({
+        action: 'importSessionSnapshot',
+        json: '{',
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: expect.stringContaining('not a valid snapshot file'),
+    })
+    expect(create).not.toHaveBeenCalled()
+    expect(repository.records.size).toBe(0)
+
+    await expect(
+      service.importSnapshot(JSON.stringify(treeItems)),
+    ).resolves.toMatchObject({
+      protected: true,
+      trigger: 'import',
+    })
+  })
+
+  it('reports import storage failures without reporting success', async () => {
+    vi.spyOn(repository, 'create').mockRejectedValueOnce(
+      new Error('storage full'),
+    )
+    await expect(
+      service.handleRuntimeMessage({
+        action: 'importSessionSnapshot',
+        json: JSON.stringify(treeItems),
+      }),
+    ).resolves.toMatchObject({ ok: false, error: 'storage full' })
+    expect(repository.records.size).toBe(0)
+  })
+
+  it('preserves private windows during explicit import even when automatic capture excludes them', async () => {
+    Settings.values.includePrivateWindowsInSessionSnapshots = false
+    const imported = await service.importSnapshot(
+      JSON.stringify([
+        {
+          type: TreeItemType.WINDOW,
+          uid: 'private-window',
+          incognito: true,
+          state: State.SAVED,
+          indentLevel: 0,
+          children: [],
+        },
+      ]),
+    )
+    expect(imported).toMatchObject({
+      protected: true,
+      containsPrivateWindows: true,
+      counts: { windows: 1 },
+    })
   })
 
   it('routes typed runtime requests and ignores unrelated messages', async () => {

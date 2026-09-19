@@ -1,0 +1,51 @@
+{
+  "collections": [
+    {
+      "title": "Research",
+      "created": 1700000000000,
+      "updated": 1700000010000,
+      "folders": [
+        {
+          "title": "Reading",
+          "type": "normal",
+          "state": "maximized",
+          "incognito": false,
+          "left": 10,
+          "top": 20,
+          "width": 1200,
+          "height": 800,
+          "links": [
+            {
+              "title": "Read this first",
+              "titleOriginal": "Example article",
+              "url": "https://example.com/article",
+              "favIconUrl": "https://example.com/favicon.ico",
+              "active": true,
+              "pinned": true,
+              "groupId": 7
+            },
+            {
+              "title": "Related",
+              "url": "https://example.com/related",
+              "groupId": 7
+            }
+          ]
+        },
+        {
+          "title": "Private reading",
+          "incognito": true,
+          "links": [{ "url": "https://example.org/private", "groupId": -1 }]
+        }
+      ]
+    },
+    {
+      "title": "Tools",
+      "folders": [
+        {
+          "title": "Browser",
+          "links": [{ "title": "Settings", "url": "chrome://settings" }]
+        }
+      ]
+    }
+  ]
+}

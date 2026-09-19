@@ -147,12 +147,10 @@ describe('favicon service', () => {
     expect(service.getFavicon('https://missing.example')).toBe(
       '/icons/default-favicon.svg',
     )
-    expect(service.getFavicon('not a url')).toBe('/icons/default-favicon.svg')
-    expect(consoleError).toHaveBeenCalledWith(
-      'Failed to parse URL',
-      expect.any(Error),
-      'not a url',
-    )
+    for (const url of ['', '   ', 'not a url', 'https://']) {
+      expect(service.getFavicon(url)).toBe('/icons/default-favicon.svg')
+    }
+    expect(consoleError).not.toHaveBeenCalled()
   })
 
   it('suppresses a cached domain favicon only for a page known to have no icon (EV-09)', () => {

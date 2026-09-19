@@ -5,6 +5,7 @@ import fs from 'node:fs/promises'
 import SnapshotTreeItemComponent from '@/entrypoints/options/components/SnapshotTreeItem.vue'
 import { DEFAULT_SETTINGS } from '@/defaults/settings'
 import { Settings } from '@/services/settings'
+import { FaviconService } from '@/services/favicons'
 import type {
   SnapshotNote,
   SnapshotSeparator,
@@ -75,6 +76,24 @@ describe('snapshot tree presentation', () => {
   })
 
   afterEach(() => vi.restoreAllMocks())
+
+  it.each(['', '   ', 'not a url'])(
+    'renders an imported tab with URL %j using a quiet fallback icon',
+    async (url) => {
+      const service = new FaviconService()
+      const consoleError = vi
+        .spyOn(console, 'error')
+        .mockImplementation(() => {})
+      const item = tab({ url, state: State.SAVED })
+      const markup = await renderSnapshotItem(item, {
+        getFavicon: service.getFavicon.bind(service),
+      })
+
+      expect(markup).toContain('src="/icons/default-favicon.svg"')
+      expect(consoleError).not.toHaveBeenCalled()
+      expect(item.url).toBe(url)
+    },
+  )
 
   it('renders a selected cached private tab with live tree state, pin, group, and container styling', async () => {
     const getFavicon = vi.fn(() => 'data:image/png;base64,cached')
