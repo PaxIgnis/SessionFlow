@@ -551,8 +551,10 @@ const windowHoverDetails = computed(() => {
   position: relative;
   display: grid;
   grid-template-areas: 'prepend content append';
-  grid-template-columns: max-content 1fr auto;
+  grid-template-columns: max-content minmax(0, 1fr) auto;
   outline: none;
+  width: 100%;
+  min-width: 0;
   max-width: 100%;
   padding: 1px 16px;
   text-decoration: none;

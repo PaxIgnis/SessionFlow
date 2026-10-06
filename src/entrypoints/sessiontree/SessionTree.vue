@@ -527,6 +527,7 @@ function runToolbarAction(action: () => void | Promise<void>): void {
   flex-direction: column;
   min-width: 200px;
   width: 100%;
+  max-width: 100%;
   overflow-x: hidden;
   overflow-y: hidden;
   height: 100vh;
@@ -626,9 +627,11 @@ function runToolbarAction(action: () => void | Promise<void>): void {
 
 .sessiontree-content {
   flex: 1 1 auto;
+  min-width: 0;
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 .tree-end-drop-target {
@@ -638,7 +641,9 @@ function runToolbarAction(action: () => void | Promise<void>): void {
 </style>
 
 <style>
-body {
+html,
+body,
+#sessiontree {
   position: relative;
   width: 100%;
   height: 100%;

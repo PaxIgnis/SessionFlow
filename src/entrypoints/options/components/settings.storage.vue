@@ -810,14 +810,21 @@ function fileTimestamp(value: number) {
   display: flex;
   align-items: center;
   gap: 16px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   margin-bottom: 12px;
 }
 
 .snapshot-toolbar-summary {
   flex: 1;
+  min-width: 0;
+  overflow: hidden;
   color: var(--options-text-muted);
   font-family: var(--font-mono);
   font-size: 0.8125rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .snapshot-import-help {
@@ -850,6 +857,9 @@ function fileTimestamp(value: number) {
 .snapshot-browser {
   display: grid;
   grid-template-columns: 288px minmax(0, 1fr);
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   height: 528px;
   overflow: hidden;
   border: 1px solid var(--options-hairline-strong);
@@ -860,6 +870,7 @@ function fileTimestamp(value: number) {
   min-width: 0;
   overflow-x: hidden;
   overflow-y: auto;
+  scrollbar-gutter: stable;
   border-right: 1px solid var(--options-hairline-strong);
   background: var(--background-color-secondary);
 }
@@ -1015,6 +1026,7 @@ function fileTimestamp(value: number) {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+  overflow: hidden;
 }
 
 .snapshot-detail-head {
@@ -1091,8 +1103,11 @@ function fileTimestamp(value: number) {
 .snapshot-tree-scroll {
   display: flex;
   flex: 1;
+  min-width: 0;
   min-height: 0;
+  overflow-x: hidden;
   overflow-y: auto;
+  scrollbar-gutter: stable;
   padding: 8px 0 12px;
 }
 

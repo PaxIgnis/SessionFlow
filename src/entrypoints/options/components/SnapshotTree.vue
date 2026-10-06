@@ -194,9 +194,13 @@ function containingWindow(row: SnapshotVisibleRow): SnapshotWindow | undefined {
 <style scoped>
 .snapshot-tree {
   flex: 1 1 auto;
+  min-width: 0;
   min-height: 0;
+  width: 100%;
   height: auto;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
   border: 1px solid var(--options-list-divider-color);
   border-radius: 5px;
   background: var(--background-color-primary);

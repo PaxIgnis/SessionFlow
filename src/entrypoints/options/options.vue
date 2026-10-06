@@ -136,8 +136,10 @@ onUnmounted(() => {
 
 html,
 body,
-#app {
+#options-root {
+  width: 100%;
   height: 100%;
+  overflow: hidden;
   margin: 0;
 }
 
@@ -164,6 +166,8 @@ body {
 .options-root {
   display: grid;
   grid-template-columns: 204px minmax(0, 1fr);
+  width: 100%;
+  min-width: 0;
   height: 100vh;
   overflow: hidden;
 }
@@ -257,7 +261,9 @@ body {
 
 .content-panel {
   min-width: 0;
+  overflow-x: hidden;
   overflow-y: auto;
+  scrollbar-gutter: stable;
   padding: 0 48px 45vh;
   background: var(--background-color-primary);
 }
@@ -287,12 +293,14 @@ body {
 }
 
 .section {
+  width: min(100%, var(--options-measure));
   max-width: var(--options-measure);
   padding: 40px 0 8px;
   scroll-margin-top: 24px;
 }
 
 .section.section-wide {
+  width: min(100%, 1180px);
   max-width: 1180px;
 }
 
