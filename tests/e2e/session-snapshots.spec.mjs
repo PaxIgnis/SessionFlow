@@ -10,6 +10,93 @@ import {
 } from './support/session-snapshots.mjs'
 
 describe('session snapshot workflows', () => {
+  it('keeps Tabs Outliner group notes and shared loose-tab windows after import and reload', async () => {
+    const options = await openOptionsPage()
+    try {
+      await sendSnapshotRequest({ action: 'clearSessionSnapshots' })
+      const treeBefore = await readPersistedSessionTree()
+      const fixture = JSON.parse(
+        await readFile(
+          path.resolve('tests/fixtures/tabs-outliner-backup.json'),
+          'utf8',
+        ),
+      )
+      const response = await sendSnapshotRequest({
+        action: 'importSessionSnapshot',
+        json: JSON.stringify([
+          fixture.data[0],
+          [2001, { type: 'textnote', data: { note: 'Courses' } }, [0]],
+          [
+            2001,
+            {
+              type: 'savedwin',
+              data: {},
+              marks: {
+                customTitle: 'Term',
+                customFavicon: 'img/group-icon.png',
+              },
+            },
+            [0, 0],
+          ],
+          [
+            2001,
+            { type: 'group', data: {}, marks: { customTitle: 'Subject' } },
+            [0, 0, 0],
+          ],
+          [
+            2001,
+            { type: 'savedwin', data: {}, marks: { customTitle: 'Reading' } },
+            [0, 0, 0, 0],
+          ],
+          [
+            2001,
+            { data: { url: 'https://example.com/reading' } },
+            [0, 0, 0, 0, 0],
+          ],
+          [2001, { data: { url: 'https://example.com/one' } }, [0, 0, 1]],
+          [2001, { data: { url: 'https://example.com/two' } }, [0, 0, 2]],
+          fixture.data.at(-1),
+        ]),
+      })
+      expect(response).toMatchObject({
+        ok: true,
+        data: {
+          protected: true,
+          counts: { windows: 2, tabs: 3, notes: 3, separators: 0 },
+        },
+      })
+      await browser.refresh()
+      await options.page.expectLoaded()
+      await options.page.selectSection('settings_storage')
+      await expect($('[data-testid="snapshot-import-source"]')).toHaveText(
+        expect.stringContaining('Imported from Tabs Outliner'),
+      )
+      const record = await sendSnapshotRequest({
+        action: 'getSessionSnapshot',
+        snapshotId: response.data.id,
+      })
+      const [courses, term, subject, reading, loose] = record.data.payload.items
+      expect(term).toMatchObject({
+        type: 2,
+        text: 'Term',
+        parentUid: courses.uid,
+      })
+      expect(subject).toMatchObject({ type: 2, parentUid: term.uid })
+      expect(reading).toMatchObject({ type: 0, parentUid: subject.uid })
+      expect(loose).toMatchObject({ type: 0, parentUid: term.uid })
+      expect(loose.children.map((tab) => tab.url)).toEqual([
+        'https://example.com/one',
+        'https://example.com/two',
+      ])
+      expect(await readPersistedSessionTree()).toEqual(treeBefore)
+    } finally {
+      await sendSnapshotRequest({ action: 'clearSessionSnapshots' }).catch(
+        () => undefined,
+      )
+      await closeOptionsPage(options.optionsHandle, options.originalHandle)
+    }
+  })
+
   it('imports Tab Session Manager sessions with hierarchy and a persistent protected import label', async () => {
     const options = await openOptionsPage()
     try {

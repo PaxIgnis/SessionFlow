@@ -105,7 +105,8 @@ After saving the JSON file, select it with **Import snapshot** in Session Flow.
 During import:
 
 - Nested windows become separate saved windows immediately below their containing window.
-- Groups become note branches.
+- Groups become note branches, including groups stored as windows with the built-in group icon.
+- Consecutive sibling tabs outside a window share a saved window at their original position among the notes and groups.
 - Conversion details identify anything that could not be preserved.
 
 ## Session Buddy

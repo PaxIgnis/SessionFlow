@@ -34,7 +34,7 @@ const warningMessages = {
     'Nested windows were moved below their containing window as siblings.',
   'groups-as-notes': 'Tabs Outliner groups were converted to note branches.',
   'tabs-without-window':
-    'Tabs outside a window were placed in additional saved windows.',
+    'Consecutive sibling tabs outside a window were placed together in saved windows at their original position.',
   'separator-children':
     'Children of separators were moved below the separator as siblings.',
   'browser-specific-urls':
@@ -122,11 +122,19 @@ export function parseTabsOutlinerImport(
       typeof data.incognito !== 'boolean'
     )
       invalid()
+    // Some groups are stored as windows but retain the built-in group icon.
+    // Match only this exact marker; arbitrary custom icons remain cosmetic.
+    const nodeType: OutlinerNode['type'] =
+      (type === 'win' || type === 'savedwin') &&
+      isRecord(marks) &&
+      marks.customFavicon === 'img/group-icon.png'
+        ? 'group'
+        : type
     const key = path.join('.')
     if (nodes.has(key)) invalid()
     nodes.set(key, {
       uid: `tabs-outliner-${key}` as UID,
-      type,
+      type: nodeType,
       data,
       title: isRecord(marks)
         ? (marks.customTitle as string | undefined)
@@ -185,12 +193,25 @@ export function parseTabsOutlinerImport(
   }
 
   // Use a stack so deeply nested exports do not consume the JavaScript call stack.
-  const stack: { node: OutlinerNode; context: Context }[] = roots
-    .slice()
-    .reverse()
-    .map((node) => ({ node, context: {} }))
+  const stack: {
+    node: OutlinerNode
+    context: Context
+    looseTabs?: { window?: SnapshotWindow }
+  }[] = []
+  function enqueue(siblings: OutlinerNode[], context: Context): void {
+    // Share a lazily created window only within one consecutive run of sibling
+    // tabs. Creating it when visited preserves its place among notes/windows.
+    let looseTabs: { window?: SnapshotWindow } | undefined
+    for (let i = siblings.length - 1; i >= 0; i--) {
+      const node = siblings[i]
+      if (!context.window && node.type === 'tab') looseTabs ??= {}
+      else looseTabs = undefined
+      stack.push({ node, context, looseTabs })
+    }
+  }
+  enqueue(roots, {})
   while (stack.length) {
-    const { node, context } = stack.pop()!
+    const { node, context, looseTabs } = stack.pop()!
     let next: Context
     if (node.type === 'win' || node.type === 'savedwin') {
       if (context.window) warn('nested-windows')
@@ -201,13 +222,17 @@ export function parseTabsOutlinerImport(
     } else {
       let { window, parent } = context
       if (node.type === 'tab' && !window) {
-        window = createWindow(
-          `${node.uid}-window` as UID,
-          'Imported tabs',
-          context.topParent,
-        )
+        window = looseTabs?.window
+        if (!window) {
+          window = createWindow(
+            (node.uid + '-window') as UID,
+            'Imported tabs',
+            context.topParent,
+          )
+          if (looseTabs) looseTabs.window = window
+          warn('tabs-without-window')
+        }
         parent = undefined
-        warn('tabs-without-window')
       }
       const common = {
         uid: node.uid,
@@ -273,8 +298,7 @@ export function parseTabsOutlinerImport(
           !window && item.type === TreeItemType.NOTE ? item : context.topParent,
       }
     }
-    for (let i = node.children.length - 1; i >= 0; i--)
-      stack.push({ node: node.children[i], context: next })
+    enqueue(node.children, next)
   }
   const payload = validateSessionSnapshotPayload({ schemaVersion: 1, items })
   return {
