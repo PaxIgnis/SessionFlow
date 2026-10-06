@@ -35,6 +35,7 @@ export function projectSnapshotForRestore(options: RestoreProjectionOptions): {
   const includedItems = collectIncludedItems(options.payload.items, selected)
   const itemUidMap = new Map<UID, UID>()
   const groupUidMap = new Map<UID, UID>()
+  const restoredSavedTime = Date.now()
 
   for (const item of includedItems) {
     itemUidMap.set(item.uid, createUid(existingUids))
@@ -61,6 +62,7 @@ export function projectSnapshotForRestore(options: RestoreProjectionOptions): {
           itemUidMap,
           groupUidMap,
           existingUids,
+          restoredSavedTime,
         ),
       )
       continue
@@ -124,6 +126,7 @@ function restoreWindow(
   itemUidMap: Map<UID, UID>,
   groupUidMap: Map<UID, UID>,
   existingUids: Set<string>,
+  restoredSavedTime: number,
 ): Window {
   let windowUid = itemUidMap.get(source.uid)
   if (!windowUid) {
@@ -147,6 +150,7 @@ function restoreWindow(
       windowUid,
       itemUidMap,
       groupUidMap,
+      restoredSavedTime,
     ),
   )
   updateParentFlags(children)
@@ -156,6 +160,7 @@ function restoreWindow(
     id: -1,
     active: false,
     activeTabId: undefined,
+    savedTime: positiveSavedTime(source.savedTime, restoredSavedTime),
     savedActiveTabUid:
       source.savedActiveTabUid && selected.has(source.savedActiveTabUid)
         ? itemUidMap.get(source.savedActiveTabUid)
@@ -178,6 +183,7 @@ function restoreWindowChild(
   windowUid: UID,
   itemUidMap: ReadonlyMap<UID, UID>,
   groupUidMap: ReadonlyMap<UID, UID>,
+  restoredSavedTime: number,
 ): WindowChild {
   const parentUid = nearestSelectedParent(
     source,
@@ -210,6 +216,7 @@ function restoreWindowChild(
       type: TreeItemType.TAB,
       id: -1,
       active: false,
+      savedTime: positiveSavedTime(source.savedTime, restoredSavedTime),
       state: State.SAVED,
       loadingStatus: undefined,
       tabGroup: source.tabGroup
@@ -338,6 +345,17 @@ function updateParentFlags(items: Array<TopLevelTreeItem | WindowChild>): void {
       if (!item.isParent) item.collapsed = false
     }
   }
+}
+
+function positiveSavedTime(
+  sourceSavedTime: number | undefined,
+  restoredSavedTime: number,
+): number {
+  return sourceSavedTime !== undefined &&
+    Number.isFinite(sourceSavedTime) &&
+    sourceSavedTime > 0
+    ? sourceSavedTime
+    : restoredSavedTime
 }
 
 function countRestoredItems(

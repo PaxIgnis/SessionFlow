@@ -49,15 +49,89 @@ describe('session snapshot restore projection', () => {
       activeTabId: undefined,
       id: -1,
       selected: false,
+      savedTime: expect.any(Number),
       state: State.SAVED,
     })
     expect(restoredWindow.children[0]).toMatchObject({
       active: false,
       id: -1,
       selected: false,
+      savedTime: expect.any(Number),
       state: State.SAVED,
       windowUid: restoredWindow.uid,
     })
+  })
+
+  it('repairs zero saved times so restored items count as previously saved', async () => {
+    const tab = createTab('tab-1' as UID, {
+      id: 10,
+      savedTime: 0,
+      state: State.OPEN,
+    })
+    createWindow('window-1' as UID, [tab], {
+      id: 20,
+      savedTime: 0,
+      state: State.OPEN,
+    })
+    const payload = (
+      await captureSessionSnapshot(Tree.Items, {
+        includePrivateWindows: true,
+      })
+    ).payload
+    resetTree()
+
+    const result = projectSnapshotForRestore({
+      payload,
+      mode: 'all',
+      selectedUids: new Set(),
+      existingUids: new Set(),
+    })
+
+    const restoredWindow = result.items[0]
+    expect(restoredWindow.type).toBe(TreeItemType.WINDOW)
+    if (restoredWindow.type !== TreeItemType.WINDOW) return
+    expect(restoredWindow.savedTime).toEqual(expect.any(Number))
+    expect(restoredWindow.savedTime).toBeGreaterThan(0)
+    const restoredTab = restoredWindow.children[0]
+    expect(restoredTab.type).toBe(TreeItemType.TAB)
+    if (restoredTab.type !== TreeItemType.TAB) return
+    expect(restoredTab.savedTime).toEqual(expect.any(Number))
+    expect(restoredTab.savedTime).toBeGreaterThan(0)
+  })
+
+  it('preserves positive saved times from snapshot items', async () => {
+    const tab = createTab('tab-1' as UID, {
+      id: -1,
+      savedTime: 1_700_000_001_000,
+      state: State.SAVED,
+    })
+    const window = createWindow('window-1' as UID, [tab], {
+      id: -1,
+      savedTime: 1_700_000_000_000,
+      state: State.SAVED,
+    })
+    const payload = (
+      await captureSessionSnapshot(Tree.Items, {
+        includePrivateWindows: true,
+      })
+    ).payload
+    resetTree()
+
+    const result = projectSnapshotForRestore({
+      payload,
+      mode: 'all',
+      selectedUids: new Set(),
+      existingUids: new Set(),
+    })
+
+    const restoredWindow = result.items[0]
+    expect(restoredWindow.type).toBe(TreeItemType.WINDOW)
+    if (restoredWindow.type !== TreeItemType.WINDOW) return
+    expect(restoredWindow.savedTime).toBe(window.savedTime)
+    const restoredTab = restoredWindow.children[0]
+    expect(restoredTab.type).toBe(TreeItemType.TAB)
+    if (restoredTab.type !== TreeItemType.TAB) return
+    expect(restoredTab.savedTime).toBe(tab.savedTime)
   })
 
   it('does not restore a selected window when its children are not selected', async () => {
