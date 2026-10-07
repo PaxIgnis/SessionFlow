@@ -1,6 +1,6 @@
 <script lang="ts" setup>
-import { TAB_LOADING } from '@/defaults/favicons'
 import { isKnownFirefoxContainerIcon } from '@/defaults/container-icons'
+import { TAB_LOADING } from '@/defaults/favicons'
 import { ContextMenu } from '@/services/context-menu'
 import { getTreeItemContextMenuArgs } from '@/services/context-menu-actions'
 import { DragAndDrop } from '@/services/drag-and-drop'
@@ -1141,7 +1141,7 @@ function isFocusedTab(item: TreeItem): boolean {
 
 .tree-item-tab-group-indicator {
   position: absolute;
-  z-index: 3;
+  z-index: 10;
   top: 2px;
   bottom: 2px;
   width: 3px;
