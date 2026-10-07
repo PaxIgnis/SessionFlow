@@ -1,3 +1,4 @@
+import { i18n } from '@/services/i18n'
 import {
   countSnapshotItems,
   validateSessionSnapshotPayload,
@@ -95,9 +96,7 @@ export function parseTabsOutlinerImport(
     const type =
       raw.type === undefined && typeof data.url === 'string' ? 'tab' : raw.type
     if (!isNodeType(type)) {
-      throw new Error(
-        'Unsupported Tabs Outliner node type. No snapshot was imported.',
-      )
+      throw new Error(i18n.t('unsupportedOutlinerNode'))
     }
     const marks = raw.marks
     if (
@@ -226,7 +225,7 @@ export function parseTabsOutlinerImport(
         if (!window) {
           window = createWindow(
             (node.uid + '-window') as UID,
-            'Imported tabs',
+            i18n.t('importedTabs'),
             context.topParent,
           )
           if (looseTabs) looseTabs.window = window
@@ -278,7 +277,7 @@ export function parseTabsOutlinerImport(
           type: TreeItemType.NOTE,
           text:
             node.type === 'group'
-              ? node.title || 'Group'
+              ? node.title || i18n.t('group')
               : node.title && node.title !== note
                 ? `${node.title}\n${note}`
                 : note,
@@ -317,9 +316,7 @@ export function parseTabsOutlinerImport(
 }
 
 function invalid(): never {
-  throw new Error(
-    'Invalid or incomplete Tabs Outliner backup. No snapshot was imported.',
-  )
+  throw new Error(i18n.t('invalidOutlinerBackup'))
 }
 
 function isNodeType(value: unknown): value is OutlinerNode['type'] {

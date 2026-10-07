@@ -1,4 +1,7 @@
+import { localizeDocument } from '@/services/i18n'
+import { i18n } from '@/services/i18n'
 document.addEventListener('DOMContentLoaded', () => {
+  localizeDocument()
   const params = new URLSearchParams(window.location.search)
   const targetUrl = params.get('targetUrl')
   const targetTitle = params.get('targetTitle')
@@ -9,7 +12,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const copiedMessageElement = document.getElementById('copied-message')
 
   if (targetTitle) {
-    document.title = `Redirect to ${targetTitle}`
+    document.title = i18n.t('redirectTo', [targetTitle])
   }
 
   if (!targetUrl || !messageElement || !targetUrlElement) {
@@ -18,8 +21,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   targetUrlElement.textContent = targetUrl
   targetUrlElement.href = targetUrl
-  messageElement.textContent =
-    'The URL is privileged and cannot be opened automatically because of Firefox security restrictions. Select the URL to copy it, then paste it into the address bar.'
+  messageElement.textContent = i18n.t(
+    'theURLIsPrivilegedAndCannotBeOpenedAutomaticallyBecause',
+  )
   targetUrlElement.addEventListener('click', (event) => {
     event.preventDefault()
     const writeText = navigator.clipboard?.writeText?.bind(navigator.clipboard)
@@ -32,7 +36,7 @@ document.addEventListener('DOMContentLoaded', () => {
       void writeText(targetUrl)
         .then(() => {
           if (!copiedMessageElement) return
-          copiedMessageElement.textContent = 'Copied!'
+          copiedMessageElement.textContent = i18n.t('copied')
           copiedMessageElement.classList.add('visible')
           setTimeout(() => {
             copiedMessageElement.classList.remove('visible')
@@ -51,7 +55,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function showManualCopyMessage(element: HTMLElement | null): void {
   if (!element) return
-  element.textContent = 'Copy unavailable. Select the URL and copy it manually.'
+  element.textContent = i18n.t('copyUnavailableSelectTheURLAndCopyItManually')
   element.classList.add('visible')
 }
 

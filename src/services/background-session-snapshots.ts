@@ -1,3 +1,4 @@
+import { i18n } from '@/services/i18n'
 import { Tree } from '@/services/background-tree'
 import {
   captureSessionSnapshot,
@@ -351,9 +352,7 @@ export class SessionSnapshotService {
       }
     }
 
-    throw new Error(
-      'The active session tree changed repeatedly during restore; please try again.',
-    )
+    throw new Error(i18n.t('restoreTreeChanged'))
   }
 
   private async prune(
@@ -395,7 +394,7 @@ export class SessionSnapshotService {
 
 export class SafetySnapshotError extends Error {
   constructor(cause: unknown) {
-    super(`Failed to create safety snapshot: ${String(cause)}`, { cause })
+    super(i18n.t('safetySnapshotFailedDetail', [String(cause)]), { cause })
     this.name = 'SafetySnapshotError'
   }
 }

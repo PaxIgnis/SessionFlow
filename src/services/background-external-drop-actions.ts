@@ -1,3 +1,4 @@
+import { i18n, formatNumber } from '@/services/i18n'
 import { OnCreatedQueue } from '@/services/background-on-created-queue'
 import { Tree } from '@/services/background-tree'
 import { normalizeExternalDropItems } from '@/services/external-drop'
@@ -21,7 +22,7 @@ export async function importExternalUrls(
       url: urls,
     })
     if (createdWindow.id === undefined) {
-      throw new Error('External drop window creation returned no ID')
+      throw new Error(i18n.t('externalDropNoWindowId'))
     }
     await Tree.addWindow(createdWindow.id)
     return
@@ -29,7 +30,7 @@ export async function importExternalUrls(
 
   const targetWindow = Tree.windowsByUid.get(message.targetWindowUid)
   if (!targetWindow) {
-    throw new Error('External drop target window not found')
+    throw new Error(i18n.t('externalDropWindowMissing'))
   }
 
   const parent = message.parentUid
@@ -37,7 +38,7 @@ export async function importExternalUrls(
       Tree.notesByUid.get(message.parentUid))
     : undefined
   if (message.parentUid && (!parent || parent.windowUid !== targetWindow.uid)) {
-    throw new Error('External drop parent is not in the target window')
+    throw new Error(i18n.t('externalDropParentMismatch'))
   }
 
   const requestedIndex = Number.isFinite(message.targetIndex)
@@ -98,7 +99,10 @@ export async function importExternalUrls(
 
   if (failedCount > 0) {
     throw new Error(
-      `${failedCount} of ${importedTabUids.length} externally dropped tabs could not be opened`,
+      i18n.t('externalDropOpenFailed', [
+        formatNumber(failedCount),
+        formatNumber(importedTabUids.length),
+      ]),
     )
   }
 }

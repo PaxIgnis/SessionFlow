@@ -1,3 +1,4 @@
+import { i18n } from '@/services/i18n'
 import { Tree } from '@/services/background-tree'
 import {
   readTabUid,
@@ -208,7 +209,7 @@ export async function handleCreatedWindow(
         tab.id,
         false,
         tab.discarded ? State.DISCARDED : State.OPEN,
-        tab.title || 'Untitled',
+        tab.title || i18n.t('untitled'),
         tab.url || '',
         tab.pinned || false,
         undefined,

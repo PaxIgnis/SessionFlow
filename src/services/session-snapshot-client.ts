@@ -1,3 +1,4 @@
+import { i18n } from '@/services/i18n'
 import type {
   SessionSnapshotExport,
   SessionSnapshotImportResult,
@@ -14,7 +15,7 @@ async function request<T>(message: SessionSnapshotRequest): Promise<T> {
   const response = (await browser.runtime.sendMessage(message)) as
     | SessionSnapshotResponse<T>
     | undefined
-  if (!response) throw new Error('No response from session snapshot service')
+  if (!response) throw new Error(i18n.t('snapshotNoResponse'))
   if (!response.ok) {
     const error = new Error(response.error) as Error & { code?: string }
     error.code = response.code

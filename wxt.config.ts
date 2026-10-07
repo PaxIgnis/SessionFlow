@@ -5,6 +5,8 @@ import { defineConfig } from 'wxt'
 // See https://wxt.dev/api/config.html
 export default defineConfig({
   manifest: {
+    default_locale: 'en',
+    description: '__MSG_extensionDescription__',
     icons: {
       '128': 'icon/session-flow.svg',
     },
@@ -40,7 +42,7 @@ export default defineConfig({
       },
     },
   },
-  modules: ['@wxt-dev/module-vue'],
+  modules: ['@wxt-dev/module-vue', '@wxt-dev/i18n/module'],
   // runner: {
   //   binaries: {
   //     //chrome: '/path/to/chrome-beta', // Use Chrome Beta instead of regular Chrome

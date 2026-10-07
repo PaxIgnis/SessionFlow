@@ -1,8 +1,8 @@
 <script lang="ts" setup>
+import { i18n } from '@/services/i18n'
 import ToggleButton from '@/components/ToggleButton.vue'
 import { Settings } from '@/services/settings'
 import { OPTIONS } from '@/types/settings'
-import { STRINGS } from '@/types/strings'
 </script>
 
 <template>
@@ -10,49 +10,53 @@ import { STRINGS } from '@/types/strings'
     id="settings_general"
     class="content-panel-section section"
   >
-    <h2 class="section-title">{{ STRINGS.settings_general }}</h2>
+    <h2 class="section-title">{{ i18n.t('general') }}</h2>
     <div class="section-body rows">
       <ToggleButton
-        label="Open the session tree on startup"
+        :label="i18n.t('openTheSessionTreeOnStartup')"
         v-model="Settings.values.openSessionTreeOnStartup"
         :options="OPTIONS.boolean"
         @update="Settings.saveSettingsToStorage()"
       />
       <ToggleButton
-        label="Reopen the tree at its last size and position"
+        :label="i18n.t('reopenTheTreeAtItsLastSizeAndPosition')"
         v-model="Settings.values.openSessionTreeInSameLocation"
         :options="OPTIONS.boolean"
         @update="Settings.saveSettingsToStorage()"
       />
       <ToggleButton
-        label="Restore the previous session on startup"
+        :label="i18n.t('restoreThePreviousSessionOnStartup')"
         v-model="Settings.values.restorePreviousSessionOnStartup"
         :options="OPTIONS.boolean"
         @update="Settings.saveSettingsToStorage()"
       />
       <ToggleButton
-        label="Match open windows to saved windows at startup"
-        description="Reconnects the windows Firefox reopened to the ones already in your tree, instead of adding duplicates."
+        :label="i18n.t('matchOpenWindowsToSavedWindowsAtStartup')"
+        :description="
+          i18n.t('reconnectsTheWindowsFirefoxReopenedToTheOnesAlreadyIn')
+        "
         v-model="Settings.values.matchOpenedWindowsWithSavedWindowsOnStartup"
         :options="OPTIONS.boolean"
         @update="Settings.saveSettingsToStorage()"
       />
       <ToggleButton
-        label="Reconnect items Firefox restores"
-        description="Applies when you undo a closed tab or window."
+        :label="i18n.t('reconnectItemsFirefoxRestores')"
+        :description="i18n.t('appliesWhenYouUndoAClosedTabOrWindow')"
         v-model="Settings.values.reconnectFirefoxRestoredItems"
         :options="OPTIONS.boolean"
         @update="Settings.saveSettingsToStorage()"
       />
       <ToggleButton
-        label="Show indent lines on items without children"
+        :label="i18n.t('showIndentLinesOnItemsWithoutChildren')"
         v-model="Settings.values.showIndentLinesWithoutChildren"
         :options="OPTIONS.boolean"
         @update="Settings.saveSettingsToStorage()"
       />
       <ToggleButton
-        label="State of duplicated items"
-        description="A duplicate can start saved, or inherit whether the original was open."
+        :label="i18n.t('stateOfDuplicatedItems')"
+        :description="
+          i18n.t('aDuplicateCanStartSavedOrInheritWhetherTheOriginal')
+        "
         v-model="Settings.values.duplicatedItemState"
         :options="OPTIONS.duplicatedItemState"
         @update="Settings.saveSettingsToStorage()"

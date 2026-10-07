@@ -1,3 +1,4 @@
+import { i18n } from '@/services/i18n'
 import * as Utils from '@/services/utils'
 import {
   ContainerMetadata,
@@ -194,7 +195,7 @@ function normalizeTab(
     savedTime: positiveNumber(record.savedTime, context.now(), context),
     selected: false,
     state: State.SAVED,
-    title: stringValue(record.title, 'Untitled', context),
+    title: stringValue(record.title, i18n.t('untitled'), context),
     url: stringValue(record.url, '', context),
     windowUid,
     collapsed: optionalBoolean(record.collapsed),

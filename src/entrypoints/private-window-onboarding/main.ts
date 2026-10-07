@@ -1,3 +1,5 @@
+import { localizeDocument } from '@/services/i18n'
+import { i18n } from '@/services/i18n'
 import { isPrivateWindowAccessAllowed } from '@/services/utils'
 
 type CompletionCommand = 'continue' | 'dismiss'
@@ -5,6 +7,7 @@ type CompletionCommand = 'continue' | 'dismiss'
 let completionPending = false
 
 document.addEventListener('DOMContentLoaded', async () => {
+  localizeDocument()
   const status = document.getElementById('private-access-status')
   const checkAgain = document.getElementById('check-again')
   const continueButton = document.getElementById('continue')
@@ -29,11 +32,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 })
 
 async function refreshAccessStatus(status: HTMLElement): Promise<void> {
-  status.textContent = 'Checking…'
+  status.textContent = i18n.t('checking')
   status.dataset.status = 'checking'
 
   const allowed = await isPrivateWindowAccessAllowed()
-  status.textContent = allowed ? 'Allowed' : 'Not allowed'
+  status.textContent = allowed ? i18n.t('allowed') : i18n.t('notAllowed')
   status.dataset.status = allowed ? 'allowed' : 'not-allowed'
 }
 

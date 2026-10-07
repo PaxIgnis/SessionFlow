@@ -1,3 +1,4 @@
+import { i18n, formatNumber } from '@/services/i18n'
 import { sendTreeCommand } from '@/services/runtime-port-service'
 import { missingContainers } from '@/services/foreground-container-actions'
 import {
@@ -70,7 +71,7 @@ export function closeTab(tabId: number, tabUid: UID): Promise<void> {
       tabId: tabId,
       tabUid: tabUid,
     } as Messages.CloseTabMessage,
-    'Session Flow could not close the tab',
+    i18n.t('sessionFlowCouldNotCloseTheTab'),
   )
 }
 
@@ -161,7 +162,7 @@ export async function openTab(tabUid: UID, windowUid: UID, url: string) {
       url: target.url,
       active: target.active,
     },
-    'Session Flow could not open the tab',
+    i18n.t('sessionFlowCouldNotOpenTheTab'),
   )
 }
 
@@ -194,7 +195,10 @@ export async function openTabs(tabs: Array<Tab>): Promise<void> {
         active: target.active,
       })),
       (failedCount, totalCount) =>
-        `Session Flow could not open ${failedCount} of ${totalCount} tabs.`,
+        i18n.t('failedOpenTabs', [
+          formatNumber(failedCount),
+          formatNumber(totalCount),
+        ]),
     )
     return
   }
@@ -212,7 +216,10 @@ export async function openTabs(tabs: Array<Tab>): Promise<void> {
       active: target.active,
     })),
     (failedCount, totalCount) =>
-      `Session Flow could not open ${failedCount} of ${totalCount} tabs.`,
+      i18n.t('failedOpenTabs', [
+        formatNumber(failedCount),
+        formatNumber(totalCount),
+      ]),
   )
 }
 
@@ -225,7 +232,10 @@ export function pinTabs(tabs: Array<Tab>): Promise<void> {
       tabUid: tab.uid,
     })),
     (failedCount, totalCount) =>
-      `Session Flow could not pin ${failedCount} of ${totalCount} tabs.`,
+      i18n.t('failedPinTabs', [
+        formatNumber(failedCount),
+        formatNumber(totalCount),
+      ]),
   )
 }
 
@@ -247,7 +257,10 @@ export function reloadTabs(tabs: Array<Tab>): Promise<void> {
       tabUid: tab.uid,
     })),
     (failedCount, totalCount) =>
-      `Session Flow could not reload ${failedCount} of ${totalCount} tabs.`,
+      i18n.t('failedReloadTabs', [
+        formatNumber(failedCount),
+        formatNumber(totalCount),
+      ]),
   )
 }
 
@@ -258,7 +271,7 @@ export function saveTab(tabId: number, tabUid: UID): Promise<void> {
       tabId: tabId,
       tabUid: tabUid,
     },
-    'Session Flow could not save the tab',
+    i18n.t('sessionFlowCouldNotSaveTheTab'),
   )
 }
 
@@ -272,7 +285,10 @@ export function saveTabs(tabs: Array<Tab>): Promise<void> {
       tabUid: tab.uid,
     })),
     (failedCount, totalCount) =>
-      `Session Flow could not save ${failedCount} of ${totalCount} tabs.`,
+      i18n.t('failedSaveTabs', [
+        formatNumber(failedCount),
+        formatNumber(totalCount),
+      ]),
   )
 }
 
@@ -361,7 +377,10 @@ export function unpinTabs(tabs: Array<Tab>): Promise<void> {
       tabUid: tab.uid,
     })),
     (failedCount, totalCount) =>
-      `Session Flow could not unpin ${failedCount} of ${totalCount} tabs.`,
+      i18n.t('failedUnpinTabs', [
+        formatNumber(failedCount),
+        formatNumber(totalCount),
+      ]),
   )
 }
 
@@ -386,7 +405,7 @@ export function closeWindow(windowId: number, windowUid: UID): Promise<void> {
       windowId: windowId,
       windowUid: windowUid,
     },
-    'Session Flow could not close the window',
+    i18n.t('sessionFlowCouldNotCloseTheWindow'),
   )
 }
 
@@ -397,7 +416,7 @@ export function saveWindow(windowId: number, windowUid: UID): Promise<void> {
       windowId: windowId,
       windowUid: windowUid,
     },
-    'Session Flow could not save the window',
+    i18n.t('sessionFlowCouldNotSaveTheWindow'),
   )
 }
 
@@ -409,7 +428,10 @@ export function saveWindows(windows: Array<Window>): Promise<void> {
       windowUid: window.uid,
     })),
     (failedCount, totalCount) =>
-      `Session Flow could not save ${failedCount} of ${totalCount} windows.`,
+      i18n.t('failedSaveWindows', [
+        formatNumber(failedCount),
+        formatNumber(totalCount),
+      ]),
   )
 }
 
@@ -441,7 +463,7 @@ export async function windowDoubleClick(
         action: 'openWindow',
         windowUid,
       },
-      'Session Flow could not open the window',
+      i18n.t('sessionFlowCouldNotOpenTheWindow'),
     )
   } else if (state === State.OPEN) {
     void sendTreeCommand({
@@ -477,15 +499,11 @@ export async function resolveContainerRecoveryModal(
           await refreshContainerRecoveryModal(target)
         } catch (refreshError) {
           await retainRemainingBulkRecoveryTarget(target)
-          showNotification(
-            `Session Flow could not recover the container: ${refreshError}`,
-          )
+          showNotification(i18n.t('recoverContainer', [String(refreshError)]))
         }
       } else {
         await retainRemainingBulkRecoveryTarget(target)
-        showNotification(
-          `Session Flow could not recover the container: ${error}`,
-        )
+        showNotification(i18n.t('recoverContainer', [String(error)]))
       }
     }
   })()
@@ -621,7 +639,7 @@ export function moveWindows(
       targetIndex: targetIndex,
       copy: copy,
     },
-    'Session Flow could not move the selected windows',
+    i18n.t('sessionFlowCouldNotMoveTheSelectedWindows'),
   )
 }
 
@@ -643,7 +661,7 @@ export function moveTreeItems(
       copy,
       includeDescendants,
     } as Messages.MoveTreeItemsMessage,
-    'Session Flow could not move the selected items',
+    i18n.t('sessionFlowCouldNotMoveTheSelectedItems'),
   )
 }
 
@@ -661,7 +679,7 @@ export function moveFirefoxNativeTabs(
       parentUid,
       targetWindowUid,
     },
-    'Session Flow could not move the Firefox tabs',
+    i18n.t('sessionFlowCouldNotMoveTheFirefoxTabs'),
   )
 }
 
@@ -679,7 +697,7 @@ export function importExternalUrls(
       parentUid,
       targetWindowUid,
     } as Messages.ImportExternalUrlsMessage,
-    'Session Flow could not import the dropped URLs',
+    i18n.t('sessionFlowCouldNotImportTheDroppedURLs'),
   )
 }
 
@@ -717,9 +735,7 @@ export function duplicateTreeItems(
     itemUIDs,
     includeDescendants,
   } as Messages.DuplicateTreeItemsMessage).catch((error) => {
-    showNotification(
-      `Session Flow could not duplicate the selected items: ${error}`,
-    )
+    showNotification(i18n.t('duplicateItems', [String(error)]))
   })
 }
 
@@ -727,9 +743,7 @@ export async function deleteTreeItems(itemUIDs: Array<UID>): Promise<void> {
   try {
     await sendTreeCommand({ action: 'deleteTreeItems', itemUIDs })
   } catch (error) {
-    showNotification(
-      `Session Flow could not delete the selected items: ${error}`,
-    )
+    showNotification(i18n.t('deleteItems', [String(error)]))
   }
 }
 

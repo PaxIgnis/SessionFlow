@@ -1,3 +1,4 @@
+import { i18n } from '@/services/i18n'
 import * as Messages from '@/services/foreground-messages'
 import { openModal } from '@/services/modal-state'
 import { Selection } from '@/services/selection'
@@ -8,7 +9,7 @@ export const contextMenuItemsWindow: Record<string, () => ContextMenuItem> = {
   newWindow: () => {
     return {
       id: 'newWindow',
-      label: 'New Window',
+      label: i18n.t('newWindowLabel'),
       icon: 'window',
       enabled: true,
       action: () => {
@@ -25,7 +26,7 @@ export const contextMenuItemsWindow: Record<string, () => ContextMenuItem> = {
   saveWindow: () => {
     return {
       id: 'saveWindow',
-      label: 'Save',
+      label: i18n.t('save'),
       icon: 'save',
       enabled: atLeastOneSelectedWindowOpen(),
       action: () => Messages.saveWindows(Selection.getSelectedWindows()),
@@ -35,7 +36,7 @@ export const contextMenuItemsWindow: Record<string, () => ContextMenuItem> = {
   editWindowTitle: () => {
     return {
       id: 'editWindowTitle',
-      label: 'Edit Title',
+      label: i18n.t('editTitle'),
       icon: 'edit',
       enabled: onlySingleWindowSelected(),
       action: () => {

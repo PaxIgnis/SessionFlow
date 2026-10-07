@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+﻿import { describe, expect, it } from 'vitest'
 import {
   buildDragImagePreview,
   collectDraggedItemsWithIncludedChildren,
@@ -43,8 +43,8 @@ describe('drag start item collection', () => {
       expect(
         buildDragImagePreview([window, selectedNote, selectedTab]),
       ).toEqual({
-        title: '1 window, 1 note and 1 tab',
-        metadata: '(Window contents: 2 tabs, 1 note and 1 separator)',
+        title: '1 window, 1 note, and 1 tab',
+        metadata: '(Window contents: 2 tabs, 1 note, and 1 separator)',
         body: [selectedTab.url],
       })
     })
@@ -100,7 +100,7 @@ describe('drag start item collection', () => {
 
       expect(buildDragImagePreview([firstWindow, secondWindow])).toEqual({
         title: '2 windows',
-        metadata: '(Window contents: 2 tabs, 1 note and 1 separator)',
+        metadata: '(Window contents: 2 tabs, 1 note, and 1 separator)',
         body: [],
       })
     })
@@ -217,7 +217,7 @@ describe('drag start item collection', () => {
 
   it('serializes Unicode and markup-looking tab data without creating executable HTML', () => {
     const tab = makeForegroundTab('tab-1' as UID, {
-      title: 'Snowman ☃\n<img src=x onerror="alert(1)">',
+      title: 'Snowman â˜ƒ\n<img src=x onerror="alert(1)">',
       url: 'https://example.test/path?quote=%22value%22',
     })
     const written = new Map<string, string>()
@@ -316,7 +316,7 @@ describe('drag start item collection', () => {
     expect(selected.map((item) => item.uid)).toEqual(
       tabs.map((item) => item.uid),
     )
-    expect(preview.title).toBe('10000 tabs')
+    expect(preview.title).toBe('10,000 tabs')
     expect(preview.body).toEqual(tabs.slice(0, 15).map((tab) => tab.url))
   })
 })

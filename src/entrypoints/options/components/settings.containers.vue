@@ -1,8 +1,8 @@
 <script lang="ts" setup>
+import { i18n } from '@/services/i18n'
 import ToggleButton from '@/components/ToggleButton.vue'
 import { Settings } from '@/services/settings'
 import { OPTIONS } from '@/types/settings'
-import { STRINGS } from '@/types/strings'
 </script>
 
 <template>
@@ -10,10 +10,10 @@ import { STRINGS } from '@/types/strings'
     id="settings_containers"
     class="content-panel-section section"
   >
-    <h2 class="section-title">{{ STRINGS.settings_containers }}</h2>
+    <h2 class="section-title">{{ i18n.t('containers') }}</h2>
     <div class="section-body rows">
       <ToggleButton
-        label="Color indicator"
+        :label="i18n.t('colorIndicator')"
         v-model="Settings.values.containerColorIndicator"
         :options="OPTIONS.containerColorIndicator"
         @update="Settings.saveSettingsToStorage()"
@@ -25,7 +25,7 @@ import { STRINGS } from '@/types/strings'
       :inert="Settings.values.containerColorIndicator === 'off'"
     >
       <ToggleButton
-        label="Fade side"
+        :label="i18n.t('fadeSide')"
         v-model="Settings.values.containerFadeSide"
         :options="OPTIONS.containerFadeSide"
         :disabled="Settings.values.containerColorIndicator === 'off'"
@@ -34,7 +34,7 @@ import { STRINGS } from '@/types/strings'
     </div>
     <div class="rows">
       <ToggleButton
-        label="Container icon"
+        :label="i18n.t('containerIcon')"
         v-model="Settings.values.containerIconPosition"
         :options="OPTIONS.containerIconPosition"
         @update="Settings.saveSettingsToStorage()"

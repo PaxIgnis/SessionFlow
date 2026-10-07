@@ -1,4 +1,5 @@
 <script lang="ts" setup>
+import { i18n } from '@/services/i18n'
 import { isKnownFirefoxContainerIcon } from '@/defaults/container-icons'
 import type { ContainerMetadata } from '@/types/session-tree'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
@@ -76,12 +77,13 @@ function handleDialogKeydown(event: KeyboardEvent): void {
     >
       <h2 id="container-recovery-title">
         {{
-          plural ? 'Containers No Longer Exist' : 'Container No Longer Exists'
+          plural
+            ? i18n.t('containersNoLongerExist')
+            : i18n.t('containerNoLongerExists')
         }}
       </h2>
       <p>
-        Session Flow cannot open this item in its saved
-        {{ plural ? 'containers' : 'container' }}.
+        {{ i18n.t(plural ? 'containersUnavailable' : 'containerUnavailable') }}
       </p>
       <ul>
         <li
@@ -105,8 +107,7 @@ function handleDialogKeydown(event: KeyboardEvent): void {
         </li>
       </ul>
       <p>
-        Recreating creates a new empty container. Its cookies and signed-in
-        sessions cannot be recovered.
+        {{ i18n.t('recreatingCreatesANewEmptyContainerItsCookiesAndSignedin') }}
       </p>
       <div class="container-recovery-actions">
         <button
@@ -115,8 +116,8 @@ function handleDialogKeydown(event: KeyboardEvent): void {
         >
           {{
             plural
-              ? 'Recreate Missing Containers and Open'
-              : 'Recreate Container and Open'
+              ? i18n.t('recreateMissingContainersAndOpen')
+              : i18n.t('recreateContainerAndOpen')
           }}
         </button>
         <button
@@ -125,15 +126,15 @@ function handleDialogKeydown(event: KeyboardEvent): void {
         >
           {{
             plural
-              ? 'Open Without Missing Containers'
-              : 'Open Without Container'
+              ? i18n.t('openWithoutMissingContainers')
+              : i18n.t('openWithoutContainer')
           }}
         </button>
         <button
           :disabled="pending"
           @click="$emit('cancel')"
         >
-          Cancel
+          {{ i18n.t('cancel') }}
         </button>
       </div>
     </section>

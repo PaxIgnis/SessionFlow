@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+﻿import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 class FakeClassList {
   private readonly classes = new Set<string>()
@@ -38,6 +38,11 @@ class FakeElement {
 }
 
 class FakeDocument {
+  documentElement = { lang: 'en' }
+  querySelectorAll() {
+    return []
+  }
+
   title = ''
   private domContentLoadedListener: (() => void) | undefined
   readonly elements = new Map<string, FakeElement | null>()
@@ -151,9 +156,9 @@ describe('redirect entrypoint', () => {
 
   it('renders HTML-looking, Unicode, fragmented, and long targets only as text', async () => {
     const targetUrl = `about:reader?url=${encodeURIComponent(
-      'https://example.test/<img src=x onerror=alert(1)>/λ',
+      'https://example.test/<img src=x onerror=alert(1)>/Î»',
     )}#fragment-${'x'.repeat(2_000)}`
-    const targetTitle = '<script>alert(1)</script> — λ'
+    const targetTitle = '<script>alert(1)</script> â€” Î»'
     const document = createRedirectDocument()
     installRedirectGlobals({
       document,

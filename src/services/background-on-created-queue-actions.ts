@@ -1,3 +1,4 @@
+import { i18n } from '@/services/i18n'
 import { OnCreatedQueue } from '@/services/background-on-created-queue'
 
 const CREATION_EVENT_TIMEOUT_MS = 15000
@@ -22,7 +23,13 @@ function waitForListenerResolution(
       if (elapsedMs >= CREATION_EVENT_TIMEOUT_MS) {
         clearInterval(interval)
         reject(
-          new Error(`Timed out waiting for Firefox ${itemType} creation event`),
+          new Error(
+            i18n.t(
+              itemType === 'tab'
+                ? 'tabCreationTimeout'
+                : 'windowCreationTimeout',
+            ),
+          ),
         )
       }
     }, CREATION_EVENT_POLL_MS)
@@ -202,7 +209,7 @@ export async function createTabAndWait(
       0,
       OnCreatedQueue.pendingTabCount - 1,
     )
-    throw new Error('Tab creation returned no ID')
+    throw new Error(i18n.t('tabCreationNoId'))
   }
   addPendingTabToQueue(tab.id, true, false)
   try {
@@ -281,10 +288,10 @@ export async function createWindowAndWait(
     })
   try {
     if (window.id === undefined || !window.tabs) {
-      throw new Error('Window creation failed: ID or tabs undefined')
+      throw new Error(i18n.t('windowCreationIncomplete'))
     }
     if (tabCount > 0 && window.tabs.some((tab) => tab.id === undefined)) {
-      throw new Error('Tab ID is undefined')
+      throw new Error(i18n.t('tabIdMissing'))
     }
     // Update window position if provided. This is necessary
     // because top/left are ignored before Firefox 109.
@@ -309,7 +316,7 @@ export async function createWindowAndWait(
       const promises: Promise<void>[] = []
       for (const tab of window.tabs) {
         if (!tab.id) {
-          throw new Error('Tab ID is undefined')
+          throw new Error(i18n.t('tabIdMissing'))
         }
         addPendingTabToQueue(tab.id, true, false)
         promises.push(

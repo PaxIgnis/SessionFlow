@@ -17,7 +17,9 @@ describe('context menu settings UI', () => {
     expect(optionsSource).toContain(
       "import SettingsContextMenu from './components/settings.context-menu.vue'",
     )
-    expect(optionsSource).toContain("{ id: 'settings_context_menu', level: 0 }")
+    expect(optionsSource).toContain(
+      "{ id: 'settings_context_menu', level: 0, label: i18n.t('contextMenu') }",
+    )
     expect(optionsSource).toContain('<SettingsContextMenu />')
   })
 
@@ -40,15 +42,15 @@ describe('context menu settings UI', () => {
       'utf8',
     )
     for (const label of [
-      'Delete',
-      'Duplicate',
-      'Open saved tabs',
-      'Reload tabs',
-      'Save tabs',
-      'Pin and unpin',
-      'Change indent',
+      'delete',
+      'duplicate',
+      'openSavedTabs',
+      'reloadTabs',
+      'saveTabs',
+      'pinAndUnpin',
+      'changeIndent',
     ]) {
-      expect(matrixSource).toContain(`label: '${label}'`)
+      expect(matrixSource).toContain(`label: i18n.t('${label}')`)
     }
     expect(matrixSource).toContain('type="radio"')
     expect(matrixSource).toContain(':name="`descendant-scope-${row.key}`"')

@@ -1,4 +1,4 @@
-import { isPrivateWindowAccessAllowed } from '@/services/utils'
+﻿import { isPrivateWindowAccessAllowed } from '@/services/utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/services/utils', () => ({
@@ -22,6 +22,11 @@ class FakeElement {
 }
 
 class FakeDocument {
+  documentElement = { lang: 'en' }
+  querySelectorAll() {
+    return []
+  }
+
   private domContentLoadedListener: EventListener | undefined
   readonly elements = new Map<string, FakeElement>()
 

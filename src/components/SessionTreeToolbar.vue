@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { i18n } from '@/services/i18n'
 defineEmits<{
   addNote: []
   addSeparator: []
@@ -11,14 +12,14 @@ defineEmits<{
 <template>
   <nav
     class="session-tree-toolbar"
-    aria-label="Tree actions"
+    :aria-label="i18n.t('treeActions')"
     @click.stop
   >
     <button
       class="toolbar-button"
       type="button"
-      aria-label="New tab"
-      title="New tab"
+      :aria-label="i18n.t('newTab')"
+      :title="i18n.t('newTab')"
       @click="$emit('newTab')"
     >
       <svg
@@ -31,8 +32,8 @@ defineEmits<{
     <button
       class="toolbar-button"
       type="button"
-      aria-label="New window"
-      title="New window"
+      :aria-label="i18n.t('newWindow')"
+      :title="i18n.t('newWindow')"
       @click="$emit('newWindow')"
     >
       <svg
@@ -52,8 +53,8 @@ defineEmits<{
     <button
       class="toolbar-button"
       type="button"
-      aria-label="Add note"
-      title="Add note"
+      :aria-label="i18n.t('addNote')"
+      :title="i18n.t('addNote')"
       @click="$emit('addNote')"
     >
       <svg
@@ -67,8 +68,8 @@ defineEmits<{
     <button
       class="toolbar-button"
       type="button"
-      aria-label="Add separator"
-      title="Add separator"
+      :aria-label="i18n.t('addSeparator')"
+      :title="i18n.t('addSeparator')"
       @click="$emit('addSeparator')"
     >
       <svg
@@ -84,8 +85,8 @@ defineEmits<{
     <button
       class="toolbar-button settings-button"
       type="button"
-      aria-label="Settings"
-      title="Settings"
+      :aria-label="i18n.t('settings')"
+      :title="i18n.t('settings')"
       @click="$emit('openSettings')"
     >
       <svg

@@ -1,3 +1,4 @@
+import { i18n, formatNumber } from '@/services/i18n'
 import {
   State,
   TreeItemType,
@@ -76,14 +77,19 @@ export function formatStateBreakdown(counts: {
   saved: number
 }): string {
   const parts: string[] = []
-  if (counts.open > 0) parts.push(`${counts.open} open`)
-  if (counts.unloaded > 0) parts.push(`${counts.unloaded} unloaded`)
-  if (counts.saved > 0) parts.push(`${counts.saved} saved`)
+  if (counts.open > 0)
+    parts.push(i18n.t('countOpen', [formatNumber(counts.open)]))
+  if (counts.unloaded > 0)
+    parts.push(i18n.t('countUnloaded', [formatNumber(counts.unloaded)]))
+  if (counts.saved > 0)
+    parts.push(i18n.t('countSaved', [formatNumber(counts.saved)]))
   return parts.join(' \u00b7 ')
 }
 
 export function formatTallyLine(label: string, total: number, breakdown = '') {
-  return breakdown ? `${label}: ${total} (${breakdown})` : `${label}: ${total}`
+  return breakdown
+    ? `${label}: ${formatNumber(total)} (${breakdown})`
+    : `${label}: ${formatNumber(total)}`
 }
 
 /* The shared tail of the window and session hover summaries. Tabs always
@@ -91,11 +97,15 @@ export function formatTallyLine(label: string, total: number, breakdown = '') {
    categories stay quiet unless they are actually present. */
 export function formatTallyLines(tally: TreeItemTally): string[] {
   const lines = [
-    formatTallyLine('Tabs', tally.tabs, formatStateBreakdown(tally)),
+    formatTallyLine(
+      i18n.t('tabsLabel'),
+      tally.tabs,
+      formatStateBreakdown(tally),
+    ),
   ]
-  if (tally.notes > 0) lines.push(formatTallyLine('Notes', tally.notes))
+  if (tally.notes > 0) lines.push(formatTallyLine(i18n.t('notes'), tally.notes))
   if (tally.separators > 0) {
-    lines.push(formatTallyLine('Separators', tally.separators))
+    lines.push(formatTallyLine(i18n.t('separators'), tally.separators))
   }
   return lines
 }

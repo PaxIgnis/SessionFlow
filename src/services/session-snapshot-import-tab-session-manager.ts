@@ -1,3 +1,4 @@
+import { i18n } from '@/services/i18n'
 import {
   countSnapshotItems,
   validateSessionSnapshotPayload,
@@ -104,7 +105,7 @@ export function parseTabSessionManagerImport(
     items.push({
       type: TreeItemType.NOTE,
       uid: sessionUid,
-      text: session.name || `Session ${sessionIndex + 1}`,
+      text: session.name || i18n.t('sessionNumber', [sessionIndex + 1]),
       indentLevel: 0,
       collapsed: false,
       isParent: Object.keys(windows).length > 0 || session.tag.length > 0,
@@ -115,7 +116,7 @@ export function parseTabSessionManagerImport(
         type: TreeItemType.NOTE,
         uid: uid(),
         parentUid: sessionUid,
-        text: `Tags: ${session.tag.join(', ')}`,
+        text: i18n.t('tagsDetail', [session.tag.join(', ')]),
         indentLevel: 1,
         collapsed: false,
         isParent: false,
@@ -361,7 +362,5 @@ function timestamp(value: unknown): number {
   return value
 }
 function invalid(): never {
-  throw new Error(
-    'Invalid or unsupported Tab Session Manager snapshot. No snapshot was imported.',
-  )
+  throw new Error(i18n.t('invalidTabSessionManager'))
 }

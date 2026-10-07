@@ -1,3 +1,4 @@
+import { i18n, formatNumber } from '@/services/i18n'
 import { Browser } from '@/services/background-browser'
 import { removeBrowserWindow } from '@/services/background-command-removal'
 import { DeferredEventsQueue } from '@/services/background-deferred-events-queue'
@@ -443,7 +444,7 @@ export async function openWindow(
   try {
     const sessionTreeWindow = Tree.windowsByUid.get(message.windowUid)
     if (!sessionTreeWindow) {
-      throw new Error('Saved window not found')
+      throw new Error(i18n.t('savedWindowNotFound'))
     }
     if (
       sessionTreeWindow.incognito &&
@@ -515,7 +516,7 @@ export async function openWindow(
         window?.id === undefined ||
         (firstSessionTab && firstBrowserTab?.id === undefined)
       ) {
-        throw new Error('Window creation returned no window or tab ID')
+        throw new Error(i18n.t('windowCreationNoIds'))
       }
       if (!Settings.values.focusWindowOnOpen && Tree.sessionTreeWindowId) {
         Browser.focusWindow({ windowId: Tree.sessionTreeWindowId })
@@ -575,7 +576,9 @@ export async function openWindow(
           warnings: [
             {
               code: 'tab-group-restore-partial',
-              message: `Session Flow opened the window, but ${affectedCount} tab ${affectedCount === 1 ? 'group' : 'groups'} could not be fully restored.`,
+              message: i18n.t('groupsNotRestored', affectedCount, [
+                formatNumber(affectedCount),
+              ]),
               affectedCount,
             },
           ],

@@ -1,3 +1,4 @@
+import { i18n } from '@/services/i18n'
 import { Tree } from '@/services/background-tree'
 import { emitTreeDelta } from '@/services/runtime-port-service'
 import { normalizeEditTextValue } from '@/services/utils'
@@ -16,7 +17,7 @@ import { Note, TreeItem, TreeItemType, Window } from '@/types/session-tree'
 export function createNote(
   parentUid?: UID,
   index?: number,
-  text: string = 'New note',
+  text: string = i18n.t('newNote'),
 ): UID {
   const { children, parent } = Tree.getContainerForParent(parentUid)
   const itemParentUid =

@@ -1,8 +1,8 @@
 <script lang="ts" setup>
+import { i18n } from '@/services/i18n'
 import ToggleButton from '@/components/ToggleButton.vue'
 import { Settings } from '@/services/settings'
 import { OPTIONS } from '@/types/settings'
-import { STRINGS } from '@/types/strings'
 </script>
 
 <template>
@@ -10,24 +10,26 @@ import { STRINGS } from '@/types/strings'
     id="settings_tab_groups"
     class="content-panel-section section"
   >
-    <h2 class="section-title">{{ STRINGS.settings_tab_groups }}</h2>
+    <h2 class="section-title">{{ i18n.t('tabGroups') }}</h2>
     <div class="section-body rows">
       <ToggleButton
-        label="Group a tab dropped next to a group"
-        description="Choose whether both neighbours must belong to the same group, or any adjacent group is enough."
+        :label="i18n.t('groupATabDroppedNextToAGroup')"
+        :description="
+          i18n.t('chooseWhetherBothNeighboursMustBelongToTheSameGroup')
+        "
         v-model="Settings.values.tabGroupDropBehavior"
         :options="OPTIONS.tabGroupDropBehavior"
         @update="Settings.saveSettingsToStorage()"
       />
       <ToggleButton
-        label="Color indicator"
+        :label="i18n.t('colorIndicator')"
         v-model="Settings.values.tabGroupColorIndicator"
         :options="OPTIONS.tabGroupColorIndicator"
         @update="Settings.saveSettingsToStorage()"
       />
       <ToggleButton
-        label="Save tabs when their group is removed"
-        description="Includes removing a group by closing its last tab."
+        :label="i18n.t('saveTabsWhenTheirGroupIsRemoved')"
+        :description="i18n.t('includesRemovingAGroupByClosingItsLastTab')"
         v-model="Settings.values.saveTabsWhenTabGroupDeleted"
         :options="OPTIONS.boolean"
         @update="Settings.saveSettingsToStorage()"

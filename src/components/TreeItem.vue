@@ -1,4 +1,5 @@
 <script lang="ts" setup>
+import { i18n, formatNumber } from '@/services/i18n'
 import { isKnownFirefoxContainerIcon } from '@/defaults/container-icons'
 import { TAB_LOADING } from '@/defaults/favicons'
 import { ContextMenu } from '@/services/context-menu'
@@ -432,7 +433,7 @@ const tabGroupIndicator = computed(() => {
   return {
     color: `var(--tab-group-color-${props.item.tabGroup.color})`,
     position: Settings.values.tabGroupColorIndicator,
-    title: props.item.tabGroup.title?.trim() || 'Unnamed tab group',
+    title: props.item.tabGroup.title?.trim() || i18n.t('unnamedTabGroup'),
   }
 })
 
@@ -472,10 +473,10 @@ const tabHoverDetails = computed(() => {
 
   const details: string[] = []
   if (Settings.values.showTabTitleOnHover) {
-    details.push(`Title: ${props.item.title}`)
+    details.push(i18n.t('titleDetail', [props.item.title]))
   }
   if (Settings.values.showTabUrlOnHover) {
-    details.push(`URL: ${props.item.url}`)
+    details.push(i18n.t('urlDetail', [props.item.url]))
   }
   if (
     Settings.values.tabGroupInfoOnHover === 'always' ||
@@ -483,23 +484,23 @@ const tabHoverDetails = computed(() => {
       props.item.tabGroup)
   ) {
     details.push(
-      `Tab group: ${
+      i18n.t('tabGroupDetail', [
         props.item.tabGroup?.title?.trim() ||
-        (props.item.tabGroup ? 'Unnamed tab group' : 'None')
-      }`,
+          (props.item.tabGroup ? i18n.t('unnamedTabGroup') : i18n.t('none')),
+      ]),
     )
   }
   if (props.item.container) {
-    details.push(`Container: ${props.item.container.name}`)
+    details.push(i18n.t('containerDetail', [props.item.container.name]))
   }
 
   return details.length > 0 ? details.join('\n') : undefined
 })
 
 const WINDOW_STATE_LABELS: Partial<Record<State, string>> = {
-  [State.OPEN]: 'Open',
-  [State.SAVED]: 'Saved',
-  [State.DISCARDED]: 'Unloaded',
+  [State.OPEN]: i18n.t('openState'),
+  [State.SAVED]: i18n.t('saved'),
+  [State.DISCARDED]: i18n.t('unloaded'),
 }
 
 /*
@@ -513,12 +514,12 @@ const windowHoverDetails = computed(() => {
   const tally = createTreeItemTally()
   for (const child of props.item.children) tallyTreeItem(tally, child)
 
-  const kind = props.item.incognito ? 'Private window' : 'Window'
+  const kind = props.item.incognito ? i18n.t('privateWindow') : i18n.t('window')
   const name = props.item.title?.trim()
   const lines = [name ? `${kind}: ${name}` : kind]
 
   const state = WINDOW_STATE_LABELS[props.item.state]
-  if (state) lines.push(`State: ${state}`)
+  if (state) lines.push(i18n.t('stateDetail', [state]))
 
   return [...lines, ...formatTallyLines(tally)].join('\n')
 })
@@ -612,15 +613,17 @@ function isFocusedTab(item: TreeItem): boolean {
       v-if="containerDisplay"
       :id="containerDescriptionId"
       class="tree-item-container-description"
-    >
-      Container: {{ containerDisplay.metadata.name }}
+      >{{ i18n.t('containerDetail', [containerDisplay.metadata.name]) }}
     </span>
     <span
       v-if="isTab(item) && item.tabGroup"
       :id="tabGroupDescriptionId"
       class="tree-item-tab-group-description"
-    >
-      Tab group: {{ item.tabGroup.title?.trim() || 'Unnamed tab group' }}
+      >{{
+        i18n.t('tabGroupDetail', [
+          item.tabGroup.title?.trim() || i18n.t('unnamedTabGroup'),
+        ])
+      }}
     </span>
     <span
       v-if="tabGroupIndicator"
@@ -662,8 +665,8 @@ function isFocusedTab(item: TreeItem): boolean {
         "
         class="tree-item-hover-menu-button"
         type="button"
-        aria-label="Save"
-        title="Save"
+        :aria-label="i18n.t('save')"
+        :title="i18n.t('save')"
         @click.stop="saveItemAction()"
       >
         <svg
@@ -677,8 +680,8 @@ function isFocusedTab(item: TreeItem): boolean {
       <button
         class="tree-item-hover-menu-button"
         type="button"
-        aria-label="Delete"
-        title="Delete"
+        :aria-label="i18n.t('delete')"
+        :title="i18n.t('delete')"
         @click.stop="deleteItemAction()"
       >
         <svg
@@ -738,7 +741,7 @@ function isFocusedTab(item: TreeItem): boolean {
             class="child-count"
             :class="{ 'tree-item-child-active': childrenOpen }"
             @dblclick.stop
-            >{{ childCount }}</span
+            >{{ formatNumber(childCount) }}</span
           >
           <svg
             class="collapse-arrow"
@@ -802,8 +805,10 @@ function isFocusedTab(item: TreeItem): boolean {
           }"
           :aria-label="
             props.item.incognito
-              ? `Private window: ${props.item.title || 'Window'}`
-              : props.item.title || 'Window'
+              ? i18n.t('privateWindowDetail', [
+                  props.item.title || i18n.t('window'),
+                ])
+              : props.item.title || i18n.t('window')
           "
         >
           <img
@@ -822,14 +827,13 @@ function isFocusedTab(item: TreeItem): boolean {
               'tree-item-text-active': props.item.active === true,
             }"
           >
-            {{ props.item.title || 'Window' }}
+            {{ props.item.title || i18n.t('window') }}
           </div>
           <span
             v-if="props.item.incognito"
             class="tree-item-window-private-badge"
+            >{{ i18n.t('private') }}</span
           >
-            Private
-          </span>
         </div>
       </template>
       <template v-else-if="isTab(props.item)">
@@ -922,7 +926,7 @@ function isFocusedTab(item: TreeItem): boolean {
       <template v-else-if="isSeparator(props.item)">
         <div
           class="tree-item-separator-line"
-          aria-label="Separator"
+          :aria-label="i18n.t('separator')"
         ></div>
       </template>
     </div>
@@ -955,7 +959,7 @@ function isFocusedTab(item: TreeItem): boolean {
       <span
         class="tree-item-window-count"
         :class="{ 'tree-item-child-active': childrenOpen }"
-        >{{ windowComposition.total }}</span
+        >{{ formatNumber(windowComposition.total) }}</span
       >
     </div>
   </div>

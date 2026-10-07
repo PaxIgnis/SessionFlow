@@ -1,3 +1,4 @@
+import { i18n } from '@/services/i18n'
 import { validateSessionSnapshotPayload } from '@/services/session-snapshot-codec'
 import type {
   SessionSnapshotMetadata,
@@ -85,12 +86,12 @@ export class IndexedDbSessionSnapshotRepository implements SessionSnapshotReposi
       requestResult<unknown>(payloadRequest),
     ])
     await transactionDone(transaction)
-    if (!metadata) throw new Error(`Session snapshot not found: ${id}`)
+    if (!metadata) throw new Error(i18n.t('snapshotNotFound', [id]))
     if (!metadata.available || payload === undefined) {
       if (metadata.available && payload === undefined) {
         await this.markUnavailable(id)
       }
-      throw new Error(`Session snapshot payload is unavailable: ${id}`)
+      throw new Error(i18n.t('snapshotPayloadUnavailable', [id]))
     }
     let validatedPayload: SessionSnapshotPayload
     try {
@@ -114,7 +115,7 @@ export class IndexedDbSessionSnapshotRepository implements SessionSnapshotReposi
     )
     if (!metadata) {
       transaction.abort()
-      throw new Error(`Session snapshot not found: ${id}`)
+      throw new Error(i18n.t('snapshotNotFound', [id]))
     }
     store.put({ ...metadata, protected: value })
     await transactionDone(transaction)
@@ -175,7 +176,7 @@ export class IndexedDbSessionSnapshotRepository implements SessionSnapshotReposi
   private async open(): Promise<IDBDatabase> {
     if (this.database) return this.database
     const factory = this.factory ?? globalThis.indexedDB
-    if (!factory) throw new Error('IndexedDB is unavailable')
+    if (!factory) throw new Error(i18n.t('databaseUnavailable'))
     this.database = await new Promise<IDBDatabase>((resolve, reject) => {
       const request = factory.open(this.databaseName, DATABASE_VERSION)
       request.onupgradeneeded = () => {
@@ -189,9 +190,9 @@ export class IndexedDbSessionSnapshotRepository implements SessionSnapshotReposi
       }
       request.onsuccess = () => resolve(request.result)
       request.onerror = () =>
-        reject(request.error ?? new Error('Failed to open snapshot database'))
+        reject(request.error ?? new Error(i18n.t('databaseOpenFailed')))
       request.onblocked = () =>
-        reject(new Error('Session snapshot database upgrade is blocked'))
+        reject(new Error(i18n.t('databaseUpgradeBlocked')))
     })
     return this.database
   }
@@ -255,7 +256,7 @@ function requestResult<T>(request: IDBRequest): Promise<T> {
   return new Promise((resolve, reject) => {
     request.onsuccess = () => resolve(request.result as T)
     request.onerror = () =>
-      reject(request.error ?? new Error('IndexedDB request failed'))
+      reject(request.error ?? new Error(i18n.t('databaseRequestFailed')))
   })
 }
 
@@ -263,8 +264,12 @@ function transactionDone(transaction: IDBTransaction): Promise<void> {
   return new Promise((resolve, reject) => {
     transaction.oncomplete = () => resolve()
     transaction.onabort = () =>
-      reject(transaction.error ?? new Error('IndexedDB transaction aborted'))
+      reject(
+        transaction.error ?? new Error(i18n.t('databaseTransactionAborted')),
+      )
     transaction.onerror = () =>
-      reject(transaction.error ?? new Error('IndexedDB transaction failed'))
+      reject(
+        transaction.error ?? new Error(i18n.t('databaseTransactionFailed')),
+      )
   })
 }

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { i18n } from '@/services/i18n'
 import { Settings } from '@/services/settings'
 import { OPTIONS } from '@/types/settings'
 
@@ -26,37 +27,37 @@ const ordinaryOptions = OPTIONS.includeChildrenOfSelectedItems
 const rows: MatrixRow[] = [
   {
     key: 'contextMenuDeleteDescendants',
-    label: 'Delete',
+    label: i18n.t('delete'),
     options: ordinaryOptions,
   },
   {
     key: 'duplicateTreeItemDescendants',
-    label: 'Duplicate',
+    label: i18n.t('duplicate'),
     options: OPTIONS.duplicateTreeItemDescendants,
   },
   {
     key: 'contextMenuOpenDescendants',
-    label: 'Open saved tabs',
+    label: i18n.t('openSavedTabs'),
     options: ordinaryOptions,
   },
   {
     key: 'contextMenuReloadDescendants',
-    label: 'Reload tabs',
+    label: i18n.t('reloadTabs'),
     options: ordinaryOptions,
   },
   {
     key: 'contextMenuSaveDescendants',
-    label: 'Save tabs',
+    label: i18n.t('saveTabs'),
     options: ordinaryOptions,
   },
   {
     key: 'contextMenuPinDescendants',
-    label: 'Pin and unpin',
+    label: i18n.t('pinAndUnpin'),
     options: ordinaryOptions,
   },
   {
     key: 'includeChildrenOfSelectedItemsWhenIndenting',
-    label: 'Change indent',
+    label: i18n.t('changeIndent'),
     options: ordinaryOptions,
   },
 ]
@@ -115,10 +116,10 @@ function updateScope(row: MatrixRow, value: string) {
       class="matrix-head"
       aria-hidden="true"
     >
-      <span class="matrix-head-label">Action</span>
-      <span class="matrix-head-col">Always</span>
-      <span class="matrix-head-col">If collapsed</span>
-      <span class="matrix-head-col">Never</span>
+      <span class="matrix-head-label">{{ i18n.t('action') }}</span>
+      <span class="matrix-head-col">{{ i18n.t('always') }}</span>
+      <span class="matrix-head-col">{{ i18n.t('ifCollapsed') }}</span>
+      <span class="matrix-head-col">{{ i18n.t('never') }}</span>
     </div>
     <div
       v-for="row in rows"

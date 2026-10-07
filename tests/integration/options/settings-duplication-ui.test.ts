@@ -27,12 +27,14 @@ describe('duplication settings UI', () => {
       ),
       'utf8',
     )
-    expect(matrixSource).toContain("label: 'Duplicate'")
+    expect(matrixSource).toContain("label: i18n.t('duplicate')")
     expect(matrixSource).toContain(
       'Settings.values.duplicateTreeItemDescendants',
     )
     expect(matrixSource).toContain('OPTIONS.duplicateTreeItemDescendants')
-    expect(generalSource).toContain('label="State of duplicated items"')
+    expect(generalSource).toContain(
+      ':label="i18n.t(\'stateOfDuplicatedItems\')"',
+    )
     expect(generalSource).toContain(
       'v-model="Settings.values.duplicatedItemState"',
     )

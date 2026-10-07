@@ -1,3 +1,4 @@
+import { i18n } from '@/services/i18n'
 import {
   countSnapshotItems,
   validateSessionSnapshotPayload,
@@ -194,7 +195,7 @@ export function parseSessionBuddyImport(
       const note: SnapshotNote = {
         type: TreeItemType.NOTE,
         uid: uid(),
-        text: name(collection) || `Collection ${index + 1}`,
+        text: name(collection) || i18n.t('collectionNumber', [index + 1]),
         indentLevel: 0,
         isParent: folders.length > 0,
         collapsed: false,
@@ -206,12 +207,10 @@ export function parseSessionBuddyImport(
   } else if (level === 1) {
     for (const folder of entries) convertWindow(folder)
   } else {
-    convertWindow({ title: 'Imported tabs', links: entries })
+    convertWindow({ title: i18n.t('importedTabs'), links: entries })
   }
   if (items.length === 0 && warnings.has('history-not-imported')) {
-    throw new Error(
-      'This Session Buddy backup contains only history. Export saved collections to import them.',
-    )
+    throw new Error(i18n.t('sessionBuddyHistoryOnly'))
   }
   const payload = validateSessionSnapshotPayload({ schemaVersion: 1, items })
   return {
@@ -289,7 +288,5 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function invalid(): never {
-  throw new Error(
-    'Invalid or unsupported Session Buddy snapshot. No snapshot was imported.',
-  )
+  throw new Error(i18n.t('invalidSessionBuddy'))
 }

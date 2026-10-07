@@ -1,4 +1,5 @@
 <script lang="ts" setup>
+import { i18n } from '@/services/i18n'
 import { truncateText } from '@/services/utils'
 import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 
@@ -20,8 +21,8 @@ const inputRef = ref<HTMLInputElement | HTMLTextAreaElement | null>(null)
 const dialogRef = ref<HTMLElement | null>(null)
 let previouslyFocused: HTMLElement | null = null
 
-const dialogTitle = props.title || 'Edit Text'
-const inputPlaceholder = props.placeholder || 'Enter text'
+const dialogTitle = props.title || i18n.t('editText')
+const inputPlaceholder = props.placeholder || i18n.t('enterText')
 
 function handleConfirm() {
   emit('confirm', truncateText(inputValue.value, props.maxLength))
@@ -140,13 +141,13 @@ onBeforeUnmount(() => {
           class="btn btn-primary"
           @click="handleConfirm"
         >
-          OK
+          {{ i18n.t('oK') }}
         </button>
         <button
           class="btn btn-secondary"
           @click="handleCancel"
         >
-          Cancel
+          {{ i18n.t('cancel') }}
         </button>
       </div>
     </div>

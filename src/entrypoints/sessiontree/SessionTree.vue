@@ -1,4 +1,5 @@
 <script lang="ts" setup>
+import { i18n, formatNumber } from '@/services/i18n'
 import IconChevronRight from '@/assets/chevron-right.svg'
 import IconPinned from '@/assets/pinned.svg'
 import ContainerRecoveryModal from '@/components/ContainerRecoveryModal.vue'
@@ -100,7 +101,7 @@ const treeComposition = computed(() => {
     unloaded: tally.unloaded,
     saved: tally.saved,
     total: tally.open + tally.unloaded + tally.saved,
-    title: breakdown || 'No tabs',
+    title: breakdown || i18n.t('noTabs'),
   }
 })
 
@@ -127,9 +128,9 @@ const sessionHoverDetails = computed(() => {
   }
 
   return [
-    'Session',
+    i18n.t('session'),
     formatTallyLine(
-      'Windows',
+      i18n.t('windows'),
       windows,
       formatStateBreakdown({
         open: windowsOpen,
@@ -395,9 +396,15 @@ function runToolbarAction(action: () => void | Promise<void>): void {
           tabindex="0"
           :aria-expanded="!rootCollapsed"
           :aria-label="
-            rootCollapsed ? 'Expand all windows' : 'Collapse all windows'
+            rootCollapsed
+              ? i18n.t('expandAllWindows')
+              : i18n.t('collapseAllWindows')
           "
-          :title="rootCollapsed ? 'Expand all windows' : 'Collapse all windows'"
+          :title="
+            rootCollapsed
+              ? i18n.t('expandAllWindows')
+              : i18n.t('collapseAllWindows')
+          "
           @click.stop="toggleRootCollapsed()"
           @keydown.enter.prevent="toggleRootCollapsed()"
           @keydown.space.prevent="toggleRootCollapsed()"
@@ -409,7 +416,7 @@ function runToolbarAction(action: () => void | Promise<void>): void {
             <use :xlink:href="'#chevron-right'" />
           </svg>
         </div>
-        <span class="session-root-label">Session</span>
+        <span class="session-root-label">{{ i18n.t('session') }}</span>
         <div class="session-root-meta">
           <span
             class="session-root-composition"
@@ -432,7 +439,9 @@ function runToolbarAction(action: () => void | Promise<void>): void {
               :style="{ flexGrow: treeComposition.saved }"
             ></i>
           </span>
-          <span class="session-root-count">{{ treeComposition.total }}</span>
+          <span class="session-root-count">{{
+            formatNumber(treeComposition.total)
+          }}</span>
         </div>
       </div>
 
@@ -473,31 +482,31 @@ function runToolbarAction(action: () => void | Promise<void>): void {
 
     <EditTextModal
       v-if="ModalState.active?.kind === 'editWindowTitle'"
-      title="Edit Window Title"
+      :title="i18n.t('editWindowTitle')"
       :initial-value="ModalState.active.window.title || ''"
       :max-length="150"
-      placeholder="Enter window title"
+      :placeholder="i18n.t('enterWindowTitle')"
       @confirm="handleEditWindowTitleConfirm"
       @cancel="handleEditWindowTitleCancel"
     />
 
     <EditTextModal
       v-if="ModalState.active?.kind === 'editCustomLabel'"
-      title="Edit Custom Label"
+      :title="i18n.t('editCustomLabel')"
       :initial-value="ModalState.active.customLabel || ''"
       :max-length="150"
-      placeholder="Enter custom label"
+      :placeholder="i18n.t('enterCustomLabel')"
       @confirm="handleEditCustomLabelConfirm"
       @cancel="handleEditCustomLabelCancel"
     />
 
     <EditTextModal
       v-if="ModalState.active?.kind === 'editNote'"
-      title="Edit Note"
+      :title="i18n.t('editNote')"
       :initial-value="ModalState.active.note.text"
       :max-length="500"
       multiline
-      placeholder="Enter note text"
+      :placeholder="i18n.t('enterNoteText')"
       @confirm="handleEditNoteConfirm"
       @cancel="handleEditNoteCancel"
     />

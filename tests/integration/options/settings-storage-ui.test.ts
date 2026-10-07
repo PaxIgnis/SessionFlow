@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+﻿import { describe, expect, it } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
 import { createSSRApp } from 'vue'
@@ -18,14 +18,14 @@ describe('session snapshot Storage UI', () => {
     )
     expect(source).toContain('Settings.values.automaticSessionSnapshots')
     expect(source).toContain('Settings.values.sessionSnapshotInterval')
-    expect(source).toContain('Protect manual snapshots')
-    expect(source).toContain('Include private windows')
-    expect(source).toContain('Take a snapshot now')
+    expect(source).toContain("i18n.t('protectManualSnapshots')")
+    expect(source).toContain("i18n.t('includePrivateWindows')")
+    expect(source).toContain("i18n.t('takeASnapshotNow')")
     expect(source).toContain('snapshot-history')
     expect(source).toContain('groupedSnapshots')
     expect(source).toContain('snapshot-group-label')
     expect(source).toContain('snapshot-protected-icon')
-    expect(source).toContain('aria-label="Protected snapshot"')
+    expect(source).toContain(':aria-label="i18n.t(\'protectedSnapshotLabel\')"')
     expect(source).not.toContain("snapshot.protected ? 'Protected' : ''")
     expect(source).toContain('snapshot-toolbar-summary')
     expect(source).toContain('snapshot-meter')
@@ -42,13 +42,15 @@ describe('session snapshot Storage UI', () => {
     )
     expect(source).toContain('formatCounts(snapshot.counts)')
     expect(source).toContain('class="snapshot-unavailable-tag"')
-    expect(source).toContain('The active session tree is empty')
+    expect(source).toContain("i18n.t('theActiveSessionTreeIsEmpty')")
     expect(source).toContain('SnapshotTree')
     // The empty state must follow the configured schedule, not assume one.
     expect(source).toContain('emptyHistoryMessage')
-    expect(source).toContain('Automatic snapshots are off, so take one now.')
+    expect(source).toContain(
+      "i18n.t('noSnapshotsYetAutomaticSnapshotsAreOffSoTakeOne')",
+    )
     expect(source).not.toContain('One is taken every 30 minutes')
-    expect(source).toContain('Pick a snapshot to see what it contains.')
+    expect(source).toContain("i18n.t('pickASnapshotToSeeWhatItContains')")
     expect(source).toMatch(/\.snapshot-browser\s*\{[\s\S]*?height:\s*528px/)
     expect(source).toMatch(
       /\.snapshot-preview\s*\{[\s\S]*?display:\s*flex[\s\S]*?flex-direction:\s*column[\s\S]*?min-height:\s*0/,
@@ -63,10 +65,8 @@ describe('session snapshot Storage UI', () => {
     expect(source).toMatch(
       /\.snapshot-entry\s*\{[\s\S]*?box-sizing:\s*border-box/,
     )
-    expect(source).toContain("'Restore everything'")
-    expect(source).toContain(
-      "`Restore ${pluralize(selectedUids.value.length, 'item')}`",
-    )
+    expect(source).toContain("i18n.t('restoreEverything')")
+    expect(source).toContain("i18n.t('restoreItems'")
     // The restore button and the dialog it opens must read from one source so
     // their wording cannot drift apart.
     expect(source).toContain('{{ restoreLabel }}')
@@ -75,9 +75,9 @@ describe('session snapshot Storage UI', () => {
     expect(source).not.toContain("'Restore Selected Items'")
     expect(source).not.toContain("'Restore Entire Snapshot'")
     expect(source).toContain('snapshot-selected-actions')
-    expect(source).toContain('Save as JSON')
-    expect(source).toContain('Delete this snapshot')
-    expect(source).toContain('toFixed(2)')
+    expect(source).toContain("i18n.t('saveAsJSON')")
+    expect(source).toContain("i18n.t('deleteThisSnapshot')")
+    expect(source).toContain('minimumFractionDigits: 2')
     expect(source).toContain('snapshot-success-toast')
     expect(source).toMatch(
       /\.snapshot-success-toast\s*\{[\s\S]*?top:\s*18px[\s\S]*?left:\s*50%[\s\S]*?transform:\s*translateX\(-50%\)/,
@@ -90,9 +90,9 @@ describe('session snapshot Storage UI', () => {
     expect(source).toContain('onBeforeUnmount')
     expect(source).not.toContain('--text-color-secondary')
     expect(source).toContain('SessionSnapshotClient.restoreSummary')
-    expect(source).toContain('Append ${formatCountsSentence(counts)}')
+    expect(source).toContain("i18n.t('restoreAppend'")
     // Prose counts are pluralised and omit item types the snapshot lacks.
-    expect(source).toContain("if (parts.length === 0) return 'nothing'")
+    expect(source).toContain("if (parts.length === 0) return i18n.t('nothing')")
     expect(source).not.toContain('${counts.windows} windows')
     expect(source).toMatch(
       /SessionSnapshotClient\.get\(id\)[\s\S]*?current\.available = false/,

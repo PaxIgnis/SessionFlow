@@ -1,4 +1,11 @@
 <script setup lang="ts">
+import {
+  i18n,
+  formatList,
+  getDisplayLocale,
+  formatNumber,
+} from '@/services/i18n'
+import { localizedImportWarning } from '@/services/localized-import-warnings'
 import NumberInput from '@/components/NumberInput.vue'
 import ToggleButton from '@/components/ToggleButton.vue'
 import { Favicons } from '@/services/favicons'
@@ -58,7 +65,11 @@ const snapshotDeltas = computed(() => {
     const delta = snapshot.counts.tabs - chronological[index - 1].counts.tabs
     deltas.set(
       snapshot.id,
-      delta > 0 ? `+${delta}` : delta < 0 ? `−${Math.abs(delta)}` : '±0',
+      delta > 0
+        ? `+${formatNumber(delta)}`
+        : delta < 0
+          ? `−${formatNumber(Math.abs(delta))}`
+          : '±0',
     )
   })
   return deltas
@@ -67,21 +78,20 @@ const snapshotDeltas = computed(() => {
 // so this follows the live setting instead of the default interval.
 const emptyHistoryMessage = computed(() => {
   if (!Settings.values.automaticSessionSnapshots) {
-    return 'No snapshots yet. Automatic snapshots are off, so take one now.'
+    return i18n.t('noSnapshotsYetAutomaticSnapshotsAreOffSoTakeOne')
   }
   const unit =
     Settings.values.sessionSnapshotIntervalUnit === 'hours' ? 'hour' : 'minute'
-  return `No snapshots yet. One is taken every ${pluralize(
-    Settings.values.sessionSnapshotInterval,
-    unit,
-  )}, or take one now.`
+  return i18n.t('snapshotScheduleEmpty', [
+    pluralize(Settings.values.sessionSnapshotInterval, unit),
+  ])
 })
 // One source of truth for the restore vocabulary, so the button and the
 // dialog it opens can never drift apart.
 const restoreLabel = computed(() =>
   selectedUids.value.length === 0
-    ? 'Restore everything'
-    : `Restore ${pluralize(selectedUids.value.length, 'item')}`,
+    ? i18n.t('restoreEverything')
+    : i18n.t('restoreItems', [pluralize(selectedUids.value.length, 'item')]),
 )
 let successTimer: ReturnType<typeof setTimeout> | undefined
 
@@ -144,11 +154,14 @@ async function createSnapshot() {
   await run(async () => {
     const created = await SessionSnapshotClient.create()
     if (!created) {
-      showError('Snapshot Not Created', 'The active session tree is empty.')
+      showError(
+        i18n.t('snapshotNotCreated'),
+        i18n.t('theActiveSessionTreeIsEmpty'),
+      )
       return
     }
     await refresh(created?.id)
-    showSuccess('Snapshot created.')
+    showSuccess(i18n.t('snapshotCreated'))
   })
 }
 
@@ -161,7 +174,7 @@ async function importSnapshot(event: Event) {
   await run(async () => {
     const imported = await SessionSnapshotClient.import(await file.text())
     await refresh(imported.id)
-    showSuccess('Snapshot imported and protected.')
+    showSuccess(i18n.t('snapshotImportedAndProtected'))
   })
 }
 
@@ -170,7 +183,9 @@ async function toggleProtected(snapshot: SessionSnapshotMetadata) {
     await SessionSnapshotClient.setProtected(snapshot.id, !snapshot.protected)
     await refresh(snapshot.id)
     showSuccess(
-      snapshot.protected ? 'Snapshot unprotected.' : 'Snapshot protected.',
+      snapshot.protected
+        ? i18n.t('snapshotUnprotected')
+        : i18n.t('snapshotProtected'),
     )
   })
 }
@@ -178,9 +193,9 @@ async function toggleProtected(snapshot: SessionSnapshotMetadata) {
 async function deleteSnapshot(snapshot: SessionSnapshotMetadata) {
   if (
     !(await confirmAction({
-      title: 'Delete Snapshot',
-      message: `Delete snapshot from ${formatDate(snapshot.createdAt)}?`,
-      confirmLabel: 'Delete',
+      title: i18n.t('deleteSnapshot'),
+      message: i18n.t('deleteSnapshotAt', [formatDate(snapshot.createdAt)]),
+      confirmLabel: i18n.t('delete'),
       danger: true,
     }))
   )
@@ -188,16 +203,16 @@ async function deleteSnapshot(snapshot: SessionSnapshotMetadata) {
   await run(async () => {
     await SessionSnapshotClient.delete(snapshot.id)
     await refresh()
-    showSuccess('Snapshot deleted.')
+    showSuccess(i18n.t('snapshotDeleted'))
   })
 }
 
 async function clearSnapshots() {
   if (
     !(await confirmAction({
-      title: 'Delete All Snapshots',
-      message: 'Delete all snapshots, including protected snapshots?',
-      confirmLabel: 'Delete All',
+      title: i18n.t('deleteAllSnapshots'),
+      message: i18n.t('deleteAllSnapshotsIncludingProtectedSnapshots'),
+      confirmLabel: i18n.t('deleteAll'),
       danger: true,
     }))
   )
@@ -205,7 +220,7 @@ async function clearSnapshots() {
   await run(async () => {
     await SessionSnapshotClient.clear()
     await refresh()
-    showSuccess('All snapshots deleted.')
+    showSuccess(i18n.t('allSnapshotsDeleted'))
   })
 }
 
@@ -217,7 +232,7 @@ async function exportSnapshot(copy: boolean) {
     const json = JSON.stringify(exported, null, 2)
     if (copy) {
       await navigator.clipboard.writeText(json)
-      showSuccess('Snapshot JSON copied.')
+      showSuccess(i18n.t('snapshotJSONCopied'))
       return
     }
     const url = URL.createObjectURL(
@@ -228,7 +243,7 @@ async function exportSnapshot(copy: boolean) {
     anchor.download = `session-flow-snapshot-${fileTimestamp(exported.metadata.createdAt)}.json`
     anchor.click()
     URL.revokeObjectURL(url)
-    showSuccess('Snapshot JSON exported.')
+    showSuccess(i18n.t('snapshotJSONExported'))
   })
 }
 
@@ -251,7 +266,7 @@ async function restore(
     if (
       !(await confirmAction({
         title: restoreLabel.value,
-        message: `Append ${formatCountsSentence(counts)} to the bottom of the active session tree?`,
+        message: i18n.t('restoreAppend', [formatCountsSentence(counts)]),
         confirmLabel: restoreLabel.value,
       }))
     )
@@ -266,16 +281,17 @@ async function restore(
         allowWithoutSafetySnapshot,
       })
       await refresh(record.metadata.id)
-      showSuccess(`Restored ${formatCountsSentence(counts)}.`)
+      showSuccess(i18n.t('restoredItems', [formatCountsSentence(counts)]))
     } catch (error) {
       if (
         (error as Error & { code?: string }).code === 'safety-snapshot-failed'
       ) {
         const proceed = await confirmAction({
-          title: 'Safety Snapshot Failed',
-          message:
-            'Session Flow could not create the pre-restore safety snapshot. Restore without it?',
-          confirmLabel: 'Restore Without Safety Snapshot',
+          title: i18n.t('safetySnapshotFailed'),
+          message: i18n.t(
+            'sessionFlowCouldNotCreateThePrerestoreSafetySnapshotRestore',
+          ),
+          confirmLabel: i18n.t('restoreWithoutSafetySnapshot'),
           danger: true,
         })
         if (proceed) await restore(mode, true)
@@ -319,7 +335,7 @@ async function run<T>(operation: () => Promise<T>): Promise<T | undefined> {
     return await operation()
   } catch (error) {
     showError(
-      'Snapshot Operation Failed',
+      i18n.t('snapshotOperationFailed'),
       error instanceof Error ? error.message : String(error),
     )
     return undefined
@@ -329,21 +345,30 @@ async function run<T>(operation: () => Promise<T>): Promise<T | undefined> {
 }
 
 function formatDate(value: number) {
-  return new Date(value).toLocaleString()
+  return new Date(value).toLocaleString(getDisplayLocale())
 }
 function formatTime(value: number) {
-  return new Date(value).toLocaleTimeString([], {
+  return new Date(value).toLocaleTimeString(getDisplayLocale(), {
     hour: '2-digit',
     minute: '2-digit',
   })
 }
 function formatBytes(value: number) {
-  if (value < 1024) return `${value} B`
-  if (value < 1024 * 1024) return `${Math.round(value / 1024)} KB`
-  return `${(value / 1024 / 1024).toFixed(2)} MB`
+  if (value < 1024) return `${formatNumber(value)} B`
+  if (value < 1024 * 1024) return `${formatNumber(Math.round(value / 1024))} KB`
+  return `${formatNumber(value / 1024 / 1024, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MB`
 }
 function pluralize(count: number, noun: string) {
-  return `${count} ${noun}${count === 1 ? '' : 's'}`
+  const keys = {
+    window: 'countWindow',
+    tab: 'countTab',
+    note: 'countNote',
+    separator: 'countSeparator',
+    item: 'countItem',
+    hour: 'countHour',
+    minute: 'countMinute',
+  } as const
+  return i18n.t(keys[noun as keyof typeof keys], count, [formatNumber(count)])
 }
 function formatCounts(counts: SessionSnapshotCounts) {
   return [
@@ -365,17 +390,17 @@ function formatCountsSentence(counts: SessionSnapshotCounts) {
     .filter(([count]) => (count as number) > 0)
     .map(([count, noun]) => pluralize(count as number, noun as string))
 
-  if (parts.length === 0) return 'nothing'
+  if (parts.length === 0) return i18n.t('nothing')
   if (parts.length === 1) return parts[0]
-  return `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`
+  return formatList(parts)
 }
 function triggerLabel(trigger: SessionSnapshotMetadata['trigger']) {
   return {
-    periodic: 'Taken on a schedule',
-    startup: 'Taken at startup',
-    'before-restore': 'Taken before a restore',
-    manual: 'Taken by you',
-    import: 'Imported',
+    periodic: i18n.t('takenOnASchedule'),
+    startup: i18n.t('takenAtStartup'),
+    'before-restore': i18n.t('takenBeforeARestore'),
+    manual: i18n.t('takenByYou'),
+    import: i18n.t('imported'),
   }[trigger]
 }
 function snapshotBarWidth(snapshot: SessionSnapshotMetadata) {
@@ -398,12 +423,12 @@ function groupSnapshotsByPeriod(items: SessionSnapshotMetadata[]) {
     const daysAgo = Math.round((today.getTime() - day.getTime()) / 86_400_000)
     const label =
       daysAgo === 0
-        ? 'Today'
+        ? i18n.t('today')
         : daysAgo === 1
-          ? 'Yesterday'
+          ? i18n.t('yesterday')
           : daysAgo < 7
-            ? 'Previous 7 Days'
-            : date.toLocaleDateString(undefined, {
+            ? i18n.t('previous7Days')
+            : date.toLocaleDateString(getDisplayLocale(), {
                 month: 'long',
                 year: 'numeric',
               })
@@ -424,13 +449,13 @@ function fileTimestamp(value: number) {
     id="settings_storage"
     class="content-panel-section section section-wide"
   >
-    <h2 class="section-title">Storage</h2>
+    <h2 class="section-title">{{ i18n.t('storage') }}</h2>
     <p class="section-intro">
-      Snapshots capture the whole tree so you can roll back to an earlier state.
+      {{ i18n.t('snapshotsCaptureTheWholeTreeSoYouCanRollBack') }}
     </p>
     <div class="section-body rows">
       <ToggleButton
-        label="Take snapshots automatically"
+        :label="i18n.t('takeSnapshotsAutomatically')"
         v-model="Settings.values.automaticSessionSnapshots"
         :options="OPTIONS.boolean"
         @update="saveSettings"
@@ -442,7 +467,7 @@ function fileTimestamp(value: number) {
       :inert="!Settings.values.automaticSessionSnapshots"
     >
       <NumberInput
-        label="Snapshot every"
+        :label="i18n.t('snapshotEvery')"
         v-model:value="Settings.values.sessionSnapshotInterval"
         v-model:selected-unit="Settings.values.sessionSnapshotIntervalUnit"
         :units="OPTIONS.sessionSnapshotIntervalUnit"
@@ -454,21 +479,23 @@ function fileTimestamp(value: number) {
     </div>
     <div class="rows">
       <ToggleButton
-        label="Protect manual snapshots"
-        description="Snapshots you take yourself are never removed to make room."
+        :label="i18n.t('protectManualSnapshots')"
+        :description="
+          i18n.t('snapshotsYouTakeYourselfAreNeverRemovedToMakeRoom')
+        "
         v-model="Settings.values.protectManualSessionSnapshots"
         :options="OPTIONS.boolean"
         @update="saveSettings"
       />
       <ToggleButton
-        label="Include private windows"
+        :label="i18n.t('includePrivateWindows')"
         v-model="Settings.values.includePrivateWindowsInSessionSnapshots"
         :options="OPTIONS.boolean"
         @update="saveSettings"
       />
     </div>
 
-    <p class="eyebrow">Snapshot history</p>
+    <p class="eyebrow">{{ i18n.t('snapshotHistory') }}</p>
     <div class="snapshot-toolbar workspace-bar">
       <button
         type="button"
@@ -480,29 +507,34 @@ function fileTimestamp(value: number) {
         "
         @click="createSnapshot"
       >
-        Take a snapshot now
+        {{ i18n.t('takeASnapshotNow') }}
       </button>
       <button
         type="button"
         class="btn"
         data-testid="import-snapshot"
         :disabled="loading"
-        title="Import a snapshot"
+        :title="i18n.t('importASnapshot')"
         @click="importFileInput?.click()"
       >
-        Import snapshot
+        {{ i18n.t('importSnapshot') }}
       </button>
       <input
         ref="importFileInput"
         type="file"
         accept=".json,application/json"
-        aria-label="Import a snapshot"
+        :aria-label="i18n.t('importASnapshot')"
         data-testid="import-snapshot-file"
         hidden
         @change="importSnapshot"
       />
       <span class="snapshot-toolbar-summary workspace-summary"
-        >{{ snapshots.length }} snapshots · {{ formatBytes(totalBytes) }}</span
+        >{{
+          i18n.t('countSnapshot', snapshots.length, [
+            formatNumber(snapshots.length),
+          ])
+        }}
+        · {{ formatBytes(totalBytes) }}</span
       >
       <button
         type="button"
@@ -510,11 +542,11 @@ function fileTimestamp(value: number) {
         :disabled="loading || snapshots.length === 0"
         @click="clearSnapshots"
       >
-        Delete all snapshots
+        {{ i18n.t('deleteAllSnapshotsLabel') }}
       </button>
     </div>
     <details class="snapshot-import-help">
-      <summary>Supported Import Formats</summary>
+      <summary>{{ i18n.t('supportedImportFormats') }}</summary>
       <ul>
         <li
           v-for="(label, source) in SESSION_SNAPSHOT_IMPORT_SOURCE_LABELS"
@@ -523,19 +555,18 @@ function fileTimestamp(value: number) {
           {{ label }} — (.json)
         </li>
       </ul>
-      <p>Imported snapshots are protected automatically.</p>
+      <p>{{ i18n.t('importedSnapshotsAreProtectedAutomatically') }}</p>
       <a
         href="https://github.com/PaxIgnis/SessionFlowExtension/blob/main/docs/importing-snapshots.md"
         target="_blank"
         rel="noopener noreferrer"
+        >{{ i18n.t('howToExportAndImportSnapshots') }}</a
       >
-        How to export and import snapshots
-      </a>
     </details>
     <small
       v-if="activeTreeEmpty"
       id="empty-tree-snapshot-help"
-      >The active session tree is empty, so there is nothing to snapshot.</small
+      >{{ i18n.t('theActiveSessionTreeIsEmptySoThereIsNothing') }}</small
     >
 
     <div class="snapshot-browser workspace">
@@ -561,7 +592,7 @@ function fileTimestamp(value: number) {
               unavailable: !snapshot.available,
             }"
             :aria-current="selectedSnapshotId === snapshot.id"
-            :aria-label="`${formatDate(snapshot.createdAt)}, ${formatCounts(snapshot.counts)}, ${triggerLabel(snapshot.trigger)}${snapshot.protected ? ', Protected snapshot' : ''}`"
+            :aria-label="`${formatDate(snapshot.createdAt)}, ${formatCounts(snapshot.counts)}, ${triggerLabel(snapshot.trigger)}${snapshot.protected ? i18n.t('protectedSnapshot') : ''}`"
             @click="selectSnapshot(snapshot.id)"
           >
             <span class="snapshot-entry-line">
@@ -572,9 +603,9 @@ function fileTimestamp(value: number) {
                   class="snapshot-protected-icon"
                   viewBox="0 0 16 16"
                   role="img"
-                  aria-label="Protected snapshot"
+                  :aria-label="i18n.t('protectedSnapshotLabel')"
                 >
-                  <title>Protected snapshot</title>
+                  <title>{{ i18n.t('protectedSnapshotLabel') }}</title>
                   <rect
                     x="3"
                     y="7"
@@ -595,9 +626,9 @@ function fileTimestamp(value: number) {
                   class="snapshot-imported-icon"
                   viewBox="0 0 16 16"
                   role="img"
-                  aria-label="Imported snapshot"
+                  :aria-label="i18n.t('importedSnapshot')"
                 >
-                  <title>Imported snapshot</title>
+                  <title>{{ i18n.t('importedSnapshot') }}</title>
                   <path
                     d="M8 2v7m-3-3 3 3 3-3M3 10v3h10v-3"
                     fill="none"
@@ -608,9 +639,11 @@ function fileTimestamp(value: number) {
                   />
                 </svg>
               </strong>
-              <span class="snapshot-tab-count"
-                >{{ snapshot.counts.tabs }} <small>tabs</small></span
-              >
+              <span class="snapshot-tab-count">{{
+                i18n.t('countTab', snapshot.counts.tabs, [
+                  formatNumber(snapshot.counts.tabs),
+                ])
+              }}</span>
             </span>
             <span class="snapshot-meter">
               <span class="snapshot-track">
@@ -624,7 +657,7 @@ function fileTimestamp(value: number) {
             <span
               v-if="!snapshot.available"
               class="snapshot-unavailable-tag"
-              >Unavailable</span
+              >{{ i18n.t('unavailable') }}</span
             >
           </button>
         </template>
@@ -638,11 +671,12 @@ function fileTimestamp(value: number) {
               class="snapshot-detail-meta"
               data-testid="snapshot-import-source"
             >
-              Imported from
               {{
-                SESSION_SNAPSHOT_IMPORT_SOURCE_LABELS[
-                  selectedRecord.metadata.importSummary.source
-                ]
+                i18n.t('importedFrom', [
+                  SESSION_SNAPSHOT_IMPORT_SOURCE_LABELS[
+                    selectedRecord.metadata.importSummary.source
+                  ],
+                ])
               }}
               <template
                 v-if="
@@ -650,35 +684,41 @@ function fileTimestamp(value: number) {
                   undefined
                 "
               >
-                · source saved
+                ·
                 {{
-                  formatDate(
-                    selectedRecord.metadata.importSummary.sourceCreatedAt,
-                  )
+                  i18n.t('sourceSaved', [
+                    formatDate(
+                      selectedRecord.metadata.importSummary.sourceCreatedAt,
+                    ),
+                  ])
                 }}
               </template>
             </p>
             <p class="snapshot-detail-meta">
               {{ triggerLabel(selectedRecord.metadata.trigger) }} ·
               {{ formatBytes(selectedRecord.metadata.sizeBytes)
-              }}<template v-if="selectedRecord.metadata.containsPrivateWindows">
-                · includes private windows</template
-              ><template v-if="selectedRecord.metadata.protected">
-                · protected</template
-              >
+              }}<template
+                v-if="selectedRecord.metadata.containsPrivateWindows"
+                >{{ i18n.t('includesPrivateWindows') }}</template
+              ><template v-if="selectedRecord.metadata.protected">{{
+                i18n.t('protected')
+              }}</template>
             </p>
             <div class="snapshot-stats">
               <div
                 v-for="stat in [
-                  ['Windows', selectedRecord.metadata.counts.windows],
-                  ['Tabs', selectedRecord.metadata.counts.tabs],
-                  ['Notes', selectedRecord.metadata.counts.notes],
-                  ['Separators', selectedRecord.metadata.counts.separators],
+                  [i18n.t('windows'), selectedRecord.metadata.counts.windows],
+                  [i18n.t('tabsLabel'), selectedRecord.metadata.counts.tabs],
+                  [i18n.t('notes'), selectedRecord.metadata.counts.notes],
+                  [
+                    i18n.t('separators'),
+                    selectedRecord.metadata.counts.separators,
+                  ],
                 ]"
                 :key="stat[0]"
                 class="snapshot-stat"
               >
-                <strong>{{ stat[1] }}</strong>
+                <strong>{{ formatNumber(Number(stat[1])) }}</strong>
                 <span>{{ stat[0] }}</span>
               </div>
             </div>
@@ -688,9 +728,13 @@ function fileTimestamp(value: number) {
               data-testid="snapshot-import-warnings"
             >
               <summary>
-                Import conversion details ({{
-                  selectedRecord.metadata.importSummary.warnings.length
-                }})
+                {{
+                  i18n.t('importConversionDetails', [
+                    formatNumber(
+                      selectedRecord.metadata.importSummary.warnings.length,
+                    ),
+                  ])
+                }}
               </summary>
               <ul>
                 <li
@@ -698,7 +742,13 @@ function fileTimestamp(value: number) {
                     .warnings"
                   :key="warning.code"
                 >
-                  {{ warning.message }} ({{ warning.count }})
+                  {{
+                    localizedImportWarning(
+                      selectedRecord.metadata.importSummary!.source,
+                      warning,
+                    )
+                  }}
+                  ({{ formatNumber(warning.count) }})
                 </li>
               </ul>
             </details>
@@ -725,14 +775,14 @@ function fileTimestamp(value: number) {
                 class="btn"
                 @click="exportSnapshot(false)"
               >
-                Save as JSON
+                {{ i18n.t('saveAsJSON') }}
               </button>
               <button
                 type="button"
                 class="btn"
                 @click="exportSnapshot(true)"
               >
-                Copy JSON
+                {{ i18n.t('copyJSON') }}
               </button>
             </span>
             <!-- Actions that govern whether the snapshot continues to exist. -->
@@ -743,7 +793,9 @@ function fileTimestamp(value: number) {
                 @click="toggleProtected(selectedRecord.metadata)"
               >
                 {{
-                  selectedRecord.metadata.protected ? 'Unprotect' : 'Protect'
+                  selectedRecord.metadata.protected
+                    ? i18n.t('unprotect')
+                    : i18n.t('protect')
                 }}
               </button>
               <button
@@ -751,7 +803,7 @@ function fileTimestamp(value: number) {
                 class="btn-quiet-danger"
                 @click="deleteSnapshot(selectedRecord.metadata)"
               >
-                Delete this snapshot
+                {{ i18n.t('deleteThisSnapshot') }}
               </button>
             </span>
           </footer>
@@ -761,18 +813,20 @@ function fileTimestamp(value: number) {
           class="snapshot-detail-empty unavailable-detail"
         >
           <div>
-            <h3>Snapshot unavailable</h3>
+            <h3>{{ i18n.t('snapshotUnavailable') }}</h3>
             <p>
-              This snapshot's data could not be read, so it cannot be restored
-              or exported. Deleting it will free
-              {{ formatBytes(selectedMetadata.sizeBytes) }}.
+              {{
+                i18n.t('snapshotUnavailableDetails', [
+                  formatBytes(selectedMetadata.sizeBytes),
+                ])
+              }}
             </p>
             <button
               type="button"
               class="btn-quiet-danger"
               @click="deleteSnapshot(selectedMetadata)"
             >
-              Delete this snapshot
+              {{ i18n.t('deleteThisSnapshot') }}
             </button>
           </div>
         </div>
@@ -780,7 +834,7 @@ function fileTimestamp(value: number) {
           v-else
           class="snapshot-detail-empty"
         >
-          Pick a snapshot to see what it contains.
+          {{ i18n.t('pickASnapshotToSeeWhatItContains') }}
         </div>
       </main>
     </div>

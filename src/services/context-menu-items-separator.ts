@@ -1,3 +1,4 @@
+import { i18n } from '@/services/i18n'
 import * as Messages from '@/services/foreground-messages'
 import { SessionTree } from '@/services/foreground-tree'
 import { Selection } from '@/services/selection'
@@ -38,7 +39,7 @@ export const contextMenuItemsSeparator: Record<string, () => ContextMenuItem> =
     createNote: () => {
       return {
         id: 'createNote',
-        label: 'Add Note',
+        label: i18n.t('addNoteLabel'),
         icon: 'note',
         enabled: Selection.selectedItems.value.length <= 1,
         action: () => {
@@ -57,7 +58,7 @@ export const contextMenuItemsSeparator: Record<string, () => ContextMenuItem> =
     createSeparator: () => {
       return {
         id: 'createSeparator',
-        label: 'Add Separator',
+        label: i18n.t('addSeparatorLabel'),
         icon: 'separator',
         enabled: Selection.selectedItems.value.length <= 1,
         action: () => Messages.createSeparator(selectedParentUid()),
@@ -67,7 +68,7 @@ export const contextMenuItemsSeparator: Record<string, () => ContextMenuItem> =
     createSeparatorBelow: () => {
       return {
         id: 'createSeparatorBelow',
-        label: 'Add Separator',
+        label: i18n.t('addSeparatorLabel'),
         icon: 'separator',
         enabled: Selection.getSelectedSeparators().length === 1,
         action: () => {

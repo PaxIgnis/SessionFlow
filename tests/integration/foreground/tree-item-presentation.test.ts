@@ -324,9 +324,9 @@ describe('tree item presentation', () => {
 
     // Same outcome, so the same word: a hover button reading "Close" beside a
     // menu entry reading "Delete" implies two different actions.
-    expect(contextMenuSource).toContain("label: 'Delete'")
-    expect(itemSource).toContain('aria-label="Delete"')
-    expect(itemSource).toContain('title="Delete"')
+    expect(contextMenuSource).toContain("label: i18n.t('delete')")
+    expect(itemSource).toContain(':aria-label="i18n.t(\'delete\')"')
+    expect(itemSource).toContain(':title="i18n.t(\'delete\')"')
     expect(itemSource).not.toContain('aria-label="Close"')
   })
 

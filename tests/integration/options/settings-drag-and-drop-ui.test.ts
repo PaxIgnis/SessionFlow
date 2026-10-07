@@ -18,7 +18,9 @@ describe('drag-and-drop settings UI', () => {
     )?.[0]
 
     expect(toggleMarkup).toBeDefined()
-    expect(toggleMarkup).toContain('label="Allow dropping onto descendants"')
+    expect(toggleMarkup).toContain(
+      ':label="i18n.t(\'allowDroppingOntoDescendants\')"',
+    )
     expect(toggleMarkup).toContain(
       'v-model="Settings.values.allowDropOntoDescendantItems"',
     )

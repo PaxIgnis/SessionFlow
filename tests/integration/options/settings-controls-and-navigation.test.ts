@@ -146,10 +146,10 @@ describe('settings controls and navigation', () => {
     expect(source).toContain(
       'v-model="Settings.values.cachePrivateTabFavicons"',
     )
-    expect(source).toContain('Show and cache favicons for private tabs')
+    expect(source).toContain("i18n.t('showAndCacheFaviconsForPrivateTabs')")
     expect(source).toContain(
       'v-model="Settings.values.dimUnloadedAndSavedFavicons"',
     )
-    expect(source).toContain('Dim favicons of unloaded and saved tabs')
+    expect(source).toContain("i18n.t('dimFaviconsOfUnloadedAndSavedTabs')")
   })
 })

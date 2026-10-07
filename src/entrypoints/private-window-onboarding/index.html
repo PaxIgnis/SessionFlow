@@ -6,7 +6,9 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0"
     />
-    <title>Private windows in Session Flow</title>
+    <title data-i18n="privateWindowsInSessionFlow">
+      Private windows in Session Flow
+    </title>
     <link
       rel="stylesheet"
       href="./style.css"
@@ -20,38 +22,60 @@
           alt=""
         />
         <div>
-          <p class="eyebrow">Welcome to Session Flow</p>
-          <h1>Include private windows?</h1>
+          <p
+            class="eyebrow"
+            data-i18n="welcomeToSessionFlow"
+          >
+            Welcome to Session Flow
+          </p>
+          <h1 data-i18n="includePrivateWindowsLabel">
+            Include private windows?
+          </h1>
         </div>
       </header>
 
-      <p>
+      <p data-i18n="sessionFlowCanSaveAndRestorePrivateWindowsOnlyWhen">
         Session Flow can save and restore private windows only when Firefox
         allows the extension to access them. This is optional.
       </p>
 
       <div class="status-row">
-        <span>Firefox private-window access</span>
+        <span data-i18n="firefoxPrivatewindowAccess"
+          >Firefox private-window access</span
+        >
         <strong
           id="private-access-status"
           data-status="checking"
           aria-live="polite"
+          data-i18n="checking"
         >
           Checking…
         </strong>
       </div>
 
       <section aria-labelledby="enable-private-access">
-        <h2 id="enable-private-access">To enable access</h2>
+        <h2
+          id="enable-private-access"
+          data-i18n="toEnableAccess"
+        >
+          To enable access
+        </h2>
         <ol>
-          <li>Open Firefox Add-ons and Themes.</li>
-          <li>Select Extensions, then Session Flow.</li>
-          <li>Set “Run in Private Windows” to “Allow”.</li>
+          <li data-i18n="openFirefoxAddonsAndThemes">
+            Open Firefox Add-ons and Themes.
+          </li>
+          <li data-i18n="selectExtensionsThenSessionFlow">
+            Select Extensions, then Session Flow.
+          </li>
+          <li data-i18n="setRunInPrivateWindowsToAllow">
+            Set “Run in Private Windows” to “Allow”.
+          </li>
         </ol>
         <button
           id="check-again"
           class="button button-secondary"
           type="button"
+          data-i18n="checkAgain"
         >
           Check again
         </button>
@@ -61,6 +85,7 @@
         id="continue"
         class="button button-primary"
         type="button"
+        data-i18n="continueToSessionFlow"
       >
         Continue to Session Flow
       </button>
@@ -68,12 +93,14 @@
         <button
           id="hide"
           type="button"
+          data-i18n="hideForNow"
         >
           Hide for now
         </button>
         <button
           id="dismiss"
           type="button"
+          data-i18n="dontShowAgain"
         >
           Don't show again
         </button>

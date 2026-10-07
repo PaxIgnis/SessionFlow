@@ -1,3 +1,4 @@
+import { i18n } from '@/services/i18n'
 const claimedTabRemovals = new Map<number, number>()
 const claimedWindowRemovals = new Map<number, number>()
 const claimedTabRelocations = new Map<number, number>()
@@ -58,7 +59,7 @@ export async function removeBrowserTab(tabId: number): Promise<void> {
       } catch (lookupError) {
         if (isFirefoxObjectNotFound(lookupError)) return
         throw new Error(
-          `Could not confirm whether Firefox removed tab ${tabId}: ${lookupError}`,
+          i18n.t('removalTabUnconfirmed', [String(tabId), String(lookupError)]),
           { cause: removalError },
         )
       }
@@ -80,7 +81,10 @@ export async function removeBrowserWindow(windowId: number): Promise<void> {
       } catch (lookupError) {
         if (isFirefoxObjectNotFound(lookupError)) return
         throw new Error(
-          `Could not confirm whether Firefox removed window ${windowId}: ${lookupError}`,
+          i18n.t('removalWindowUnconfirmed', [
+            String(windowId),
+            String(lookupError),
+          ]),
           { cause: removalError },
         )
       }

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { i18n, formatNumber } from '@/services/i18n'
 import { computed } from 'vue'
 import { isKnownFirefoxContainerIcon } from '@/defaults/container-icons'
 import {
@@ -84,7 +85,7 @@ const tabGroupIndicator = computed(() => {
   return {
     color: `var(--tab-group-color-${props.item.tabGroup.color})`,
     position: Settings.values.tabGroupColorIndicator,
-    title: props.item.tabGroup.title?.trim() || 'Unnamed tab group',
+    title: props.item.tabGroup.title?.trim() || i18n.t('unnamedTabGroup'),
   }
 })
 
@@ -124,22 +125,23 @@ const itemHoverDetails = computed(() => {
   if (!isTab(props.item)) return undefined
   const details: string[] = []
   if (Settings.values.showTabTitleOnHover)
-    details.push(`Title: ${props.item.title}`)
-  if (Settings.values.showTabUrlOnHover) details.push(`URL: ${props.item.url}`)
+    details.push(i18n.t('titleDetail', [props.item.title]))
+  if (Settings.values.showTabUrlOnHover)
+    details.push(i18n.t('urlDetail', [props.item.url]))
   if (
     Settings.values.tabGroupInfoOnHover === 'always' ||
     (Settings.values.tabGroupInfoOnHover === 'grouped-only' &&
       props.item.tabGroup)
   ) {
     details.push(
-      `Tab group: ${
+      i18n.t('tabGroupDetail', [
         props.item.tabGroup?.title?.trim() ||
-        (props.item.tabGroup ? 'Unnamed tab group' : 'None')
-      }`,
+          (props.item.tabGroup ? i18n.t('unnamedTabGroup') : i18n.t('none')),
+      ]),
     )
   }
   if (props.item.container)
-    details.push(`Container: ${props.item.container.name}`)
+    details.push(i18n.t('containerDetail', [props.item.container.name]))
   return details.length > 0 ? details.join('\n') : undefined
 })
 
@@ -180,9 +182,9 @@ const windowComposition = computed(() => {
 })
 
 const WINDOW_STATE_LABELS: Partial<Record<State, string>> = {
-  [State.OPEN]: 'Open',
-  [State.SAVED]: 'Saved',
-  [State.DISCARDED]: 'Unloaded',
+  [State.OPEN]: i18n.t('openState'),
+  [State.SAVED]: i18n.t('saved'),
+  [State.DISCARDED]: i18n.t('unloaded'),
 }
 
 const windowHoverDetails = computed(() => {
@@ -190,11 +192,11 @@ const windowHoverDetails = computed(() => {
 
   const tally = tallyWindowChildren(props.item.children)
 
-  const kind = props.item.incognito ? 'Private window' : 'Window'
+  const kind = props.item.incognito ? i18n.t('privateWindow') : i18n.t('window')
   const name = props.item.title?.trim()
   const lines = [name ? `${kind}: ${name}` : kind]
   const state = WINDOW_STATE_LABELS[props.item.state]
-  if (state) lines.push(`State: ${state}`)
+  if (state) lines.push(i18n.t('stateDetail', [state]))
 
   return [...lines, ...formatTallyLines(tally)].join('\n')
 })
@@ -236,15 +238,17 @@ const windowHoverDetails = computed(() => {
       v-if="containerDisplay"
       :id="containerDescriptionId"
       class="tree-item-container-description"
-    >
-      Container: {{ containerDisplay.metadata.name }}
+      >{{ i18n.t('containerDetail', [containerDisplay.metadata.name]) }}
     </span>
     <span
       v-if="isTab(item) && item.tabGroup"
       :id="tabGroupDescriptionId"
       class="tree-item-tab-group-description"
-    >
-      Tab group: {{ item.tabGroup.title?.trim() || 'Unnamed tab group' }}
+      >{{
+        i18n.t('tabGroupDetail', [
+          item.tabGroup.title?.trim() || i18n.t('unnamedTabGroup'),
+        ])
+      }}
     </span>
     <span
       v-if="tabGroupIndicator"
@@ -312,14 +316,16 @@ const windowHoverDetails = computed(() => {
             'tree-item-action-button-counted': collapsed && !isWindow(item),
           }"
           type="button"
-          :aria-label="collapsed ? 'Expand item' : 'Collapse item'"
+          :aria-label="
+            collapsed ? i18n.t('expandItem') : i18n.t('collapseItem')
+          "
           @click.stop="emit('collapse')"
         >
           <span
             v-if="collapsed && !isWindow(item)"
             class="child-count"
             :class="{ 'tree-item-child-active': childrenOpen }"
-            >{{ childCount }}</span
+            >{{ formatNumber(childCount) }}</span
           >
           <svg
             class="collapse-arrow"
@@ -338,7 +344,17 @@ const windowHoverDetails = computed(() => {
         type="checkbox"
         :checked="checked"
         :indeterminate="indeterminate"
-        :aria-label="`Select ${isWindow(item) ? item.title || 'window' : isTab(item) ? item.customLabel || item.title : isNote(item) ? item.text || 'note' : 'separator'}`"
+        :aria-label="
+          i18n.t('selectItem', [
+            isWindow(item)
+              ? item.title || i18n.t('window')
+              : isTab(item)
+                ? item.customLabel || item.title
+                : isNote(item)
+                  ? item.text || i18n.t('note')
+                  : i18n.t('separator'),
+          ])
+        "
         @click.stop
         @change.stop="selectItem"
       />
@@ -390,8 +406,8 @@ const windowHoverDetails = computed(() => {
           }"
           :aria-label="
             item.incognito
-              ? `Private window: ${item.title || 'Window'}`
-              : item.title || 'Window'
+              ? i18n.t('privateWindowDetail', [item.title || i18n.t('window')])
+              : item.title || i18n.t('window')
           "
         >
           <img
@@ -408,14 +424,13 @@ const windowHoverDetails = computed(() => {
               'tree-item-text-discarded': item.state === State.DISCARDED,
             }"
           >
-            {{ item.title || 'Window' }}
+            {{ item.title || i18n.t('window') }}
           </div>
           <span
             v-if="item.incognito"
             class="tree-item-window-private-badge"
+            >{{ i18n.t('private') }}</span
           >
-            Private
-          </span>
         </div>
       </template>
       <template v-else-if="isTab(item)">
@@ -503,7 +518,7 @@ const windowHoverDetails = computed(() => {
       <template v-else-if="isSeparator(item)">
         <div
           class="tree-item-separator-line"
-          aria-label="Separator"
+          :aria-label="i18n.t('separator')"
         ></div>
       </template>
     </div>
@@ -535,7 +550,7 @@ const windowHoverDetails = computed(() => {
       <span
         class="tree-item-window-count"
         :class="{ 'tree-item-child-active': childrenOpen }"
-        >{{ windowComposition.total }}</span
+        >{{ formatNumber(windowComposition.total) }}</span
       >
     </div>
   </div>

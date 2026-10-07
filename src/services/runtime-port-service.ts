@@ -1,3 +1,4 @@
+import { i18n } from '@/services/i18n'
 import { Tree } from '@/services/background-tree'
 import * as Messages from '@/types/messages'
 import {
@@ -568,7 +569,7 @@ function handleClientMessage(message: unknown): void {
     const pending = pendingRequests.get(message.requestId)
     if (!pending) return
     pendingRequests.delete(message.requestId)
-    pending.reject(new Error('Malformed session tree response'))
+    pending.reject(new Error(i18n.t('treeResponseMalformed')))
     return
   }
 
@@ -612,7 +613,7 @@ function connectClientPort(): browser.runtime.Port {
     lastTreeVersion = undefined
     bufferedDeltas = []
     pendingRequests.forEach(({ reject }) => {
-      reject(new Error('Session tree port disconnected'))
+      reject(new Error(i18n.t('treePortDisconnected')))
     })
     pendingRequests.clear()
     scheduleReconnect()
@@ -668,7 +669,7 @@ async function handlePortMessage(
   if (typedMessage.type === 'command') {
     try {
       if (!dispatchCommandHandler) {
-        throw new Error('Session tree command dispatcher is not initialized')
+        throw new Error(i18n.t('treeDispatcherUnavailable'))
       }
       const result = await dispatchCommandHandler(typedMessage.command)
       sendResponse(
@@ -754,7 +755,7 @@ export async function sendTreeCommand(
     command: message,
   })
   if (!response.ok) {
-    throw new Error(response.error || 'Session tree command failed')
+    throw new Error(response.error || i18n.t('treeCommandFailed'))
   }
   return response.result
 }

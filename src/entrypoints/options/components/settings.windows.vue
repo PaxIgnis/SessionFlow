@@ -1,9 +1,9 @@
 <script lang="ts" setup>
+import { i18n } from '@/services/i18n'
 import NumberInput from '@/components/NumberInput.vue'
 import ToggleButton from '@/components/ToggleButton.vue'
 import { Settings } from '@/services/settings'
 import { OPTIONS } from '@/types/settings'
-import { STRINGS } from '@/types/strings'
 
 function updateLocation() {
   Settings.saveSettingsToStorage()
@@ -20,23 +20,23 @@ function updateLocation() {
     id="settings_windows"
     class="content-panel-section section"
   >
-    <h2 class="section-title">{{ STRINGS.settings_windows }}</h2>
+    <h2 class="section-title">{{ i18n.t('windows') }}</h2>
     <div class="section-body rows">
       <ToggleButton
-        label="Focus a window when it opens"
+        :label="i18n.t('focusAWindowWhenItOpens')"
         v-model="Settings.values.focusWindowOnOpen"
         :options="OPTIONS.boolean"
         @update="Settings.saveSettingsToStorage()"
       />
       <ToggleButton
-        label="Open saved windows lazily"
-        description="Tabs load the first time you click them, not when the window opens."
+        :label="i18n.t('openSavedWindowsLazily')"
+        :description="i18n.t('tabsLoadTheFirstTimeYouClickThemNotWhen')"
         v-model="Settings.values.openWindowWithTabsDiscarded"
         :options="OPTIONS.boolean"
         @update="Settings.saveSettingsToStorage()"
       />
       <ToggleButton
-        label="Reopen windows in their last position"
+        :label="i18n.t('reopenWindowsInTheirLastPosition')"
         v-model="Settings.values.openWindowsInSameLocation"
         :options="OPTIONS.boolean"
         @update="updateLocation()"
@@ -48,7 +48,7 @@ function updateLocation() {
       :inert="!Settings.values.openWindowsInSameLocation"
     >
       <NumberInput
-        label="Track window positions every"
+        :label="i18n.t('trackWindowPositionsEvery')"
         v-model:value="Settings.values.openWindowsInSameLocationUpdateInterval"
         v-model:selected-unit="
           Settings.values.openWindowsInSameLocationUpdateIntervalUnit
@@ -60,10 +60,10 @@ function updateLocation() {
         @update="updateLocation()"
       />
     </div>
-    <p class="eyebrow">When a window closes</p>
+    <p class="eyebrow">{{ i18n.t('whenAWindowCloses') }}</p>
     <div class="rows">
       <ToggleButton
-        label="Always save it"
+        :label="i18n.t('alwaysSaveIt')"
         v-model="Settings.values.saveWindowOnClose"
         :options="OPTIONS.boolean"
         @update="Settings.saveSettingsToStorage()"
@@ -75,21 +75,21 @@ function updateLocation() {
       :inert="Settings.values.saveWindowOnClose"
     >
       <ToggleButton
-        label="Save it if it contains saved tabs"
+        :label="i18n.t('saveItIfItContainsSavedTabs')"
         v-model="Settings.values.saveWindowOnCloseIfContainsSavedTabs"
         :options="OPTIONS.boolean"
         :disabled="Settings.values.saveWindowOnClose"
         @update="Settings.saveSettingsToStorage()"
       />
       <ToggleButton
-        label="Save it if it was previously saved"
+        :label="i18n.t('saveItIfItWasPreviouslySaved')"
         v-model="Settings.values.saveWindowOnCloseIfPreviouslySaved"
         :options="OPTIONS.boolean"
         :disabled="Settings.values.saveWindowOnClose"
         @update="Settings.saveSettingsToStorage()"
       />
       <ToggleButton
-        label="Save it if it contains notes"
+        :label="i18n.t('saveItIfItContainsNotes')"
         v-model="Settings.values.saveWindowOnCloseIfContainsNotes"
         :options="OPTIONS.boolean"
         :disabled="Settings.values.saveWindowOnClose"

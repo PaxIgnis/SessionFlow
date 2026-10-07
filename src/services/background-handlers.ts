@@ -1,3 +1,4 @@
+import { i18n } from '@/services/i18n'
 import * as Actions from '@/services/background-actions'
 import { updateBadge } from '@/services/background-actions'
 import { Browser } from '@/services/background-browser'
@@ -551,7 +552,7 @@ async function addBrowserTabToTrackedWindow(
     tab.id,
     false,
     tab.discarded ? State.DISCARDED : State.OPEN,
-    tab.title || 'Untitled',
+    tab.title || i18n.t('untitled'),
     tab.url || '',
     tab.pinned || false,
     targetIndex,
@@ -1244,7 +1245,7 @@ async function tabsOnAttached(
         tabId,
         false,
         tab.discarded ? State.DISCARDED : State.OPEN,
-        tab.title || 'Untitled',
+        tab.title || i18n.t('untitled'),
         tab.url || '',
         tab.pinned || false,
         targetTabIndex,
@@ -1260,7 +1261,7 @@ async function tabsOnAttached(
         tabId,
         false,
         tab.discarded ? State.DISCARDED : State.OPEN,
-        tab.title || 'Untitled',
+        tab.title || i18n.t('untitled'),
         tab.url || '',
         tab.pinned || false,
         targetTabIndex,

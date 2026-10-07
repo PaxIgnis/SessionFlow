@@ -1,3 +1,4 @@
+import { i18n, formatNumber } from '@/services/i18n'
 import { Tree } from '@/services/background-tree'
 import { openSessionTree } from '@/services/background-tree-actions'
 import { updateWindowPositionInterval } from '@/services/background-tree-window-actions'
@@ -11,9 +12,9 @@ export async function updateBadge() {
   const tabCount = tabs.length
   const windows = await browser.windows.getAll()
   const windowCount = windows.length
-  await browser.browserAction.setBadgeText({ text: `${tabCount}` })
+  await browser.browserAction.setBadgeText({ text: formatNumber(tabCount) })
   await browser.browserAction.setTitle({
-    title: `${windowCount} windows / ${tabCount} tabs`,
+    title: `${i18n.t('countWindow', windowCount, [formatNumber(windowCount)])} / ${i18n.t('countTab', tabCount, [formatNumber(tabCount)])}`,
   })
 }
 
@@ -56,7 +57,7 @@ export function startSessionTreePersistence(): NodeJS.Timeout {
 export function setupBrowserActionMenu(): void {
   createBrowserActionMenu({
     id: 'open-sessiontree',
-    title: 'Open SessionTree',
+    title: i18n.t('openSessionTree'),
     onclick: () => {
       Tree.openSessionTree()
     },
@@ -65,7 +66,7 @@ export function setupBrowserActionMenu(): void {
 
   createBrowserActionMenu({
     id: 'open-settings',
-    title: 'Settings',
+    title: i18n.t('settings'),
     onclick: () => {
       browser.runtime.openOptionsPage()
     },

@@ -1,3 +1,4 @@
+import { i18n } from '@/services/i18n'
 import * as Messages from '@/services/foreground-messages'
 import { openModal } from '@/services/modal-state'
 import { Selection } from '@/services/selection'
@@ -16,7 +17,7 @@ export const contextMenuItemsTab: Record<string, () => ContextMenuItem> = {
     )
     return {
       id: 'openTab',
-      label: 'Open',
+      label: i18n.t('open'),
       icon: 'open',
       enabled: tabs.some((tab) => tab.state === State.SAVED),
       action: () => Messages.openTabs(tabs),
@@ -29,7 +30,7 @@ export const contextMenuItemsTab: Record<string, () => ContextMenuItem> = {
     )
     return {
       id: 'reloadTab',
-      label: 'Reload',
+      label: i18n.t('reload'),
       icon: 'reload',
       enabled: tabs.some(isOpenTab),
       action: () => Messages.reloadTabs(tabs),
@@ -42,7 +43,7 @@ export const contextMenuItemsTab: Record<string, () => ContextMenuItem> = {
     )
     return {
       id: 'saveTab',
-      label: 'Save',
+      label: i18n.t('save'),
       icon: 'save',
       enabled: tabs.some(isOpenTab),
       action: () => Messages.saveTabs(tabs),
@@ -53,7 +54,7 @@ export const contextMenuItemsTab: Record<string, () => ContextMenuItem> = {
     const tabs = selectedTabsForScope(Settings.values.contextMenuPinDescendants)
     return {
       id: 'pinTab',
-      label: 'Pin',
+      label: i18n.t('pin'),
       icon: 'pin',
       enabled: tabs.some((tab) => !tab.pinned),
       action: () => Messages.pinTabs(tabs),
@@ -64,7 +65,7 @@ export const contextMenuItemsTab: Record<string, () => ContextMenuItem> = {
     const tabs = selectedTabsForScope(Settings.values.contextMenuPinDescendants)
     return {
       id: 'unpinTab',
-      label: 'Unpin',
+      label: i18n.t('unpin'),
       icon: 'unpin',
       enabled: tabs.some((tab) => tab.pinned),
       action: () => Messages.unpinTabs(tabs),
@@ -74,7 +75,7 @@ export const contextMenuItemsTab: Record<string, () => ContextMenuItem> = {
   editLabel: () => {
     return {
       id: 'editLabel',
-      label: 'Edit Label',
+      label: i18n.t('editLabel'),
       icon: 'edit',
       enabled: onlySingleTabSelected(),
       action: () => {

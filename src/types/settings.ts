@@ -1,3 +1,4 @@
+import { i18n } from '@/services/i18n'
 export interface Settings {
   // General
   matchOpenedWindowsWithSavedWindowsOnStartup: boolean
@@ -105,86 +106,86 @@ export const SETTINGS_TYPES = {
 
 export const OPTIONS = {
   boolean: [
-    { label: 'On', value: true },
-    { label: 'Off', value: false },
+    { label: i18n.t('on'), value: true },
+    { label: i18n.t('off'), value: false },
   ],
   doubleClickOnOpenTab: [
-    { label: 'Save', value: 'save' },
-    { label: 'Delete', value: 'close' },
-    { label: 'Reload', value: 'reload' },
-    { label: 'Duplicate', value: 'duplicate' },
-    { label: 'Focus', value: 'focus' },
+    { label: i18n.t('save'), value: 'save' },
+    { label: i18n.t('delete'), value: 'close' },
+    { label: i18n.t('reload'), value: 'reload' },
+    { label: i18n.t('duplicate'), value: 'duplicate' },
+    { label: i18n.t('focus'), value: 'focus' },
   ],
   doubleClickOnSavedTab: [
-    { label: 'Open', value: 'open' },
-    { label: 'Delete', value: 'remove' },
-    { label: 'Duplicate', value: 'duplicate' },
+    { label: i18n.t('open'), value: 'open' },
+    { label: i18n.t('delete'), value: 'remove' },
+    { label: i18n.t('duplicate'), value: 'duplicate' },
   ],
   duplicateTreeItemDescendants: [
-    { label: 'Always', value: 'complete-subtree' },
-    { label: 'Only if Collapsed', value: 'collapsed' },
-    { label: 'Never', value: 'selected-only' },
+    { label: i18n.t('always'), value: 'complete-subtree' },
+    { label: i18n.t('onlyIfCollapsed'), value: 'collapsed' },
+    { label: i18n.t('never'), value: 'selected-only' },
   ],
   duplicatedItemState: [
-    { label: 'Always Saved', value: 'saved' },
-    { label: 'Match Original Items', value: 'match-original' },
+    { label: i18n.t('alwaysSaved'), value: 'saved' },
+    { label: i18n.t('matchOriginalItems'), value: 'match-original' },
   ],
   tabGroupDropBehavior: [
-    { label: 'Same group', value: 'same-group-both-adjacent' },
-    { label: 'Any adjacent', value: 'any-adjacent-group' },
+    { label: i18n.t('sameGroup'), value: 'same-group-both-adjacent' },
+    { label: i18n.t('anyAdjacent'), value: 'any-adjacent-group' },
   ],
   tabGroupColorIndicator: [
-    { label: 'Left Edge', value: 'left' },
-    { label: 'Right Edge', value: 'right' },
-    { label: 'Hidden', value: 'hidden' },
+    { label: i18n.t('leftEdge'), value: 'left' },
+    { label: i18n.t('rightEdge'), value: 'right' },
+    { label: i18n.t('hidden'), value: 'hidden' },
   ],
   tabGroupInfoOnHover: [
-    { label: 'Always', value: 'always' },
-    { label: 'Grouped Tabs Only', value: 'grouped-only' },
-    { label: 'Hidden', value: 'never' },
+    { label: i18n.t('always'), value: 'always' },
+    { label: i18n.t('groupedTabsOnly'), value: 'grouped-only' },
+    { label: i18n.t('hidden'), value: 'never' },
   ],
   containerColorIndicator: [
-    { label: 'Soft Fade', value: 'soft-fade' },
-    { label: 'Strong Fade', value: 'strong-fade' },
-    { label: 'Off', value: 'off' },
+    { label: i18n.t('softFade'), value: 'soft-fade' },
+    { label: i18n.t('strongFade'), value: 'strong-fade' },
+    { label: i18n.t('off'), value: 'off' },
   ],
   containerFadeSide: [
-    { label: 'Left', value: 'left' },
-    { label: 'Right', value: 'right' },
+    { label: i18n.t('left'), value: 'left' },
+    { label: i18n.t('right'), value: 'right' },
   ],
   containerIconPosition: [
-    { label: 'Left', value: 'left' },
-    { label: 'Right', value: 'right' },
-    { label: 'Off', value: 'off' },
+    { label: i18n.t('left'), value: 'left' },
+    { label: i18n.t('right'), value: 'right' },
+    { label: i18n.t('off'), value: 'off' },
   ],
   includeChildrenOfSelectedItems: [
-    { label: 'Always', value: 'always' },
-    { label: 'Only if Collapsed', value: 'collapsed' },
-    { label: 'Never', value: 'never' },
+    { label: i18n.t('always'), value: 'always' },
+    { label: i18n.t('onlyIfCollapsed'), value: 'collapsed' },
+    { label: i18n.t('never'), value: 'never' },
   ],
   includeChildrenOfSelectedItemsWhenIndenting: [
-    { label: 'Always', value: 'always' },
-    { label: 'Only if Collapsed', value: 'collapsed' },
-    { label: 'Never', value: 'never' },
+    { label: i18n.t('always'), value: 'always' },
+    { label: i18n.t('onlyIfCollapsed'), value: 'collapsed' },
+    { label: i18n.t('never'), value: 'never' },
   ],
   refreshFaviconsAfterPeriodOfTimeUnit: [
-    { label: 'Hours', value: 'hours' },
-    { label: 'Days', value: 'days' },
-    { label: 'Weeks', value: 'weeks' },
+    { label: i18n.t('hours'), value: 'hours' },
+    { label: i18n.t('days'), value: 'days' },
+    { label: i18n.t('weeks'), value: 'weeks' },
   ],
   faviconRefreshTiming: [
-    { label: 'At Firefox Startup Only', value: 'startup-only' },
+    { label: i18n.t('atFirefoxStartupOnly'), value: 'startup-only' },
     {
-      label: 'When Expired and at Startup',
+      label: i18n.t('whenExpiredAndAtStartup'),
       value: 'expiration-and-startup',
     },
   ],
   openWindowsInSameLocationUpdateIntervalUnit: [
-    { label: 'Seconds', value: 'seconds' },
-    { label: 'Minutes', value: 'minutes' },
+    { label: i18n.t('seconds'), value: 'seconds' },
+    { label: i18n.t('minutes'), value: 'minutes' },
   ],
   sessionSnapshotIntervalUnit: [
-    { label: 'Minutes', value: 'minutes' },
-    { label: 'Hours', value: 'hours' },
+    { label: i18n.t('minutes'), value: 'minutes' },
+    { label: i18n.t('hours'), value: 'hours' },
   ],
 }

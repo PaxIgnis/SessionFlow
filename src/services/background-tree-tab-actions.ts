@@ -1,3 +1,4 @@
+import { i18n } from '@/services/i18n'
 import { Browser } from '@/services/background-browser'
 import {
   claimTabRelocation,
@@ -574,15 +575,15 @@ export async function openTab(
 ): Promise<void> {
   const sessionTreeWindow = Tree.windowsByUid.get(message.windowUid)
   if (!sessionTreeWindow) {
-    throw new Error('Saved window not found')
+    throw new Error(i18n.t('savedWindowNotFound'))
   }
   const sessionTreeTab = Tree.tabsByUid.get(message.tabUid)
   if (!sessionTreeTab) {
-    throw new Error('Saved tab not found')
+    throw new Error(i18n.t('savedTabNotFound'))
   }
   const containingWindow = Tree.windowsByUid.get(sessionTreeTab.windowUid)
   if (!containingWindow) {
-    throw new Error('Saved tab parent window not found')
+    throw new Error(i18n.t('savedTabWindowNotFound'))
   }
   if (
     containingWindow.incognito &&
@@ -635,7 +636,7 @@ export async function openTab(
       createdWindowId = createdWindow?.id
       const createdTab = createdWindow?.tabs?.[0]
       if (createdWindow?.id === undefined || createdTab?.id === undefined) {
-        throw new Error('Window creation returned no window or tab ID')
+        throw new Error(i18n.t('windowCreationNoIds'))
       }
       windowId = createdWindow.id
       tabId = createdTab.id
@@ -695,7 +696,7 @@ export async function openTab(
     let tab: browser.tabs.Tab
     try {
       tab = await OnCreatedQueue.createTabAndWait(properties)
-      if (tab.id === undefined) throw new Error('Tab creation returned no ID')
+      if (tab.id === undefined) throw new Error(i18n.t('tabCreationNoId'))
       if (tab.windowId !== sessionTreeWindow.id) {
         await browser.tabs.remove(tab.id).catch((removeError) => {
           console.error(
@@ -703,7 +704,7 @@ export async function openTab(
             removeError,
           )
         })
-        throw new Error('Tab creation returned an unexpected window ID')
+        throw new Error(i18n.t('tabCreationWindowMismatch'))
       }
     } catch (error) {
       await containerRecovery.rollback()
@@ -1481,7 +1482,7 @@ export async function moveTab(
     }
     const movedTab = Array.isArray(moved) ? moved[0] : moved
     if (movedTab?.id === undefined) {
-      throw new Error('Tab move returned no tab ID')
+      throw new Error(i18n.t('tabMoveNoId'))
     }
     commitTreeMove(movedTab.id)
     return tab.uid

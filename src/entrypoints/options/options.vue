@@ -1,7 +1,7 @@
 <script lang="ts" setup>
+import { i18n } from '@/services/i18n'
 import '@/styles/variables.css'
 import { findActiveSettingsSection } from '@/services/settings-actions'
-import { STRINGS } from '@/types/strings'
 import { onMounted, onUnmounted, ref } from 'vue'
 import SettingsDragAndDrop from './components/settings.drag-and-drop.vue'
 import Favicons from './components/settings.favicons.vue'
@@ -14,15 +14,15 @@ import SettingsWindows from './components/settings.windows.vue'
 import SettingsStorage from './components/settings.storage.vue'
 
 const sections = [
-  { id: 'settings_general', level: 0 },
-  { id: 'settings_context_menu', level: 0 },
-  { id: 'settings_windows', level: 0 },
-  { id: 'settings_tabs', level: 0 },
-  { id: 'settings_containers', level: 0 },
-  { id: 'settings_tab_groups', level: 0 },
-  { id: 'settings_drag_and_drop', level: 0 },
-  { id: 'settings_favicons', level: 0 },
-  { id: 'settings_storage', level: 0 },
+  { id: 'settings_general', level: 0, label: i18n.t('general') },
+  { id: 'settings_context_menu', level: 0, label: i18n.t('contextMenu') },
+  { id: 'settings_windows', level: 0, label: i18n.t('windows') },
+  { id: 'settings_tabs', level: 0, label: i18n.t('tabsLabel') },
+  { id: 'settings_containers', level: 0, label: i18n.t('containers') },
+  { id: 'settings_tab_groups', level: 0, label: i18n.t('tabGroups') },
+  { id: 'settings_drag_and_drop', level: 0, label: i18n.t('dragAndDrop') },
+  { id: 'settings_favicons', level: 0, label: i18n.t('favicons') },
+  { id: 'settings_storage', level: 0, label: i18n.t('storage') },
 ]
 
 const activeSection = ref(sections[0].id)
@@ -87,7 +87,7 @@ onUnmounted(() => {
   <div class="options-root">
     <nav class="nav-panel">
       <div class="nav-brand">
-        <span class="nav-brand-name">Session Flow</span>
+        <span class="nav-brand-name">{{ i18n.t('sessionFlow') }}</span>
         <span class="nav-brand-version">{{ extensionVersion }}</span>
       </div>
       <div class="nav-list">
@@ -103,7 +103,7 @@ onUnmounted(() => {
           type="button"
           @click="scrollToSection(section.id)"
         >
-          <span class="nav-item-body">{{ STRINGS[section.id] }}</span>
+          <span class="nav-item-body">{{ section.label }}</span>
         </button>
       </div>
     </nav>
@@ -113,8 +113,8 @@ onUnmounted(() => {
       class="content-panel"
     >
       <header class="page-head">
-        <h1 class="page-title">Settings</h1>
-        <p class="page-sub">Changes save as you make them.</p>
+        <h1 class="page-title">{{ i18n.t('settings') }}</h1>
+        <p class="page-sub">{{ i18n.t('changesSaveAsYouMakeThem') }}</p>
       </header>
       <SettingsGeneral />
       <SettingsContextMenu />

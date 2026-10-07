@@ -1,3 +1,4 @@
+import { localizeDocument } from '@/services/i18n'
 import { Settings } from '@/services/settings'
 import { createApp } from 'vue'
 import Options from './options.vue'
@@ -9,3 +10,5 @@ async function init() {
   createApp(Options).mount('#options-root')
 }
 init()
+
+localizeDocument()

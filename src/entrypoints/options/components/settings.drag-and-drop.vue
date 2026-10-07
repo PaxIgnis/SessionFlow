@@ -1,8 +1,8 @@
 <script lang="ts" setup>
+import { i18n } from '@/services/i18n'
 import ToggleButton from '@/components/ToggleButton.vue'
 import { Settings } from '@/services/settings'
 import { OPTIONS } from '@/types/settings'
-import { STRINGS } from '@/types/strings'
 </script>
 
 <template>
@@ -12,15 +12,14 @@ import { STRINGS } from '@/types/strings'
   >
     <div class="section-head">
       <div class="section-head-text">
-        <h2 class="section-title">{{ STRINGS.settings_drag_and_drop }}</h2>
+        <h2 class="section-title">{{ i18n.t('dragAndDrop') }}</h2>
         <p class="section-intro">
-          Rearrange the tree by dragging items within it. Turn this off to lock
-          the tree's shape.
+          {{ i18n.t('rearrangeTheTreeByDraggingItemsWithinItTurnThis') }}
         </p>
       </div>
       <ToggleButton
         class="section-master"
-        label="Enable drag and drop"
+        :label="i18n.t('enableDragAndDrop')"
         v-model="Settings.values.enableDragAndDrop"
         :options="OPTIONS.boolean"
         @update="Settings.saveSettingsToStorage()"
@@ -33,37 +32,41 @@ import { STRINGS } from '@/types/strings'
     >
       <div class="rows">
         <ToggleButton
-          label="Hold Alt while dragging to copy"
+          :label="i18n.t('holdAltWhileDraggingToCopy')"
           v-model="Settings.values.enableCopyOnDragAndDrop"
           :options="OPTIONS.boolean"
           :disabled="!Settings.values.enableDragAndDrop"
           @update="Settings.saveSettingsToStorage()"
         />
         <ToggleButton
-          label="Accept drops from other apps"
-          description="Links dragged from outside Firefox become saved tabs."
+          :label="i18n.t('acceptDropsFromOtherApps')"
+          :description="i18n.t('linksDraggedFromOutsideFirefoxBecomeSavedTabs')"
           v-model="Settings.values.enableDropFromExternalSources"
           :options="OPTIONS.boolean"
           :disabled="!Settings.values.enableDragAndDrop"
           @update="Settings.saveSettingsToStorage()"
         />
         <ToggleButton
-          label="Drag the whole selection, not just the grabbed item"
+          :label="i18n.t('dragTheWholeSelectionNotJustTheGrabbedItem')"
           v-model="Settings.values.includeSelectedItemsWithDraggedItem"
           :options="OPTIONS.boolean"
           :disabled="!Settings.values.enableDragAndDrop"
           @update="Settings.saveSettingsToStorage()"
         />
         <ToggleButton
-          label="Include children of selected items"
+          :label="i18n.t('includeChildrenOfSelectedItems')"
           v-model="Settings.values.includeChildrenOfSelectedItems"
           :options="OPTIONS.includeChildrenOfSelectedItems"
           :disabled="!Settings.values.enableDragAndDrop"
           @update="Settings.saveSettingsToStorage()"
         />
         <ToggleButton
-          label="Keep hierarchy on drop"
-          description="Dropped items keep their parent-child relationships instead of flattening."
+          :label="i18n.t('keepHierarchyOnDrop')"
+          :description="
+            i18n.t(
+              'droppedItemsKeepTheirParentchildRelationshipsInsteadOfFlattening',
+            )
+          "
           v-model="Settings.values.tryToMaintainHierarchyOfDraggedItems"
           :options="OPTIONS.boolean"
           :disabled="
@@ -73,7 +76,7 @@ import { STRINGS } from '@/types/strings'
           @update="Settings.saveSettingsToStorage()"
         />
         <ToggleButton
-          label="Keep collapsed state on drop"
+          :label="i18n.t('keepCollapsedStateOnDrop')"
           v-model="Settings.values.tryToMaintainCollapsedStateOfDraggedItems"
           :options="OPTIONS.boolean"
           :disabled="
@@ -84,7 +87,7 @@ import { STRINGS } from '@/types/strings'
           @update="Settings.saveSettingsToStorage()"
         />
         <ToggleButton
-          label="Allow dropping onto descendants"
+          :label="i18n.t('allowDroppingOntoDescendants')"
           v-model="Settings.values.allowDropOntoDescendantItems"
           :options="OPTIONS.boolean"
           :disabled="!Settings.values.enableDragAndDrop"

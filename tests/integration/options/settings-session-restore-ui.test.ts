@@ -11,7 +11,9 @@ describe('Firefox session restoration settings UI', () => {
       'utf8',
     )
 
-    expect(source).toContain('label="Reconnect items Firefox restores"')
+    expect(source).toContain(
+      ':label="i18n.t(\'reconnectItemsFirefoxRestores\')"',
+    )
     expect(source).toContain(
       'v-model="Settings.values.reconnectFirefoxRestoredItems"',
     )

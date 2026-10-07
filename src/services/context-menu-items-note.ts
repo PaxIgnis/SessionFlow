@@ -1,3 +1,4 @@
+import { i18n } from '@/services/i18n'
 import * as Messages from '@/services/foreground-messages'
 import { openEditNoteModal } from '@/services/modal-state'
 import { Selection } from '@/services/selection'
@@ -12,7 +13,7 @@ export const contextMenuItemsNote: Record<string, () => ContextMenuItem> = {
   createNote: () => {
     return {
       id: 'createNote',
-      label: 'Add Note',
+      label: i18n.t('addNoteLabel'),
       icon: 'note',
       enabled: Selection.selectedItems.value.length <= 1,
       action: () => Messages.createNote(selectedParentUid()),
@@ -22,7 +23,7 @@ export const contextMenuItemsNote: Record<string, () => ContextMenuItem> = {
   editNote: () => {
     return {
       id: 'editNote',
-      label: 'Edit Note',
+      label: i18n.t('editNote'),
       icon: 'edit',
       enabled: Selection.getSelectedNotes().length === 1,
       action: () => {

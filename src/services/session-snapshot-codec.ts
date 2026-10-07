@@ -1,3 +1,4 @@
+import { i18n } from '@/services/i18n'
 import type {
   SessionSnapshotCounts,
   SessionSnapshotExport,
@@ -91,10 +92,10 @@ export function validateSessionSnapshotPayload(
   value: unknown,
 ): SessionSnapshotPayload {
   if (!isRecord(value) || value.schemaVersion !== 1) {
-    throw new Error('Unsupported session snapshot schema version')
+    throw new Error(i18n.t('unsupportedSnapshotVersion'))
   }
   if (!Array.isArray(value.items)) {
-    throw new Error('Invalid session snapshot items')
+    throw new Error(i18n.t('invalidSessionSnapshotItems'))
   }
   const items = value.items.map(validateTopLevelItem)
   validateSnapshotRelationships(items)
@@ -230,13 +231,25 @@ function validateTopLevelItem(value: unknown): SnapshotTopLevelItem {
       typeof record.incognito !== 'boolean' ||
       !isSnapshotState(record.state)
     )
-      throw new Error('Invalid snapshot window')
-    validateOptionalUid(record, 'savedActiveTabUid', 'Invalid snapshot window')
-    validateOptionalUid(record, 'parentUid', 'Invalid snapshot window')
-    validateOptionalString(record, 'title', 'Invalid snapshot window')
-    validateOptionalBoolean(record, 'collapsed', 'Invalid snapshot window')
-    validateOptionalBoolean(record, 'isParent', 'Invalid snapshot window')
-    validateOptionalFiniteNumber(record, 'savedTime', 'Invalid snapshot window')
+      throw new Error(i18n.t('invalidSnapshotWindow'))
+    validateOptionalUid(
+      record,
+      'savedActiveTabUid',
+      i18n.t('invalidSnapshotWindow'),
+    )
+    validateOptionalUid(record, 'parentUid', i18n.t('invalidSnapshotWindow'))
+    validateOptionalString(record, 'title', i18n.t('invalidSnapshotWindow'))
+    validateOptionalBoolean(
+      record,
+      'collapsed',
+      i18n.t('invalidSnapshotWindow'),
+    )
+    validateOptionalBoolean(record, 'isParent', i18n.t('invalidSnapshotWindow'))
+    validateOptionalFiniteNumber(
+      record,
+      'savedTime',
+      i18n.t('invalidSnapshotWindow'),
+    )
     validateWindowPosition(record.windowPosition)
     return {
       ...structuredClone(record),
@@ -245,29 +258,29 @@ function validateTopLevelItem(value: unknown): SnapshotTopLevelItem {
   }
   if (record.type === TreeItemType.NOTE) {
     if (typeof record.text !== 'string')
-      throw new Error('Invalid snapshot note')
-    validateOptionalUid(record, 'windowUid', 'Invalid snapshot note')
-    validateOptionalUid(record, 'parentUid', 'Invalid snapshot note')
-    validateOptionalBoolean(record, 'collapsed', 'Invalid snapshot note')
-    validateOptionalBoolean(record, 'isParent', 'Invalid snapshot note')
+      throw new Error(i18n.t('invalidSnapshotNote'))
+    validateOptionalUid(record, 'windowUid', i18n.t('invalidSnapshotNote'))
+    validateOptionalUid(record, 'parentUid', i18n.t('invalidSnapshotNote'))
+    validateOptionalBoolean(record, 'collapsed', i18n.t('invalidSnapshotNote'))
+    validateOptionalBoolean(record, 'isParent', i18n.t('invalidSnapshotNote'))
     return structuredClone(record) as unknown as SnapshotNote
   }
   if (record.type === TreeItemType.SEPARATOR) {
-    validateOptionalUid(record, 'windowUid', 'Invalid snapshot separator')
-    validateOptionalUid(record, 'parentUid', 'Invalid snapshot separator')
+    validateOptionalUid(record, 'windowUid', i18n.t('invalidSnapshotSeparator'))
+    validateOptionalUid(record, 'parentUid', i18n.t('invalidSnapshotSeparator'))
     validateOptionalFalseBoolean(
       record,
       'collapsed',
-      'Invalid snapshot separator',
+      i18n.t('invalidSnapshotSeparator'),
     )
     validateOptionalFalseBoolean(
       record,
       'isParent',
-      'Invalid snapshot separator',
+      i18n.t('invalidSnapshotSeparator'),
     )
     return structuredClone(record) as unknown as SnapshotSeparator
   }
-  throw new Error('Invalid top-level snapshot item type')
+  throw new Error(i18n.t('invalidTopLevelSnapshotItemType'))
 }
 
 function validateCommon(value: unknown): Record<string, unknown> {
@@ -280,7 +293,7 @@ function validateCommon(value: unknown): Record<string, unknown> {
     !Number.isInteger(value.indentLevel) ||
     value.indentLevel < 0
   ) {
-    throw new Error('Invalid snapshot tree item')
+    throw new Error(i18n.t('invalidSnapshotTreeItem'))
   }
   for (const transient of [
     'id',
@@ -290,7 +303,7 @@ function validateCommon(value: unknown): Record<string, unknown> {
     'isVisible',
   ]) {
     if (transient in value)
-      throw new Error(`Invalid transient snapshot field: ${transient}`)
+      throw new Error(i18n.t('invalidTransientField', [transient]))
   }
   return value
 }
@@ -301,7 +314,7 @@ function validateWindowChild(value: unknown): SnapshotWindowChild {
     try {
       record = validateCommon(value)
     } catch {
-      throw new Error('Invalid snapshot tab')
+      throw new Error(i18n.t('invalidSnapshotTab'))
     }
     if (
       typeof record.title !== 'string' ||
@@ -311,13 +324,17 @@ function validateWindowChild(value: unknown): SnapshotWindowChild {
       typeof record.pinned !== 'boolean' ||
       !isSnapshotState(record.state)
     ) {
-      throw new Error('Invalid snapshot tab')
+      throw new Error(i18n.t('invalidSnapshotTab'))
     }
-    validateOptionalFiniteNumber(record, 'savedTime', 'Invalid snapshot tab')
-    validateOptionalBoolean(record, 'collapsed', 'Invalid snapshot tab')
-    validateOptionalBoolean(record, 'isParent', 'Invalid snapshot tab')
-    validateOptionalUid(record, 'parentUid', 'Invalid snapshot tab')
-    validateOptionalString(record, 'customLabel', 'Invalid snapshot tab')
+    validateOptionalFiniteNumber(
+      record,
+      'savedTime',
+      i18n.t('invalidSnapshotTab'),
+    )
+    validateOptionalBoolean(record, 'collapsed', i18n.t('invalidSnapshotTab'))
+    validateOptionalBoolean(record, 'isParent', i18n.t('invalidSnapshotTab'))
+    validateOptionalUid(record, 'parentUid', i18n.t('invalidSnapshotTab'))
+    validateOptionalString(record, 'customLabel', i18n.t('invalidSnapshotTab'))
     validateTabGroup(record.tabGroup)
     validateContainer(record.container)
     return structuredClone(record) as unknown as SnapshotTab
@@ -325,31 +342,31 @@ function validateWindowChild(value: unknown): SnapshotWindowChild {
   const record = validateCommon(value)
   if (record.type === TreeItemType.NOTE) {
     if (typeof record.text !== 'string')
-      throw new Error('Invalid snapshot note')
+      throw new Error(i18n.t('invalidSnapshotNote'))
     if (typeof record.windowUid !== 'string' || record.windowUid.length === 0)
-      throw new Error('Invalid snapshot note')
-    validateOptionalUid(record, 'parentUid', 'Invalid snapshot note')
-    validateOptionalBoolean(record, 'collapsed', 'Invalid snapshot note')
-    validateOptionalBoolean(record, 'isParent', 'Invalid snapshot note')
+      throw new Error(i18n.t('invalidSnapshotNote'))
+    validateOptionalUid(record, 'parentUid', i18n.t('invalidSnapshotNote'))
+    validateOptionalBoolean(record, 'collapsed', i18n.t('invalidSnapshotNote'))
+    validateOptionalBoolean(record, 'isParent', i18n.t('invalidSnapshotNote'))
     return structuredClone(record) as unknown as SnapshotNote
   }
   if (record.type === TreeItemType.SEPARATOR) {
     if (typeof record.windowUid !== 'string' || record.windowUid.length === 0)
-      throw new Error('Invalid snapshot separator')
-    validateOptionalUid(record, 'parentUid', 'Invalid snapshot separator')
+      throw new Error(i18n.t('invalidSnapshotSeparator'))
+    validateOptionalUid(record, 'parentUid', i18n.t('invalidSnapshotSeparator'))
     validateOptionalFalseBoolean(
       record,
       'isParent',
-      'Invalid snapshot separator',
+      i18n.t('invalidSnapshotSeparator'),
     )
     validateOptionalFalseBoolean(
       record,
       'collapsed',
-      'Invalid snapshot separator',
+      i18n.t('invalidSnapshotSeparator'),
     )
     return structuredClone(record) as unknown as SnapshotSeparator
   }
-  throw new Error('Invalid snapshot window child type')
+  throw new Error(i18n.t('invalidSnapshotWindowChildType'))
 }
 
 function validateSnapshotRelationships(
@@ -382,7 +399,7 @@ function validateSnapshotRelationships(
   for (const item of items) {
     if (item.type !== TreeItemType.WINDOW) {
       if (item.windowUid !== undefined)
-        throw new Error('Invalid snapshot top-level container relationship')
+        throw new Error(i18n.t('invalidSnapshotTopLevelContainerRelationship'))
       continue
     }
 
@@ -396,7 +413,7 @@ function claimSnapshotItem(
   allItems: SnapshotTreeItem[],
 ): void {
   if (itemByUid.has(item.uid))
-    throw new Error(`Duplicate snapshot UID: ${item.uid}`)
+    throw new Error(i18n.t('duplicateSnapshotUid', [item.uid]))
   itemByUid.set(item.uid, item)
   allItems.push(item)
 }
@@ -410,7 +427,7 @@ function validateSnapshotTabGroups(
     if (item.type !== TreeItemType.TAB || item.tabGroup === undefined) continue
     const group = item.tabGroup
     if (itemByUid.has(group.uid)) {
-      throw new Error(`Snapshot tab group UID collides with item: ${group.uid}`)
+      throw new Error(i18n.t('snapshotGroupUidCollision', [group.uid]))
     }
     const previous = groupsByUid.get(group.uid)
     if (
@@ -419,7 +436,7 @@ function validateSnapshotTabGroups(
         previous.color !== group.color ||
         previous.collapsed !== group.collapsed)
     ) {
-      throw new Error(`Conflicting snapshot tab group metadata: ${group.uid}`)
+      throw new Error(i18n.t('snapshotGroupConflict', [group.uid]))
     }
     groupsByUid.set(group.uid, group)
   }
@@ -431,7 +448,7 @@ function validateWindowRelationships(window: SnapshotWindow): void {
   )
   for (const child of window.children) {
     if (child.windowUid !== window.uid)
-      throw new Error('Invalid snapshot child relationship')
+      throw new Error(i18n.t('invalidSnapshotChildRelationship'))
   }
   validateParentLinks(
     window.children,
@@ -449,9 +466,9 @@ function validateWindowRelationships(window: SnapshotWindow): void {
       child.type === TreeItemType.TAB && child.uid === window.savedActiveTabUid,
   )
   if (!savedActiveTab)
-    throw new Error('Invalid snapshot saved active tab relationship')
+    throw new Error(i18n.t('invalidSnapshotSavedActiveTabRelationship'))
   if (window.state === State.SAVED && savedActiveTab.state === State.OPEN) {
-    throw new Error('Invalid snapshot saved active tab relationship')
+    throw new Error(i18n.t('invalidSnapshotSavedActiveTabRelationship'))
   }
 }
 
@@ -465,7 +482,13 @@ function validateParentLinks(
 ): void {
   for (const item of items) {
     if (item.parentUid !== undefined && !itemsByUid.has(item.parentUid)) {
-      throw new Error(`Invalid snapshot ${containerName} parent relationship`)
+      throw new Error(
+        i18n.t('snapshotParentRelationship', [
+          containerName === 'window child'
+            ? i18n.t('snapshotWindowChild')
+            : i18n.t('snapshotTopLevel'),
+        ]),
+      )
     }
   }
 
@@ -474,11 +497,17 @@ function validateParentLinks(
     let current: SnapshotTreeItem | undefined = item
     while (current.parentUid !== undefined) {
       if (visited.has(current.uid))
-        throw new Error('Cyclic snapshot parent relationship')
+        throw new Error(i18n.t('cyclicSnapshotParent'))
       visited.add(current.uid)
       current = itemsByUid.get(current.parentUid)
       if (!current)
-        throw new Error(`Invalid snapshot ${containerName} parent relationship`)
+        throw new Error(
+          i18n.t('snapshotParentRelationship', [
+            containerName === 'window child'
+              ? i18n.t('snapshotWindowChild')
+              : i18n.t('snapshotTopLevel'),
+          ]),
+        )
     }
   }
 
@@ -486,7 +515,13 @@ function validateParentLinks(
     const parent =
       item.parentUid === undefined ? undefined : itemsByUid.get(item.parentUid)
     if (parent && !isValidParent(parent)) {
-      throw new Error(`Invalid snapshot ${containerName} parent relationship`)
+      throw new Error(
+        i18n.t('snapshotParentRelationship', [
+          containerName === 'window child'
+            ? i18n.t('snapshotWindowChild')
+            : i18n.t('snapshotTopLevel'),
+        ]),
+      )
     }
     const expectedIndentLevel = parent
       ? parent.indentLevel + 1
@@ -494,7 +529,13 @@ function validateParentLinks(
         ? rootParent.indentLevel + 1
         : rootIndentLevel
     if (item.indentLevel !== expectedIndentLevel) {
-      throw new Error(`Invalid snapshot ${containerName} indent relationship`)
+      throw new Error(
+        i18n.t('snapshotIndentRelationship', [
+          containerName === 'window child'
+            ? i18n.t('snapshotWindowChild')
+            : i18n.t('snapshotTopLevel'),
+        ]),
+      )
     }
   }
 }
@@ -509,10 +550,10 @@ function validateTabGroup(value: unknown): void {
     !TAB_GROUP_COLORS.has(value.color as TabGroupColor) ||
     typeof value.collapsed !== 'boolean'
   ) {
-    throw new Error('Invalid snapshot tab group')
+    throw new Error(i18n.t('invalidSnapshotTabGroup'))
   }
-  validateOptionalString(value, 'title', 'Invalid snapshot tab group')
-  if ('id' in value) throw new Error('Invalid snapshot tab group')
+  validateOptionalString(value, 'title', i18n.t('invalidSnapshotTabGroup'))
+  if ('id' in value) throw new Error(i18n.t('invalidSnapshotTabGroup'))
 }
 
 function validateContainer(value: unknown): void {
@@ -525,9 +566,9 @@ function validateContainer(value: unknown): void {
     typeof value.colorCode !== 'string' ||
     typeof value.icon !== 'string'
   ) {
-    throw new Error('Invalid snapshot container')
+    throw new Error(i18n.t('invalidSnapshotContainer'))
   }
-  validateOptionalString(value, 'iconUrl', 'Invalid snapshot container')
+  validateOptionalString(value, 'iconUrl', i18n.t('invalidSnapshotContainer'))
 }
 
 function validateWindowPosition(value: unknown): void {
@@ -539,7 +580,7 @@ function validateWindowPosition(value: unknown): void {
     !isFiniteNumber(value.width) ||
     !isFiniteNumber(value.height)
   ) {
-    throw new Error('Invalid snapshot window position')
+    throw new Error(i18n.t('invalidSnapshotWindowPosition'))
   }
 }
 

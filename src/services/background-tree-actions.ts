@@ -1,3 +1,4 @@
+import { i18n, formatNumber } from '@/services/i18n'
 import { STORAGE_KEY } from '@/defaults/constants'
 import { OnCreatedQueue } from '@/services/background-on-created-queue'
 import { Tree } from '@/services/background-tree'
@@ -95,7 +96,7 @@ export async function initializeWindows(): Promise<void> {
               id: tab.id!,
               selected: false,
               state: tab.discarded ? State.DISCARDED : State.OPEN,
-              title: identity.title || 'Untitled',
+              title: identity.title || i18n.t('untitled'),
               url: identity.url || '',
               windowUid: windowUid,
               indentLevel: 1,
@@ -315,7 +316,7 @@ function reconcileSavedWindowWithOpenWindow(
       matchedOpenTab.url,
       matchedOpenTab.title,
     )
-    savedTab.title = identity.title || savedTab.title || 'Untitled'
+    savedTab.title = identity.title || savedTab.title || i18n.t('untitled')
     savedTab.url = identity.url || savedTab.url || ''
     savedTab.pinned = matchedOpenTab.pinned || false
     savedTab.windowUid = savedWindow.uid
@@ -338,7 +339,7 @@ function reconcileSavedWindowWithOpenWindow(
       id: openTab.id,
       selected: false,
       state: openTab.discarded ? State.DISCARDED : State.OPEN,
-      title: openTab.title || 'Untitled',
+      title: openTab.title || i18n.t('untitled'),
       url: openTab.url || '',
       windowUid: savedWindow.uid,
       indentLevel: 1,
@@ -1043,9 +1044,7 @@ export async function moveTreeItems(
       includeDescendants,
     )
   ) {
-    throw new Error(
-      'Firefox cannot move open tabs between normal and private windows',
-    )
+    throw new Error(i18n.t('privateWindowMoveUnsupported'))
   }
 
   if (moveIncludesBrowserBackedTabs(itemUIDs, includeDescendants)) {
@@ -2024,7 +2023,10 @@ export async function deleteTreeItems(itemUIDs: UID[]): Promise<void> {
 
   if (failedCount > 0) {
     throw new Error(
-      `Failed to delete ${failedCount} of ${items.length} tree items`,
+      i18n.t('treeDeleteFailed', [
+        formatNumber(failedCount),
+        formatNumber(items.length),
+      ]),
     )
   }
 }
@@ -2091,9 +2093,7 @@ async function restoreClonedTabStates(pairs: ClonedTabPair[]): Promise<void> {
       !restoredDuplicatedWindowUids.has(clone.windowUid)
     ) {
       blockedDuplicatedWindowUids.add(clone.windowUid)
-      firstError ??= new Error(
-        'Could not restore discarded tabs because the duplicated window was not opened',
-      )
+      firstError ??= new Error(i18n.t('duplicatedWindowNotOpened'))
       continue
     }
     try {
@@ -2105,9 +2105,7 @@ async function restoreClonedTabStates(pairs: ClonedTabPair[]): Promise<void> {
         active: isActiveOpenTab(source),
       })
       if (clone.state !== source.state) {
-        throw new Error(
-          `Duplicated tab ${clone.uid} did not match its original state`,
-        )
+        throw new Error(i18n.t('duplicatedTabStateMismatch', [clone.uid]))
       }
       if (fromDuplicatedWindow && source.state === State.OPEN) {
         restoredDuplicatedWindowUids.add(clone.windowUid)

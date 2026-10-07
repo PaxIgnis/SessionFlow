@@ -1,3 +1,4 @@
+import { i18n } from '@/services/i18n'
 import { Tree } from '@/services/background-tree'
 import {
   CONTAINER_RECOVERY_STALE_ERROR,
@@ -156,7 +157,7 @@ export async function resolveContainerRecovery(
 
   if (!strategy) {
     const first = missing.values().next().value as ContainerMetadata
-    throw new Error(`Firefox container "${first.name}" no longer exists`)
+    throw new Error(i18n.t('firefoxContainerMissing', [first.name]))
   }
 
   if (!consentMatches(missing, consentedStoreIds)) {

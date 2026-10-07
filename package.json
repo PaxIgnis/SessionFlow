@@ -43,6 +43,7 @@
     "format": "prettier . --write"
   },
   "dependencies": {
+    "@wxt-dev/i18n": "^0.2.8",
     "vue": "^3.5.41"
   },
   "devDependencies": {

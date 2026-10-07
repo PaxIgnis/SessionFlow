@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@wxt-dev/i18n':
+        specifier: ^0.2.8
+        version: 0.2.8(wxt@0.20.27(@types/node@25.9.5)(eslint@9.39.5(jiti@2.7.0)(supports-color@8.1.1))(jiti@2.7.0)(rolldown@1.2.5)(rollup@4.61.1)(supports-color@8.1.1)(tsx@4.23.12))
       vue:
         specifier: ^3.5.41
         version: 3.5.41(typescript@5.9.3)
@@ -1511,6 +1514,14 @@ packages:
 
   '@wxt-dev/browser@0.2.7':
     resolution: {integrity: sha512-Dr3h3qS25Wah4LjoCSw5uazD+547Q0dLnxaRjkkLauus008daHAulgNKTU4HkojaS9QBdo3xUlwUYPTBCQb+XQ==}
+
+  '@wxt-dev/i18n@0.2.8':
+    resolution: {integrity: sha512-mxVwIJ2YFzsWuXEKMElaD7ehI6hfxjWT4ON8xFVX5kk+vNQ8JmgsDflfU8LApaNHULs8nqhU0QoLecVp075LPQ==}
+    peerDependencies:
+      wxt: '>=0.19.7'
+    peerDependenciesMeta:
+      wxt:
+        optional: true
 
   '@wxt-dev/module-vue@1.0.3':
     resolution: {integrity: sha512-xUNygcj4w0b1MzQGOQIp5V2ZwFE4y+5AwKPi/IPKyo2aNeFVJTfItIxzWI5vTj7031WCLzHgQrrBRS5C63D5iw==}
@@ -5808,6 +5819,15 @@ snapshots:
     dependencies:
       '@types/filesystem': 0.0.36
       '@types/har-format': 1.2.16
+
+  '@wxt-dev/i18n@0.2.8(wxt@0.20.27(@types/node@25.9.5)(eslint@9.39.5(jiti@2.7.0)(supports-color@8.1.1))(jiti@2.7.0)(rolldown@1.2.5)(rollup@4.61.1)(supports-color@8.1.1)(tsx@4.23.12))':
+    dependencies:
+      '@wxt-dev/browser': 0.2.7
+      chokidar: 5.0.0
+      confbox: 0.2.4
+      tinyglobby: 0.2.17
+    optionalDependencies:
+      wxt: 0.20.27(@types/node@25.9.5)(eslint@9.39.5(jiti@2.7.0)(supports-color@8.1.1))(jiti@2.7.0)(rolldown@1.2.5)(rollup@4.61.1)(supports-color@8.1.1)(tsx@4.23.12)
 
   '@wxt-dev/module-vue@1.0.3(vite@6.4.3(@types/node@25.9.5)(jiti@2.7.0)(lightningcss@1.33.0)(tsx@4.23.12))(vue@3.5.41(typescript@5.9.3))(wxt@0.20.27(@types/node@25.9.5)(eslint@9.39.5(jiti@2.7.0)(supports-color@8.1.1))(jiti@2.7.0)(rolldown@1.2.5)(rollup@4.61.1)(supports-color@8.1.1)(tsx@4.23.12))':
     dependencies:

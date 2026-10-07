@@ -1,3 +1,4 @@
+import { i18n } from '@/services/i18n'
 import * as Messages from '@/services/foreground-messages'
 import { openDeleteTreeItemsModal } from '@/services/modal-state'
 import { Selection } from '@/services/selection'
@@ -34,7 +35,7 @@ export const contextMenuItemsTree: Record<string, () => ContextMenuItem> = {
     )
     return {
       id: 'deleteTreeItem',
-      label: 'Delete',
+      label: i18n.t('delete'),
       icon: 'close',
       enabled: items.length > 0,
       action: () => openDeleteTreeItemsModal(items),
@@ -48,7 +49,7 @@ export const contextMenuItemsTree: Record<string, () => ContextMenuItem> = {
     )
     return {
       id: 'duplicateTreeItem',
-      label: 'Duplicate',
+      label: i18n.t('duplicate'),
       icon: 'duplicate',
       enabled: items.length > 0,
       action: () =>
@@ -64,7 +65,7 @@ export const contextMenuItemsTree: Record<string, () => ContextMenuItem> = {
     const uids = items.map((item) => item.uid)
     return {
       id: 'treeItemIndentIncrease',
-      label: 'Increase Indent',
+      label: i18n.t('increaseIndent'),
       icon: 'indent-increase',
       enabled: canIncreaseIndentSelectedItems(items),
       action: () => Messages.treeItemIndentIncrease(uids),
@@ -76,7 +77,7 @@ export const contextMenuItemsTree: Record<string, () => ContextMenuItem> = {
     const uids = items.map((item) => item.uid)
     return {
       id: 'treeItemIndentDecrease',
-      label: 'Decrease Indent',
+      label: i18n.t('decreaseIndent'),
       icon: 'indent-decrease',
       enabled: canDecreaseIndentSelectedItems(items),
       action: () => Messages.treeItemIndentDecrease(uids),

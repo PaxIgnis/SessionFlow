@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { STRINGS } from '@/types/strings'
+import { i18n } from '@/services/i18n'
 import DescendantScopeMatrix from './DescendantScopeMatrix.vue'
 </script>
 
@@ -8,10 +8,9 @@ import DescendantScopeMatrix from './DescendantScopeMatrix.vue'
     id="settings_context_menu"
     class="content-panel-section section"
   >
-    <h2 class="section-title">{{ STRINGS.settings_context_menu }}</h2>
+    <h2 class="section-title">{{ i18n.t('contextMenu') }}</h2>
     <p class="section-intro">
-      Right-click actions apply to the items you selected. These settings decide
-      when an action also reaches children you did not select.
+      {{ i18n.t('rightclickActionsApplyToTheItemsYouSelectedTheseSettings') }}
     </p>
     <div class="section-body">
       <DescendantScopeMatrix />

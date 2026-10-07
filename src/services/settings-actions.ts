@@ -1,3 +1,4 @@
+import { i18n } from '@/services/i18n'
 import { DEFAULT_SETTINGS } from '@/defaults/settings'
 import { Settings as SettingsValues } from '@/services/settings'
 import { Settings, SETTINGS_TYPES } from '@/types/settings'
@@ -199,7 +200,7 @@ async function writeSettingsToStorage(): Promise<void> {
     stored = await browser.storage.local.get('settings')
   } catch (error) {
     applySettingsPreservingLiveEdits(previous, current)
-    throw contextualError('Failed to read latest settings before saving', error)
+    throw contextualError(i18n.t('settingsLatestReadFailed'), error)
   }
   const latest = normalizeSettings(stored.settings)
   const merged = normalizeSettings({ ...latest, ...patch })
@@ -208,7 +209,7 @@ async function writeSettingsToStorage(): Promise<void> {
     await browser.storage.local.set({ settings: merged })
   } catch (error) {
     applySettingsPreservingLiveEdits(previous, current)
-    throw contextualError('Failed to write settings to storage', error)
+    throw contextualError(i18n.t('settingsWriteFailed'), error)
   }
 
   applySettingsPreservingLiveEdits(merged, current)
@@ -216,10 +217,7 @@ async function writeSettingsToStorage(): Promise<void> {
   try {
     await browser.runtime.sendMessage({ type: 'settingsUpdated' })
   } catch (error) {
-    throw contextualError(
-      'Settings were saved but the update broadcast failed',
-      error,
-    )
+    throw contextualError(i18n.t('settingsBroadcastFailed'), error)
   }
 }
 

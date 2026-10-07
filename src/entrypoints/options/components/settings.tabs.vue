@@ -1,8 +1,8 @@
 <script lang="ts" setup>
+import { i18n } from '@/services/i18n'
 import { Settings } from '@/services/settings'
 import ToggleButton from '@/components/ToggleButton.vue'
 import { OPTIONS } from '@/types/settings'
-import { STRINGS } from '@/types/strings'
 </script>
 
 <template>
@@ -10,16 +10,16 @@ import { STRINGS } from '@/types/strings'
     id="settings_tabs"
     class="content-panel-section section"
   >
-    <h2 class="section-title">{{ STRINGS.settings_tabs }}</h2>
+    <h2 class="section-title">{{ i18n.t('tabsLabel') }}</h2>
     <div class="section-body rows">
       <ToggleButton
-        label="Focus a tab when it opens"
+        :label="i18n.t('focusATabWhenItOpens')"
         v-model="Settings.values.focusTabOnOpen"
         :options="OPTIONS.boolean"
         @update="Settings.saveSettingsToStorage()"
       />
       <ToggleButton
-        label="Save tabs when they close"
+        :label="i18n.t('saveTabsWhenTheyClose')"
         v-model="Settings.values.saveTabOnClose"
         :options="OPTIONS.boolean"
         @update="Settings.saveSettingsToStorage()"
@@ -31,44 +31,44 @@ import { STRINGS } from '@/types/strings'
       :inert="Settings.values.saveTabOnClose"
     >
       <ToggleButton
-        label="Save it if it was previously saved"
+        :label="i18n.t('saveItIfItWasPreviouslySaved')"
         v-model="Settings.values.saveTabOnCloseIfPreviouslySaved"
         :options="OPTIONS.boolean"
         :disabled="Settings.values.saveTabOnClose"
         @update="Settings.saveSettingsToStorage()"
       />
     </div>
-    <p class="eyebrow">Double-click</p>
+    <p class="eyebrow">{{ i18n.t('doubleclick') }}</p>
     <div class="rows">
       <ToggleButton
-        label="An open tab"
+        :label="i18n.t('anOpenTab')"
         v-model="Settings.values.doubleClickOnOpenTab"
         :options="OPTIONS.doubleClickOnOpenTab"
         @update="Settings.saveSettingsToStorage()"
       />
       <ToggleButton
-        label="A saved tab"
+        :label="i18n.t('aSavedTab')"
         v-model="Settings.values.doubleClickOnSavedTab"
         :options="OPTIONS.doubleClickOnSavedTab"
         @update="Settings.saveSettingsToStorage()"
       />
     </div>
-    <p class="eyebrow">Show on hover</p>
+    <p class="eyebrow">{{ i18n.t('showOnHover') }}</p>
     <div class="rows">
       <ToggleButton
-        label="Tab title"
+        :label="i18n.t('tabTitle')"
         v-model="Settings.values.showTabTitleOnHover"
         :options="OPTIONS.boolean"
         @update="Settings.saveSettingsToStorage()"
       />
       <ToggleButton
-        label="Tab URL"
+        :label="i18n.t('tabURL')"
         v-model="Settings.values.showTabUrlOnHover"
         :options="OPTIONS.boolean"
         @update="Settings.saveSettingsToStorage()"
       />
       <ToggleButton
-        label="Tab group"
+        :label="i18n.t('tabGroupLabel')"
         v-model="Settings.values.tabGroupInfoOnHover"
         :options="OPTIONS.tabGroupInfoOnHover"
         @update="Settings.saveSettingsToStorage()"

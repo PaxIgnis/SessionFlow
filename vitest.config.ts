@@ -9,9 +9,19 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': srcPath,
+      '#i18n': fileURLToPath(new URL('./.wxt/i18n/index.ts', import.meta.url)),
+      '@wxt-dev/browser': fileURLToPath(
+        new URL('./tests/helpers/i18n.ts', import.meta.url),
+      ),
+      'wxt/browser': fileURLToPath(
+        new URL('./tests/helpers/i18n.ts', import.meta.url),
+      ),
     },
   },
   test: {
+    server: {
+      deps: { inline: ['@wxt-dev/i18n', '@wxt-dev/browser'] },
+    },
     coverage: {
       provider: 'istanbul',
       include: ['src/**/*.{ts,vue}'],

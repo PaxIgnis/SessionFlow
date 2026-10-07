@@ -1,3 +1,4 @@
+import { i18n, formatList, formatNumber } from '@/services/i18n'
 import { DragAndDrop } from '@/services/drag-and-drop'
 import {
   hasSupportedExternalDropType,
@@ -109,7 +110,7 @@ export function buildDragImagePreview(items: TreeItem[]): DragImagePreview {
   if (items.length === 1) {
     if (firstItem.type === TreeItemType.TAB) {
       return {
-        title: firstItem.title || `Tab id ${firstItem.id}`,
+        title: firstItem.title || i18n.t('tabId', [firstItem.id]),
         body: [firstItem.url || ''],
       }
     }
@@ -117,7 +118,7 @@ export function buildDragImagePreview(items: TreeItem[]): DragImagePreview {
       return { title: firstItem.text, body: [] }
     }
     if (firstItem.type === TreeItemType.SEPARATOR) {
-      return { title: 'Separator', body: [] }
+      return { title: i18n.t('separator'), body: [] }
     }
   }
 
@@ -132,12 +133,12 @@ export function buildDragImagePreview(items: TreeItem[]): DragImagePreview {
       TreeItemType.NOTE,
       TreeItemType.SEPARATOR,
     ])
-    metadata = `(Window contents: ${contents || '0 items'})`
+    metadata = i18n.t('windowContents', [contents || i18n.t('0Items')])
   }
 
   if (items.length === 1 && firstItem.type === TreeItemType.WINDOW) {
     return {
-      title: firstItem.title || `Window id ${firstItem.id}`,
+      title: firstItem.title || i18n.t('windowId', [firstItem.id]),
       metadata,
       body: [],
     }
@@ -166,19 +167,19 @@ function formatItemCounts(
 ): string {
   const phrases = typeOrder.flatMap((type) => {
     const count = items.filter((item) => item.type === type).length
-    return count > 0 ? [`${count} ${getItemTypeLabel(type, count)}`] : []
+    return count > 0 ? [getItemTypeLabel(type, count)] : []
   })
-  if (phrases.length <= 1) return phrases[0] ?? ''
-  if (phrases.length === 2) return `${phrases[0]} and ${phrases[1]}`
-  return `${phrases.slice(0, -1).join(', ')} and ${phrases.at(-1)}`
+  return formatList(phrases)
 }
 
 function getItemTypeLabel(type: TreeItemType, count: number): string {
-  const plural = count === 1 ? '' : 's'
-  if (type === TreeItemType.WINDOW) return `window${plural}`
-  if (type === TreeItemType.TAB) return `tab${plural}`
-  if (type === TreeItemType.NOTE) return `note${plural}`
-  return `separator${plural}`
+  if (type === TreeItemType.WINDOW)
+    return i18n.t('countWindow', count, [formatNumber(count)])
+  if (type === TreeItemType.TAB)
+    return i18n.t('countTab', count, [formatNumber(count)])
+  if (type === TreeItemType.NOTE)
+    return i18n.t('countNote', count, [formatNumber(count)])
+  return i18n.t('countSeparator', count, [formatNumber(count)])
 }
 
 export function populateInternalDragData(
@@ -205,7 +206,7 @@ export function populateInternalDragData(
   } else if (dragInfo.dragType === DragType.WINDOW) {
     for (const item of dragInfo.items) {
       if (item.type !== TreeItemType.WINDOW) continue
-      const title = item.title || `Window id ${item.id}`
+      const title = item.title || i18n.t('windowId', [item.id])
       html.push(`<span>${escapeHtml(title)}</span>`)
       plain.push(title)
     }
@@ -214,7 +215,7 @@ export function populateInternalDragData(
       plain.push(item.type === TreeItemType.NOTE ? item.text : item.uid)
     }
   } else {
-    plain.push('Separator')
+    plain.push(i18n.t('separator'))
   }
 
   safeSetDragData(

@@ -1,4 +1,5 @@
 <script lang="ts" setup>
+import { i18n, formatList, formatNumber } from '@/services/i18n'
 import type { DeleteTreeItemCounts } from '@/services/modal-state'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 
@@ -14,23 +15,14 @@ const summary = computed(() => {
   const { windows, tabs, notes, separators } = props.counts
 
   const parts = [
-    { count: windows, singular: 'window', plural: 'windows' },
-    { count: tabs, singular: 'tab', plural: 'tabs' },
-    { count: notes, singular: 'note', plural: 'notes' },
-    { count: separators, singular: 'separator', plural: 'separators' },
-  ]
-    .filter(({ count }) => count > 0)
-    .map(
-      ({ count, singular, plural }) =>
-        `${count} ${count === 1 ? singular : plural}`,
-    )
-
-  if (parts.length === 0) return 'no items'
-  if (parts.length === 1) return parts[0]
-
-  const last = parts[parts.length - 1]
-  const preceding = parts.slice(0, -1).join(', ')
-  return `${preceding}${parts.length > 2 ? ',' : ''} and ${last}`
+    windows > 0 ? i18n.t('countWindow', windows, [formatNumber(windows)]) : '',
+    tabs > 0 ? i18n.t('countTab', tabs, [formatNumber(tabs)]) : '',
+    notes > 0 ? i18n.t('countNote', notes, [formatNumber(notes)]) : '',
+    separators > 0
+      ? i18n.t('countSeparator', separators, [formatNumber(separators)])
+      : '',
+  ].filter(Boolean)
+  return parts.length ? formatList(parts) : i18n.t('noItems')
 })
 
 onMounted(async () => {
@@ -91,23 +83,23 @@ function handleKeydown(event: KeyboardEvent): void {
       tabindex="-1"
       @keydown="handleKeydown"
     >
-      <h2 id="delete-tree-items-title">Delete Selected Items</h2>
-      <p>This will delete {{ summary }}.</p>
-      <p>Open tabs and windows will also be closed in Firefox.</p>
+      <h2 id="delete-tree-items-title">{{ i18n.t('deleteSelectedItems') }}</h2>
+      <p>{{ i18n.t('deleteSummary', [summary]) }}</p>
+      <p>{{ i18n.t('openTabsAndWindowsWillAlsoBeClosedInFirefox') }}</p>
       <div class="delete-tree-items-actions">
         <button
           class="delete-tree-items-confirm"
           :disabled="pending"
           @click="$emit('confirm')"
         >
-          Delete
+          {{ i18n.t('delete') }}
         </button>
         <button
           class="delete-tree-items-cancel"
           :disabled="pending"
           @click="$emit('cancel')"
         >
-          Cancel
+          {{ i18n.t('cancel') }}
         </button>
       </div>
     </section>

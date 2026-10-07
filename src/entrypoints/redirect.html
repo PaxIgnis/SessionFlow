@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>Redirect</title>
+    <title data-i18n="redirect">Redirect</title>
     <style>
       .copied-message {
         display: none;
@@ -15,7 +15,12 @@
     </style>
   </head>
   <body>
-    <p id="message">Redirecting</p>
+    <p
+      id="message"
+      data-i18n="redirecting"
+    >
+      Redirecting
+    </p>
     <a
       id="target-url"
       href="#"
@@ -26,7 +31,7 @@
       class="copied-message"
       role="status"
       aria-live="polite"
-      >Copied!</span
+      ><span data-i18n="copied">Copied!</span></span
     >
     <script
       type="module"

@@ -1,3 +1,4 @@
+import { i18n } from '@/services/i18n'
 import { reactive } from 'vue'
 
 type PrivateItemType = 'tab' | 'window'
@@ -26,11 +27,15 @@ export function showPrivateWindowAccessRequired(
 ): void {
   showNotification(
     [
-      `Session Flow can’t open this private ${itemType} because private-window access isn’t enabled in Firefox.`,
-      'To enable private-window access:',
-      '1. Open Firefox Add-ons and Themes.',
-      '2. Select Extensions, then Session Flow.',
-      '3. Set “Run in Private Windows” to “Allow”.',
+      i18n.t(
+        itemType === 'tab'
+          ? 'privateTabAccessRequired'
+          : 'privateWindowAccessRequired',
+      ),
+      i18n.t('toEnablePrivatewindowAccess'),
+      i18n.t('1OpenFirefoxAddonsAndThemes'),
+      i18n.t('2SelectExtensionsThenSessionFlow'),
+      i18n.t('3SetRunInPrivateWindowsToAllow'),
     ].join('\n'),
   )
 }

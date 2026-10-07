@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { i18n } from '@/services/i18n'
 defineProps<{
   kind: 'confirm' | 'error'
   title: string
@@ -33,7 +34,7 @@ const emit = defineEmits<{
           type="button"
           @click="emit('cancel')"
         >
-          Cancel
+          {{ i18n.t('cancel') }}
         </button>
         <button
           v-if="kind === 'confirm'"
@@ -48,7 +49,7 @@ const emit = defineEmits<{
           type="button"
           @click="emit('cancel')"
         >
-          Dismiss
+          {{ i18n.t('dismiss') }}
         </button>
       </div>
     </div>
