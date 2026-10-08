@@ -52,15 +52,6 @@ import { OPTIONS } from '@/types/settings'
         :options="OPTIONS.boolean"
         @update="Settings.saveSettingsToStorage()"
       />
-      <ToggleButton
-        :label="i18n.t('stateOfDuplicatedItems')"
-        :description="
-          i18n.t('aDuplicateCanStartSavedOrInheritWhetherTheOriginal')
-        "
-        v-model="Settings.values.duplicatedItemState"
-        :options="OPTIONS.duplicatedItemState"
-        @update="Settings.saveSettingsToStorage()"
-      />
     </div>
   </section>
 </template>

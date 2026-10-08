@@ -1,6 +1,9 @@
 <script lang="ts" setup>
 import { i18n } from '@/services/i18n'
 import DescendantScopeMatrix from './DescendantScopeMatrix.vue'
+import ToggleButton from '@/components/ToggleButton.vue'
+import { Settings } from '@/services/settings'
+import { OPTIONS } from '@/types/settings'
 </script>
 
 <template>
@@ -14,6 +17,15 @@ import DescendantScopeMatrix from './DescendantScopeMatrix.vue'
     </p>
     <div class="section-body">
       <DescendantScopeMatrix />
+      <ToggleButton
+        :label="i18n.t('stateOfDuplicatedItems')"
+        :description="
+          i18n.t('aDuplicateCanStartSavedOrInheritWhetherTheOriginal')
+        "
+        v-model="Settings.values.duplicatedItemState"
+        :options="OPTIONS.duplicatedItemState"
+        @update="Settings.saveSettingsToStorage()"
+      />
     </div>
   </section>
 </template>

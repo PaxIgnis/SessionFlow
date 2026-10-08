@@ -49,6 +49,7 @@ function updateLocation() {
     >
       <NumberInput
         :label="i18n.t('trackWindowPositionsEvery')"
+        :description="i18n.t('windowPositionTrackingDescription')"
         v-model:value="Settings.values.openWindowsInSameLocationUpdateInterval"
         v-model:selected-unit="
           Settings.values.openWindowsInSameLocationUpdateIntervalUnit

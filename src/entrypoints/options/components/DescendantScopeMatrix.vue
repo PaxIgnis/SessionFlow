@@ -116,7 +116,12 @@ function updateScope(row: MatrixRow, value: string) {
       class="matrix-head"
       aria-hidden="true"
     >
-      <span class="matrix-head-label">{{ i18n.t('action') }}</span>
+      <span class="matrix-head-label">
+        {{ i18n.t('action') }}
+        <span class="matrix-head-description">{{
+          i18n.t('shouldActionApplyToUnselectedChildren')
+        }}</span>
+      </span>
       <span class="matrix-head-col">{{ i18n.t('always') }}</span>
       <span class="matrix-head-col">{{ i18n.t('ifCollapsed') }}</span>
       <span class="matrix-head-col">{{ i18n.t('never') }}</span>
@@ -178,6 +183,12 @@ function updateScope(row: MatrixRow, value: string) {
 
 .matrix-head-col {
   text-align: center;
+}
+
+.matrix-head-description {
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
 }
 
 .matrix-row {

@@ -297,7 +297,7 @@
   "saveItIfItWasPreviouslySaved": "Speichern, wenn zuvor gespeichert",
   "saveTabs": "Tabs speichern",
   "saveTabsWhenTheirGroupIsRemoved": "Tabs beim Entfernen ihrer Gruppe speichern",
-  "saveTabsWhenTheyClose": "Tabs beim Schließen speichern",
+  "saveTabsWhenTheyClose": "Tabs beim Schließen immer speichern",
   "saved": "Gespeichert",
   "savedTabNotFound": "Der gespeicherte Tab wurde nicht gefunden.",
   "savedTabWindowNotFound": "Das zugehörige Fenster des gespeicherten Tabs wurde nicht gefunden.",
@@ -331,6 +331,7 @@
   "settingsBroadcastFailed": "Die Einstellungen wurden gespeichert, aber die Änderung konnte nicht an die anderen Ansichten übermittelt werden",
   "settingsLatestReadFailed": "Die aktuellen Einstellungen konnten vor dem Speichern nicht gelesen werden",
   "settingsWriteFailed": "Die Einstellungen konnten nicht gespeichert werden",
+  "shouldActionApplyToUnselectedChildren": "(Soll die Aktion auch für nicht ausgewählte Unterelemente gelten)",
   "showAndCacheFaviconsForPrivateTabs": "Favicons privater Tabs anzeigen und zwischenspeichern",
   "showIndentLinesOnItemsWithoutChildren": "Einrückungslinien bei Elementen ohne Unterelemente anzeigen",
   "showOnHover": "Beim Darüberfahren anzeigen",
@@ -427,6 +428,7 @@
   "windowCreationNoIds": "Beim Erstellen des Fensters wurde keine Fenster- oder Tab-ID zurückgegeben.",
   "windowCreationTimeout": "Zeitüberschreitung beim Warten auf die Fenster-Erstellung durch Firefox.",
   "windowId": "Fenster-ID $1",
+  "windowPositionTrackingDescription": "Wie oft Fenstergrößen und -positionen erfasst werden, damit gespeicherte Fenster wieder an ihrer letzten Position geöffnet werden können.",
   "windows": "Fenster",
   "yesterday": "Gestern"
 }

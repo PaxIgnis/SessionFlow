@@ -306,7 +306,7 @@
   "saveItIfItWasPreviouslySaved": "Enregistrer si un enregistrement a déjà été effectué",
   "saveTabs": "Enregistrer les onglets",
   "saveTabsWhenTheirGroupIsRemoved": "Enregistrer les onglets lorsque leur groupe est supprimé",
-  "saveTabsWhenTheyClose": "Enregistrer les onglets à leur fermeture",
+  "saveTabsWhenTheyClose": "Toujours enregistrer les onglets à leur fermeture",
   "saved": "Enregistré",
   "savedTabNotFound": "Onglet enregistré introuvable",
   "savedTabWindowNotFound": "Fenêtre parente de l’onglet enregistré introuvable",
@@ -340,6 +340,7 @@
   "settingsBroadcastFailed": "Les paramètres ont été enregistrés, mais leur mise à jour n’a pas pu être transmise aux autres vues",
   "settingsLatestReadFailed": "Impossible de lire les paramètres actuels avant l’enregistrement",
   "settingsWriteFailed": "Impossible d’enregistrer les paramètres",
+  "shouldActionApplyToUnselectedChildren": "(L’action doit-elle s’appliquer aux enfants non sélectionnés)",
   "showAndCacheFaviconsForPrivateTabs": "Afficher et mettre en cache les favicons des onglets privés",
   "showIndentLinesOnItemsWithoutChildren": "Afficher les lignes de retrait pour les éléments sans enfants",
   "showOnHover": "Afficher au survol",
@@ -436,6 +437,7 @@
   "windowCreationNoIds": "La création de la fenêtre n’a renvoyé aucun identifiant de fenêtre ou d’onglet",
   "windowCreationTimeout": "Délai d’attente dépassé pour la création de la fenêtre par Firefox",
   "windowId": "Identifiant de fenêtre $1",
+  "windowPositionTrackingDescription": "Fréquence d’enregistrement de la taille et de la position des fenêtres pour rouvrir les fenêtres enregistrées là où vous les avez laissées.",
   "windows": "Fenêtres",
   "yesterday": "Hier"
 }

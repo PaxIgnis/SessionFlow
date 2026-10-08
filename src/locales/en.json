@@ -297,7 +297,7 @@
   "saveItIfItWasPreviouslySaved": "Save it if it was previously saved",
   "saveTabs": "Save tabs",
   "saveTabsWhenTheirGroupIsRemoved": "Save tabs when their group is removed",
-  "saveTabsWhenTheyClose": "Save tabs when they close",
+  "saveTabsWhenTheyClose": "Always save tabs when they close",
   "saved": "Saved",
   "savedTabNotFound": "Saved tab not found",
   "savedTabWindowNotFound": "Saved tab parent window not found",
@@ -331,6 +331,7 @@
   "settingsBroadcastFailed": "Settings were saved but the update broadcast failed",
   "settingsLatestReadFailed": "Failed to read latest settings before saving",
   "settingsWriteFailed": "Failed to write settings to storage",
+  "shouldActionApplyToUnselectedChildren": "(Should action apply to unselected children)",
   "showAndCacheFaviconsForPrivateTabs": "Show and cache favicons for private tabs",
   "showIndentLinesOnItemsWithoutChildren": "Show indent lines on items without children",
   "showOnHover": "Show on hover",
@@ -427,6 +428,7 @@
   "windowCreationNoIds": "Window creation returned no window or tab ID",
   "windowCreationTimeout": "Timed out waiting for Firefox window creation event",
   "windowId": "Window id $1",
+  "windowPositionTrackingDescription": "How often to record window sizes and positions so saved windows can reopen where you left them.",
   "windows": "Windows",
   "yesterday": "Yesterday"
 }
