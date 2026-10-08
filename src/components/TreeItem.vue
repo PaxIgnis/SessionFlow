@@ -741,7 +741,7 @@ function isFocusedTab(item: TreeItem): boolean {
             class="child-count"
             :class="{ 'tree-item-child-active': childrenOpen }"
             @dblclick.stop
-            >{{ formatNumber(childCount) }}</span
+            >{{ formatNumber(childCount, { useGrouping: false }) }}</span
           >
           <svg
             class="collapse-arrow"
@@ -959,7 +959,9 @@ function isFocusedTab(item: TreeItem): boolean {
       <span
         class="tree-item-window-count"
         :class="{ 'tree-item-child-active': childrenOpen }"
-        >{{ formatNumber(windowComposition.total) }}</span
+        >{{
+          formatNumber(windowComposition.total, { useGrouping: false })
+        }}</span
       >
     </div>
   </div>

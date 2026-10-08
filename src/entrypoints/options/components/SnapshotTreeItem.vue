@@ -325,7 +325,7 @@ const windowHoverDetails = computed(() => {
             v-if="collapsed && !isWindow(item)"
             class="child-count"
             :class="{ 'tree-item-child-active': childrenOpen }"
-            >{{ formatNumber(childCount) }}</span
+            >{{ formatNumber(childCount, { useGrouping: false }) }}</span
           >
           <svg
             class="collapse-arrow"
@@ -550,7 +550,9 @@ const windowHoverDetails = computed(() => {
       <span
         class="tree-item-window-count"
         :class="{ 'tree-item-child-active': childrenOpen }"
-        >{{ formatNumber(windowComposition.total) }}</span
+        >{{
+          formatNumber(windowComposition.total, { useGrouping: false })
+        }}</span
       >
     </div>
   </div>

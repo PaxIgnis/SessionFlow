@@ -440,7 +440,7 @@ function runToolbarAction(action: () => void | Promise<void>): void {
             ></i>
           </span>
           <span class="session-root-count">{{
-            formatNumber(treeComposition.total)
+            formatNumber(treeComposition.total, { useGrouping: false })
           }}</span>
         </div>
       </div>
