@@ -113,10 +113,18 @@ export class SessionSnapshotService {
     return this.repository.listMetadata()
   }
 
-  readonly handleRuntimeMessage = async (
+  readonly handleRuntimeMessage = (
     message: unknown,
-  ): Promise<SessionSnapshotResponse | undefined> => {
+  ): Promise<SessionSnapshotResponse> | undefined => {
+    // Only claim responses for snapshot requests. An async listener would also
+    // claim onboarding messages, resolving them before their settings are saved.
     if (!isSnapshotRequest(message)) return undefined
+    return this.handleSnapshotRequest(message)
+  }
+
+  private async handleSnapshotRequest(
+    message: SessionSnapshotRequest,
+  ): Promise<SessionSnapshotResponse> {
     try {
       if (message.action === 'listSessionSnapshots') {
         return { ok: true, data: await this.list() }

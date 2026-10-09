@@ -1,7 +1,16 @@
 import { i18n } from '@/services/i18n'
 import { DEFAULT_SETTINGS } from '@/defaults/settings'
 import { Settings as SettingsValues } from '@/services/settings'
-import { Settings, SETTINGS_TYPES } from '@/types/settings'
+import {
+  ONBOARDING_STORAGE_KEY,
+  ONBOARDING_VERSION,
+  type OnboardingRecord,
+} from '@/types/onboarding'
+import {
+  Settings,
+  SETTINGS_TYPES,
+  type SettingsSaveOptions,
+} from '@/types/settings'
 
 export interface SettingsSectionPosition {
   id: string
@@ -70,6 +79,14 @@ export function normalizeSettings(
   const normalized = structuredClone(DEFAULT_SETTINGS)
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     return normalized
+  }
+
+  // Preserve private-data preferences on installations predating onboarding.
+  // A missing settings object uses the opt-in defaults for new users.
+  if (!('retainPrivateWindows' in value)) {
+    normalized.retainPrivateWindows = true
+    normalized.includePrivateWindowsInSessionSnapshots = true
+    normalized.cachePrivateTabFavicons = true
   }
 
   for (const [key, candidate] of Object.entries(value)) {
@@ -149,13 +166,30 @@ function settingsPatch(
  */
 export async function loadSettingsFromStorage(): Promise<void> {
   let settingsFromStorage: Record<string, unknown>
+  let migrateImplicitLegacyPreferences = false
   try {
     settingsFromStorage = await browser.storage.local.get('settings')
+    if (settingsFromStorage.settings === undefined) {
+      const legacy = await browser.storage.local.get([
+        'sessionTree',
+        ONBOARDING_STORAGE_KEY,
+      ])
+      const onboarding = legacy[ONBOARDING_STORAGE_KEY] as
+        | OnboardingRecord
+        | undefined
+      const hasExistingTree =
+        Array.isArray(legacy.sessionTree) && legacy.sessionTree.length > 0
+      const hasLegacyIntroduction =
+        onboarding?.status === 'pending' || onboarding?.status === 'completed'
+      migrateImplicitLegacyPreferences =
+        onboarding?.version !== ONBOARDING_VERSION &&
+        (hasExistingTree || hasLegacyIntroduction)
+    }
   } catch (error) {
     throw contextualError('Failed to read settings from storage', error)
   }
   const normalized = normalizeSettings(
-    settingsFromStorage.settings,
+    migrateImplicitLegacyPreferences ? {} : settingsFromStorage.settings,
     (key, error) => {
       if (!(key in DEFAULT_SETTINGS)) {
         console.error(`Invalid settings key: ${key}`)
@@ -165,6 +199,13 @@ export async function loadSettingsFromStorage(): Promise<void> {
     },
   )
   replaceSettingsValues(normalized)
+  if (migrateImplicitLegacyPreferences) {
+    // Older users could keep all defaults without ever writing settings.
+    // Persist that legacy policy before a replay marks the new introduction.
+    lastSynchronizedSettings = structuredClone(DEFAULT_SETTINGS)
+    await saveSettingsToStorage({ broadcast: false })
+    return
+  }
   lastSynchronizedSettings = structuredClone(normalized)
 }
 
@@ -180,17 +221,21 @@ export async function loadSettingsFromStorage(): Promise<void> {
  *
  * @returns a Promise that resolves when the settings have been saved
  */
-export function saveSettingsToStorage(): Promise<void> {
+export function saveSettingsToStorage(
+  options: SettingsSaveOptions = {},
+): Promise<void> {
   const write = settingsWriteQueue.then(
-    writeSettingsToStorage,
-    writeSettingsToStorage,
+    () => writeSettingsToStorage(options),
+    () => writeSettingsToStorage(options),
   )
   // The queue itself must survive a failed write, while callers still see it.
   settingsWriteQueue = write.catch(() => undefined)
   return write
 }
 
-async function writeSettingsToStorage(): Promise<void> {
+async function writeSettingsToStorage(
+  options: SettingsSaveOptions,
+): Promise<void> {
   const previous = structuredClone(lastSynchronizedSettings)
   const current = normalizeSettings(toRaw(SettingsValues.values))
   const patch = settingsPatch(current, previous)
@@ -214,6 +259,7 @@ async function writeSettingsToStorage(): Promise<void> {
 
   applySettingsPreservingLiveEdits(merged, current)
   lastSynchronizedSettings = structuredClone(merged)
+  if (options.broadcast === false) return
   try {
     await browser.runtime.sendMessage({ type: 'settingsUpdated' })
   } catch (error) {

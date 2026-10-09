@@ -20,11 +20,12 @@ export const DEFAULT_SETTINGS: Settings = {
   contextMenuPinDescendants: 'collapsed',
 
   // Storage
+  retainPrivateWindows: false,
   automaticSessionSnapshots: true,
   sessionSnapshotInterval: 30,
   sessionSnapshotIntervalUnit: 'minutes',
   protectManualSessionSnapshots: true,
-  includePrivateWindowsInSessionSnapshots: true,
+  includePrivateWindowsInSessionSnapshots: false,
 
   // Windows
   focusWindowOnOpen: true,
@@ -68,7 +69,7 @@ export const DEFAULT_SETTINGS: Settings = {
   tryToMaintainCollapsedStateOfDraggedItems: true,
 
   // Favicons
-  cachePrivateTabFavicons: true,
+  cachePrivateTabFavicons: false,
   fetchMissingFaviconsOnStartup: false,
   refreshFaviconsAfterPeriodOfTime: false,
   refreshFaviconsAfterPeriodOfTimeValue: 7,

@@ -1,160 +1,144 @@
-﻿import { isPrivateWindowAccessAllowed } from '@/services/utils'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
+import { createSSRApp } from 'vue'
+import { renderToString } from 'vue/server-renderer'
+import Introduction from '@/entrypoints/onboarding/Introduction.vue'
+import TabStateLegend from '@/components/TabStateLegend.vue'
+import OnboardingTreeDemo from '@/components/OnboardingTreeDemo.vue'
+import {
+  completeIntroduction,
+  openIntroduction,
+  saveOnboardingRetention,
+  saveOnboardingStartup,
+} from '@/services/onboarding-client'
+import { installFakeBrowser } from '../../helpers/fake-browser'
+import { setTestLocale } from '../../helpers/i18n'
 
-vi.mock('@/services/utils', () => ({
-  isPrivateWindowAccessAllowed: vi.fn(),
-}))
+afterEach(() => setTestLocale('en'))
 
-type EventListener = () => void | Promise<void>
-
-class FakeElement {
-  textContent = ''
-  readonly dataset: Record<string, string> = {}
-  private readonly listeners = new Map<string, EventListener>()
-
-  addEventListener(type: string, listener: EventListener): void {
-    this.listeners.set(type, listener)
-  }
-
-  async click(): Promise<void> {
-    await this.listeners.get('click')?.()
-  }
-}
-
-class FakeDocument {
-  documentElement = { lang: 'en' }
-  querySelectorAll() {
-    return []
-  }
-
-  private domContentLoadedListener: EventListener | undefined
-  readonly elements = new Map<string, FakeElement>()
-
-  addEventListener(type: string, listener: EventListener): void {
-    if (type === 'DOMContentLoaded') {
-      this.domContentLoadedListener = listener
-    }
-  }
-
-  getElementById(id: string): FakeElement | null {
-    return this.elements.get(id) ?? null
-  }
-
-  async fireDOMContentLoaded(): Promise<void> {
-    await this.domContentLoadedListener?.()
-  }
-}
-
-describe('private-window onboarding popup', () => {
-  beforeEach(() => {
-    vi.resetModules()
-    vi.restoreAllMocks()
-    vi.unstubAllGlobals()
-    vi.mocked(isPrivateWindowAccessAllowed).mockResolvedValue(true)
-  })
-
-  it('shows access status and checks it again', async () => {
-    const { document } = installPopupGlobals()
-    vi.mocked(isPrivateWindowAccessAllowed)
-      .mockResolvedValueOnce(false)
-      .mockResolvedValueOnce(true)
-
-    await import('@/entrypoints/private-window-onboarding/main')
-    await document.fireDOMContentLoaded()
-
-    const status = document.elements.get('private-access-status')!
-    expect(status.textContent).toBe('Not allowed')
-    expect(status.dataset.status).toBe('not-allowed')
-
-    await document.elements.get('check-again')!.click()
-
-    expect(status.textContent).toBe('Allowed')
-    expect(status.dataset.status).toBe('allowed')
-  })
-
-  it('hides without completing onboarding', async () => {
-    const { close, document, sendMessage } = installPopupGlobals()
-
-    await import('@/entrypoints/private-window-onboarding/main')
-    await document.fireDOMContentLoaded()
-    await document.elements.get('hide')!.click()
-
-    expect(sendMessage).not.toHaveBeenCalled()
-    expect(close).toHaveBeenCalledTimes(1)
-  })
-
+describe('introduction presentation and commands', () => {
   it.each([
-    ['continue', 'continue'],
-    ['dismiss', 'dismiss'],
-  ] as const)(
-    'sends the %s completion action before closing',
-    async (elementId, command) => {
-      const { close, document, sendMessage } = installPopupGlobals()
-
-      await import('@/entrypoints/private-window-onboarding/main')
-      await document.fireDOMContentLoaded()
-      await document.elements.get(elementId)!.click()
-
-      expect(sendMessage).toHaveBeenCalledWith({
-        action: 'privateWindowOnboarding',
-        command,
-      })
-      expect(close).toHaveBeenCalledTimes(1)
+    ['en', 'Welcome to Session Flow', 'Skip introduction'],
+    ['de', 'Willkommen bei Session Flow', 'Einführung überspringen'],
+    ['fr', 'Bienvenue dans Session Flow', 'Passer l’introduction'],
+  ])(
+    'renders a localized, skippable welcome in %s',
+    async (locale, title, skip) => {
+      setTestLocale(locale)
+      const html = await renderToString(createSSRApp(Introduction))
+      expect(html).toContain(title)
+      expect(html).toContain(skip)
+      expect(html).toContain('src="/icon/session-flow.svg"')
+      expect(html).toContain('tabindex="-1"')
     },
   )
 
-  it('ignores repeated completion clicks while one is in flight', async () => {
-    const { close, document, sendMessage } = installPopupGlobals()
-
-    await import('@/entrypoints/private-window-onboarding/main')
-    await document.fireDOMContentLoaded()
-    const firstClick = document.elements.get('continue')!.click()
-    const secondClick = document.elements.get('continue')!.click()
-    await Promise.all([firstClick, secondClick])
-
-    expect(sendMessage).toHaveBeenCalledTimes(1)
-    expect(close).toHaveBeenCalledTimes(1)
+  it('labels each state independently of color and distinguishes focus from lifecycle state', async () => {
+    const html = await renderToString(createSSRApp(TabStateLegend))
+    for (const label of ['Active', 'Live', 'Unloaded', 'Saved'])
+      expect(html).toContain(label)
+    expect(html).toContain('Hollow blue dot')
+    expect(html).toContain('currently closed in Firefox')
+    expect(html).toContain('Active describes focus')
+    expect(html.match(/<dt /g)).toHaveLength(4)
   })
 
-  it('keeps the popup open when completion fails', async () => {
-    const error = new Error('background unavailable')
-    const { close, document, sendMessage } = installPopupGlobals()
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
-    sendMessage.mockRejectedValue(error)
+  it.each([
+    'open',
+    'focus',
+    'organize',
+    'multi-select',
+    'labels',
+    'save',
+    'close',
+    'note-add',
+    'note-edit',
+    'note-group',
+  ] as const)(
+    'renders a replayable %s example without autoplay or browser commands',
+    async (action) => {
+      const fake = installFakeBrowser()
+      const html = await renderToString(
+        createSSRApp(OnboardingTreeDemo, { action }),
+      )
+      expect(html).toContain('data-phase="before"')
+      expect(html).toContain('Watch example')
+      expect(html).toContain('data-state="live"')
+      if (action === 'save') expect(html).toContain('aria-label="Save"')
+      expect(fake.runtime.sendMessage).not.toHaveBeenCalled()
+      expect(fake.tabs.remove).not.toHaveBeenCalled()
+    },
+  )
 
-    await import('@/entrypoints/private-window-onboarding/main')
-    await document.fireDOMContentLoaded()
-    await document.elements.get('dismiss')!.click()
+  it.each(['window-bar', 'tab-groups', 'containers'] as const)(
+    'renders the static %s lesson without autoplay or browser commands',
+    async (action) => {
+      const fake = installFakeBrowser()
+      const html = await renderToString(
+        createSSRApp(OnboardingTreeDemo, { action }),
+      )
+      expect(html).not.toContain('Watch example')
+      if (action === 'window-bar')
+        expect(html).toContain('3 live, 2 unloaded, 1 saved tabs')
+      if (action === 'tab-groups')
+        expect(html).toContain('tree-item-tab-group-indicator')
+      if (action === 'containers')
+        expect(html).toContain('/icons/usercontext.svg#briefcase')
+      expect(fake.runtime.sendMessage).not.toHaveBeenCalled()
+    },
+  )
 
-    expect(consoleError).toHaveBeenCalledWith(
-      'Failed to complete private-window onboarding:',
-      error,
-    )
-    expect(close).not.toHaveBeenCalled()
+  it('shows windows, notes, separators, real outline classes and nested indent guides on the welcome page', async () => {
+    const html = await renderToString(createSSRApp(Introduction))
+    expect(html).toContain('Organize your windows and tabs in a vertical tree')
+    for (const className of [
+      'tree-item-window-label',
+      'tree-item-note-text',
+      'tree-item-separator-line',
+      'tree-item-indent-lines',
+      'tree-item-active-latest-tab',
+    ])
+      expect(html).toContain(className)
+    expect(html).toContain('data-example-id="second-window"')
+    expect(html).not.toContain('data-example-id="planning"')
+    expect(html).toContain('This is a sample tree.')
+    expect(html).toContain('data-example-id="related"')
+    expect(html).not.toContain('data-example-id="docs"')
+  })
+
+  it('reopens the welcome tab without modifying completion or browser tabs', async () => {
+    const fake = installFakeBrowser()
+    await openIntroduction()
+    expect(fake.tabs.create).toHaveBeenCalledWith({
+      url: 'moz-extension://test-id/onboarding.html',
+    })
+    expect(fake.storage.local.set).not.toHaveBeenCalled()
+    expect(fake.tabs.remove).not.toHaveBeenCalled()
+  })
+
+  it('finishes without sending preferences again', async () => {
+    const fake = installFakeBrowser()
+    await completeIntroduction('import')
+    expect(fake.runtime.sendMessage).toHaveBeenCalledExactlyOnceWith({
+      action: 'onboarding',
+      command: 'import',
+    })
+    expect(fake.storage.local.set).not.toHaveBeenCalled()
+  })
+
+  it('sends preference changes as separate onboarding commands', async () => {
+    const fake = installFakeBrowser()
+    await saveOnboardingRetention(false)
+    await saveOnboardingStartup(true)
+    expect(fake.runtime.sendMessage).toHaveBeenNthCalledWith(1, {
+      action: 'onboarding',
+      command: 'set-retention',
+      retainPrivateWindows: false,
+    })
+    expect(fake.runtime.sendMessage).toHaveBeenNthCalledWith(2, {
+      action: 'onboarding',
+      command: 'set-startup',
+      openSessionTreeOnStartup: true,
+    })
+    expect(fake.storage.local.set).not.toHaveBeenCalled()
   })
 })
-
-function installPopupGlobals() {
-  const document = new FakeDocument()
-  for (const id of [
-    'private-access-status',
-    'check-again',
-    'continue',
-    'hide',
-    'dismiss',
-  ]) {
-    document.elements.set(id, new FakeElement())
-  }
-
-  const close = vi.fn()
-  const sendMessage = vi.fn().mockResolvedValue(undefined)
-  vi.stubGlobal('document', document)
-  vi.stubGlobal('window', { close })
-  vi.stubGlobal('browser', {
-    runtime: {
-      sendMessage,
-    },
-  })
-
-  return { close, document, sendMessage }
-}

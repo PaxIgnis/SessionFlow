@@ -1,0 +1,196 @@
+:root {
+  color-scheme: dark;
+  font-family: var(--font-family);
+  background: var(--tree-background);
+  color: var(--text-color-primary);
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+.introduction {
+  max-width: 640px;
+  margin: 6vh auto;
+  padding: 28px;
+}
+.welcome-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 38px;
+  font-weight: 600;
+}
+.welcome-brand .quiet {
+  margin-inline-start: auto;
+}
+h1 {
+  color: var(--header-text-color);
+  font-size: clamp(24px, 5vw, 32px);
+  margin: 18px 0;
+}
+h1:focus,
+.tab-guide h2:focus {
+  outline: none;
+}
+p,
+li,
+small {
+  line-height: 1.6;
+}
+.eyebrow {
+  font-size: 12px;
+  color: var(--options-text-muted);
+}
+.progress {
+  display: flex;
+  gap: 6px;
+}
+.progress span {
+  height: 3px;
+  flex: 1;
+  background: var(--options-hairline-strong);
+  border-radius: 2px;
+}
+.progress .current {
+  background: var(--state-live);
+}
+.example-tree {
+  border: 1px solid var(--tree-edge);
+  border-radius: 8px;
+  margin: 24px 0;
+}
+.start-choices {
+  border: 0;
+  padding: 0;
+  margin: 24px 0;
+  display: grid;
+  gap: 12px;
+}
+.start-choices legend {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 18px;
+  background: var(--options-surface);
+  border: 1px solid var(--options-hairline-strong);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.choice:has(input:checked) {
+  border-color: var(--state-live);
+}
+.choice input {
+  margin-top: 5px;
+  accent-color: var(--state-live);
+}
+.choice strong,
+.choice small {
+  display: block;
+}
+.choice small {
+  margin-top: 5px;
+  font-size: 13px;
+}
+.retention {
+  margin-top: 24px;
+}
+.fine-print {
+  font-size: 13px;
+}
+.tip-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 24px 0;
+}
+.tip-tabs button {
+  font-size: 12px;
+  padding: 7px 10px;
+}
+.tip-tabs [aria-current='step'] {
+  border-color: var(--state-live);
+  background: color-mix(in srgb, var(--state-live) 15%, var(--options-surface));
+}
+.tab-guide h2 {
+  font-size: 20px;
+  color: var(--header-text-color);
+}
+.guide-warning {
+  border-inline-start: 2px solid var(--state-rest);
+  padding-inline-start: 12px;
+  font-size: 13px;
+}
+.indicator-settings a {
+  color: var(--state-live);
+  text-underline-offset: 3px;
+}
+.access-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 14px;
+  background: var(--options-surface);
+  border-radius: 6px;
+  margin: 20px 0;
+}
+footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 28px;
+}
+button {
+  font: inherit;
+  border: 1px solid var(--options-hairline-strong);
+  border-radius: 6px;
+  padding: 10px 16px;
+  cursor: pointer;
+  color: var(--text-color-primary);
+}
+.primary {
+  background: var(--state-live);
+  color: var(--tree-background);
+  border-color: transparent;
+  font-weight: 600;
+}
+.secondary {
+  background: var(--options-surface);
+}
+.quiet {
+  background: transparent;
+  border: 0;
+  font-size: 13px;
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+button:focus-visible,
+a:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--options-focus);
+  outline-offset: 3px;
+}
+.error {
+  color: rgb(255, 160, 150);
+}
+@media (max-width: 480px) {
+  .introduction {
+    margin: 0 auto;
+    padding: 20px;
+  }
+  .welcome-brand {
+    margin-bottom: 24px;
+  }
+}

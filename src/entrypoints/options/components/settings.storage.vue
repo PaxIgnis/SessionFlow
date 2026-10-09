@@ -1,14 +1,14 @@
 <script setup lang="ts">
-import {
-  i18n,
-  formatList,
-  getDisplayLocale,
-  formatNumber,
-} from '@/services/i18n'
-import { localizedImportWarning } from '@/services/localized-import-warnings'
 import NumberInput from '@/components/NumberInput.vue'
 import ToggleButton from '@/components/ToggleButton.vue'
 import { Favicons } from '@/services/favicons'
+import {
+  formatList,
+  formatNumber,
+  getDisplayLocale,
+  i18n,
+} from '@/services/i18n'
+import { localizedImportWarning } from '@/services/localized-import-warnings'
 import { SessionSnapshotClient } from '@/services/session-snapshot-client'
 import { Settings } from '@/services/settings'
 import type {
@@ -454,6 +454,13 @@ function fileTimestamp(value: number) {
       {{ i18n.t('snapshotsCaptureTheWholeTreeSoYouCanRollBack') }}
     </p>
     <div class="section-body rows">
+      <ToggleButton
+        :label="i18n.t('onboardingRetainTreeLabel')"
+        :description="i18n.t('onboardingRetainTreeDescription')"
+        v-model="Settings.values.retainPrivateWindows"
+        :options="OPTIONS.boolean"
+        @update="saveSettings"
+      />
       <ToggleButton
         :label="i18n.t('takeSnapshotsAutomatically')"
         v-model="Settings.values.automaticSessionSnapshots"

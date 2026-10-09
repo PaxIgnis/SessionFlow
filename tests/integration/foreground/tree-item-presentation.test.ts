@@ -9,6 +9,7 @@ import {
   resetForegroundTree,
 } from '../../helpers/foreground-tree-fixtures'
 import { createSSRApp } from 'vue'
+import { readTreeItemSource } from '../../helpers/tree-item-source'
 import { renderToString } from 'vue/server-renderer'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import fs from 'node:fs/promises'
@@ -35,10 +36,7 @@ async function renderTreeItem(
 describe('tree item presentation', () => {
   it('paints Firefox internal-page SVGs with the browser icon white', async () => {
     const [source, variables] = await Promise.all([
-      fs.readFile(
-        new URL('../../../src/components/TreeItem.vue', import.meta.url),
-        'utf8',
-      ),
+      readTreeItemSource(),
       fs.readFile(
         new URL('../../../src/styles/variables.css', import.meta.url),
         'utf8',
@@ -111,10 +109,7 @@ describe('tree item presentation', () => {
         text: 'First line\nSecond line ' + 'long '.repeat(80),
       }),
     )
-    const source = await fs.readFile(
-      new URL('../../../src/components/TreeItem.vue', import.meta.url),
-      'utf8',
-    )
+    const source = await readTreeItemSource()
 
     expect(markup).toContain('tree-item-note-text')
     expect(source).toMatch(
@@ -309,10 +304,7 @@ describe('tree item presentation', () => {
 
   it('labels the hover menu destructive action exactly as the context menu does', async () => {
     const [itemSource, contextMenuSource] = await Promise.all([
-      fs.readFile(
-        new URL('../../../src/components/TreeItem.vue', import.meta.url),
-        'utf8',
-      ),
+      readTreeItemSource(),
       fs.readFile(
         new URL(
           '../../../src/services/context-menu-items-tree.ts',
@@ -331,10 +323,7 @@ describe('tree item presentation', () => {
   })
 
   it('isolates every nested action surface from row double-click handling', async () => {
-    const source = await fs.readFile(
-      new URL('../../../src/components/TreeItem.vue', import.meta.url),
-      'utf8',
-    )
+    const source = await readTreeItemSource()
 
     for (const className of [
       'tree-item-tab-group-indicator',
@@ -352,10 +341,7 @@ describe('tree item presentation', () => {
   })
 
   it('scales every compact row with larger default fonts without wrapping', async () => {
-    const source = await fs.readFile(
-      new URL('../../../src/components/TreeItem.vue', import.meta.url),
-      'utf8',
-    )
+    const source = await readTreeItemSource()
 
     expect(source).toMatch(
       /\.tree-item\s*\{[\s\S]*?min-height:\s*max\(20px, calc\(var\(--font-size-xs\) \+ 7px\)\)/,

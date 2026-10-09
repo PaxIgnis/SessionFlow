@@ -1,4 +1,8 @@
 import { i18n } from '@/services/i18n'
+export interface SettingsSaveOptions {
+  /** Background callers apply effects directly and notify views separately. */
+  broadcast?: boolean
+}
 export interface Settings {
   // General
   matchOpenedWindowsWithSavedWindowsOnStartup: boolean
@@ -19,6 +23,7 @@ export interface Settings {
   contextMenuPinDescendants: (typeof SETTINGS_TYPES.contextMenuPinDescendants)[number]
 
   // Storage
+  retainPrivateWindows: boolean
   automaticSessionSnapshots: boolean
   sessionSnapshotInterval: number
   sessionSnapshotIntervalUnit: (typeof SETTINGS_TYPES.sessionSnapshotIntervalUnit)[number]

@@ -210,10 +210,11 @@ export async function grantFirefoxExtensionOrigins(extensionId, origins) {
 export async function setFirefoxExtensionPrivateBrowsingAllowed(
   extensionId,
   allowed,
+  reload = false,
 ) {
   return withFirefoxChromeContext(async () => {
     const response = await executeFirefoxChromeScript(
-      async (id, shouldAllow) => {
+      async (id, shouldAllow, shouldReload) => {
         const { ExtensionParent } = ChromeUtils.importESModule(
           'resource://gre/modules/ExtensionParent.sys.mjs',
         )
@@ -231,9 +232,20 @@ export async function setFirefoxExtensionPrivateBrowsingAllowed(
         } else {
           await ExtensionPermissions.remove(id, permission, extension)
         }
-        return extension.privateBrowsingAllowed === shouldAllow
+        if (shouldReload) {
+          // Match about:addons, which reloads the extension after this change.
+          const { AddonManager } = ChromeUtils.importESModule(
+            'resource://gre/modules/AddonManager.sys.mjs',
+          )
+          const addon = await AddonManager.getAddonByID(id)
+          await addon.reload()
+        }
+        return (
+          ExtensionParent.GlobalManager.getExtension(id)
+            ?.privateBrowsingAllowed === shouldAllow
+        )
       },
-      [extensionId, allowed],
+      [extensionId, allowed, reload],
     )
     return response.value
   })

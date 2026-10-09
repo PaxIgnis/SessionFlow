@@ -51,6 +51,8 @@ async function initializeBackground(): Promise<void> {
   await Tree.restoreStartupTabs()
   Actions.scheduleSessionTreeOpenOnStartup()
   Settings.setupSettingsUpdatedListener(async () => {
+    // Apply private-tree retention immediately when the preference changes.
+    await Tree.saveSessionTreeToStorage()
     try {
       await FaviconRefresh.handleSettingsUpdated()
     } catch (error) {

@@ -52,6 +52,7 @@ describe('favicon refresh scheduler', () => {
   })
 
   it('refreshes missing or expired icons at startup without scheduling in startup-only mode', async () => {
+    Settings.values.cachePrivateTabFavicons = true
     Settings.values.refreshFaviconsAfterPeriodOfTime = true
     Settings.values.refreshFaviconsAfterPeriodOfTimeValue = 7
     Settings.values.refreshFaviconsAfterPeriodOfTimeUnit = 'days'
@@ -459,6 +460,7 @@ describe('favicon refresh scheduler', () => {
   })
 
   it('purges private-only entries when the private favicon setting is disabled', async () => {
+    Settings.values.cachePrivateTabFavicons = true
     const references = [
       { url: 'https://private.test/saved', incognito: true },
       { url: 'https://shared.test/private', incognito: true },

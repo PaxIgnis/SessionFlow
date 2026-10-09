@@ -73,6 +73,10 @@ const handleScroll = () => {
 
 onMounted(() => {
   contentPanel.value?.addEventListener('scroll', handleScroll)
+  const initialSection = window.location.hash.slice(1)
+  if (sections.some((section) => section.id === initialSection)) {
+    void scrollToSection(initialSection)
+  }
 })
 
 onUnmounted(() => {

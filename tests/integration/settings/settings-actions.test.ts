@@ -61,7 +61,9 @@ describe('settings actions', () => {
     expect(Object.keys(Settings.values).sort()).toEqual(
       Object.keys(DEFAULT_SETTINGS).sort(),
     )
-    expect(Settings.values.cachePrivateTabFavicons).toBe(true)
+    expect(Settings.values.cachePrivateTabFavicons).toBe(false)
+    expect(Settings.values.retainPrivateWindows).toBe(false)
+    expect(Settings.values.includePrivateWindowsInSessionSnapshots).toBe(false)
   })
 
   it('fills every missing legacy setting from current defaults', async () => {
@@ -80,6 +82,9 @@ describe('settings actions', () => {
     expect(Settings.values).toEqual({
       ...DEFAULT_SETTINGS,
       openSessionTreeOnStartup: true,
+      retainPrivateWindows: true,
+      includePrivateWindowsInSessionSnapshots: true,
+      cachePrivateTabFavicons: true,
     })
   })
 
@@ -137,6 +142,9 @@ describe('settings actions', () => {
     ).toEqual({
       ...DEFAULT_SETTINGS,
       openSessionTreeOnStartup: true,
+      retainPrivateWindows: true,
+      includePrivateWindowsInSessionSnapshots: true,
+      cachePrivateTabFavicons: true,
     })
   })
 

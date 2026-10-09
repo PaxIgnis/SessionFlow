@@ -13,6 +13,7 @@ import {
   resetForegroundTree,
 } from '../../helpers/foreground-tree-fixtures'
 import { createSSRApp } from 'vue'
+import { readTreeItemSource } from '../../helpers/tree-item-source'
 import { renderToString } from 'vue/server-renderer'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -425,12 +426,7 @@ describe('TreeItem indent guide rendering', () => {
   })
 
   it('keeps container fades inset from interaction lines and behind tab content', async () => {
-    const source = await import('node:fs/promises').then((fs) =>
-      fs.readFile(
-        new URL('../../../src/components/TreeItem.vue', import.meta.url),
-        'utf8',
-      ),
-    )
+    const source = await readTreeItemSource()
 
     expect(source).toMatch(
       /\.tree-item-container-indicator\s*\{[^}]*z-index:\s*0;/s,
@@ -467,12 +463,7 @@ describe('TreeItem indent guide rendering', () => {
   })
 
   it('binds the script-side handler and maps each context-menu item type', async () => {
-    const source = await import('node:fs/promises').then((fs) =>
-      fs.readFile(
-        new URL('../../../src/components/TreeItem.vue', import.meta.url),
-        'utf8',
-      ),
-    )
+    const source = await readTreeItemSource()
 
     expect(source).toContain('@contextmenu.stop="openItemContextMenu"')
     expect(source).toMatch(

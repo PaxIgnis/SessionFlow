@@ -31,6 +31,33 @@ export interface NormalizedStoredTree {
   repaired: boolean
 }
 
+/** Private windows remain usable in memory without being written to disk. */
+export function projectStoredSessionTree(
+  items: readonly TopLevelTreeItem[],
+  retainPrivateWindows: boolean,
+): TopLevelTreeItem[] {
+  const projected = structuredClone(
+    items.filter(
+      (item) =>
+        retainPrivateWindows ||
+        item.type !== TreeItemType.WINDOW ||
+        !item.incognito,
+    ),
+  )
+  const retainedUids = new Set(
+    projected.flatMap((item) =>
+      item.type === TreeItemType.WINDOW
+        ? [item.uid, ...item.children.map((child) => child.uid)]
+        : [item.uid],
+    ),
+  )
+  for (const item of projected) {
+    if (item.parentUid && !retainedUids.has(item.parentUid))
+      delete item.parentUid
+  }
+  return projected
+}
+
 interface NormalizationContext {
   existingUids: Set<UID>
   groupUids: Map<string, UID>

@@ -621,13 +621,21 @@ describe('background session snapshots', () => {
       ok: true,
       data: { windows: 0, tabs: 0, notes: 1, separators: 0 },
     })
-    await expect(
+    expect(
       service.handleRuntimeMessage({ type: 'settingsUpdated' }),
-    ).resolves.toBeUndefined()
-    await expect(
+    ).toBeUndefined()
+    // Returning a Promise here would claim the onboarding response in Firefox.
+    expect(
+      service.handleRuntimeMessage({
+        action: 'onboarding',
+        command: 'set-retention',
+        retainPrivateWindows: false,
+      }),
+    ).toBeUndefined()
+    expect(
       service.handleRuntimeMessage({ action: 'getSessionSnapshot' }),
-    ).resolves.toBeUndefined()
-    await expect(
+    ).toBeUndefined()
+    expect(
       service.handleRuntimeMessage({
         action: 'restoreSessionSnapshot',
         snapshotId: created!.id,
@@ -635,7 +643,7 @@ describe('background session snapshots', () => {
         selectedUids: 'note-1',
         allowWithoutSafetySnapshot: false,
       }),
-    ).resolves.toBeUndefined()
+    ).toBeUndefined()
   })
 })
 

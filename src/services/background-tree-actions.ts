@@ -3,7 +3,10 @@ import { STORAGE_KEY } from '@/defaults/constants'
 import { OnCreatedQueue } from '@/services/background-on-created-queue'
 import { Tree } from '@/services/background-tree'
 import { Settings } from '@/services/settings'
-import { normalizeStoredSessionTree } from '@/services/session-tree-storage'
+import {
+  normalizeStoredSessionTree,
+  projectStoredSessionTree,
+} from '@/services/session-tree-storage'
 import * as Utils from '@/services/utils'
 import {
   State,
@@ -626,7 +629,10 @@ export async function loadSessionTreeFromStorage(): Promise<void> {
  */
 export async function saveSessionTreeToStorage(): Promise<void> {
   await serializeSessionTreePersistence(async () => {
-    const persistedItems = structuredClone(Tree.Items)
+    const persistedItems = projectStoredSessionTree(
+      Tree.Items,
+      Settings.values.retainPrivateWindows,
+    )
     await browser.storage.local.set({ [STORAGE_KEY]: persistedItems })
   })
 }
@@ -651,7 +657,12 @@ export async function appendTreeItemsAfterPersist(
       ...structuredClone(Tree.Items),
       ...persistedRestoredItems,
     ]
-    await browser.storage.local.set({ [STORAGE_KEY]: persistedItems })
+    await browser.storage.local.set({
+      [STORAGE_KEY]: projectStoredSessionTree(
+        persistedItems,
+        Settings.values.retainPrivateWindows,
+      ),
+    })
     assertCurrentTreeUnchanged(expectedCurrentItems)
 
     Tree.Items.push(...persistedRestoredItems)

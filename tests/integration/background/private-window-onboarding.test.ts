@@ -1,357 +1,327 @@
 import { initializePrivateWindowOnboarding } from '@/services/background-private-window-onboarding'
 import { Tree } from '@/services/background-tree'
+import { Settings } from '@/services/settings'
+import { DEFAULT_SETTINGS } from '@/defaults/settings'
+import { normalizeSettings } from '@/services/settings-actions'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushMicrotasks, installFakeBrowser } from '../../helpers/fake-browser'
 
-describe('private-window onboarding', () => {
+vi.mock('@/services/favicon-refresh', () => ({
+  FaviconRefresh: {
+    handleSettingsUpdated: vi.fn().mockResolvedValue(undefined),
+  },
+}))
+vi.mock('@/services/background-session-snapshots', () => ({
+  SessionSnapshots: {
+    handleSettingsUpdated: vi.fn().mockResolvedValue(undefined),
+  },
+}))
+
+describe('first-run introduction', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
+    Object.assign(Settings.values, structuredClone(DEFAULT_SETTINGS))
   })
 
-  it('arms and opens the toolbar popup after a fresh install', async () => {
-    const fakeBrowser = installFakeBrowser()
-    fakeBrowser.extension.isAllowedIncognitoAccess!.mockResolvedValue(false)
+  it.each([true, false])(
+    'opens a welcome tab on install with private access %s',
+    async (allowed) => {
+      const fake = installFakeBrowser()
+      fake.extension.isAllowedIncognitoAccess!.mockResolvedValue(allowed)
+      initializePrivateWindowOnboarding()
+      fake.runtime.onInstalled.emit({ reason: 'install', temporary: false })
+      await vi.waitFor(() => expect(fake.tabs.create).toHaveBeenCalledOnce())
+      expect(fake.tabs.create).toHaveBeenCalledWith({
+        url: 'moz-extension://test-id/onboarding.html',
+      })
+      expect(fake.storage.local.set).toHaveBeenCalledWith({
+        privateWindowOnboarding: { status: 'pending', version: 1 },
+      })
+      expect(fake.browserAction.setPopup).toHaveBeenCalledWith({ popup: '' })
+      expect(fake.browserAction.openPopup).not.toHaveBeenCalled()
+    },
+  )
+
+  it('does not open a welcome tab on update or restart, even when pending', async () => {
+    const fake = installFakeBrowser()
+    fake.storage.local.get.mockResolvedValue({
+      privateWindowOnboarding: { status: 'pending', version: 1 },
+    })
     initializePrivateWindowOnboarding()
+    fake.runtime.onInstalled.emit({ reason: 'update', temporary: false })
+    await flushMicrotasks()
+    expect(fake.tabs.create).not.toHaveBeenCalled()
+    expect(fake.storage.local.set).not.toHaveBeenCalled()
+    expect(fake.browserAction.setPopup).toHaveBeenCalledWith({ popup: '' })
+  })
 
-    fakeBrowser.runtime.onInstalled.emit({
-      reason: 'install',
-      temporary: false,
-    })
+  it('still opens the welcome tab if pending-state persistence fails', async () => {
+    const fake = installFakeBrowser()
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    fake.storage.local.set.mockRejectedValueOnce(
+      new Error('storage unavailable'),
+    )
+    initializePrivateWindowOnboarding()
+    fake.runtime.onInstalled.emit({ reason: 'install', temporary: false })
+    await vi.waitFor(() => expect(fake.tabs.create).toHaveBeenCalledOnce())
+  })
 
-    await vi.waitFor(() => {
-      expect(fakeBrowser.browserAction.openPopup).toHaveBeenCalledTimes(1)
+  it('opens the real tree without an in-tree guide after background startup', async () => {
+    const fake = installFakeBrowser()
+    const openTree = vi
+      .spyOn(Tree, 'openSessionTree')
+      .mockResolvedValue(undefined)
+    let ready!: () => void
+    initializePrivateWindowOnboarding(
+      new Promise<void>((resolve) => {
+        ready = resolve
+      }),
+    )
+    const complete = fake.runtime.onMessage.listeners[0]({
+      action: 'onboarding',
+      command: 'continue',
     })
-    expect(fakeBrowser.storage.local.set).toHaveBeenCalledWith({
-      privateWindowOnboarding: { status: 'pending' },
-    })
-    expect(fakeBrowser.browserAction.setPopup).toHaveBeenCalledWith({
-      popup: 'private-window-onboarding.html',
+    await flushMicrotasks()
+    expect(openTree).not.toHaveBeenCalled()
+    ready()
+    await complete
+    expect(openTree).toHaveBeenCalledOnce()
+    expect(fake.storage.local.set).toHaveBeenCalledWith({
+      privateWindowOnboarding: { status: 'completed', version: 1 },
+      sessionTreeIntroduction: { step: -1 },
     })
   })
 
-  it('silently completes a fresh install when private access is allowed', async () => {
-    const fakeBrowser = installFakeBrowser()
-    const openSessionTree = vi
+  it('skips the introduction without opting into private retention', async () => {
+    const fake = installFakeBrowser()
+    vi.spyOn(Tree, 'openSessionTree').mockResolvedValue(undefined)
+    initializePrivateWindowOnboarding()
+    await fake.runtime.onMessage.listeners[0]({
+      action: 'onboarding',
+      command: 'continue',
+    })
+    expect(fake.storage.local.set).toHaveBeenCalledWith({
+      privateWindowOnboarding: { status: 'completed', version: 1 },
+      sessionTreeIntroduction: { step: -1 },
+    })
+    expect(Settings.values.retainPrivateWindows).toBe(false)
+    expect(fake.storage.local.set).not.toHaveBeenCalledWith(
+      expect.objectContaining({ settings: expect.anything() }),
+    )
+  })
+
+  it('routes import to Storage without restoring or closing browser tabs', async () => {
+    const fake = installFakeBrowser()
+    const openTree = vi
       .spyOn(Tree, 'openSessionTree')
       .mockResolvedValue(undefined)
     initializePrivateWindowOnboarding()
-
-    fakeBrowser.runtime.onInstalled.emit({
-      reason: 'install',
-      temporary: false,
+    await fake.runtime.onMessage.listeners[0]({
+      action: 'onboarding',
+      command: 'import',
     })
+    expect(fake.tabs.create).toHaveBeenCalledWith({
+      url: 'moz-extension://test-id/options.html#settings_storage',
+    })
+    expect(openTree).not.toHaveBeenCalled()
+    expect(fake.tabs.remove).not.toHaveBeenCalled()
+  })
 
-    await vi.waitFor(() => {
-      expect(fakeBrowser.storage.local.set).toHaveBeenLastCalledWith({
-        privateWindowOnboarding: { status: 'completed' },
+  it.each([true, false])(
+    'applies an explicit private-retention choice %s before opening the tree',
+    async (retainPrivateWindows) => {
+      const fake = installFakeBrowser()
+      await Settings.loadSettingsFromStorage()
+      const saveTree = vi
+        .spyOn(Tree, 'saveSessionTreeToStorage')
+        .mockResolvedValue(undefined)
+      const openTree = vi
+        .spyOn(Tree, 'openSessionTree')
+        .mockResolvedValue(undefined)
+      initializePrivateWindowOnboarding()
+      await fake.runtime.onMessage.listeners[0]({
+        action: 'onboarding',
+        command: 'set-retention',
+        retainPrivateWindows,
       })
-    })
-    expect(fakeBrowser.browserAction.setPopup).toHaveBeenCalledWith({
-      popup: '',
-    })
-    expect(fakeBrowser.browserAction.openPopup).not.toHaveBeenCalled()
-    expect(openSessionTree).not.toHaveBeenCalled()
-  })
-
-  it('does not prompt after an extension update', async () => {
-    const fakeBrowser = installFakeBrowser()
-    initializePrivateWindowOnboarding()
-
-    fakeBrowser.runtime.onInstalled.emit({
-      reason: 'update',
-      previousVersion: '0.0.0',
-      temporary: false,
-    })
-    await flushMicrotasks()
-
-    expect(fakeBrowser.storage.local.set).not.toHaveBeenCalled()
-    expect(fakeBrowser.browserAction.setPopup).not.toHaveBeenCalled()
-    expect(fakeBrowser.browserAction.openPopup).not.toHaveBeenCalled()
-  })
-
-  it('restores a pending popup after background startup', async () => {
-    const fakeBrowser = installFakeBrowser()
-    fakeBrowser.extension.isAllowedIncognitoAccess!.mockResolvedValue(false)
-    fakeBrowser.storage.local.get.mockResolvedValue({
-      privateWindowOnboarding: { status: 'pending' },
-    })
-
-    initializePrivateWindowOnboarding()
-
-    await vi.waitFor(() => {
-      expect(fakeBrowser.browserAction.setPopup).toHaveBeenCalledWith({
-        popup: 'private-window-onboarding.html',
+      await fake.runtime.onMessage.listeners[0]({
+        action: 'onboarding',
+        command: 'continue',
       })
-    })
-    expect(fakeBrowser.browserAction.openPopup).not.toHaveBeenCalled()
-  })
-
-  it('silently completes restored pending onboarding when private access is allowed', async () => {
-    const fakeBrowser = installFakeBrowser()
-    const openSessionTree = vi
-      .spyOn(Tree, 'openSessionTree')
-      .mockResolvedValue(undefined)
-    fakeBrowser.storage.local.get.mockResolvedValue({
-      privateWindowOnboarding: { status: 'pending' },
-    })
-
-    initializePrivateWindowOnboarding()
-
-    await vi.waitFor(() => {
-      expect(fakeBrowser.storage.local.set).toHaveBeenLastCalledWith({
-        privateWindowOnboarding: { status: 'completed' },
-      })
-    })
-    expect(fakeBrowser.browserAction.setPopup).toHaveBeenCalledWith({
-      popup: '',
-    })
-    expect(fakeBrowser.browserAction.openPopup).not.toHaveBeenCalled()
-    expect(openSessionTree).not.toHaveBeenCalled()
-  })
-
-  it('does not re-arm completed onboarding when private access is denied later', async () => {
-    const fakeBrowser = installFakeBrowser()
-    fakeBrowser.extension.isAllowedIncognitoAccess!.mockResolvedValue(false)
-    fakeBrowser.storage.local.get.mockResolvedValue({
-      privateWindowOnboarding: { status: 'completed' },
-    })
-
-    initializePrivateWindowOnboarding()
-    await flushMicrotasks()
-
-    expect(fakeBrowser.storage.local.set).not.toHaveBeenCalled()
-    expect(fakeBrowser.browserAction.setPopup).not.toHaveBeenCalled()
-    expect(fakeBrowser.browserAction.openPopup).not.toHaveBeenCalled()
-  })
-
-  it('does not re-arm pending onboarding after concurrent completion', async () => {
-    const fakeBrowser = installFakeBrowser()
-    let resolveAccess: (allowed: boolean) => void = () => undefined
-    fakeBrowser.extension.isAllowedIncognitoAccess!.mockImplementation(
-      () =>
-        new Promise<boolean>((resolve) => {
-          resolveAccess = resolve
+      expect(fake.storage.local.set).toHaveBeenCalledWith({
+        settings: expect.objectContaining({
+          retainPrivateWindows,
+          includePrivateWindowsInSessionSnapshots: retainPrivateWindows,
+          cachePrivateTabFavicons: retainPrivateWindows,
         }),
-    )
-    fakeBrowser.storage.local.get.mockResolvedValue({
-      privateWindowOnboarding: { status: 'pending' },
-    })
-    initializePrivateWindowOnboarding()
-
-    await vi.waitFor(() => {
-      expect(
-        fakeBrowser.extension.isAllowedIncognitoAccess,
-      ).toHaveBeenCalledTimes(1)
-    })
-
-    fakeBrowser.runtime.onMessage.emit({
-      action: 'privateWindowOnboarding',
-      command: 'dismiss',
-    })
-    await vi.waitFor(() => {
-      expect(fakeBrowser.browserAction.setPopup).toHaveBeenLastCalledWith({
-        popup: '',
       })
-    })
-
-    resolveAccess(false)
-    await flushMicrotasks()
-
-    expect(fakeBrowser.browserAction.setPopup).toHaveBeenCalledTimes(1)
-    expect(fakeBrowser.browserAction.setPopup).toHaveBeenLastCalledWith({
-      popup: '',
-    })
-  })
-
-  it('keeps the popup armed when Firefox rejects automatic opening', async () => {
-    const fakeBrowser = installFakeBrowser()
-    fakeBrowser.extension.isAllowedIncognitoAccess!.mockResolvedValue(false)
-    const error = new Error('openPopup requires a user gesture')
-    const consoleDebug = vi.spyOn(console, 'debug').mockImplementation(() => {})
-    fakeBrowser.browserAction.openPopup.mockRejectedValue(error)
-    initializePrivateWindowOnboarding()
-
-    fakeBrowser.runtime.onInstalled.emit({
-      reason: 'install',
-      temporary: false,
-    })
-
-    await vi.waitFor(() => {
-      expect(consoleDebug).toHaveBeenCalledWith(
-        'Private-window onboarding will open on the first toolbar click:',
-        error,
+      expect(saveTree).toHaveBeenCalledOnce()
+      expect(saveTree.mock.invocationCallOrder[0]).toBeLessThan(
+        openTree.mock.invocationCallOrder[0],
       )
+    },
+  )
+
+  it('preserves existing preferences when replayed without a new retention choice', async () => {
+    const fake = installFakeBrowser()
+    Object.assign(
+      Settings.values,
+      normalizeSettings({ cachePrivateTabFavicons: false }),
+    )
+    const saveSettings = vi
+      .spyOn(Settings, 'saveSettingsToStorage')
+      .mockResolvedValue(undefined)
+    vi.spyOn(Tree, 'openSessionTree').mockResolvedValue(undefined)
+    initializePrivateWindowOnboarding()
+    await fake.runtime.onMessage.listeners[0]({
+      action: 'onboarding',
+      command: 'continue',
     })
-    expect(fakeBrowser.browserAction.setPopup).toHaveBeenCalledWith({
-      popup: 'private-window-onboarding.html',
-    })
+    expect(Settings.values.retainPrivateWindows).toBe(true)
+    expect(Settings.values.cachePrivateTabFavicons).toBe(false)
+    expect(saveSettings).not.toHaveBeenCalled()
   })
 
-  it('still arms recoverable onboarding when pending-state persistence fails (PD-PW-07)', async () => {
-    const fakeBrowser = installFakeBrowser()
-    fakeBrowser.extension.isAllowedIncognitoAccess!.mockResolvedValue(false)
-    fakeBrowser.storage.local.set.mockRejectedValueOnce(
-      new Error('storage unavailable'),
-    )
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
-    initializePrivateWindowOnboarding()
-
-    fakeBrowser.runtime.onInstalled.emit({
-      reason: 'install',
-      temporary: false,
-    })
-
-    await vi.waitFor(() => {
-      expect(fakeBrowser.browserAction.setPopup).toHaveBeenCalledWith({
-        popup: 'private-window-onboarding.html',
+  it.each([true, false])(
+    'saves a startup choice %s before opening the tree without altering privacy preferences',
+    async (openSessionTreeOnStartup) => {
+      const fake = installFakeBrowser()
+      fake.storage.local.get.mockResolvedValue({
+        settings: {
+          ...DEFAULT_SETTINGS,
+          openSessionTreeOnStartup: !openSessionTreeOnStartup,
+        },
       })
-    })
-    expect(fakeBrowser.browserAction.openPopup).toHaveBeenCalledOnce()
-    expect(consoleError).toHaveBeenCalledWith(
-      'Failed to persist pending private-window onboarding:',
-      expect.any(Error),
-    )
-  })
-
-  it('keeps completion retryable when persistence fails before popup removal (PD-PW-07)', async () => {
-    const fakeBrowser = installFakeBrowser()
-    fakeBrowser.storage.local.set.mockRejectedValueOnce(
-      new Error('storage unavailable'),
-    )
-    initializePrivateWindowOnboarding()
-
-    const firstCompletion = fakeBrowser.runtime.onMessage.listeners[0]({
-      action: 'privateWindowOnboarding',
-      command: 'dismiss',
-    })
-    await expect(firstCompletion).rejects.toThrow('storage unavailable')
-    expect(fakeBrowser.browserAction.setPopup).not.toHaveBeenCalledWith({
-      popup: '',
-    })
-
-    fakeBrowser.storage.local.set.mockResolvedValue(undefined)
-    const retry = fakeBrowser.runtime.onMessage.listeners[0]({
-      action: 'privateWindowOnboarding',
-      command: 'dismiss',
-    })
-    await expect(retry).resolves.toBeUndefined()
-    expect(fakeBrowser.browserAction.setPopup).toHaveBeenCalledWith({
-      popup: '',
-    })
-  })
-
-  it('leaves onboarding pending for an unsupported command', async () => {
-    const fakeBrowser = installFakeBrowser()
-    const openSessionTree = vi
-      .spyOn(Tree, 'openSessionTree')
-      .mockResolvedValue(undefined)
-    initializePrivateWindowOnboarding()
-
-    fakeBrowser.runtime.onMessage.emit({
-      action: 'privateWindowOnboarding',
-      command: 'hide',
-    })
-    await flushMicrotasks()
-
-    expect(fakeBrowser.storage.local.set).not.toHaveBeenCalled()
-    expect(fakeBrowser.browserAction.setPopup).not.toHaveBeenCalled()
-    expect(openSessionTree).not.toHaveBeenCalled()
-  })
-
-  it('completes onboarding and opens Session Tree when continuing', async () => {
-    const fakeBrowser = installFakeBrowser()
-    const openSessionTree = vi
-      .spyOn(Tree, 'openSessionTree')
-      .mockResolvedValue(undefined)
-    initializePrivateWindowOnboarding()
-
-    fakeBrowser.runtime.onMessage.emit({
-      action: 'privateWindowOnboarding',
-      command: 'continue',
-    })
-
-    await vi.waitFor(() => {
-      expect(openSessionTree).toHaveBeenCalledTimes(1)
-    })
-    expect(fakeBrowser.storage.local.set).toHaveBeenCalledWith({
-      privateWindowOnboarding: { status: 'completed' },
-    })
-    expect(fakeBrowser.browserAction.setPopup).toHaveBeenCalledWith({
-      popup: '',
-    })
-  })
-
-  it('waits for background startup before opening Session Tree', async () => {
-    const fakeBrowser = installFakeBrowser()
-    const openSessionTree = vi
-      .spyOn(Tree, 'openSessionTree')
-      .mockResolvedValue(undefined)
-    let markBackgroundReady: () => void = () => undefined
-    const backgroundReady = new Promise<void>((resolve) => {
-      markBackgroundReady = resolve
-    })
-    initializePrivateWindowOnboarding(backgroundReady)
-
-    fakeBrowser.runtime.onMessage.emit({
-      action: 'privateWindowOnboarding',
-      command: 'continue',
-    })
-    await flushMicrotasks()
-
-    expect(openSessionTree).not.toHaveBeenCalled()
-
-    markBackgroundReady()
-    await vi.waitFor(() => {
-      expect(openSessionTree).toHaveBeenCalledTimes(1)
-    })
-  })
-
-  it('coalesces concurrent completion messages', async () => {
-    const fakeBrowser = installFakeBrowser()
-    fakeBrowser.storage.local.set.mockImplementation(
-      () => new Promise<void>(() => undefined),
-    )
-    const openSessionTree = vi
-      .spyOn(Tree, 'openSessionTree')
-      .mockResolvedValue(undefined)
-    initializePrivateWindowOnboarding()
-
-    fakeBrowser.runtime.onMessage.emit({
-      action: 'privateWindowOnboarding',
-      command: 'continue',
-    })
-    fakeBrowser.runtime.onMessage.emit({
-      action: 'privateWindowOnboarding',
-      command: 'continue',
-    })
-    await flushMicrotasks()
-
-    expect(fakeBrowser.storage.local.set).toHaveBeenCalledTimes(1)
-    expect(fakeBrowser.browserAction.setPopup).not.toHaveBeenCalled()
-    expect(openSessionTree).not.toHaveBeenCalled()
-  })
-
-  it('dismisses onboarding without opening Session Tree', async () => {
-    const fakeBrowser = installFakeBrowser()
-    const openSessionTree = vi
-      .spyOn(Tree, 'openSessionTree')
-      .mockResolvedValue(undefined)
-    initializePrivateWindowOnboarding()
-
-    fakeBrowser.runtime.onMessage.emit({
-      action: 'privateWindowOnboarding',
-      command: 'dismiss',
-    })
-
-    await vi.waitFor(() => {
-      expect(fakeBrowser.storage.local.set).toHaveBeenCalledWith({
-        privateWindowOnboarding: { status: 'completed' },
+      await Settings.loadSettingsFromStorage()
+      const saveTree = vi
+        .spyOn(Tree, 'saveSessionTreeToStorage')
+        .mockResolvedValue(undefined)
+      const openTree = vi
+        .spyOn(Tree, 'openSessionTree')
+        .mockResolvedValue(undefined)
+      initializePrivateWindowOnboarding()
+      await fake.runtime.onMessage.listeners[0]({
+        action: 'onboarding',
+        command: 'set-startup',
+        openSessionTreeOnStartup,
       })
+      await fake.runtime.onMessage.listeners[0]({
+        action: 'onboarding',
+        command: 'continue',
+      })
+      expect(fake.storage.local.set).toHaveBeenCalledWith({
+        settings: expect.objectContaining({
+          openSessionTreeOnStartup,
+          retainPrivateWindows: false,
+          includePrivateWindowsInSessionSnapshots: false,
+          cachePrivateTabFavicons: false,
+        }),
+      })
+      expect(fake.storage.local.set.mock.invocationCallOrder[0]).toBeLessThan(
+        openTree.mock.invocationCallOrder[0],
+      )
+      expect(saveTree).not.toHaveBeenCalled()
+    },
+  )
+
+  it('completes import when no other view receives the settings notification', async () => {
+    const fake = installFakeBrowser()
+    await Settings.loadSettingsFromStorage()
+    vi.spyOn(Tree, 'saveSessionTreeToStorage').mockResolvedValue(undefined)
+    fake.runtime.sendMessage.mockRejectedValue(
+      new Error('Receiving end does not exist'),
+    )
+    vi.spyOn(console, 'debug').mockImplementation(() => {})
+    initializePrivateWindowOnboarding()
+    await fake.runtime.onMessage.listeners[0]({
+      action: 'onboarding',
+      command: 'set-retention',
+      retainPrivateWindows: true,
     })
-    expect(fakeBrowser.browserAction.setPopup).toHaveBeenCalledWith({
-      popup: '',
+    await expect(
+      fake.runtime.onMessage.listeners[0]({
+        action: 'onboarding',
+        command: 'import',
+      }),
+    ).resolves.toBeUndefined()
+    expect(fake.tabs.create).toHaveBeenCalledWith({
+      url: 'moz-extension://test-id/options.html#settings_storage',
     })
-    expect(openSessionTree).not.toHaveBeenCalled()
+  })
+
+  it('completion does not save preferences or apply obsolete preference arguments', async () => {
+    const fake = installFakeBrowser()
+    vi.spyOn(Tree, 'openSessionTree').mockResolvedValue(undefined)
+    const saveSettings = vi.spyOn(Settings, 'saveSettingsToStorage')
+    initializePrivateWindowOnboarding()
+    await fake.runtime.onMessage.listeners[0]({
+      action: 'onboarding',
+      command: 'continue',
+      retainPrivateWindows: true,
+      openSessionTreeOnStartup: true,
+    })
+    expect(saveSettings).not.toHaveBeenCalled()
+    expect(Settings.values.retainPrivateWindows).toBe(false)
+    expect(Settings.values.openSessionTreeOnStartup).toBe(false)
+  })
+
+  it('allows completion to be retried after failure and replayed after success', async () => {
+    const fake = installFakeBrowser()
+    const openTree = vi
+      .spyOn(Tree, 'openSessionTree')
+      .mockRejectedValueOnce(new Error('window unavailable'))
+      .mockResolvedValue(undefined)
+    initializePrivateWindowOnboarding()
+    const message = { action: 'onboarding', command: 'continue' }
+    await expect(fake.runtime.onMessage.listeners[0](message)).rejects.toThrow(
+      'window unavailable',
+    )
+    await fake.runtime.onMessage.listeners[0](message)
+    await fake.runtime.onMessage.listeners[0](message)
+    expect(openTree).toHaveBeenCalledTimes(3)
+  })
+
+  it('coalesces repeated clicks and rejects malformed preferences', async () => {
+    const fake = installFakeBrowser()
+    const openTree = vi
+      .spyOn(Tree, 'openSessionTree')
+      .mockResolvedValue(undefined)
+    let ready!: () => void
+    initializePrivateWindowOnboarding(
+      new Promise<void>((resolve) => {
+        ready = resolve
+      }),
+    )
+    const listener = fake.runtime.onMessage.listeners[0]
+    expect(
+      listener({
+        action: 'onboarding',
+        command: 'set-retention',
+        retainPrivateWindows: 'yes',
+      }),
+    ).toBeUndefined()
+    expect(
+      listener({ action: 'onboarding', command: 'unknown' }),
+    ).toBeUndefined()
+    expect(
+      listener({
+        action: 'onboarding',
+        command: 'set-startup',
+        openSessionTreeOnStartup: 'yes',
+      }),
+    ).toBeUndefined()
+    const first = listener({
+      action: 'onboarding',
+      command: 'continue',
+    })
+    const second = listener({
+      action: 'onboarding',
+      command: 'continue',
+    })
+    expect(first).toBe(second)
+    ready()
+    await first
+    expect(openTree).toHaveBeenCalledOnce()
   })
 
   it('initializes onboarding before asynchronous background startup', async () => {
