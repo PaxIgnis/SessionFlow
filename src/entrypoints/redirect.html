@@ -2,37 +2,140 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title data-i18n="redirect">Redirect</title>
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1"
+    />
+    <meta
+      name="color-scheme"
+      content="dark"
+    />
+    <title data-i18n="redirecting">Redirecting</title>
+    <!-- Paint the loading state before the module and its styles are ready. -->
     <style>
-      .copied-message {
-        display: none;
-        color: green;
-        margin-left: 10px;
+      :root {
+        color-scheme: dark;
+        background: var(--tree-background, rgb(20, 23, 28));
+        color: var(--text-color-primary, rgb(204, 204, 204));
+        font-family: system-ui;
       }
-      .copied-message.visible {
-        display: inline;
+      body {
+        margin: 0;
+      }
+      [hidden] {
+        display: none !important;
       }
     </style>
+    <link
+      rel="icon"
+      href="/icon/session-flow.svg"
+      type="image/svg+xml"
+    />
   </head>
   <body>
-    <p
-      id="message"
-      data-i18n="redirecting"
+    <main
+      id="redirect-page"
+      class="redirect-page"
+      hidden
     >
-      Redirecting
-    </p>
-    <a
-      id="target-url"
-      href="#"
-      target="_self"
-    ></a>
-    <span
-      id="copied-message"
-      class="copied-message"
-      role="status"
-      aria-live="polite"
-      ><span data-i18n="copied">Copied!</span></span
-    >
+      <div class="brand">
+        <img
+          src="/icon/session-flow.svg"
+          width="28"
+          height="28"
+          alt=""
+        />
+        <span>Session Flow</span>
+      </div>
+      <section
+        class="redirect-card"
+        aria-labelledby="redirect-heading"
+      >
+        <h1
+          id="redirect-heading"
+          data-i18n="redirectHeading"
+        >
+          Open this page manually
+        </h1>
+        <p
+          id="message"
+          class="description"
+          data-i18n="theURLIsPrivilegedAndCannotBeOpenedAutomaticallyBecause"
+        ></p>
+        <div
+          id="target-title-section"
+          class="title-section"
+          hidden
+        >
+          <p
+            class="field-label"
+            data-i18n="redirectTitleLabel"
+          >
+            Page title
+          </p>
+          <p
+            id="target-title"
+            class="page-value"
+          ></p>
+        </div>
+        <p
+          class="field-label"
+          data-i18n="redirectURLLabel"
+        >
+          Page URL
+        </p>
+        <div class="address-row">
+          <a
+            id="target-url"
+            class="page-value"
+            href="#"
+            aria-describedby="redirect-instructions"
+          ></a>
+          <button
+            id="copy-url"
+            type="button"
+            disabled
+          >
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              aria-hidden="true"
+            >
+              <rect
+                x="8"
+                y="8"
+                width="12"
+                height="12"
+                rx="2"
+              />
+              <path
+                d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"
+              />
+            </svg>
+            <span data-i18n="redirectCopyURL">Copy URL</span>
+          </button>
+        </div>
+        <p
+          id="copied-message"
+          class="copied-message"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        ></p>
+        <p
+          id="redirect-instructions"
+          class="instructions"
+          data-i18n="redirectInstructions"
+        >
+          Copy the address above, paste it into Firefox’s address bar, and press
+          Enter.
+        </p>
+      </section>
+    </main>
     <script
       type="module"
       src="./redirect/main.ts"

@@ -1,5 +1,6 @@
 import { $, browser, expect } from '@wdio/globals'
 import http from 'node:http'
+import { readFile } from 'node:fs/promises'
 import {
   cleanupSeededTabs,
   createPrivateFixtureTabs,
@@ -22,8 +23,20 @@ describe('favicon and redirect workflows', () => {
   let sessionTree
 
   before(async () => {
+    // Exercise the initial HTML while the application module is still unavailable.
+    const loadingPage = (
+      await readFile(
+        new URL('../../src/entrypoints/redirect.html', import.meta.url),
+        'utf8',
+      )
+    ).replace(/<script\b[^>]*>[\s\S]*?<\/script>/g, '')
     server = http.createServer((request, response) => {
       const url = new URL(request.url, 'http://127.0.0.1')
+      if (url.pathname === '/redirect-loading') {
+        response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+        response.end(loadingPage)
+        return
+      }
       if (url.pathname.startsWith('/icon/')) {
         const color = url.pathname.split('/').at(-1).replace('.svg', '')
         response.writeHead(200, { 'content-type': 'image/svg+xml' })
@@ -304,6 +317,19 @@ describe('favicon and redirect workflows', () => {
     )
   })
 
+  it('shows a blank dark background before the redirect module is ready', async () => {
+    await browser.switchToWindow(seed.handles[0])
+    await browser.url(`${origin}/redirect-loading`)
+    await expect($('body')).toHaveText('')
+    await expect($('#redirect-page')).not.toBeDisplayed()
+    expect(await browser.getTitle()).toBe('Redirecting')
+    expect(
+      await browser.execute(
+        () => getComputedStyle(document.documentElement).backgroundColor,
+      ),
+    ).toBe('rgb(20, 23, 28)')
+  })
+
   it('renders and copies a complex privileged redirect target (FV-13/FV-14)', async () => {
     const target = `about:reader?url=${encodeURIComponent(
       'https://example.test/<img src=x onerror=alert(1)>/λ',
@@ -328,6 +354,8 @@ describe('favicon and redirect workflows', () => {
     seed.browserTabIds.redirect = redirect.tabId
 
     await switchToTitle(`Redirect to ${title}`)
+    await expect($('#redirect-page')).toBeDisplayed()
+    await expect($('#target-title')).toHaveText(title)
     expect(await $('#target-url').getText()).toBe(target)
     expect(await $('#target-url').getAttribute('href')).toBe(target)
     await browser.execute(() =>
@@ -338,7 +366,7 @@ describe('favicon and redirect workflows', () => {
         browser.permissions.contains({ permissions: ['clipboardWrite'] }),
       ),
     ).toBe(false)
-    await $('#target-url').click()
+    await $('#copy-url').click()
     await browser.waitUntil(
       async () => (await $('#copied-message').getText()).length > 0,
       { timeoutMsg: 'Expected redirect copy status feedback.' },

@@ -19,6 +19,8 @@ class FakeClassList {
 }
 
 class FakeElement {
+  disabled = true
+  hidden = false
   textContent = ''
   href = ''
   innerHTML = ''
@@ -82,22 +84,29 @@ describe('redirect entrypoint', () => {
     })
 
     await import('@/entrypoints/redirect/main')
+    expect(document.elements.get('redirect-page')!.hidden).toBe(true)
     document.fireDOMContentLoaded()
+    expect(document.elements.get('redirect-page')!.hidden).toBe(false)
 
     const targetUrlElement = document.elements.get('target-url')!
     const copiedMessageElement = document.elements.get('copied-message')!
 
     expect(document.title).toBe('Redirect to Advanced Preferences')
+    expect(document.elements.get('target-title')!.textContent).toBe(
+      'Advanced Preferences',
+    )
+    expect(document.elements.get('target-title-section')!.hidden).toBe(false)
     expect(targetUrlElement.textContent).toBe('about:config')
     expect(targetUrlElement.href).toBe('about:config')
     expect(document.elements.get('message')!.textContent).toContain(
       'URL is privileged',
     )
 
+    expect(fakeBrowser.permissions.request).not.toHaveBeenCalled()
     const clickEvent = targetUrlElement.click()
     expect(writeText).toHaveBeenCalledWith('about:config')
     expect(fakeBrowser.permissions.request).not.toHaveBeenCalled()
-    await Promise.resolve()
+    await flushMicrotasks()
 
     expect(clickEvent.preventDefault).toHaveBeenCalledTimes(1)
     expect(writeText).toHaveBeenCalledWith('about:config')
@@ -106,6 +115,27 @@ describe('redirect entrypoint', () => {
     vi.advanceTimersByTime(2_000)
 
     expect(copiedMessageElement.classList.contains('visible')).toBe(false)
+  })
+
+  it('copies through the explicit button without requesting permission', async () => {
+    const document = createRedirectDocument()
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    const fakeBrowser = installRedirectGlobals({
+      document,
+      search: '?targetUrl=about%3Aconfig',
+      writeText,
+    })
+    await import('@/entrypoints/redirect/main')
+    document.fireDOMContentLoaded()
+    expect(document.title).toBe('Open this page manually')
+    expect(document.elements.get('target-title-section')!.hidden).toBe(true)
+    const copyButton = document.elements.get('copy-url')!
+    expect(copyButton.disabled).toBe(false)
+    copyButton.click()
+    expect(writeText).toHaveBeenCalledWith('about:config')
+    expect(fakeBrowser.permissions.request).not.toHaveBeenCalled()
+    await flushMicrotasks()
+    expect(document.elements.get('copied-message')!.textContent).toBe('Copied!')
   })
 
   it('logs copy failures without throwing from the click handler', async () => {
@@ -123,8 +153,7 @@ describe('redirect entrypoint', () => {
       document.fireDOMContentLoaded()
 
       document.elements.get('target-url')!.click()
-      await Promise.resolve()
-      await Promise.resolve()
+      await flushMicrotasks()
 
       expect(consoleError).toHaveBeenCalledWith(
         'Error copying URL to clipboard:',
@@ -156,6 +185,8 @@ describe('redirect entrypoint', () => {
     expect(document.elements.get('target-url')!.textContent).toBe('')
     expect(document.elements.get('message')!.innerHTML).toBe('')
     expect(writeText).not.toHaveBeenCalled()
+    expect(document.elements.get('copy-url')!.disabled).toBe(true)
+    expect(document.elements.get('redirect-page')!.hidden).toBe(false)
   })
 
   it('renders HTML-looking, Unicode, fragmented, and long targets only as text', async () => {
@@ -175,6 +206,8 @@ describe('redirect entrypoint', () => {
 
     const target = document.elements.get('target-url')!
     expect(document.title).toBe(`Redirect to ${targetTitle}`)
+    expect(document.elements.get('target-title')!.textContent).toBe(targetTitle)
+    expect(document.elements.get('target-title')!.innerHTML).toBe('')
     expect(target.textContent).toBe(targetUrl)
     expect(target.href).toBe(targetUrl)
     expect(target.innerHTML).toBe('')
@@ -232,8 +265,17 @@ describe('redirect entrypoint', () => {
 
 function createRedirectDocument() {
   const document = new FakeDocument()
+  const page = new FakeElement()
+  page.hidden = true
+  document.elements.set('redirect-page', page)
   document.elements.set('message', new FakeElement())
+  const title = new FakeElement()
+  document.elements.set('target-title', title)
+  const titleSection = new FakeElement()
+  titleSection.hidden = true
+  document.elements.set('target-title-section', titleSection)
   document.elements.set('target-url', new FakeElement())
+  document.elements.set('copy-url', new FakeElement())
   document.elements.set('copied-message', new FakeElement())
   return document
 }
