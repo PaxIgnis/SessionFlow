@@ -30,6 +30,7 @@
   "childrenOfSeparatorsWereMovedBelowTheSeparatorAsSiblings": "Children of separators were moved below the separator as siblings.",
   "chooseWhetherBothNeighboursMustBelongToTheSameGroup": "Choose whether both neighbours must belong to the same group, or any adjacent group is enough.",
   "chromespecificURLsWerePreservedButMayNotOpenInFirefox": "Chrome-specific URLs were preserved but may not open in Firefox.",
+  "clipboardWritePermissionDenied": "Clipboard access wasn't granted. You can export JSON to a file instead.",
   "collapseAllWindows": "Collapse all windows",
   "collapseItem": "Collapse item",
   "collectionNumber": "Collection $1",

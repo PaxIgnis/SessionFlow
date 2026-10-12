@@ -228,6 +228,13 @@ async function exportSnapshot(copy: boolean) {
   const id = selectedRecord.value?.metadata.id
   if (!id) return
   await run(async () => {
+    if (copy) {
+      // Request from the click gesture, before fetching the snapshot.
+      const granted = await browser.permissions.request({
+        permissions: ['clipboardWrite'],
+      })
+      if (!granted) throw new Error(i18n.t('clipboardWritePermissionDenied'))
+    }
     const exported = await SessionSnapshotClient.export(id)
     const json = JSON.stringify(exported, null, 2)
     if (copy) {

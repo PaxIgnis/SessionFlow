@@ -23,7 +23,6 @@ export default defineConfig({
       'alarms',
       'contextualIdentities',
       'cookies',
-      'clipboardWrite',
       'menus',
       'menus.overrideContext',
       'sessions',
@@ -33,7 +32,11 @@ export default defineConfig({
       'unlimitedStorage',
     ],
     optional_host_permissions: ['http://*/*', 'https://*/*'],
-    optional_permissions: ['http://*/*' as never, 'https://*/*' as never],
+    optional_permissions: [
+      'clipboardWrite',
+      'http://*/*' as never,
+      'https://*/*' as never,
+    ],
     name: 'Session Flow',
     browser_specific_settings: {
       gecko: {

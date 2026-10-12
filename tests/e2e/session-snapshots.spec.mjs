@@ -3,6 +3,7 @@ import { mkdtemp, writeFile, rm, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { closeOptionsPage, openOptionsPage } from './support/options-page.mjs'
+import { respondToFirefoxExtensionPermissionPrompt } from './support/firefox-chrome-context.mjs'
 import {
   readPersistedSessionTree,
   readSnapshotAlarm,
@@ -498,10 +499,38 @@ describe('session snapshot workflows', () => {
       })
 
       const selectedActions = await $('.snapshot-selected-actions')
+      await browser.execute(() =>
+        browser.permissions.remove({ permissions: ['clipboardWrite'] }),
+      )
+      expect(
+        await browser.execute(() =>
+          browser.permissions.contains({ permissions: ['clipboardWrite'] }),
+        ),
+      ).toBe(false)
       await (await selectedActions.$('button=Copy JSON')).click()
+      await respondToFirefoxExtensionPermissionPrompt(false)
+      const permissionError = await $('[role="dialog"]')
+      await expect(permissionError).toBeDisplayed()
+      await expect(permissionError).toHaveText(
+        expect.stringContaining(
+          await browser.execute(() =>
+            browser.i18n.getMessage('clipboardWritePermissionDenied'),
+          ),
+        ),
+      )
+      await (await permissionError.$('button=Dismiss')).click()
+      await expect(selectedActions.$('button=Save as JSON')).toBeEnabled()
+
+      await (await selectedActions.$('button=Copy JSON')).click()
+      await respondToFirefoxExtensionPermissionPrompt(true)
       const successToast = await $('.snapshot-success-toast')
       await expect(successToast).toBeDisplayed()
       await expect(successToast).toHaveText('Snapshot JSON copied.')
+      expect(
+        await browser.execute(() =>
+          browser.permissions.contains({ permissions: ['clipboardWrite'] }),
+        ),
+      ).toBe(true)
       await browser.waitUntil(async () => !(await successToast.isDisplayed()), {
         timeout: 5_000,
         timeoutMsg: 'Expected the snapshot success toast to disappear.',

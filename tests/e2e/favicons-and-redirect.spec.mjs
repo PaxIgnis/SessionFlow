@@ -330,14 +330,25 @@ describe('favicon and redirect workflows', () => {
     await switchToTitle(`Redirect to ${title}`)
     expect(await $('#target-url').getText()).toBe(target)
     expect(await $('#target-url').getAttribute('href')).toBe(target)
+    await browser.execute(() =>
+      browser.permissions.remove({ permissions: ['clipboardWrite'] }),
+    )
+    expect(
+      await browser.execute(() =>
+        browser.permissions.contains({ permissions: ['clipboardWrite'] }),
+      ),
+    ).toBe(false)
     await $('#target-url').click()
     await browser.waitUntil(
       async () => (await $('#copied-message').getText()).length > 0,
       { timeoutMsg: 'Expected redirect copy status feedback.' },
     )
-    expect(await $('#copied-message').getText()).toMatch(
-      /Copied!|Copy unavailable/,
-    )
+    expect(await $('#copied-message').getText()).toBe('Copied!')
+    expect(
+      await browser.execute(() =>
+        browser.permissions.contains({ permissions: ['clipboardWrite'] }),
+      ),
+    ).toBe(false)
   })
 
   async function navigateSeed(url, title) {

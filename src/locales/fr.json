@@ -30,6 +30,7 @@
   "childrenOfSeparatorsWereMovedBelowTheSeparatorAsSiblings": "Les enfants des séparateurs ont été déplacés sous le séparateur, au même niveau que celui-ci.",
   "chooseWhetherBothNeighboursMustBelongToTheSameGroup": "Choisissez si les deux voisins doivent appartenir au même groupe ou si un seul groupe adjacent suffit.",
   "chromespecificURLsWerePreservedButMayNotOpenInFirefox": "Les URL propres à Chrome ont été conservées, mais risquent de ne pas s’ouvrir dans Firefox.",
+  "clipboardWritePermissionDenied": "L’accès au presse-papiers n’a pas été accordé. Vous pouvez exporter le JSON dans un fichier à la place.",
   "collapseAllWindows": "Replier toutes les fenêtres",
   "collapseItem": "Replier l’élément",
   "collectionNumber": "Collection $1",

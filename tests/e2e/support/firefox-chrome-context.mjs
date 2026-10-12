@@ -182,6 +182,38 @@ export async function dismissFirefoxContextMenu() {
   })
 }
 
+export async function respondToFirefoxExtensionPermissionPrompt(allow) {
+  await browser.waitUntil(
+    () =>
+      withFirefoxChromeContext(async () => {
+        const response = await executeFirefoxChromeScript(
+          (shouldAllow) => {
+            const browserWindow =
+              window.BrowserWindowTracker?.getTopWindow?.() ?? window
+            const notifications = browserWindow.PopupNotifications
+            const notification = notifications.getNotification(
+              'addon-webext-permissions',
+              browserWindow.gBrowser.selectedBrowser,
+            )
+            if (!notification) return false
+            const action = shouldAllow
+              ? notification.mainAction
+              : notification.secondaryActions[0]
+            action.callback()
+            notifications.remove(notification)
+            return true
+          },
+          [allow],
+        )
+        return response.value
+      }),
+    {
+      timeout: 10_000,
+      timeoutMsg: 'Expected a Firefox extension permission prompt.',
+    },
+  )
+}
+
 export async function grantFirefoxExtensionOrigins(extensionId, origins) {
   return withFirefoxChromeContext(async () => {
     const response = await executeFirefoxChromeScript(

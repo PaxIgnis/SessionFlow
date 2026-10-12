@@ -1,5 +1,7 @@
 ﻿import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { flushMicrotasks, installFakeBrowser } from '../../helpers/fake-browser'
+
 class FakeClassList {
   private readonly classes = new Set<string>()
 
@@ -73,7 +75,7 @@ describe('redirect entrypoint', () => {
     vi.useFakeTimers()
     const document = createRedirectDocument()
     const writeText = vi.fn().mockResolvedValue(undefined)
-    installRedirectGlobals({
+    const fakeBrowser = installRedirectGlobals({
       document,
       search: '?targetUrl=about%3Aconfig&targetTitle=Advanced%20Preferences',
       writeText,
@@ -93,6 +95,8 @@ describe('redirect entrypoint', () => {
     )
 
     const clickEvent = targetUrlElement.click()
+    expect(writeText).toHaveBeenCalledWith('about:config')
+    expect(fakeBrowser.permissions.request).not.toHaveBeenCalled()
     await Promise.resolve()
 
     expect(clickEvent.preventDefault).toHaveBeenCalledTimes(1)
@@ -194,6 +198,36 @@ describe('redirect entrypoint', () => {
     )
     expect(status.classList.contains('visible')).toBe(true)
   })
+  it('handles synchronous clipboard failures without requesting permission', async () => {
+    const document = createRedirectDocument()
+    const writeText = vi.fn()
+    const fakeBrowser = installRedirectGlobals({
+      document,
+      search: '?targetUrl=about%3Aconfig',
+      writeText,
+    })
+    const error = new Error('Clipboard unavailable')
+    writeText.mockImplementation(() => {
+      throw error
+    })
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      await import('@/entrypoints/redirect/main')
+      document.fireDOMContentLoaded()
+      document.elements.get('target-url')!.click()
+      await flushMicrotasks()
+      expect(fakeBrowser.permissions.request).not.toHaveBeenCalled()
+      expect(consoleError).toHaveBeenCalledWith(
+        'Error copying URL to clipboard:',
+        error,
+      )
+      expect(
+        document.elements.get('copied-message')!.classList.contains('visible'),
+      ).toBe(true)
+    } finally {
+      consoleError.mockRestore()
+    }
+  })
 })
 
 function createRedirectDocument() {
@@ -213,6 +247,7 @@ function installRedirectGlobals({
   search: string
   writeText?: (text: string) => Promise<void>
 }) {
+  const fakeBrowser = installFakeBrowser()
   vi.stubGlobal('document', document)
   vi.stubGlobal('window', {
     location: {
@@ -229,4 +264,5 @@ function installRedirectGlobals({
         }
       : {},
   )
+  return fakeBrowser
 }

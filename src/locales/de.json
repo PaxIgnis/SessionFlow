@@ -30,6 +30,7 @@
   "childrenOfSeparatorsWereMovedBelowTheSeparatorAsSiblings": "Unterelemente von Trennlinien wurden unter die jeweilige Trennlinie auf dieselbe Hierarchieebene verschoben.",
   "chooseWhetherBothNeighboursMustBelongToTheSameGroup": "Legen Sie fest, ob beide Nachbarn zur selben Gruppe gehören müssen oder eine beliebige benachbarte Gruppe genügt.",
   "chromespecificURLsWerePreservedButMayNotOpenInFirefox": "Chrome-spezifische URLs wurden übernommen, lassen sich aber möglicherweise nicht in Firefox öffnen.",
+  "clipboardWritePermissionDenied": "Der Zugriff auf die Zwischenablage wurde nicht erlaubt. Sie können JSON stattdessen in eine Datei exportieren.",
   "collapseAllWindows": "Alle Fenster einklappen",
   "collapseItem": "Element einklappen",
   "collectionNumber": "Sammlung $1",
