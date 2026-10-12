@@ -16,6 +16,42 @@ async function loadRuntimePortService() {
 }
 
 describe('runtime port service', () => {
+  it('transports container creation through the command dispatcher', async () => {
+    const { runtime } = await loadRuntimePortService()
+    const result = { createdContainerStoreId: 'firefox-container-new' }
+    const dispatchCommand = vi.fn().mockResolvedValue(result)
+    runtime.initializeSessionTreePort({
+      dispatchCommand,
+      getSnapshot: () => [],
+    })
+    const command = {
+      action: 'createContainer' as const,
+      name: 'Research',
+      color: 'blue',
+      icon: 'fingerprint',
+    }
+    await expect(runtime.sendTreeCommand(command)).resolves.toEqual(result)
+    expect(dispatchCommand).toHaveBeenCalledWith(command)
+  })
+  it.each(['firefox-container-1', undefined])(
+    'transports container assignment and clearing (%s)',
+    async (cookieStoreId) => {
+      const { runtime } = await loadRuntimePortService()
+      const dispatchCommand = vi.fn().mockResolvedValue(undefined)
+      runtime.initializeSessionTreePort({
+        dispatchCommand,
+        getSnapshot: () => [],
+      })
+      const command = {
+        action: 'setTabContainer' as const,
+        tabUid: 'tab-1' as UID,
+        cookieStoreId,
+      }
+      await runtime.sendTreeCommand(command)
+      expect(dispatchCommand).toHaveBeenCalledWith(command)
+    },
+  )
+
   beforeEach(() => {
     vi.restoreAllMocks()
   })

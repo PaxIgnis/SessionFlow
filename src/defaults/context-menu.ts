@@ -25,6 +25,7 @@ export const TAB_MENU: ContextMenuConfig = [
   { type: ContextMenuItemType.Action, id: 'editLabel' },
   { type: ContextMenuItemType.Action, id: 'pinTab' },
   { type: ContextMenuItemType.Action, id: 'unpinTab' },
+  { type: ContextMenuItemType.Action, id: 'setContainer' },
   { type: ContextMenuItemType.Action, id: 'duplicateTreeItem' },
   { type: ContextMenuItemType.Action, id: 'treeItemIndentIncrease' },
   { type: ContextMenuItemType.Action, id: 'treeItemIndentDecrease' },

@@ -156,6 +156,35 @@ export async function readFirefoxContextMenu() {
   return lastSnapshot
 }
 
+export async function readFirefoxContextSubmenu(label) {
+  return withFirefoxChromeContext(async () => {
+    const response = await executeFirefoxChromeScript(
+      (menuLabel) => {
+        const browserWindow =
+          window.BrowserWindowTracker?.getTopWindow?.() ?? window
+        const documents = [
+          ...new Set([window.document, browserWindow.document]),
+        ]
+        const menu = documents
+          .flatMap((document) => [...document.querySelectorAll('menu')])
+          .find((item) => item.getAttribute('label') === menuLabel)
+        if (!menu) return []
+        return [
+          ...menu.querySelectorAll(
+            'menupopup > menuitem, menupopup > menuseparator',
+          ),
+        ].map((item) => ({
+          type: item.localName === 'menuseparator' ? 'separator' : 'normal',
+          label: item.getAttribute('label'),
+          image: item.getAttribute('image'),
+        }))
+      },
+      [label],
+    )
+    return response.value
+  })
+}
+
 export async function dismissFirefoxContextMenu() {
   return withFirefoxChromeContext(async () => {
     const response = await executeFirefoxChromeScript(() => {

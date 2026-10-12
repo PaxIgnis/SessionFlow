@@ -2,6 +2,8 @@ import { i18n } from '@/services/i18n'
 import * as Messages from '@/services/foreground-messages'
 import { openModal } from '@/services/modal-state'
 import { Selection } from '@/services/selection'
+import { SessionTree } from '@/services/foreground-tree'
+import { containerMenuIcon } from '@/services/container-menu-icons'
 import {
   collectContextMenuActionItems,
   type ContextMenuDescendantScope,
@@ -11,6 +13,72 @@ import { ContextMenuItem } from '@/types/context-menu'
 import { State, type Tab, TreeItemType } from '@/types/session-tree'
 
 export const contextMenuItemsTab: Record<string, () => ContextMenuItem> = {
+  setContainer: () => {
+    const selectedTabs = Selection.getSelectedTabs()
+    const tabs = selectedTabs.filter(
+      (tab) => SessionTree.windowsByUid.get(tab.windowUid)?.incognito === false,
+    )
+    return {
+      id: 'setContainer',
+      label: i18n.t('setContainer'),
+      enabled: tabs.length > 0 || selectedTabs.some((tab) => tab.container),
+      submenu: [
+        {
+          id: 'noContainer',
+          label: i18n.t('noContainer'),
+          enabled: selectedTabs.some((tab) => tab.container),
+          action: () =>
+            Messages.setTabsContainer(
+              selectedTabs.filter((tab) => tab.container).map((tab) => tab.uid),
+            ),
+        },
+      ],
+      loadSubmenu: async () => {
+        if (!tabs.length) return []
+        try {
+          const containers = await browser.contextualIdentities.query({})
+          const choices = await Promise.all(
+            containers.map(async (container) => ({
+              id: `container-${container.cookieStoreId}`,
+              label: container.name,
+              icons: { '16': await containerMenuIcon(container) },
+              action: () =>
+                Messages.setTabsContainer(
+                  tabs.map((tab) => tab.uid),
+                  container.cookieStoreId,
+                ),
+            })),
+          )
+          return [
+            { id: 'afterNoContainer', label: '', type: 'separator' },
+            ...choices,
+            ...(choices.length
+              ? [
+                  {
+                    id: 'beforeNewContainer',
+                    label: '',
+                    type: 'separator' as const,
+                  },
+                ]
+              : []),
+            {
+              id: 'newContainer',
+              label: i18n.t('newContainer'),
+              action: () =>
+                openModal({
+                  kind: 'createContainer',
+                  tabUids: tabs.map((tab) => tab.uid),
+                }),
+            },
+          ]
+        } catch {
+          // Clearing saved metadata remains available with containers disabled.
+          return []
+        }
+      },
+    }
+  },
+
   openTab: () => {
     const tabs = selectedTabsForScope(
       Settings.values.contextMenuOpenDescendants,

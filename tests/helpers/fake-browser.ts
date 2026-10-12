@@ -149,6 +149,7 @@ export interface FakeBrowser {
     request: ReturnType<typeof vi.fn>
   }
   menus: {
+    refresh: ReturnType<typeof vi.fn>
     onHidden: FakeEvent<[]>
     overrideContext: ReturnType<typeof vi.fn>
     removeAll: ReturnType<typeof vi.fn>
@@ -283,6 +284,7 @@ export function installFakeBrowser(): FakeBrowser {
       request: vi.fn().mockResolvedValue(false),
     },
     menus: {
+      refresh: vi.fn().mockResolvedValue(undefined),
       onHidden: new FakeEvent<[]>(),
       overrideContext: vi.fn(),
       removeAll: vi.fn().mockResolvedValue(undefined),

@@ -25,6 +25,7 @@ interface ItemLocation {
 }
 
 let contextMenuTrigger: HTMLElement | null = null
+let menuGeneration = 0
 
 /**
  * Controls logic opening of context menu based on selected type.
@@ -93,44 +94,76 @@ export function createContextMenuItems(
  * @param items - The array of context menu items to add to browser context menu.
  */
 export function createContextMenu(items: ContextMenuItem[]): void {
+  const generation = ++menuGeneration
   const selectionSnapshot = Selection.selectedItems.value.slice()
-  for (const item of items) {
-    const optionProperties: browser.menus._CreateCreateProperties = {
-      type: 'normal',
-      title: item.label,
-      contexts: ['all'],
-      onclick: () => {
-        const currentSelection = Selection.selectedItems.value
-        Selection.selectedItems.value = selectionSnapshot
-        try {
-          item.action?.()
-        } finally {
-          selectionSnapshot.forEach(({ item: selectedItem }) => {
-            selectedItem.selected = false
-          })
-          Selection.selectedItems.value = currentSelection
-          Selection.clearSelection()
+  let nextId = 0
+  function createItems(items: ContextMenuItem[], parentId?: string): void {
+    for (const item of items) {
+      const id = `sessionflow-menu-${generation}-${nextId++}`
+      const optionProperties: browser.menus._CreateCreateProperties = {
+        id,
+        ...(parentId ? { parentId } : {}),
+        ...(item.icons ? { icons: item.icons } : {}),
+        type: item.type ?? 'normal',
+        title: item.label,
+        contexts: ['all'],
+        onclick: () => {
+          menuGeneration++
+          const currentSelection = Selection.selectedItems.value
+          Selection.selectedItems.value = selectionSnapshot
+          try {
+            item.action?.()
+          } finally {
+            selectionSnapshot.forEach(({ item: selectedItem }) => {
+              selectedItem.selected = false
+            })
+            Selection.selectedItems.value = currentSelection
+            Selection.clearSelection()
+          }
+        },
+      }
+      if (item.type === 'separator') {
+        delete optionProperties.title
+        delete optionProperties.onclick
+      }
+      if (item.submenu || item.loadSubmenu) delete optionProperties.onclick
+      if (item.enabled === false) {
+        optionProperties.enabled = false
+      }
+      try {
+        browser.menus.create(optionProperties)
+        if (item.submenu) createItems(item.submenu, id)
+        if (item.loadSubmenu && item.enabled !== false) {
+          void item
+            .loadSubmenu()
+            .then(async (children) => {
+              if (generation !== menuGeneration || !children.length) return
+              createItems(children, id)
+              await browser.menus.refresh()
+            })
+            .catch((error) => {
+              console.error(
+                `Failed to load context submenu "${item.label}":`,
+                error,
+              )
+            })
         }
-      },
-    }
-    if (item.enabled === false) {
-      optionProperties.enabled = false
-    }
-    try {
-      browser.menus.create(optionProperties)
-    } catch (error) {
-      console.error(
-        `Failed to create context menu item "${item.label}":`,
-        error,
-      )
+      } catch (error) {
+        console.error(
+          `Failed to create context menu item "${item.label}":`,
+          error,
+        )
+      }
     }
   }
+  createItems(items)
 }
 
 /**
  * Clears all context menu items that have been added.
  */
 export async function clear(): Promise<void> {
+  menuGeneration++
   try {
     await browser.menus.removeAll()
   } catch (error) {
@@ -139,6 +172,7 @@ export async function clear(): Promise<void> {
 }
 
 export function handleContextMenuHidden(): void {
+  menuGeneration++
   Selection.clearSelection()
   contextMenuTrigger?.focus({ preventScroll: true })
   contextMenuTrigger = null

@@ -26,6 +26,10 @@ import {
   openSessionTreePopup,
 } from './support/session-tree-popup.mjs'
 import { createNativeTabGroup } from './support/tab-groups.mjs'
+import {
+  readFirefoxContextSubmenu,
+  dismissFirefoxContextMenu,
+} from './support/firefox-chrome-context.mjs'
 import { closeOptionsPage, openOptionsPage } from './support/options-page.mjs'
 
 const TITLES = {
@@ -119,6 +123,234 @@ describe('Firefox container workflows', () => {
 
     expect(await tabCookieStore(restoredTab.id)).toBe(identity.cookieStoreId)
     expect(createdTab.id).not.toBe(restoredTab.id)
+  })
+
+  it('sets and clears containers through the tab context menu while preserving tree identity', async () => {
+    const work = await trackedContainer({
+      name: 'Context menu Work',
+      color: 'blue',
+      icon: 'briefcase',
+    })
+    const personal = await trackedContainer({
+      name: 'Context menu Personal',
+      color: 'purple',
+      icon: 'fingerprint',
+    })
+    const created = await trackedContainerTab(work.cookieStoreId, TITLES.work)
+    const neighbour = await trackedContainerTab(
+      work.cookieStoreId,
+      TITLES.workSecond,
+    )
+    const title = extensionFixtureTitle(TITLES.work)
+    await createNativeTabGroup(
+      [title, extensionFixtureTitle(TITLES.workSecond)],
+      {
+        title: 'Container assignment group',
+        color: 'blue',
+      },
+    )
+    const initial = await waitForTreeTabById(
+      created.id,
+      (tab) =>
+        Boolean(tab.container) &&
+        tab.tabGroup?.title === 'Container assignment group',
+    )
+    await sessionTree.waitForItemTextVisible(title)
+
+    await sessionTree.captureContextMenuItems()
+    await sessionTree.openTabContextMenu(title)
+    let nativeChoices
+    await browser.waitUntil(
+      async () => {
+        nativeChoices = await readFirefoxContextSubmenu('Set Container')
+        return nativeChoices.some((item) => item.label === personal.name)
+      },
+      {
+        timeout: 10_000,
+        timeoutMsg:
+          'Expected the native Set Container submenu with current Firefox containers.',
+      },
+    )
+    expect(nativeChoices[0].label).toBe('No Container')
+    expect(nativeChoices[1].type).toBe('separator')
+    expect(nativeChoices.at(-2).type).toBe('separator')
+    expect(nativeChoices.at(-1).label).toBe('New Container')
+    expect(
+      nativeChoices.find((item) => item.label === personal.name).image,
+    ).toContain('data:image/svg+xml,')
+    await dismissFirefoxContextMenu()
+    await sessionTree.clickCapturedContextMenuItem(personal.name)
+    const menuItems = await browser.execute(() =>
+      window.__sessionFlowE2eContextMenuItems.map(
+        ({ id, parentId, title, icons }) => ({ id, parentId, title, icons }),
+      ),
+    )
+    const parentMenu = menuItems.find((item) => item.title === 'Set Container')
+    const choices = menuItems.filter((item) => item.parentId === parentMenu.id)
+    expect(choices[0].title).toBe('No Container')
+    expect(
+      choices.find((item) => item.title === personal.name).icons['16'],
+    ).toContain('data:image/svg+xml,')
+    const coloredIcon = decodeURIComponent(
+      choices
+        .find((item) => item.title === personal.name)
+        .icons['16'].split(',')[1],
+    )
+    expect(coloredIcon).toContain(personal.colorCode)
+    expect(coloredIcon).toContain('id="fingerprint"')
+    expect(menuItems.some((item) => item.title === 'Clear container')).toBe(
+      false,
+    )
+    const changed = await waitForTreeTabByUid(
+      initial.uid,
+      (tab) =>
+        tab.id !== created.id &&
+        tab.container?.cookieStoreId === personal.cookieStoreId,
+    )
+    tabIds.push(changed.id)
+    expect(changed.uid).toBe(initial.uid)
+    expect(changed.windowUid).toBe(initial.windowUid)
+    expect(changed.tabGroup?.uid).toBe(initial.tabGroup.uid)
+    expect(changed.tabGroup?.id).toBe(initial.tabGroup.id)
+    const groupOrder = await browser.executeAsync((groupId, done) => {
+      window.browser.tabs
+        .query({ groupId })
+        .then((tabs) => done(tabs.map((tab) => tab.id)))
+    }, initial.tabGroup.id)
+    expect(groupOrder).toEqual([changed.id, neighbour.id])
+    expect(await tabCookieStore(changed.id)).toBe(personal.cookieStoreId)
+    expect(await tabCookieStore(created.id)).toBeNull()
+
+    await sessionTree.captureContextMenuItems()
+    await sessionTree.openTabContextMenu(title)
+    await sessionTree.clickCapturedContextMenuItem('No Container')
+    const cleared = await waitForTreeTabByUid(
+      initial.uid,
+      (tab) => !tab.container && tab.id !== changed.id,
+    )
+    tabIds.push(cleared.id)
+    expect(await tabCookieStore(cleared.id)).toBe('firefox-default')
+    expect(await tabCookieStore(changed.id)).toBeNull()
+    expect(cleared.tabGroup?.uid).toBe(initial.tabGroup.uid)
+    expect(cleared.tabGroup?.id).toBe(initial.tabGroup.id)
+
+    await saveTreeTab(cleared)
+    await waitForTreeTabByUid(
+      initial.uid,
+      (tab) => tab.state === TreeItemState.Saved,
+    )
+    await sessionTree.captureContextMenuItems()
+    await sessionTree.openTabContextMenu(title)
+    await sessionTree.clickCapturedContextMenuItem(work.name)
+    const saved = await waitForTreeTabByUid(
+      initial.uid,
+      (tab) => tab.container?.cookieStoreId === work.cookieStoreId,
+    )
+    expect(saved.state).toBe(TreeItemState.Saved)
+    expect(saved.id).toBeLessThan(1)
+    await sessionTree.sendTreeCommand({
+      action: 'openTab',
+      tabUid: saved.uid,
+      windowUid: saved.windowUid,
+    })
+    const restored = await waitForTreeTabByUid(
+      initial.uid,
+      (tab) => tab.state === TreeItemState.Open && tab.id > 0,
+    )
+    tabIds.push(restored.id)
+    expect(await tabCookieStore(restored.id)).toBe(work.cookieStoreId)
+  })
+
+  it('creates a container and applies it to selected open and saved tabs', async () => {
+    const originalContainer = await trackedContainer({
+      name: 'Original',
+      color: 'blue',
+      icon: 'briefcase',
+    })
+    const created = await trackedContainerTab(
+      originalContainer.cookieStoreId,
+      TITLES.work,
+    )
+    const title = extensionFixtureTitle(TITLES.work)
+    const initial = await waitForTreeTabById(created.id, (tab) =>
+      Boolean(tab.container),
+    )
+    const savedBrowserTab = await trackedContainerTab(
+      originalContainer.cookieStoreId,
+      TITLES.workSecond,
+    )
+    const savedTitle = extensionFixtureTitle(TITLES.workSecond)
+    const savedInitial = await waitForTreeTabById(savedBrowserTab.id, (tab) =>
+      Boolean(tab.container),
+    )
+    await saveTreeTab(savedInitial)
+    await waitForTreeTabByUid(
+      savedInitial.uid,
+      (tab) => tab.state === TreeItemState.Saved,
+    )
+    await waitForSavedTreeItem(savedInitial.uid, savedTitle)
+    const before = await containerIdentities()
+
+    await sessionTree.captureContextMenuItems()
+    await sessionTree.openTabContextMenu(title)
+    await sessionTree.clickCapturedContextMenuItem('New Container')
+    const modal = await browser.$('.create-container-modal')
+    await expect(modal).toBeDisplayed()
+    await expect(modal.$('button[type="submit"]')).toBeDisabled()
+    await browser.keys('Escape')
+    await expect(modal).not.toExist()
+    expect((await containerIdentities()).length).toBe(before.length)
+
+    await sessionTree.selectTreeItemRange(title, savedTitle)
+    await sessionTree.captureContextMenuItems()
+    await sessionTree.openTabContextMenu(title)
+    await sessionTree.clickCapturedContextMenuItem('New Container')
+    const input = await browser.$('#container-name')
+    await input.setValue('   ')
+    await expect(
+      browser.$('.create-container-modal button[type="submit"]'),
+    ).toBeDisabled()
+    const name = `SF E2E New Container ${Date.now()}`
+    await input.setValue(name)
+    await browser
+      .$('.container-choice:has(input[name="container-color"][value="orange"])')
+      .click()
+    await browser
+      .$('.container-choice:has(input[name="container-icon"][value="fruit"])')
+      .click()
+    await browser.$('.create-container-modal button[type="submit"]').click()
+    await expect(browser.$('.create-container-modal')).not.toExist()
+    let identity
+    await browser.waitUntil(
+      async () => {
+        identity = (await containerIdentities()).find(
+          (item) => item.name === name,
+        )
+        return Boolean(identity)
+      },
+      {
+        timeout: 10_000,
+        timeoutMsg: 'Expected the container created from the modal.',
+      },
+    )
+    identities.push(identity)
+    expect(identity).toMatchObject({ name, color: 'orange', icon: 'fruit' })
+    const assigned = await waitForTreeTabByUid(
+      initial.uid,
+      (tab) =>
+        tab.container?.cookieStoreId === identity.cookieStoreId &&
+        tab.id !== created.id,
+    )
+    tabIds.push(assigned.id)
+    expect(await tabCookieStore(assigned.id)).toBe(identity.cookieStoreId)
+    expect(await tabCookieStore(created.id)).toBeNull()
+    const savedAssigned = await waitForTreeTabByUid(
+      savedInitial.uid,
+      (tab) => tab.container?.cookieStoreId === identity.cookieStoreId,
+    )
+    expect(savedAssigned.state).toBe(TreeItemState.Saved)
+    expect(savedAssigned.id).toBeLessThan(1)
+    expect(await tabCookieStore(savedBrowserTab.id)).toBeNull()
   })
 
   it('refreshes saved container metadata when Firefox updates an identity', async () => {

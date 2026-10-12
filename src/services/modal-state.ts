@@ -8,6 +8,7 @@ import {
 import { reactive } from 'vue'
 
 export type ActiveModal =
+  | { kind: 'createContainer'; tabUids: UID[] }
   | {
       kind: 'editWindowTitle'
       window: Window

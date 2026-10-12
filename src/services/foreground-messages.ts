@@ -64,6 +64,40 @@ async function sendBulkCommands(
 // Tab Messages
 // ==============================
 
+export function setTabsContainer(
+  tabUids: UID[],
+  cookieStoreId?: string,
+): Promise<void> {
+  return sendBulkCommands(
+    [...new Set(tabUids)].map((tabUid) => ({
+      action: 'setTabContainer',
+      tabUid,
+      cookieStoreId,
+    })),
+    (failedCount, totalCount) =>
+      i18n.t('containerChangeFailed', [
+        formatNumber(failedCount),
+        formatNumber(totalCount),
+      ]),
+  )
+}
+
+export async function createContainer(
+  details: Omit<Messages.CreateContainerMessage, 'action'>,
+  tabUids: UID[] = [],
+): Promise<void> {
+  const result = await sendTreeCommand({
+    action: 'createContainer',
+    ...details,
+  })
+  if (tabUids.length) {
+    if (!result?.createdContainerStoreId) {
+      throw new Error(i18n.t('containerCreateFailed'))
+    }
+    await setTabsContainer(tabUids, result.createdContainerStoreId)
+  }
+}
+
 export function closeTab(tabId: number, tabUid: UID): Promise<void> {
   return sendActionCommand(
     {

@@ -32,6 +32,7 @@ export interface SessionTreeCommandWarning {
 
 export interface SessionTreeCommandResult {
   warnings?: SessionTreeCommandWarning[]
+  createdContainerStoreId?: string
 }
 
 export interface SessionTreePortResponse {

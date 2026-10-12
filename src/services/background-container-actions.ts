@@ -1,10 +1,18 @@
 import { i18n } from '@/services/i18n'
 import { Tree } from '@/services/background-tree'
+import { OnCreatedQueue } from '@/services/background-on-created-queue'
+import {
+  claimTabRelocation,
+  removeBrowserTab,
+} from '@/services/background-command-removal'
+import { discardedUrlPrecheck, prepareRestorableUrl } from '@/services/utils'
 import {
   CONTAINER_RECOVERY_STALE_ERROR,
   type ContainerRecoveryStrategy,
+  type SetTabContainerMessage,
 } from '@/types/messages'
-import type { ContainerMetadata, Tab } from '@/types/session-tree'
+import { State, type ContainerMetadata, type Tab } from '@/types/session-tree'
+import type { SessionTreeCommandResult } from '@/types/runtime-port-service'
 
 type ContextualIdentityChangeInfo = {
   contextualIdentity: browser.contextualIdentities.ContextualIdentity
@@ -61,6 +69,20 @@ export async function initializeContainers(): Promise<void> {
   }
 }
 
+export async function createContainer(
+  details: CreateContainerDetails,
+): Promise<SessionTreeCommandResult> {
+  const name = details.name.trim()
+  if (!name) throw new Error(i18n.t('containerNameRequired'))
+  const identity = await browser.contextualIdentities.create({
+    name,
+    color: details.color,
+    icon: details.icon,
+  })
+  containerCreated({ contextualIdentity: identity })
+  return { createdContainerStoreId: identity.cookieStoreId }
+}
+
 export function containerForCookieStore(
   cookieStoreId?: string,
 ): ContainerMetadata | undefined {
@@ -115,6 +137,124 @@ export function containerRemoved(
 export function resetContainerState(): void {
   liveContainers.clear()
   containerEventVersion = 0
+}
+
+/** Replaces only the browser tab, retaining the tree item's stable identity. */
+export async function setTabContainer(
+  message: Omit<SetTabContainerMessage, 'action'>,
+): Promise<void> {
+  const tab = Tree.tabsByUid.get(message.tabUid)
+  if (!tab) throw new Error(i18n.t('savedTabNotFound'))
+  const window = Tree.windowsByUid.get(tab.windowUid)
+  if (!window) throw new Error(i18n.t('savedTabWindowNotFound'))
+
+  let container: ContainerMetadata | undefined
+  if (message.cookieStoreId !== undefined) {
+    if (window.incognito) throw new Error(i18n.t('containerPrivateUnavailable'))
+    await refreshContainersFromFirefox()
+    container = containerForCookieStore(message.cookieStoreId)
+    if (!container) throw new Error(i18n.t('containerSelectionUnavailable'))
+  }
+
+  if (tab.state === State.SAVED) {
+    Tree.updateTab({ tabUid: tab.uid }, { container })
+    return
+  }
+  if (tab.state !== State.OPEN && tab.state !== State.DISCARDED) return
+
+  const original = await browser.tabs.get(tab.id)
+  if (original.id === undefined || original.windowId !== window.id) {
+    throw new Error(i18n.t('tabCreationWindowMismatch'))
+  }
+  const targetStoreId =
+    container?.cookieStoreId ??
+    (window.incognito ? 'firefox-private' : 'firefox-default')
+  if (original.cookieStoreId === targetStoreId) {
+    Tree.updateTab({ tabUid: tab.uid }, { container })
+    return
+  }
+
+  const prepared = prepareRestorableUrl(original.url ?? tab.url, tab.title)
+  const url = prepared.kind === 'url' ? prepared.url : undefined
+  const discarded =
+    original.discarded &&
+    !original.pinned &&
+    !original.active &&
+    !!url &&
+    discardedUrlPrecheck(url)
+  const properties: browser.tabs._CreateCreateProperties = {
+    windowId: original.windowId,
+    index: original.index,
+    cookieStoreId: targetStoreId,
+    active: false,
+    pinned: original.pinned,
+    muted: original.mutedInfo?.muted ?? false,
+    ...(url ? { url } : {}),
+    ...(discarded ? { discarded: true, title: tab.title } : {}),
+  }
+
+  // Keep the original open until creation and grouping have succeeded, including
+  // when this is the window's last tab. Failed replacement leaves it intact.
+  let replacement: browser.tabs.Tab | undefined
+  try {
+    replacement = await OnCreatedQueue.createTabAndWait(properties)
+    if (replacement.id === undefined) throw new Error(i18n.t('tabCreationNoId'))
+    if (replacement.windowId !== original.windowId) {
+      throw new Error(i18n.t('tabCreationWindowMismatch'))
+    }
+    if ((original.groupId ?? -1) !== -1) {
+      const releaseRelocation = claimTabRelocation(replacement.id)
+      try {
+        await browser.tabs.group({
+          groupId: original.groupId,
+          tabIds: [replacement.id],
+        })
+        // Firefox can append a joining tab to its group. Return it to the
+        // original slot before removing the old tab so tree/browser order agree.
+        await browser.tabs.move(replacement.id, { index: original.index })
+      } finally {
+        releaseRelocation()
+      }
+    }
+    await removeBrowserTab(original.id)
+  } catch (error) {
+    if (replacement?.id !== undefined) {
+      await removeBrowserTab(replacement.id).catch((cleanupError) => {
+        console.error(
+          'Failed to remove container replacement tab:',
+          cleanupError,
+        )
+      })
+    }
+    throw error
+  }
+
+  Tree.updateTab(
+    { tabUid: tab.uid },
+    {
+      container,
+      state: replacement.discarded ? State.DISCARDED : State.OPEN,
+      active: original.active,
+    },
+  )
+  Tree.updateTabId(tab.uid, replacement.id!)
+  if ((original.groupId ?? -1) !== -1) {
+    // Membership events can arrive before the new browser id is indexed.
+    // Refresh after rebinding to retain the group's live identity in the tree.
+    try {
+      await Tree.tabGroupMembershipChanged(replacement.id!, original.groupId!)
+    } catch (error) {
+      // Replacement has succeeded; metadata refresh must not prevent activation.
+      console.warn(
+        'Failed to refresh tab group after container replacement:',
+        error,
+      )
+    }
+  }
+  if (original.active) {
+    Tree.updateWindow(window.uid, { activeTabId: replacement.id })
+    await browser.tabs.update(replacement.id!, { active: true })
+  }
 }
 
 export async function resolveContainerRecovery(

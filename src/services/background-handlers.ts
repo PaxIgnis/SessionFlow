@@ -1355,7 +1355,8 @@ function getCommandCoordination(message: Messages.SessionTreeMessage):
     message.action === 'closeTab' ||
     message.action === 'saveTab' ||
     message.action === 'focusTab' ||
-    message.action === 'reloadTab'
+    message.action === 'reloadTab' ||
+    message.action === 'setTabContainer'
   ) {
     return { itemUids: [message.tabUid], coalesce: true }
   }
@@ -1391,6 +1392,10 @@ async function dispatchCommandNow(
     await Tree.saveTab(message)
   } else if (message.action === 'openTab') {
     await Tree.openTab(message)
+  } else if (message.action === 'setTabContainer') {
+    await Tree.setTabContainer(message)
+  } else if (message.action === 'createContainer') {
+    return Tree.createContainer(message)
   } else if (message.action === 'reloadTab') {
     Browser.reloadTab({
       tabId: Tree.resolveTabId(message.tabUid, message.tabId),

@@ -29,6 +29,113 @@ vi.mock('@/services/notification-state', () => ({
 }))
 
 describe('foreground message helpers', () => {
+  it('creates a container and assigns it to the captured tabs once each', async () => {
+    const { createContainer } = await import('@/services/foreground-messages')
+    const details = { name: 'New', color: 'orange', icon: 'fruit' }
+    sendTreeCommand.mockResolvedValueOnce({
+      createdContainerStoreId: 'firefox-container-new',
+    })
+    await createContainer(details, [
+      'saved' as UID,
+      'live' as UID,
+      'saved' as UID,
+    ])
+    expect(sendTreeCommand.mock.calls.map(([message]) => message)).toEqual([
+      { action: 'createContainer', ...details },
+      {
+        action: 'setTabContainer',
+        tabUid: 'saved',
+        cookieStoreId: 'firefox-container-new',
+      },
+      {
+        action: 'setTabContainer',
+        tabUid: 'live',
+        cookieStoreId: 'firefox-container-new',
+      },
+    ])
+    expect(showNotification).not.toHaveBeenCalled()
+  })
+
+  it('does not assign tabs if container creation fails', async () => {
+    const { createContainer } = await import('@/services/foreground-messages')
+    sendTreeCommand.mockRejectedValueOnce(new Error('creation failed'))
+    await expect(
+      createContainer({ name: 'New', color: 'blue', icon: 'circle' }, [
+        'selected' as UID,
+      ]),
+    ).rejects.toThrow('creation failed')
+    expect(sendTreeCommand).toHaveBeenCalledOnce()
+  })
+
+  it('reports assignment failures after creation without retrying creation', async () => {
+    const { createContainer } = await import('@/services/foreground-messages')
+    sendTreeCommand
+      .mockResolvedValueOnce({
+        createdContainerStoreId: 'firefox-container-new',
+      })
+      .mockRejectedValueOnce(new Error('tab replacement failed'))
+      .mockResolvedValueOnce(undefined)
+    await expect(
+      createContainer({ name: 'New', color: 'blue', icon: 'circle' }, [
+        'first' as UID,
+        'second' as UID,
+      ]),
+    ).resolves.toBeUndefined()
+    expect(
+      sendTreeCommand.mock.calls.filter(
+        ([message]) => message.action === 'createContainer',
+      ),
+    ).toHaveLength(1)
+    expect(showNotification).toHaveBeenCalledWith(
+      'Session Flow could not change the container for 1 of 2 tabs.',
+    )
+  })
+
+  it('creates containers through the runtime port and lets the modal handle failures', async () => {
+    const { createContainer } = await import('@/services/foreground-messages')
+    const details = { name: 'New', color: 'orange', icon: 'fruit' }
+    await createContainer(details)
+    expect(sendTreeCommand).toHaveBeenCalledWith({
+      action: 'createContainer',
+      ...details,
+    })
+    sendTreeCommand.mockRejectedValueOnce(new Error('creation failed'))
+    await expect(createContainer(details)).rejects.toThrow('creation failed')
+    expect(showNotification).not.toHaveBeenCalled()
+  })
+  it('sends distinct container commands and reports partial failures', async () => {
+    const { setTabsContainer } = await import('@/services/foreground-messages')
+    sendTreeCommand
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('container deleted'))
+    await setTabsContainer(
+      ['first' as UID, 'first' as UID, 'second' as UID],
+      'firefox-container-1',
+    )
+    expect(sendTreeCommand.mock.calls.map(([message]) => message)).toEqual([
+      {
+        action: 'setTabContainer',
+        tabUid: 'first',
+        cookieStoreId: 'firefox-container-1',
+      },
+      {
+        action: 'setTabContainer',
+        tabUid: 'second',
+        cookieStoreId: 'firefox-container-1',
+      },
+    ])
+    expect(showNotification).toHaveBeenCalledWith(
+      'Session Flow could not change the container for 1 of 2 tabs.',
+    )
+    sendTreeCommand.mockClear()
+    await setTabsContainer(['first' as UID])
+    expect(sendTreeCommand).toHaveBeenCalledWith({
+      action: 'setTabContainer',
+      tabUid: 'first',
+      cookieStoreId: undefined,
+    })
+  })
+
   beforeEach(() => {
     installFakeBrowser()
     sendTreeCommand.mockClear()

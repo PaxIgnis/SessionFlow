@@ -23,9 +23,12 @@ export const enum ContextMenuItemType {
 export interface ContextMenuItem {
   id: string
   label: string
+  type?: 'normal' | 'separator'
   icon?: string
+  icons?: Record<string, string>
   enabled?: boolean
   submenu?: ContextMenuItem[]
+  loadSubmenu?: () => Promise<ContextMenuItem[]>
   action?: () => void
 }
 

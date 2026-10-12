@@ -3,6 +3,7 @@ import { Selection } from '@/services/selection'
 import { Settings } from '@/services/settings'
 import { SessionTree } from '@/services/foreground-tree'
 import { SelectionType, State } from '@/types/session-tree'
+import { installFakeBrowser } from '../../helpers/fake-browser'
 import {
   makeForegroundTab,
   makeForegroundWindow,
@@ -14,6 +15,7 @@ const reloadTabs = vi.hoisted(() => vi.fn())
 const saveTabs = vi.hoisted(() => vi.fn())
 const pinTabs = vi.hoisted(() => vi.fn())
 const unpinTabs = vi.hoisted(() => vi.fn())
+const setTabsContainer = vi.hoisted(() => vi.fn())
 const saveWindows = vi.hoisted(() => vi.fn())
 const openModal = vi.hoisted(() => vi.fn())
 
@@ -23,6 +25,7 @@ vi.mock('@/services/foreground-messages', () => ({
   saveTabs,
   pinTabs,
   unpinTabs,
+  setTabsContainer,
   saveWindows,
 }))
 
@@ -30,7 +33,125 @@ vi.mock('@/services/modal-state', () => ({
   openModal,
 }))
 
+vi.mock('@/services/container-menu-icons', () => ({
+  containerMenuIcon: vi.fn(
+    async (container) => `colored-${container.icon}-${container.colorCode}`,
+  ),
+}))
+
 describe('tab context menu items', () => {
+  const browser = installFakeBrowser()
+  it('still offers clearing when Firefox containers are disabled', async () => {
+    const tab = makeForegroundTab('saved' as UID, {
+      container: {
+        cookieStoreId: 'deleted',
+        name: 'Old container',
+        color: 'blue',
+        colorCode: '#37adff',
+        icon: 'briefcase',
+      },
+    })
+    resetForegroundTree([makeForegroundWindow('window' as UID, [tab])])
+    Selection.selectedItems.value = [
+      { item: SessionTree.tabsByUid.get(tab.uid)!, type: SelectionType.TAB },
+    ]
+    browser.contextualIdentities.query.mockRejectedValueOnce(
+      new Error('disabled'),
+    )
+    const { contextMenuItemsTab } =
+      await import('@/services/context-menu-items-tab')
+    const menu = contextMenuItemsTab.setContainer()
+    expect(await menu.loadSubmenu!()).toEqual([])
+    expect(menu.submenu![0].enabled).toBe(true)
+    menu.submenu![0].action?.()
+    expect(setTabsContainer).toHaveBeenCalledWith([tab.uid])
+  })
+  it('sets and clears only selected tabs without changing unselected descendants', async () => {
+    const parent = makeForegroundTab('parent' as UID, {
+      collapsed: true,
+      isParent: true,
+    })
+    const child = makeForegroundTab('child' as UID, { parentUid: parent.uid })
+    const container = {
+      cookieStoreId: 'firefox-container-1',
+      name: 'Work',
+      color: 'blue',
+      colorCode: '#37adff',
+      icon: 'briefcase',
+    }
+    const second = makeForegroundTab('second' as UID, { container })
+    browser.contextualIdentities.query.mockResolvedValue([container])
+    resetForegroundTree([
+      makeForegroundWindow('window' as UID, [parent, child, second]),
+    ])
+    Selection.selectedItems.value = [parent, second].map((tab) => ({
+      item: SessionTree.tabsByUid.get(tab.uid)!,
+      type: SelectionType.TAB,
+    }))
+    const { contextMenuItemsTab } =
+      await import('@/services/context-menu-items-tab')
+    const set = contextMenuItemsTab.setContainer()
+    expect(set.enabled).toBe(true)
+    expect(set.submenu?.[0].label).toBe('No Container')
+    const options = await set.loadSubmenu!()
+    expect(options.map((item) => item.type ?? item.label)).toEqual([
+      'separator',
+      'Work',
+      'separator',
+      'New Container',
+    ])
+    expect(options[1]).toMatchObject({
+      label: 'Work',
+      icons: { '16': 'colored-briefcase-#37adff' },
+    })
+    options[1].action?.()
+    expect(setTabsContainer).toHaveBeenCalledWith(
+      [parent.uid, second.uid],
+      container.cookieStoreId,
+    )
+    const clear = set.submenu![0]
+    expect(clear.enabled).toBe(true)
+    clear.action?.()
+    expect(setTabsContainer).toHaveBeenCalledWith([second.uid])
+    expect(openModal).not.toHaveBeenCalled()
+    Selection.selectedItems.value = []
+    options.at(-1)!.action?.()
+    expect(openModal).toHaveBeenCalledWith({
+      kind: 'createContainer',
+      tabUids: [parent.uid, second.uid],
+    })
+  })
+
+  it('offers creation when there are no containers without consecutive separators', async () => {
+    const tab = makeForegroundTab('normal' as UID)
+    resetForegroundTree([makeForegroundWindow('window' as UID, [tab])])
+    Selection.selectedItems.value = [
+      { item: SessionTree.tabsByUid.get(tab.uid)!, type: SelectionType.TAB },
+    ]
+    browser.contextualIdentities.query.mockResolvedValueOnce([])
+    const { contextMenuItemsTab } =
+      await import('@/services/context-menu-items-tab')
+    expect(
+      (await contextMenuItemsTab.setContainer().loadSubmenu!()).map(
+        (item) => item.type ?? item.label,
+      ),
+    ).toEqual(['separator', 'New Container'])
+  })
+
+  it('disables assignment for private tabs and clearing when no container is selected', async () => {
+    const tab = makeForegroundTab('private' as UID)
+    resetForegroundTree([
+      makeForegroundWindow('window' as UID, [tab], { incognito: true }),
+    ])
+    Selection.selectedItems.value = [
+      { item: SessionTree.tabsByUid.get(tab.uid)!, type: SelectionType.TAB },
+    ]
+    const { contextMenuItemsTab } =
+      await import('@/services/context-menu-items-tab')
+    expect(contextMenuItemsTab.setContainer().enabled).toBe(false)
+    expect(contextMenuItemsTab.setContainer().submenu![0].enabled).toBe(false)
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
     Selection.selectedItems.value = []

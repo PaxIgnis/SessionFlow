@@ -43,6 +43,20 @@ export interface PinTabMessage {
   tabUid: UID
 }
 
+export interface SetTabContainerMessage {
+  action: 'setTabContainer'
+  tabUid: UID
+  /** Omit to clear the container. */
+  cookieStoreId?: string
+}
+
+export interface CreateContainerMessage {
+  action: 'createContainer'
+  name: string
+  color: string
+  icon: string
+}
+
 export interface ReloadTabMessage {
   action: 'reloadTab'
   tabId: number
@@ -238,6 +252,7 @@ export interface DeselectAllItemsMessage {
 
 export type SessionTreeMessage =
   | CloseTabMessage
+  | CreateContainerMessage
   | CloseWindowMessage
   | CreateSeparatorMessage
   | CreateSeparatorBelowMessage
@@ -262,6 +277,7 @@ export type SessionTreeMessage =
   | RemoveSeparatorMessage
   | SaveAndRemoveWindowMessage
   | SaveTabMessage
+  | SetTabContainerMessage
   | TreeItemIndentDecreaseMessage
   | TreeItemIndentIncreaseMessage
   | ToggleCollapseTabMessage

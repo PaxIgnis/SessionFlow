@@ -63,6 +63,114 @@ vi.mock('@/services/modal-state', () => ({
 }))
 
 describe('context menu actions', () => {
+  it('renders submenu dividers as native separators without click handlers or titles', () => {
+    createContextMenu([
+      {
+        id: 'parent',
+        label: 'Set Container',
+        submenu: [
+          { id: 'none', label: 'No Container' },
+          { id: 'divider', label: '', type: 'separator' },
+          { id: 'add', label: 'Add New Container' },
+        ],
+      },
+    ])
+    const properties = vi
+      .mocked(browser.menus.create)
+      .mock.calls.map(([item]) => item)
+    expect(properties[2]).toMatchObject({
+      type: 'separator',
+      parentId: properties[0].id,
+    })
+    expect(properties[2].onclick).toBeUndefined()
+    expect(properties[2].title).toBeUndefined()
+  })
+  it('adds colored submenu choices under their parent and preserves selection for delayed clicks', async () => {
+    const action = vi.fn(() =>
+      expect(Selection.getSelectedTabs().map((tab) => tab.uid)).toEqual([
+        'selected',
+      ]),
+    )
+    const selected = makeForegroundTab('selected' as UID)
+    Selection.selectedItems.value = [
+      { item: selected, type: SelectionType.TAB },
+    ]
+    createContextMenu([
+      {
+        id: 'setContainer',
+        label: 'Set Container',
+        submenu: [{ id: 'none', label: 'No Container', action: vi.fn() }],
+        loadSubmenu: async () => [
+          {
+            id: 'work',
+            label: 'Work',
+            icons: { '16': 'data:image/svg+xml,work' },
+            action,
+          },
+        ],
+      },
+    ])
+    await Promise.resolve()
+    await Promise.resolve()
+    const properties = vi
+      .mocked(browser.menus.create)
+      .mock.calls.map(([item]) => item)
+    expect(properties[0].onclick).toBeUndefined()
+    expect(properties[1].parentId).toBe(properties[0].id)
+    expect(properties[2]).toMatchObject({
+      parentId: properties[0].id,
+      icons: { '16': 'data:image/svg+xml,work' },
+    })
+    expect(browser.menus.refresh).toHaveBeenCalledOnce()
+    handleContextMenuHidden()
+    properties[2].onclick?.(
+      {} as browser.menus.OnClickData,
+      {} as browser.tabs.Tab,
+    )
+    expect(action).toHaveBeenCalledOnce()
+    expect(Selection.selectedItems.value).toEqual([])
+  })
+
+  it('discards late submenu results after the native menu closes', async () => {
+    let resolve!: (items: ContextMenuItem[]) => void
+    createContextMenu([
+      {
+        id: 'parent',
+        label: 'Parent',
+        submenu: [{ id: 'none', label: 'No Container' }],
+        loadSubmenu: () =>
+          new Promise((done) => {
+            resolve = done
+          }),
+      },
+    ])
+    handleContextMenuHidden()
+    resolve([{ id: 'late', label: 'Late container' }])
+    await Promise.resolve()
+    expect(browser.menus.create).toHaveBeenCalledTimes(2)
+    expect(browser.menus.refresh).not.toHaveBeenCalled()
+  })
+
+  it('discards late submenu results after another menu replaces it', async () => {
+    let resolve!: (items: ContextMenuItem[]) => void
+    createContextMenu([
+      {
+        id: 'parent',
+        label: 'Parent',
+        submenu: [],
+        loadSubmenu: () =>
+          new Promise((done) => {
+            resolve = done
+          }),
+      },
+    ])
+    createContextMenu([{ id: 'next', label: 'Next menu' }])
+    resolve([{ id: 'late', label: 'Late container' }])
+    await Promise.resolve()
+    expect(browser.menus.create).toHaveBeenCalledTimes(2)
+    expect(browser.menus.refresh).not.toHaveBeenCalled()
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
     installFakeBrowser()

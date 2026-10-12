@@ -348,6 +348,21 @@ function isSessionTreeCommand(
             Array.isArray(item) && item.every((id) => typeof id === 'string'),
         )
       )
+    case 'createContainer':
+      return (
+        typeof value.name === 'string' &&
+        value.name.trim() !== '' &&
+        hasString(value, 'color') &&
+        value.color !== '' &&
+        hasString(value, 'icon') &&
+        value.icon !== ''
+      )
+    case 'setTabContainer':
+      return (
+        hasString(value, 'tabUid') &&
+        (value.cookieStoreId === undefined ||
+          (hasString(value, 'cookieStoreId') && value.cookieStoreId !== ''))
+      )
     case 'pinTab':
     case 'toggleCollapseTab':
     case 'unpinTab':

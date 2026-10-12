@@ -3,6 +3,7 @@ import { i18n, formatNumber } from '@/services/i18n'
 import IconChevronRight from '@/assets/chevron-right.svg'
 import IconPinned from '@/assets/pinned.svg'
 import ContainerRecoveryModal from '@/components/ContainerRecoveryModal.vue'
+import CreateContainerModal from '@/components/CreateContainerModal.vue'
 import DeleteTreeItemsModal from '@/components/DeleteTreeItemsModal.vue'
 import EditTextModal from '@/components/EditTextModal.vue'
 import SessionTreeNotification from '@/components/SessionTreeNotification.vue'
@@ -67,6 +68,7 @@ const containerRecoveryPending = ref(false)
 const deleteTreeItemsPending = ref(false)
 const blockingModalActive = computed(
   () =>
+    ModalState.active?.kind === 'createContainer' ||
     ModalState.active?.kind === 'containerRecovery' ||
     ModalState.active?.kind === 'deleteTreeItems',
 )
@@ -509,6 +511,12 @@ function runToolbarAction(action: () => void | Promise<void>): void {
       :placeholder="i18n.t('enterNoteText')"
       @confirm="handleEditNoteConfirm"
       @cancel="handleEditNoteCancel"
+    />
+
+    <CreateContainerModal
+      v-if="ModalState.active?.kind === 'createContainer'"
+      :tab-uids="ModalState.active.tabUids"
+      @close="closeModal()"
     />
 
     <ContainerRecoveryModal
