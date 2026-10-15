@@ -23,6 +23,7 @@ export interface OnboardingExampleItem {
   selected?: boolean
   contextMenu?: boolean
   state?: ExampleTabState
+  incognito?: boolean
   indentLevel: number
   collapsed?: boolean
   actions?: boolean

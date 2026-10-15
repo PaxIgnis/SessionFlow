@@ -69,6 +69,11 @@ export const ONBOARDING_FEATURES = [
     title: 'onboardingContainers',
     description: 'onboardingContainersDescription',
   },
+  {
+    id: 'private',
+    title: 'onboardingPrivate',
+    description: 'onboardingPrivateDescription',
+  },
 ] as const
 
 export type OnboardingFeatureId = (typeof ONBOARDING_FEATURES)[number]['id']

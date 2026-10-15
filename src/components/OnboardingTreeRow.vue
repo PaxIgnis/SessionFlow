@@ -68,6 +68,7 @@ const details = computed(
         'tree-item-state-saved':
           item.state === 'saved' && Settings.values.dimUnloadedAndSavedFavicons,
         'tree-item-window': item.kind === 'window',
+        'tree-item-window-private': item.kind === 'window' && item.incognito,
         'tree-item-note': item.kind === 'note',
         'tree-item-separator': item.kind === 'separator',
         'example-actions-visible': item.showActions,
@@ -249,14 +250,35 @@ const details = computed(
       <div
         v-if="item.kind === 'window'"
         class="tree-item-window-label"
-        :class="{ 'tree-item-window-label-saved': item.state === 'saved' }"
+        :class="{
+          'tree-item-window-label-private': item.incognito,
+          'tree-item-window-label-saved':
+            item.state === 'saved' && !item.incognito,
+        }"
+        :aria-label="
+          item.incognito
+            ? i18n.t('privateWindowDetail', [item.title])
+            : item.title
+        "
       >
+        <img
+          v-if="item.incognito"
+          class="tree-item-favicon tree-item-window-favicon"
+          :src="'/icons/private-browsing.svg'"
+          alt=""
+          @dblclick.stop
+        />
         <div
           class="tree-item-title"
           :class="`tree-item-text-${active ? 'active' : item.state === 'saved' ? 'saved' : 'open'}`"
         >
           {{ item.title }}
         </div>
+        <span
+          v-if="item.incognito"
+          class="tree-item-window-private-badge"
+          >{{ i18n.t('private') }}</span
+        >
       </div>
       <div
         v-else-if="item.kind === 'tab'"

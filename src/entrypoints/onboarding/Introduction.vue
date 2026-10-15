@@ -35,19 +35,19 @@ const heading = ref<HTMLElement>()
 const tipHeading = ref<HTMLElement>()
 const headings = [
   'onboardingWelcome',
-  'onboardingStart',
-  'includePrivateWindowsLabel',
   'onboardingReadTree',
+  'includePrivateWindowsLabel',
   'onboardingFinish',
 ] as const
 const tips = ONBOARDING_FEATURES.map((feature) => feature.title)
 const tipDescriptions = ONBOARDING_FEATURES.map(
   (feature) => feature.description,
 )
-const demoActions = ONBOARDING_FEATURES.filter(
-  (feature) => feature.id !== 'states',
-).map((feature) => feature.id)
 const currentFeature = computed(() => ONBOARDING_FEATURES[tip.value])
+const demoAction = computed(() => {
+  const id = currentFeature.value.id
+  return id === 'states' || id === 'private' ? undefined : id
+})
 const indicatorSettings = computed(() => {
   if (currentFeature.value.id === 'tab-groups') {
     return {
@@ -154,6 +154,44 @@ const accessLabel = computed(() =>
       ? i18n.t('allowed')
       : i18n.t('notAllowed'),
 )
+const privateItems = computed<OnboardingExampleItem[]>(() => [
+  {
+    id: 'regular-window',
+    kind: 'window',
+    title: i18n.t('onboardingExampleSecondWindow'),
+    state: 'live',
+    indentLevel: 0,
+  },
+  {
+    id: 'planning',
+    kind: 'tab',
+    title: i18n.t('onboardingExampleSchedule'),
+    state: 'live',
+    indentLevel: 1,
+  },
+  {
+    id: 'private-window',
+    kind: 'window',
+    title: i18n.t('onboardingExamplePrivateWindow'),
+    state: 'live',
+    incognito: true,
+    indentLevel: 0,
+  },
+  {
+    id: 'private-research',
+    kind: 'tab',
+    title: i18n.t('onboardingDemoResearch'),
+    state: 'active',
+    indentLevel: 1,
+  },
+  {
+    id: 'private-reference',
+    kind: 'tab',
+    title: i18n.t('onboardingDemoReference'),
+    state: 'unloaded',
+    indentLevel: 1,
+  },
+])
 
 async function initialize() {
   error.value = ''
@@ -175,7 +213,7 @@ async function initialize() {
         record.welcomeStep !== undefined &&
         Number.isInteger(record.welcomeStep) &&
         record.welcomeStep >= 0 &&
-        record.welcomeStep <= 4
+        record.welcomeStep < headings.length
       )
         step.value = record.welcomeStep
       if (
@@ -278,7 +316,7 @@ async function navigate(next: number, nextTip = tip.value) {
     step.value = next
     tip.value = nextTip
     await nextTick()
-    ;(next === 3 ? tipHeading.value : heading.value)?.focus()
+    ;(next === 1 ? tipHeading.value : heading.value)?.focus()
   } catch {
     error.value = i18n.t('onboardingError')
   } finally {
@@ -336,14 +374,19 @@ async function openSettings() {
     </header>
     <template v-if="!completed">
       <p class="eyebrow">
-        {{ i18n.t('onboardingProgress', [String(step + 1), '5']) }}
+        {{
+          i18n.t('onboardingProgress', [
+            String(step + 1),
+            String(headings.length),
+          ])
+        }}
       </p>
       <div
         class="progress"
         aria-hidden="true"
       >
         <span
-          v-for="n in 5"
+          v-for="n in headings.length"
           :key="n"
           :class="{ current: n <= step + 1 }"
         ></span>
@@ -364,36 +407,6 @@ async function openSettings() {
         <p class="fine-print">{{ i18n.t('onboardingSampleTree') }}</p>
         <p>{{ i18n.t('onboardingWelcomeReassurance') }}</p>
         <p>{{ i18n.t('onboardingWelcomePrivacy') }}</p>
-      </section>
-      <section v-else-if="step === 1">
-        <p>{{ i18n.t('onboardingStartDescription') }}</p>
-        <fieldset class="start-choices">
-          <legend>{{ i18n.t('onboardingStart') }}</legend>
-          <label class="choice"
-            ><input
-              v-model="destination"
-              type="radio"
-              value="continue"
-              name="start"
-            /><span
-              ><strong>{{ i18n.t('onboardingOpenTabs') }}</strong
-              ><small>{{
-                i18n.t('onboardingOpenTabsDescription')
-              }}</small></span
-            ></label
-          >
-          <label class="choice"
-            ><input
-              v-model="destination"
-              type="radio"
-              value="import"
-              name="start"
-            /><span
-              ><strong>{{ i18n.t('onboardingImport') }}</strong
-              ><small>{{ i18n.t('onboardingImportDescription') }}</small></span
-            ></label
-          >
-        </fieldset>
       </section>
       <section v-else-if="step === 2">
         <p>{{ i18n.t('onboardingPrivateOptional') }}</p>
@@ -432,7 +445,7 @@ async function openSettings() {
         <p class="fine-print">{{ i18n.t('onboardingRetentionNote') }}</p>
       </section>
       <section
-        v-else-if="step === 3"
+        v-else-if="step === 1"
         class="tab-guide"
       >
         <nav
@@ -447,7 +460,7 @@ async function openSettings() {
             type="button"
             :aria-current="tip === index ? 'step' : undefined"
             :disabled="pending"
-            @click="navigate(3, index)"
+            @click="navigate(1, index)"
           >
             {{ i18n.t(title) }}
           </button>
@@ -479,11 +492,19 @@ async function openSettings() {
             >{{ i18n.t(indicatorSettings.label) }}</a
           >
         </p>
-        <TabStateLegend v-if="tip === 0" />
+        <TabStateLegend v-if="currentFeature.id === 'states'" />
+        <template v-else-if="currentFeature.id === 'private'">
+          <OnboardingTreePreview
+            class="example-tree private-example-tree"
+            :aria-label="i18n.t('onboardingPrivateExampleLabel')"
+            :items="privateItems"
+          />
+          <p class="fine-print">{{ i18n.t('onboardingRetentionNote') }}</p>
+        </template>
         <OnboardingTreeDemo
-          v-else
+          v-else-if="demoAction"
           :key="tip"
-          :action="demoActions[tip - 1]"
+          :action="demoAction"
         />
         <p
           v-if="currentFeature.id === 'save'"
@@ -497,6 +518,37 @@ async function openSettings() {
       </section>
       <section v-else>
         <p>{{ i18n.t('onboardingFinishDescription') }}</p>
+        <fieldset class="start-choices">
+          <legend>{{ i18n.t('onboardingFinish') }}</legend>
+          <label class="choice"
+            ><input
+              v-model="destination"
+              type="radio"
+              value="continue"
+              name="start"
+              :disabled="!ready || pending"
+              @change="updatePreference(() => saveProgress(step, tip))"
+            /><span
+              ><strong>{{ i18n.t('onboardingOpenTabs') }}</strong
+              ><small>{{
+                i18n.t('onboardingOpenTabsDescription')
+              }}</small></span
+            ></label
+          >
+          <label class="choice"
+            ><input
+              v-model="destination"
+              type="radio"
+              value="import"
+              name="start"
+              :disabled="!ready || pending"
+              @change="updatePreference(() => saveProgress(step, tip))"
+            /><span
+              ><strong>{{ i18n.t('onboardingImport') }}</strong
+              ><small>{{ i18n.t('onboardingImportDescription') }}</small></span
+            ></label
+          >
+        </fieldset>
         <p>{{ i18n.t('onboardingToolbarDescription') }}</p>
         <label class="choice startup-choice"
           ><input
@@ -528,34 +580,34 @@ async function openSettings() {
           type="button"
           :disabled="pending"
           @click="
-            step === 3 && tip > 0 ? navigate(3, tip - 1) : navigate(step - 1)
+            step === 1 && tip > 0 ? navigate(1, tip - 1) : navigate(step - 1)
           "
         >
           {{ i18n.t('onboardingBack') }}
         </button>
         <button
-          v-if="step === 3"
+          v-if="step === 1"
           class="secondary"
           type="button"
           :disabled="!ready || pending"
-          @click="navigate(4)"
+          @click="navigate(2)"
         >
           {{ i18n.t('onboardingSkipTips') }}
         </button>
         <button
-          v-if="step < 4"
+          v-if="step < headings.length - 1"
           class="primary"
           type="button"
           :disabled="!ready || pending"
           @click="
-            step === 3 && tip < tips.length - 1
-              ? navigate(3, tip + 1)
+            step === 1 && tip < tips.length - 1
+              ? navigate(1, tip + 1)
               : navigate(step + 1)
           "
         >
           {{
             i18n.t(
-              step === 3 && tip < tips.length - 1
+              step === 1 && tip < tips.length - 1
                 ? 'onboardingNextTip'
                 : 'onboardingNext',
             )

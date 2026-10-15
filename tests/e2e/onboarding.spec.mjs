@@ -38,8 +38,6 @@ async function tabIds() {
 
 async function openFeatures() {
   await $('button=Next').click()
-  await $('button=Next').click()
-  await $('button=Next').click()
   await expect($('h1')).toHaveText('Features')
 }
 
@@ -162,21 +160,9 @@ describe('Session Flow introduction', () => {
   })
 
   it('teaches with sample rows entirely in the welcome tab, resumes, finishes, and replays', async () => {
-    await $('button=Next').click()
-    await expect($('h1')).toHaveText('Choose how to start')
-    await expect($('.start-choices')).toHaveText(
-      expect.stringContaining('Use my current session'),
-    )
-    await expect($('.start-choices')).toHaveText(
-      expect.stringContaining('Start with your current windows and tabs.'),
-    )
-    await $('button=Next').click()
-    await expect($('h1')).toHaveText('Include Private Windows')
-    await browser.refresh()
-    await expect($('h1')).toHaveText('Include Private Windows')
-    await expect($('.retention input')).not.toBeChecked()
-    await $('button=Next').click()
-    await expect($('h1')).toHaveText('Features')
+    await openFeatures()
+    await expect($('.eyebrow')).toHaveText('Step 2 of 4')
+    await expect($('.start-choices')).not.toBeExisting()
     await expect($('.tab-guide')).toHaveText(
       expect.stringContaining('This is a sample tree.'),
     )
@@ -301,9 +287,67 @@ describe('Session Flow introduction', () => {
     const tabsAfter = await tabIds()
     expect(tabsAfter).toEqual(tabsBefore)
     await expect(browser).toHaveUrl(introductionUrl)
-    await feature('containers')
+    await feature('private')
+    await expect($('.tab-guide h2')).toHaveText('15. Private windows and tabs')
+    await expect($('.tab-guide')).toHaveText(
+      expect.stringContaining('mask icon'),
+    )
+    await expect($('.tree-demo')).not.toBeExisting()
+    const privateWindow = $(
+      '.private-example-tree [data-example-id="private-window"]',
+    )
+    await expect(privateWindow).toHaveElementClass('tree-item-window-private')
+    await expect(privateWindow.$('.tree-item-window-label')).toHaveAttribute(
+      'aria-label',
+      'Private window: Private research window',
+    )
+    await expect(privateWindow.$('.tree-item-window-private-badge')).toHaveText(
+      'PRIVATE',
+    )
+    await expect(privateWindow.$('img')).toHaveAttribute(
+      'src',
+      '/icons/private-browsing.svg',
+    )
+    await expect(
+      $('.private-example-tree [data-example-id="private-research"]'),
+    ).toBeDisplayed()
+    await expect(
+      $('.private-example-tree [data-example-id="private-reference"]'),
+    ).toBeDisplayed()
+    await expect(
+      $(
+        '.private-example-tree [data-example-id="regular-window"] .tree-item-window-private-badge',
+      ),
+    ).not.toBeExisting()
+    await privateWindow.$('.tree-item-action-button').click()
+    await expect(
+      $('.private-example-tree [data-example-id="private-reference"]'),
+    ).not.toBeExisting()
+    await privateWindow.$('.tree-item-action-button').click()
+    await expect(
+      $('.private-example-tree [data-example-id="private-reference"]'),
+    ).toBeDisplayed()
+    expect(await tabIds()).toEqual(tabsBefore)
+    await $('.private-example-tree').scrollIntoView()
+    await browser.saveScreenshot(
+      '.output/onboarding-preview/private-windows.png',
+    )
+    await $('button=Next').click()
+    await expect($('h1')).toHaveText('Include Private Windows')
+    await expect($('main section > p')).toHaveText(
+      expect.stringContaining(
+        'Giving Session Flow private window permissions is optional. If you do not grant this permission, then private windows will not appear in Session Flow.',
+      ),
+    )
+    await browser.refresh()
+    await expect($('h1')).toHaveText('Include Private Windows')
+    await expect($('.retention input')).not.toBeChecked()
     await $('button=Next').click()
     await expect($('h1')).toHaveText('Make yourself at home')
+    await expect($('.eyebrow')).toHaveText('Step 4 of 4')
+    await expect($('.start-choices')).toHaveText(
+      expect.stringContaining('Use my current session'),
+    )
     await expect($('.startup-choice input')).not.toBeChecked()
     for (const enabled of [true, false, true]) {
       await $('.startup-choice input').click()
@@ -420,22 +464,7 @@ describe('Session Flow introduction', () => {
   })
 
   it('routes import to Storage and applies an explicit private-retention opt-in', async () => {
-    await $('button=Next').click()
-    await $('input[value="import"]').click()
-    await $('button=Next').click()
-    await $('.retention input').click()
-    await browser.waitUntil(async () => {
-      const { settings } = await storedState()
-      return (
-        settings.retainPrivateWindows === true &&
-        settings.includePrivateWindowsInSessionSnapshots === true &&
-        settings.cachePrivateTabFavicons === true
-      )
-    })
-    expect((await storedState()).privateWindowOnboarding.status).toBe('pending')
-    await browser.refresh()
-    await expect($('.retention input')).toBeChecked()
-    await $('button=Next').click()
+    await openFeatures()
     await feature('save')
     // The replica Save control is also safe to try with the mouse.
     await sampleItem('reference').moveTo()
@@ -454,18 +483,37 @@ describe('Session Flow introduction', () => {
     await expect($('.demo-cursor')).not.toBeExisting()
     const tabsBeforeSkip = await tabIds()
     await $('button=Skip tips').click()
+    await expect($('h1')).toHaveText('Include Private Windows')
+    await $('.retention input').click()
+    await browser.waitUntil(async () => {
+      const { settings } = await storedState()
+      return (
+        settings.retainPrivateWindows === true &&
+        settings.includePrivateWindowsInSessionSnapshots === true &&
+        settings.cachePrivateTabFavicons === true
+      )
+    })
+    expect((await storedState()).privateWindowOnboarding.status).toBe('pending')
+    await browser.refresh()
+    await expect($('.retention input')).toBeChecked()
+    await $('button=Next').click()
     await expect($('h1')).toHaveText('Make yourself at home')
     await expectHeadingFocus('h1')
+    await $('input[value="import"]').click()
+    await expect($('button=Import a session')).toBeEnabled()
     const skipped = await storedState()
     expect(skipped.privateWindowOnboarding.status).toBe('pending')
-    expect(skipped.privateWindowOnboarding.welcomeStep).toBe(4)
+    expect(skipped.privateWindowOnboarding.welcomeStep).toBe(3)
     expect(skipped.privateWindowOnboarding.destination).toBe('import')
     expect(skipped.settings.retainPrivateWindows).toBe(true)
     expect(await tabIds()).toEqual(tabsBeforeSkip)
     await $('button=Back').click()
+    await expect($('h1')).toHaveText('Include Private Windows')
+    await $('button=Back').click()
     await expect($('.tab-guide h2')).toHaveText('5. Save a tab or window')
     await expectHeadingFocus('.tab-guide h2')
     await $('button=Skip tips').click()
+    await $('button=Next').click()
     await browser.refresh()
     await expect($('h1')).toHaveText('Make yourself at home')
     const previous = await browser.getWindowHandles()
@@ -481,6 +529,32 @@ describe('Session Flow introduction', () => {
     expect(state.settings.includePrivateWindowsInSessionSnapshots).toBe(true)
     expect(state.settings.cachePrivateTabFavicons).toBe(true)
     expect(state.sessionTreeIntroduction.step).toBe(-1)
+  })
+
+  it('resumes saved onboarding steps', async () => {
+    for (const [record, title] of [
+      [{ welcomeStep: 1 }, 'Features'],
+      [{ welcomeStep: 1, featureId: 'organize' }, 'Features'],
+      [{ welcomeStep: 3, destination: 'import' }, 'Make yourself at home'],
+    ]) {
+      await browser.executeAsync((progress, done) => {
+        window.browser.storage.local
+          .set({
+            privateWindowOnboarding: {
+              status: 'pending',
+              version: 1,
+              ...progress,
+            },
+          })
+          .then(done)
+      }, record)
+      await browser.refresh()
+      await expect($('h1')).toHaveText(title)
+      if (record.featureId)
+        await expect($('.tab-guide h2')).toHaveText('6. Organize a branch')
+      if (record.destination)
+        await expect($('input[value="import"]')).toBeChecked()
+    }
   })
 
   it('adds and edits a local note with the real controls, then groups windows beneath it', async () => {
@@ -932,8 +1006,8 @@ describe('Session Flow introduction', () => {
       window.browser.extension.isAllowedIncognitoAccess = () =>
         Promise.reject(new Error('private access unavailable'))
     })
-    await $('button=Next').click()
-    await $('button=Next').click()
+    await openFeatures()
+    await $('button=Skip tips').click()
     await expect($('h1')).toHaveText('Include Private Windows')
     await expect($('.access-status strong')).toHaveText('Not allowed')
     await expect($('button=Next')).toBeEnabled()
@@ -941,8 +1015,7 @@ describe('Session Flow introduction', () => {
     await $('button=Check again').click()
     await expect($('button=Next')).toBeEnabled()
     await $('button=Next').click()
-    await expect($('h1')).toHaveText('Features')
-    await $('button=Skip tips').click()
+    await expect($('h1')).toHaveText('Make yourself at home')
     await expect($('.settings-access button')).toBeEnabled()
   })
 
@@ -975,9 +1048,12 @@ describe('Session Flow introduction', () => {
       await browser.newWindow(`${introductionUrl}?replay`, { type: 'tab' })
       introductionHandle = await browser.getWindowHandle()
       await expect($('h1')).toHaveText('Welcome to Session Flow')
+      await openFeatures()
+      await $('button=Skip tips').click()
       await $('button=Next').click()
       await $('input[value="import"]').click()
-      await $('button=Next').click()
+      await expect($('button=Import a session')).toBeEnabled()
+      await $('button=Back').click()
       await expect($('.access-status strong')).toHaveText('Not allowed')
 
       // Both checkbox values persist immediately, without completing the tour.
@@ -1041,8 +1117,7 @@ describe('Session Flow introduction', () => {
       ).toBeUndefined()
       expect(resumed.settings.retainPrivateWindows).toBe(false)
       await $('button=Next').click()
-      await expect($('h1')).toHaveText('Features')
-      await $('button=Skip tips').click()
+      await expect($('h1')).toHaveText('Make yourself at home')
       const beforeImport = await browser.getWindowHandles()
       await $('button=Import a session').click()
       await switchToNewHandle(beforeImport, `${optionsUrl}#settings_storage`)
