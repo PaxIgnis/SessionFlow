@@ -422,6 +422,7 @@
   "onboardingSelectionDragDisabled": "Deine Einstellungen ziehen derzeit nur das Element unter dem Mauszeiger. Aktiviere das Einbeziehen ausgewählter Elemente unter Ziehen und Ablegen, um die Auswahl gemeinsam zu verschieben.",
   "onboardingSelectionExamples": "Beispiele zur Mehrfachauswahl",
   "onboardingSettingsDescription": "Um die Einstellungen später zu öffnen, klicke auf das Zahnrad unten rechts im Sitzungsbaum. Du kannst auch mit der rechten Maustaste auf das Session-Flow-Symbol in der Firefox-Symbolleiste klicken und Einstellungen wählen.",
+  "onboardingShowTips": "Tipps zeigen",
   "onboardingSkip": "Einführung überspringen",
   "onboardingSkipTips": "Tipps überspringen",
   "onboardingStart": "Wähle deinen Einstieg",

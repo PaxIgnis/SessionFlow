@@ -422,6 +422,7 @@
   "onboardingSelectionDragDisabled": "Your settings currently drag only the item under the pointer. Enable including selected items in Drag and Drop settings to move the selection together.",
   "onboardingSelectionExamples": "Multi-selection examples",
   "onboardingSettingsDescription": "To open Settings later, click the gear button at the bottom right of the session tree. You can also right-click the Session Flow icon in the Firefox toolbar and choose Settings.",
+  "onboardingShowTips": "Show tips",
   "onboardingSkip": "Skip introduction",
   "onboardingSkipTips": "Skip tips",
   "onboardingStart": "Choose how to start",

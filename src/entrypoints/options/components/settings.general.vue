@@ -8,12 +8,12 @@ import { ref } from 'vue'
 
 const introductionError = ref('')
 const openingIntroduction = ref(false)
-async function showIntroduction() {
+async function showIntroduction(startAt: 'welcome' | 'tips' = 'welcome') {
   if (openingIntroduction.value) return
   openingIntroduction.value = true
   introductionError.value = ''
   try {
-    await openIntroduction(true)
+    await openIntroduction(true, startAt)
   } catch {
     introductionError.value = i18n.t('onboardingError')
   } finally {
@@ -29,15 +29,25 @@ async function showIntroduction() {
   >
     <div class="section-head">
       <h2 class="section-title">{{ i18n.t('general') }}</h2>
-      <button
-        type="button"
-        class="introduction-button"
-        :disabled="openingIntroduction"
-        :title="i18n.t('onboardingGuideLabel')"
-        @click="showIntroduction"
-      >
-        {{ i18n.t('onboardingReplay') }}
-      </button>
+      <div class="introduction-actions">
+        <button
+          type="button"
+          class="introduction-button"
+          :disabled="openingIntroduction"
+          :title="i18n.t('onboardingGuideLabel')"
+          @click="showIntroduction()"
+        >
+          {{ i18n.t('onboardingReplay') }}
+        </button>
+        <button
+          type="button"
+          class="introduction-button"
+          :disabled="openingIntroduction"
+          @click="showIntroduction('tips')"
+        >
+          {{ i18n.t('onboardingShowTips') }}
+        </button>
+      </div>
     </div>
     <p
       v-if="introductionError"
@@ -95,10 +105,15 @@ async function showIntroduction() {
   flex-wrap: wrap;
   gap: 8px;
 }
+.introduction-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-inline-start: auto;
+}
 .introduction-button {
   flex: 0 0 auto;
   max-width: 100%;
-  margin-inline-start: auto;
   font: inherit;
   font-size: 12px;
   line-height: 1.4;

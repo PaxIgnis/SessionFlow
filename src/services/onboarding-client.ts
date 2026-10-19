@@ -3,9 +3,15 @@ import type {
   OnboardingMessage,
 } from '@/types/onboarding'
 
-export function openIntroduction(replay = false): Promise<browser.tabs.Tab> {
+export function openIntroduction(
+  replay = false,
+  startAt: 'welcome' | 'tips' = 'welcome',
+): Promise<browser.tabs.Tab> {
+  const query = [replay ? 'replay' : '', startAt === 'tips' ? 'step=tips' : '']
+    .filter(Boolean)
+    .join('&')
   return browser.tabs.create({
-    url: browser.runtime.getURL(`/onboarding.html${replay ? '?replay' : ''}`),
+    url: browser.runtime.getURL(`/onboarding.html${query ? `?${query}` : ''}`),
   })
 }
 

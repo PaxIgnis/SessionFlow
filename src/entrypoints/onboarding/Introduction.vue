@@ -213,6 +213,7 @@ async function initialize() {
       | undefined
     const url = new URL(window.location.href)
     const replay = url.searchParams.has('replay')
+    if (replay && url.searchParams.get('step') === 'tips') step.value = 1
     if (!replay && record?.status === 'pending') {
       if (
         record.welcomeStep !== undefined &&
@@ -239,6 +240,7 @@ async function initialize() {
     if (replay) {
       // Replay resets once; a reload of this tab should resume its new progress.
       url.searchParams.delete('replay')
+      url.searchParams.delete('step')
       window.history.replaceState(null, '', url)
     }
     ready.value = true

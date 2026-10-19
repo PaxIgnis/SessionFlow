@@ -431,6 +431,7 @@
   "onboardingSelectionDragDisabled": "Vos paramètres déplacent actuellement seulement l’élément sous le pointeur. Activez l’inclusion des éléments sélectionnés dans Glisser-déposer pour déplacer la sélection ensemble.",
   "onboardingSelectionExamples": "Exemples de sélection multiple",
   "onboardingSettingsDescription": "Pour ouvrir les paramètres plus tard, cliquez sur le bouton en forme d’engrenage en bas à droite de l’arbre de session. Vous pouvez aussi faire un clic droit sur l’icône Session Flow dans la barre d’outils de Firefox et choisir Paramètres.",
+  "onboardingShowTips": "Voir les astuces",
   "onboardingSkip": "Passer l’introduction",
   "onboardingSkipTips": "Passer les conseils",
   "onboardingStart": "Choisissez comment commencer",
