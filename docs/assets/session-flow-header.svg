@@ -1,0 +1,100 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 650 144"
+  role="img"
+  aria-labelledby="title"
+>
+  <title id="title">Session Flow</title>
+  <rect
+    width="650"
+    height="144"
+    rx="24"
+    fill="#f8f1cf"
+  />
+  <defs>
+    <symbol
+      id="session-flow-logo"
+      viewBox="0 0 640 640"
+    >
+      <rect
+        x="12"
+        y="12"
+        width="616"
+        height="616"
+        rx="112"
+        fill="#f8f1cf"
+      />
+      <g transform="translate(-32 -32) scale(1.1) translate(80 0)">
+        <g transform="translate(-5 0)">
+          <path
+            d="M237 52 L126 414 L142 469 L236 606 Z"
+            fill="#080b0e"
+          />
+          <path
+            d="M237 52 L126 414 L160 423 Z"
+            fill="#2e353a"
+          />
+          <path
+            d="M237 52 L160 423 L236.2 423 Z"
+            fill="#101417"
+          />
+          <path
+            d="M126 414 L142 469 L160 423 Z"
+            fill="#1d2226"
+          />
+          <path
+            d="M160 423 L236.2 423 L236 606 L142 469 Z"
+            fill="#080b0e"
+          />
+        </g>
+        <g transform="translate(5 0)">
+          <path
+            d="M243 52 L354 414 L338 469 L244 606 Z"
+            fill="#080b0e"
+          />
+          <path
+            d="M243 52 L354 414 L320 423 Z"
+            fill="#2e353a"
+          />
+          <path
+            d="M243 52 L320 423 L243.8 423 Z"
+            fill="#101417"
+          />
+          <path
+            d="M354 414 L338 469 L320 423 Z"
+            fill="#1d2226"
+          />
+          <path
+            d="M320 423 L243.8 423 L244 606 L338 469 Z"
+            fill="#080b0e"
+          />
+        </g>
+      </g>
+    </symbol>
+  </defs>
+  <use
+    href="#session-flow-logo"
+    x="16"
+    y="28"
+    width="88"
+    height="88"
+  />
+  <use
+    href="#session-flow-logo"
+    x="546"
+    y="28"
+    width="88"
+    height="88"
+  />
+  <text
+    x="325"
+    y="94"
+    text-anchor="middle"
+    fill="#080b0e"
+    font-family="Arial, Helvetica, sans-serif"
+    font-size="64"
+    font-weight="700"
+  >
+    Session Flow
+  </text>
+</svg>
