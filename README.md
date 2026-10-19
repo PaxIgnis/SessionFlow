@@ -45,7 +45,7 @@ Session Flow is a free, open-source Firefox extension that brings your open tabs
 
 ## Installation
 
-Requires **Firefox 139 or later**. Until Session Flow is available on Firefox Add-ons, you can install an unsigned build from [GitHub Releases](https://github.com/PaxIgnis/SessionFlowExtension/releases) using **Firefox Developer Edition or Firefox Nightly**.
+Requires **Firefox 140 or later**. Until Session Flow is available on Firefox Add-ons, you can install an unsigned build from [GitHub Releases](https://github.com/PaxIgnis/SessionFlowExtension/releases) using **Firefox Developer Edition or Firefox Nightly**.
 
 1. Open [GitHub Releases](https://github.com/PaxIgnis/SessionFlowExtension/releases) and download the release's `.xpi` file from **Assets**. The **Source code** archives are for development and cannot be installed directly.
 2. In Firefox Developer Edition or Nightly, open `about:config` and accept the prompt.

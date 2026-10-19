@@ -35,7 +35,7 @@ describe('Firefox manifest compatibility contract', () => {
     expect(addonId).not.toMatch(/@temporary-addon$/)
   })
 
-  it('requires Firefox 139 and the tabGroups permission', () => {
+  it('requires Firefox 140 and the tabGroups permission', () => {
     const source = readFileSync(
       new URL('../../../wxt.config.ts', import.meta.url),
       'utf8',
@@ -43,7 +43,7 @@ describe('Firefox manifest compatibility contract', () => {
     const permissions = source.match(/permissions:\s*\[([\s\S]*?)\]/)?.[1]
     const minimumVersion = source.match(/strict_min_version:\s*'([^']+)'/)?.[1]
 
-    expect(minimumVersion).toBe('139.0')
+    expect(minimumVersion).toBe('140.0')
     expect(permissions).toContain("'tabGroups'")
   })
 })
