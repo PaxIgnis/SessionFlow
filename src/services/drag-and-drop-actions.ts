@@ -1435,7 +1435,7 @@ function getEffectiveDragType(items: TreeItem[]): DragType | null {
  * @param {TreeItem[]} items - Dragged items in the current drag operation.
  * @returns {boolean} Whether descendants should be included in the move command.
  */
-function shouldIncludeDescendantsForDrop(
+export function shouldIncludeDescendantsForDrop(
   sourceType: DragType,
   items: TreeItem[],
 ): boolean {

@@ -424,6 +424,18 @@ describe('window actions', () => {
     expectTreeInvariants()
   })
 
+  it('closes the current Firefox window when a queued command captured its saved id', async () => {
+    const tab = createTab('tab-reopened' as UID, { id: 10, state: State.OPEN })
+    const window = createWindow('window-reopened' as UID, [tab], {
+      id: 20,
+      state: State.OPEN,
+    })
+    await Tree.closeWindow({ windowId: -1, windowUid: window.uid })
+    expect(browser.windows.remove).toHaveBeenCalledWith(20)
+    expect(Tree.windowsByUid.has(window.uid)).toBe(false)
+    expectTreeInvariants()
+  })
+
   it('commits close when the browser window is already gone', async () => {
     const tab = createTab('tab-1' as UID, { id: 10, state: State.OPEN })
     const window = createWindow('window-1' as UID, [tab], {

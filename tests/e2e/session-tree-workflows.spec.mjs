@@ -32,6 +32,10 @@ import {
   openSessionTreePopup,
 } from './support/session-tree-popup.mjs'
 import { closeOptionsPage, openOptionsPage } from './support/options-page.mjs'
+import {
+  browserWindowSnapshot,
+  resetBrowserWindows,
+} from './support/browser-isolation.mjs'
 import { withFirefoxChromeContext } from './support/firefox-chrome-context.mjs'
 import {
   reloadExtensionBackgroundPage,
@@ -48,36 +52,47 @@ let popup
 let sessionTree
 
 describe('critical Firefox UI workflows', () => {
+  before(async () => {
+    await resetBrowserWindows()
+  })
+
   afterEach(async () => {
-    if (popup?.popupHandle) {
-      const handles = await browser.getWindowHandles()
-      if (handles.includes(popup.popupHandle)) {
-        await browser.switchToWindow(popup.popupHandle)
-        if (sessionTree) {
-          await sessionTree.removeAllNotes()
-          await sessionTree.updateSettings({
-            saveWindowOnClose: false,
-            saveTabOnClose: false,
-          })
+    try {
+      if (popup?.popupHandle) {
+        const handles = await browser.getWindowHandles()
+        if (handles.includes(popup.popupHandle)) {
+          await browser.switchToWindow(popup.popupHandle)
+          if (sessionTree) {
+            await sessionTree.updateSettings({
+              saveWindowOnClose: false,
+              saveTabOnClose: false,
+            })
+            await sessionTree.removeAllNotes()
+          }
         }
       }
-    }
 
-    if (seed) {
-      await cleanupSeededTabs(seed)
-      seed = undefined
-    }
+      if (seed) {
+        await cleanupSeededTabs(seed)
+        seed = undefined
+      }
 
-    if (popup?.popupHandle) {
-      const handles = await browser.getWindowHandles()
-      if (handles.includes(popup.popupHandle)) {
-        await browser.switchToWindow(popup.popupHandle)
-        await closeSessionTreePopup(popup.originalHandle)
+      if (popup?.popupHandle) {
+        const handles = await browser.getWindowHandles()
+        if (handles.includes(popup.popupHandle)) {
+          await browser.switchToWindow(popup.popupHandle)
+          await closeSessionTreePopup(popup.originalHandle)
+        }
+      }
+    } finally {
+      try {
+        await resetBrowserWindows(popup?.originalHandle)
+      } finally {
+        seed = undefined
+        popup = undefined
+        sessionTree = undefined
       }
     }
-
-    popup = undefined
-    sessionTree = undefined
   })
 
   it('adds two browser tabs and shows three open root tabs at the correct indent', async () => {
@@ -807,9 +822,12 @@ describe('critical Firefox UI workflows', () => {
     await openSeededSessionTree()
 
     const options = await openOptionsPage()
-    await options.page.setToggle('Save tabs when they close', 'On')
-    await options.page.expectStoredSetting('saveTabOnClose', true)
-    await closeOptionsPage(options.optionsHandle, popup.popupHandle)
+    try {
+      await options.page.setToggleByKey('saveTabsWhenTheyClose', 'on')
+      await options.page.expectStoredSetting('saveTabOnClose', true)
+    } finally {
+      await closeOptionsPage(options.optionsHandle, popup.popupHandle)
+    }
     await sessionTree.expectLoaded()
     await expectSingleOpenWindowWithRootTabs([SESSION_FIXTURE_TITLES.initial])
 
@@ -1573,8 +1591,15 @@ async function openSeededSessionTree() {
   })
   await navigateSeededHandle(seed, SESSION_FIXTURE_TITLES.initial)
   await browser.switchToWindow(popup.popupHandle)
-  await ensureSeededWindowTracked()
-  await expectSingleOpenWindowWithRootTabs([SESSION_FIXTURE_TITLES.initial])
+  try {
+    await ensureSeededWindowTracked()
+    await expectSingleOpenWindowWithRootTabs([SESSION_FIXTURE_TITLES.initial])
+  } catch (error) {
+    throw new Error(
+      `${error.message} Browser contexts: ${JSON.stringify(await browserWindowSnapshot())}`,
+      { cause: error },
+    )
+  }
 }
 
 async function addNoteFromTabContextMenu(tabTitle) {

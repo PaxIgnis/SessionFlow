@@ -288,7 +288,7 @@ describe('Session Flow introduction', () => {
     expect(tabsAfter).toEqual(tabsBefore)
     await expect(browser).toHaveUrl(introductionUrl)
     await feature('private')
-    await expect($('.tab-guide h2')).toHaveText('15. Private windows and tabs')
+    await expect($('.tab-guide h2')).toHaveText('16. Private windows and tabs')
     await expect($('.tab-guide')).toHaveText(
       expect.stringContaining('mask icon'),
     )

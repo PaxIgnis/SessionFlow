@@ -12,6 +12,7 @@ import SettingsTabs from './components/settings.tabs.vue'
 import SettingsTabGroups from './components/settings.tab-groups.vue'
 import SettingsWindows from './components/settings.windows.vue'
 import SettingsStorage from './components/settings.storage.vue'
+import SettingsKeyboard from './components/settings.keyboard.vue'
 
 const sections = [
   { id: 'settings_general', level: 0, label: i18n.t('general') },
@@ -22,6 +23,7 @@ const sections = [
   { id: 'settings_tab_groups', level: 0, label: i18n.t('tabGroups') },
   { id: 'settings_drag_and_drop', level: 0, label: i18n.t('dragAndDrop') },
   { id: 'settings_favicons', level: 0, label: i18n.t('favicons') },
+  { id: 'settings_keyboard', level: 0, label: i18n.t('keyboardMappings') },
   { id: 'settings_storage', level: 0, label: i18n.t('storage') },
 ]
 
@@ -128,6 +130,7 @@ onUnmounted(() => {
       <SettingsTabGroups />
       <SettingsDragAndDrop />
       <Favicons />
+      <SettingsKeyboard />
       <SettingsStorage />
     </div>
   </div>

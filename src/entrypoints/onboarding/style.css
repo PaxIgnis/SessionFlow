@@ -124,6 +124,17 @@ small {
   font-size: 20px;
   color: var(--header-text-color);
 }
+.keyboard-guide dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 12px 20px;
+}
+.keyboard-guide dt {
+  font-weight: 600;
+}
+.keyboard-guide dd {
+  margin: 0;
+}
 .guide-warning {
   border-inline-start: 2px solid var(--state-rest);
   padding-inline-start: 12px;

@@ -422,11 +422,14 @@ export async function closeWindow(
   emitDelta: boolean = true,
   recompute: boolean = true,
 ): Promise<void> {
-  if (message.windowId === -1 || message.windowId === 0) {
+  // A close queued behind reopening can carry the old saved-window id.
+  const windowId =
+    Tree.windowsByUid.get(message.windowUid)?.id ?? message.windowId
+  if (windowId === -1 || windowId === 0) {
     Tree.removeWindow(message.windowUid, emitDelta, recompute)
     return
   }
-  await removeBrowserWindow(message.windowId)
+  await removeBrowserWindow(windowId)
   if (Tree.windowsByUid.has(message.windowUid)) {
     Tree.removeWindow(message.windowUid, emitDelta, recompute)
   }

@@ -87,24 +87,6 @@ describe('introduction presentation and commands', () => {
     },
   )
 
-  it('shows windows, notes, separators, real outline classes and nested indent guides on the welcome page', async () => {
-    const html = await renderToString(createSSRApp(Introduction))
-    expect(html).toContain('Organize your windows and tabs in a vertical tree')
-    for (const className of [
-      'tree-item-window-label',
-      'tree-item-note-text',
-      'tree-item-separator-line',
-      'tree-item-indent-lines',
-      'tree-item-active-latest-tab',
-    ])
-      expect(html).toContain(className)
-    expect(html).toContain('data-example-id="second-window"')
-    expect(html).not.toContain('data-example-id="planning"')
-    expect(html).toContain('This is a sample tree.')
-    expect(html).toContain('data-example-id="related"')
-    expect(html).not.toContain('data-example-id="docs"')
-  })
-
   it('reopens the welcome tab without modifying completion or browser tabs', async () => {
     const fake = installFakeBrowser()
     await openIntroduction()

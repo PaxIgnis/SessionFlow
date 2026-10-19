@@ -8,6 +8,7 @@ import { Tree } from '@/services/background-tree'
 import { State } from '@/types/session-tree'
 import { installFakeBrowser } from '../../helpers/fake-browser'
 import { createTab, createWindow, resetTree } from '../../helpers/tree-fixtures'
+import { expectTreeInvariants } from '../../helpers/tree-invariants'
 
 describe('session identity binding', () => {
   beforeEach(() => {
@@ -15,31 +16,66 @@ describe('session identity binding', () => {
     resetTree()
   })
 
-  it('stamps an identity when adding a live tab', async () => {
-    const window = createWindow('window-1' as UID, [], {
-      id: 20,
-      state: State.OPEN,
-    })
+  it.each([State.OPEN, State.DISCARDED])(
+    'stamps an identity when adding a browser-backed tab in state %s',
+    async (state) => {
+      const window = createWindow('window-1' as UID, [], {
+        id: 20,
+        state: State.OPEN,
+      })
 
-    const tabUid = Tree.addTab(
-      false,
-      window.uid,
-      10,
-      false,
-      State.OPEN,
-      'Tab',
-      'https://example.test/tab',
-      false,
-    )
-
-    await vi.waitFor(() => {
-      expect(browser.sessions.setTabValue).toHaveBeenCalledWith(
+      const tabUid = Tree.addTab(
+        false,
+        window.uid,
         10,
-        TAB_UID_SESSION_KEY,
-        { version: 1, uid: tabUid },
+        false,
+        state,
+        'Tab',
+        'https://example.test/tab',
+        false,
       )
-    })
-  })
+
+      await vi.waitFor(() => {
+        expect(browser.sessions.setTabValue).toHaveBeenCalledWith(
+          10,
+          TAB_UID_SESSION_KEY,
+          { version: 1, uid: tabUid },
+        )
+      })
+    },
+  )
+
+  it.each([0, -1, 42])(
+    'does not write Firefox identities for saved tabs with ID %s, including pin moves',
+    async (id) => {
+      const other = createTab('other-tab' as UID, { id: -1 })
+      const window = createWindow('saved-window' as UID, [other])
+      const uid = Tree.addTab(
+        false,
+        window.uid,
+        id,
+        false,
+        State.SAVED,
+        'Saved tab',
+        'https://example.test/saved-tab',
+        false,
+      ) as UID
+      await Promise.resolve()
+      expect(browser.sessions.setTabValue).not.toHaveBeenCalled()
+
+      Tree.pinTab(uid)
+      expect(window.children.map((item) => item.uid)).toEqual([uid, other.uid])
+      expect(Tree.tabsByUid.get(uid)?.pinned).toBe(true)
+      Tree.pinTab(other.uid)
+      Tree.unpinTab(uid)
+      expect(window.children.map((item) => item.uid)).toEqual([other.uid, uid])
+      expect(Tree.tabsByUid.get(uid)?.pinned).toBe(false)
+      await Promise.resolve()
+      expect(browser.sessions.setTabValue).not.toHaveBeenCalled()
+      expect(browser.tabs.update).not.toHaveBeenCalled()
+      expectTreeInvariants()
+    },
+  )
 
   it('stamps identities when browser IDs are rebound', async () => {
     const tab = createTab('tab-1' as UID, { id: -1, state: State.SAVED })

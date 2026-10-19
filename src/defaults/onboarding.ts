@@ -70,6 +70,11 @@ export const ONBOARDING_FEATURES = [
     description: 'onboardingContainersDescription',
   },
   {
+    id: 'keyboard',
+    title: 'onboardingKeyboard',
+    description: 'onboardingKeyboardDescription',
+  },
+  {
     id: 'private',
     title: 'onboardingPrivate',
     description: 'onboardingPrivateDescription',

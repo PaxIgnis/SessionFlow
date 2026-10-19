@@ -46,7 +46,9 @@ const tipDescriptions = ONBOARDING_FEATURES.map(
 const currentFeature = computed(() => ONBOARDING_FEATURES[tip.value])
 const demoAction = computed(() => {
   const id = currentFeature.value.id
-  return id === 'states' || id === 'private' ? undefined : id
+  return id === 'states' || id === 'private' || id === 'keyboard'
+    ? undefined
+    : id
 })
 const indicatorSettings = computed(() => {
   if (currentFeature.value.id === 'tab-groups') {
@@ -73,6 +75,9 @@ const indicatorSettingsUrl = computed(() =>
   indicatorSettings.value
     ? browser.runtime.getURL(`/options.html#${indicatorSettings.value.section}`)
     : undefined,
+)
+const keyboardSettingsUrl = computed(() =>
+  browser.runtime.getURL('/options.html#settings_keyboard'),
 )
 const welcomeItems = computed<OnboardingExampleItem[]>(() => [
   {
@@ -492,7 +497,34 @@ async function openSettings() {
             >{{ i18n.t(indicatorSettings.label) }}</a
           >
         </p>
-        <TabStateLegend v-if="currentFeature.id === 'states'" />
+        <div
+          v-if="currentFeature.id === 'keyboard'"
+          class="keyboard-guide"
+        >
+          <dl>
+            <dt>↑ / ↓</dt>
+            <dd>{{ i18n.t('keyboardNavigateRows') }}</dd>
+            <dt>← / →</dt>
+            <dd>{{ i18n.t('keyboardNavigateHierarchy') }}</dd>
+            <dt>Ctrl + ↑ / ↓</dt>
+            <dd>{{ i18n.t('keyboardMoveRows') }}</dd>
+            <dt>Ctrl + ← / →</dt>
+            <dd>{{ i18n.t('keyboardIndent') }}</dd>
+            <dt>Alt + ↑ / ↓</dt>
+            <dd>{{ i18n.t('keyboardOpenTabs') }}</dd>
+            <dt>Enter / Space</dt>
+            <dd>{{ i18n.t('onboardingKeyboardActions') }}</dd>
+          </dl>
+          <p>{{ i18n.t('onboardingKeyboardMappings') }}</p>
+          <p>{{ i18n.t('keyboardInstructions') }}</p>
+          <a
+            :href="keyboardSettingsUrl"
+            target="_blank"
+            rel="noopener"
+            >{{ i18n.t('keyboardMappings') }}</a
+          >
+        </div>
+        <TabStateLegend v-else-if="currentFeature.id === 'states'" />
         <template v-else-if="currentFeature.id === 'private'">
           <OnboardingTreePreview
             class="example-tree private-example-tree"
@@ -512,7 +544,10 @@ async function openSettings() {
         >
           {{ i18n.t('onboardingCloseDelete') }}
         </p>
-        <p class="fine-print">
+        <p
+          v-if="currentFeature.id !== 'keyboard'"
+          class="fine-print"
+        >
           {{ i18n.t('onboardingDemoSafe') }}
         </p>
       </section>

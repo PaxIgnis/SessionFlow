@@ -1,5 +1,6 @@
 import { i18n } from '@/services/i18n'
 import { DEFAULT_SETTINGS } from '@/defaults/settings'
+import { isValidShortcut } from '@/services/keyboard-shortcuts'
 import { Settings as SettingsValues } from '@/services/settings'
 import {
   ONBOARDING_STORAGE_KEY,
@@ -37,6 +38,9 @@ function validateSettingValue<K extends keyof Settings>(
   key: K,
   value: unknown,
 ): Settings[K] {
+  if (key.startsWith('shortcut') && !isValidShortcut(value)) {
+    throw new Error(`Invalid keyboard shortcut for ${key}`)
+  }
   if (key in SETTINGS_TYPES) {
     const allowedValues: readonly string[] =
       SETTINGS_TYPES[key as keyof typeof SETTINGS_TYPES]

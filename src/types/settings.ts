@@ -1,9 +1,10 @@
 import { i18n } from '@/services/i18n'
+import type { KeyboardSettings } from './keyboard'
 export interface SettingsSaveOptions {
   /** Background callers apply effects directly and notify views separately. */
   broadcast?: boolean
 }
-export interface Settings {
+export interface Settings extends KeyboardSettings {
   // General
   matchOpenedWindowsWithSavedWindowsOnStartup: boolean
   openSessionTreeInSameLocation: boolean

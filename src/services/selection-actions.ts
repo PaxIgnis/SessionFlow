@@ -96,6 +96,21 @@ export function getLogicalTreeOrder(): TreeItem[] {
   )
 }
 
+/** Selection is view state: background snapshots must not erase it. */
+export function reconcileSelection(): void {
+  const current = new Map(getLogicalTreeOrder().map((item) => [item.uid, item]))
+  Selection.selectedItems.value = Selection.selectedItems.value.flatMap(
+    (selected) => {
+      const item = current.get(selected.item.uid)
+      if (!item) return []
+      item.selected = true
+      return [{ item, type: selected.type }]
+    },
+  )
+  if (Selection.anchor.value)
+    Selection.anchor.value = current.get(Selection.anchor.value.uid)
+}
+
 export function collectContextMenuActionItems(
   items: readonly TreeItem[],
   scope: ContextMenuDescendantScope,

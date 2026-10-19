@@ -1,4 +1,5 @@
 import * as Actions from '@/services/background-actions'
+import { initializeKeyboardCommands } from '@/services/background-keyboard'
 import { DeferredEventsQueue } from '@/services/background-deferred-events-queue'
 import * as BackgroundHandlers from '@/services/background-handlers'
 import { initializePrivateWindowOnboarding } from '@/services/background-private-window-onboarding'
@@ -22,6 +23,7 @@ export default defineBackground(() => {
     }
   })
   initializePrivateWindowOnboarding(backgroundReady)
+  initializeKeyboardCommands(backgroundReady)
   Actions.updateBadgeOnStartup()
   startBackground()
   void backgroundReady.catch((error) => {

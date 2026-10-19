@@ -1,6 +1,8 @@
 import { Settings } from '../types/settings'
+import { DEFAULT_TREE_SHORTCUTS } from '../types/keyboard'
 
 export const DEFAULT_SETTINGS: Settings = {
+  ...DEFAULT_TREE_SHORTCUTS,
   // General
   matchOpenedWindowsWithSavedWindowsOnStartup: true,
   openSessionTreeInSameLocation: true,

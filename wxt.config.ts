@@ -5,6 +5,20 @@ import { defineConfig } from 'wxt'
 // See https://wxt.dev/api/config.html
 export default defineConfig({
   manifest: {
+    commands: {
+      'open-session-tree': {
+        suggested_key: { default: 'F2' },
+        description: '__MSG_openSessionTree__',
+      },
+      'open-settings': {
+        suggested_key: { default: 'Ctrl+F2' },
+        description: '__MSG_keyboardOpenSettings__',
+      },
+      shortcutSnapshot: {
+        suggested_key: { default: 'Ctrl+Alt+S' },
+        description: '__MSG_shortcutSnapshot__',
+      },
+    },
     default_locale: 'en',
     description: '__MSG_extensionDescription__',
     icons: {

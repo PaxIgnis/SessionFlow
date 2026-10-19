@@ -19,6 +19,7 @@ import { subscribeTreeUpdates } from '@/services/runtime-port-service'
 import { Selection } from '@/services/selection'
 import * as ToolbarActions from '@/services/session-tree-toolbar-actions'
 import { Settings } from '@/services/settings'
+import { setupTreeKeyboard } from '@/services/tree-keyboard'
 import {
   buildIndentGuideStates,
   createTreeItemTally,
@@ -42,6 +43,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 let unsubscribeFromTreeUpdates: (() => void) | undefined
 let removeRuntimeListener: (() => void) | undefined
 let removeContextMenuListener: (() => void) | undefined
+let removeKeyboardListener: (() => void) | undefined
 let isSessionTreeUnmounted = false
 
 // Save Session Tree Window location and size before closing.
@@ -202,6 +204,7 @@ onMounted(async () => {
   await Settings.loadSettingsFromStorage()
   Settings.setupSettingsUpdatedListener()
   removeContextMenuListener = ContextMenu.setupContextMenuLifecycle()
+  removeKeyboardListener = setupTreeKeyboard(() => visibleTreeItems.value)
 
   await faviconService.init().then(async () => {
     const openTabs = await window.browser.tabs.query({})
@@ -212,8 +215,15 @@ onMounted(async () => {
     return
   }
   unsubscribeFromTreeUpdates = subscribeTreeUpdates({
-    replaceTree: (items) => SessionTree.replaceSessionTree(items),
-    applyDelta: (delta) => SessionTree.applyDelta(delta),
+    replaceTree: (items) => {
+      SessionTree.replaceSessionTree(items)
+      Selection.reconcileSelection()
+    },
+    applyDelta: (delta) => {
+      const applied = SessionTree.applyDelta(delta)
+      Selection.reconcileSelection()
+      return applied
+    },
     onError: (error) => {
       console.error('Session tree synchronization error', error)
     },
@@ -270,6 +280,7 @@ onBeforeUnmount(() => {
   unsubscribeFromTreeUpdates?.()
   removeRuntimeListener?.()
   removeContextMenuListener?.()
+  removeKeyboardListener?.()
 })
 
 // Handler functions

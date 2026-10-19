@@ -27,8 +27,8 @@ export class OptionsPage {
   async setToggle(label, optionLabel) {
     const button = await this.toggleButton(label, optionLabel)
 
-    await expect(button).toBeDisplayed()
     await button.scrollIntoView({ block: 'center', inline: 'nearest' })
+    await expect(button).toBeDisplayed()
     await button.click()
     await browser.waitUntil(
       async () => (await button.getAttribute('class')).includes('active'),
@@ -37,6 +37,19 @@ export class OptionsPage {
         timeoutMsg: `Expected "${label}" option "${optionLabel}" to be active.`,
       },
     )
+  }
+
+  async setToggleByKey(labelKey, optionKey) {
+    const [label, optionLabel] = await browser.execute(
+      (keys) =>
+        keys.map((key) => {
+          const message = window.browser.i18n.getMessage(key)
+          if (!message) throw new Error(`Missing localized message: ${key}`)
+          return message
+        }),
+      [labelKey, optionKey],
+    )
+    await this.setToggle(label, optionLabel)
   }
 
   async expectToggleActive(label, optionLabel) {
@@ -121,7 +134,7 @@ export class OptionsPage {
 
   toggleButton(label, optionLabel) {
     return $(
-      `//div[contains(concat(" ", normalize-space(@class), " "), " toggle-container ")][.//label[normalize-space()="${label}"]]//button[normalize-space()="${optionLabel}"]`,
+      `//div[contains(concat(" ", normalize-space(@class), " "), " toggle-container ")][.//label[normalize-space()=${xpathLiteral(label)}]]//button[normalize-space()=${xpathLiteral(optionLabel)}]`,
     )
   }
 
@@ -145,6 +158,15 @@ export class OptionsPage {
         .catch((error) => done({ error: String(error) }))
     }, key)
   }
+}
+
+function xpathLiteral(value) {
+  if (!value.includes('"')) return `"${value}"`
+  if (!value.includes("'")) return `'${value}'`
+  return `concat(${value
+    .split('"')
+    .map((part) => `"${part}"`)
+    .join(`, '\"', `)})`
 }
 
 export async function openOptionsPage() {

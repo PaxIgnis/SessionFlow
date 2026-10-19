@@ -59,6 +59,11 @@ export class FakePort {
 }
 
 export interface FakeBrowser {
+  commands: {
+    onCommand: FakeEvent<[string]>
+    getAll: ReturnType<typeof vi.fn>
+    update: ReturnType<typeof vi.fn>
+  }
   alarms: {
     onAlarm: FakeEvent<[browser.alarms.Alarm]>
     clear: ReturnType<typeof vi.fn>
@@ -87,6 +92,8 @@ export interface FakeBrowser {
     connect: ReturnType<typeof vi.fn<(options?: { name?: string }) => FakePort>>
     sendMessage: ReturnType<typeof vi.fn>
     getURL: ReturnType<typeof vi.fn>
+    openOptionsPage: ReturnType<typeof vi.fn>
+    getPlatformInfo: ReturnType<typeof vi.fn>
   }
   tabs: {
     onActivated: FakeEvent<[browser.tabs._OnActivatedActiveInfo]>
@@ -168,6 +175,15 @@ export interface FakeBrowser {
 export function installFakeBrowser(): FakeBrowser {
   const onConnect = new FakeEvent<[FakePort]>()
   const browser: FakeBrowser = {
+    commands: {
+      onCommand: new FakeEvent<[string]>(),
+      getAll: vi.fn().mockResolvedValue([
+        { name: 'open-session-tree', shortcut: 'F2' },
+        { name: 'open-settings', shortcut: 'Ctrl+F2' },
+        { name: 'shortcutSnapshot', shortcut: 'Ctrl+Alt+S' },
+      ]),
+      update: vi.fn().mockResolvedValue(undefined),
+    },
     alarms: {
       onAlarm: new FakeEvent<[browser.alarms.Alarm]>(),
       clear: vi.fn().mockResolvedValue(true),
@@ -196,6 +212,8 @@ export function installFakeBrowser(): FakeBrowser {
       remove: vi.fn().mockResolvedValue(undefined),
     },
     runtime: {
+      openOptionsPage: vi.fn().mockResolvedValue(undefined),
+      getPlatformInfo: vi.fn().mockResolvedValue({ os: 'win', arch: 'x86-64' }),
       onConnect,
       onInstalled: new FakeEvent<[browser.runtime._OnInstalledDetails?]>(),
       onMessage: new FakeEvent<[Record<string, unknown>]>(),

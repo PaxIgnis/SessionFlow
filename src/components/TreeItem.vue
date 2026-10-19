@@ -362,6 +362,11 @@ function itemDblClickAction() {
   }
 }
 
+function selectRow(event: MouseEvent): void {
+  Selection.selectItem(props.item, getType(props.item), event)
+  ;(event.currentTarget as HTMLElement).focus({ preventScroll: true })
+}
+
 function saveItemAction() {
   if (isWindow(props.item)) {
     Messages.saveWindow(props.item.id, props.item.uid)
@@ -596,7 +601,7 @@ function isFocusedTab(item: TreeItem): boolean {
     }"
     :aria-describedby="itemDescriptionIds"
     :title="itemHoverDetails"
-    @click.stop="Selection.selectItem(item, getType(item), $event)"
+    @click.stop="selectRow"
     @contextmenu.stop="openItemContextMenu"
     @dblclick="itemDblClickAction()"
   >

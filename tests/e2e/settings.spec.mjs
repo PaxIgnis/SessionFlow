@@ -4,8 +4,10 @@ import { closeOptionsPage, openOptionsPage } from './support/options-page.mjs'
 describe('settings workflows', () => {
   const openOptionsHandles = new Set()
   let originalHandle
+  let originalScopes = {}
 
   beforeEach(async () => {
+    originalScopes = {}
     originalHandle = await browser.getWindowHandle()
   })
 
@@ -16,7 +18,7 @@ describe('settings workflows', () => {
     )
     if (settingsHandle) {
       await browser.switchToWindow(settingsHandle)
-      await browser.executeAsync((done) => {
+      await browser.executeAsync((scopes, done) => {
         window.browser.storage.local
           .get('settings')
           .then(({ settings }) =>
@@ -28,6 +30,7 @@ describe('settings workflows', () => {
                 saveTabOnClose: false,
                 saveTabOnCloseIfPreviouslySaved: true,
                 contextMenuDeleteDescendants: 'collapsed',
+                ...scopes,
               },
             }),
           )
@@ -36,7 +39,7 @@ describe('settings workflows', () => {
           )
           .then(() => done({ ok: true }))
           .catch((error) => done({ ok: false, error: String(error) }))
-      })
+      }, originalScopes)
     }
     for (const handle of openOptionsHandles) {
       if (!handles.includes(handle)) continue
@@ -85,30 +88,59 @@ describe('settings workflows', () => {
     openOptionsHandles.delete(options.optionsHandle)
   })
 
-  it('moves descendant scope choices with arrow keys and saves the row', async () => {
+  it('saves descendant scopes independently with arrow keys and preserves them after reload', async () => {
     const options = await trackOptionsPage()
     await options.page.selectSection('settings_context_menu')
-
-    const radios = await $$(
-      'input[name="descendant-scope-contextMenuDeleteDescendants"]',
-    )
-    expect(radios).toHaveLength(3)
-
-    await radios[0].scrollIntoView({ block: 'center' })
-    await radios[0].click()
-    await expect(radios[0]).toBeSelected()
-    // Arrow keys only move a native radio group when a radio actually holds
-    // focus, so assert that separately — otherwise a focus failure is
-    // indistinguishable from a broken binding.
-    await expect(radios[0]).toBeFocused()
-
-    await browser.keys(['ArrowRight'])
-
-    await expect(radios[1]).toBeSelected()
-    await options.page.expectStoredSetting(
+    const keys = [
       'contextMenuDeleteDescendants',
-      'collapsed',
-    )
+      'duplicateTreeItemDescendants',
+      'contextMenuOpenDescendants',
+      'contextMenuReloadDescendants',
+      'contextMenuSaveDescendants',
+      'contextMenuPinDescendants',
+      'includeChildrenOfSelectedItemsWhenIndenting',
+    ]
+    const selector = (key) => 'input[name="descendant-scope-' + key + '"]'
+    for (const key of keys)
+      originalScopes[key] = await $(selector(key) + ':checked').getValue()
+    const expected = { ...originalScopes }
+
+    for (const key of keys) {
+      const radios = await $$(selector(key))
+      const values = await radios.map((radio) => radio.getValue())
+      expect(values).toHaveLength(3)
+      expect(values).toEqual(
+        expect.arrayContaining(
+          key === 'duplicateTreeItemDescendants'
+            ? ['complete-subtree', 'collapsed', 'selected-only']
+            : ['always', 'collapsed', 'never'],
+        ),
+      )
+      const firstChoice = await radios[0].parentElement()
+      await firstChoice.scrollIntoView({ block: 'center' })
+      await firstChoice.click()
+      await expect(radios[0]).toBeFocused()
+      await options.page.expectStoredSetting(key, values[0])
+
+      for (let index = 1; index < radios.length; index++) {
+        await browser.keys('ArrowRight')
+        await expect(radios[index]).toBeSelected()
+        await options.page.expectStoredSetting(key, values[index])
+      }
+      expected[key] = values.at(-1)
+      for (const otherKey of keys)
+        await expect($(selector(otherKey) + ':checked')).toHaveValue(
+          expected[otherKey],
+        )
+    }
+
+    await browser.refresh()
+    await options.page.expectLoaded()
+    await options.page.selectSection('settings_context_menu')
+    for (const key of keys) {
+      await expect($(selector(key) + ':checked')).toHaveValue(expected[key])
+      await options.page.expectStoredSetting(key, expected[key])
+    }
   })
 
   it('disables dependent controls without changing their saved value', async () => {
@@ -125,14 +157,14 @@ describe('settings workflows', () => {
       false,
     )
 
-    await options.page.setToggle('Save tabs when they close', 'On')
+    await options.page.setToggleByKey('saveTabsWhenTheyClose', 'on')
     await expect(previouslySavedOff).toBeDisabled()
     await options.page.expectStoredSetting(
       'saveTabOnCloseIfPreviouslySaved',
       false,
     )
 
-    await options.page.setToggle('Save tabs when they close', 'Off')
+    await options.page.setToggleByKey('saveTabsWhenTheyClose', 'off')
     await expect(previouslySavedOff).toBeEnabled()
     expect(await previouslySavedOff.getAttribute('class')).toContain('active')
   })

@@ -148,7 +148,12 @@ export function addTab(
     window.children[window.children.indexOf(tab)] as Tab,
   )
   Tree.existingUidsSet.add(tab.uid)
-  if (tab.id >= 0) void writeTabUid(tab.id, tab.uid)
+  // Saved tabs can retain a placeholder or stale ID when moved within the tree.
+  if (
+    (tab.state === State.OPEN || tab.state === State.DISCARDED) &&
+    tab.id >= 0
+  )
+    void writeTabUid(tab.id, tab.uid)
   // Compute the new tab's final visibility and indentation before publishing
   // it. Emitting recompute updates here would send tabUpdated before the
   // foreground has received tabCreated, forcing an unnecessary resync.
