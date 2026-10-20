@@ -148,8 +148,9 @@ jobs:
 
       - name: Run E2E tests
         run: >-
-          xvfb-run --auto-servernum bash -c "openbox --sm-disable & sleep 1;
-          pnpm exec wdio run ./wdio.conf.mjs --spec '${{ matrix.spec }}'"
+          pnpm run zip:firefox && xvfb-run --auto-servernum bash -c
+          "openbox --sm-disable & sleep 1; pnpm exec wdio run
+          ./wdio.conf.mjs --spec '${{ matrix.spec }}'"
         env:
           WDIO_FIREFOX_BINARY: ${{ steps.firefox.outputs.firefox-path }}
 
