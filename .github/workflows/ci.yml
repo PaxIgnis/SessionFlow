@@ -45,6 +45,28 @@ jobs:
       - name: Lint
         run: pnpm run lint
 
+  tests:
+    name: tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 12.4.2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
       - name: Run non-E2E tests
         run: pnpm run test:non-e2e
 
@@ -76,7 +98,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Install window manager
+        run: sudo apt-get update && sudo apt-get install --yes openbox
+
       - name: Run E2E tests
-        run: xvfb-run --auto-servernum pnpm run test:e2e
+        run: xvfb-run --auto-servernum bash -c "openbox --sm-disable & sleep 1; pnpm run test:e2e"
         env:
           WDIO_FIREFOX_BINARY: ${{ steps.firefox.outputs.firefox-path }}

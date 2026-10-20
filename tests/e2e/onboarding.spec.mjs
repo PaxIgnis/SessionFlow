@@ -1,5 +1,4 @@
 import { $, browser, expect } from '@wdio/globals'
-import fs from 'node:fs/promises'
 import {
   FIREFOX_EXTENSION_ID,
   FIREFOX_EXTENSION_UUID,
@@ -115,7 +114,6 @@ describe('Session Flow introduction', () => {
         return icon.complete && icon.naturalWidth > 0
       }),
     )
-    await fs.mkdir('.output/onboarding-preview', { recursive: true })
     await expect($('.fine-print')).toHaveText('This is a sample tree.')
     await expect($('.example-tree [data-example-id="docs"]')).not.toBeExisting()
     await $(
@@ -136,7 +134,6 @@ describe('Session Flow introduction', () => {
         return arrow.getBBox().width > 0
       }),
     )
-    await browser.saveScreenshot('.output/onboarding-preview/welcome.png')
     await $(
       '.example-tree [data-example-id="projects"] .tree-item-action-button',
     ).click()
@@ -172,8 +169,6 @@ describe('Session Flow introduction', () => {
     const before = await storedState()
     expect(before.privateWindowOnboarding.status).toBe('pending')
     const tabsBefore = await tabIds()
-    await fs.mkdir('.output/onboarding-preview', { recursive: true })
-    await browser.saveScreenshot('.output/onboarding-preview/tab-states.png')
 
     await feature('focus')
     await expect($('.tab-guide h2')).toHaveText('3. Focus a tab')
@@ -198,7 +193,6 @@ describe('Session Flow introduction', () => {
     })
     expect(activeStyle.border).toContain('linear-gradient')
     expect(activeStyle.background).toBe('none')
-    await browser.saveScreenshot('.output/onboarding-preview/focus-after.png')
     await feature('organize')
     await expect($('.tab-guide h2')).toHaveText('6. Organize a branch')
     const sourceTop = await browser.execute(
@@ -220,7 +214,6 @@ describe('Session Flow introduction', () => {
     expect(initialDrag.highlighted).toBe(false)
     await expect(sampleItem('reference')).toHaveElementClass('indentLevel-1')
     await expect(sampleItem('research')).toHaveElementClass('drag-over-mid')
-    await browser.saveScreenshot('.output/onboarding-preview/organize-drag.png')
     await expect($('.tree-demo')).toHaveAttribute('data-phase', 'after')
     await expect(sampleItem('reference')).toHaveElementClass('indentLevel-2')
     await sampleItem('research').$('.tree-item-action-button').click()
@@ -269,14 +262,12 @@ describe('Session Flow introduction', () => {
     await expect($('.guide-warning')).toHaveText(
       expect.stringContaining('Save closes a tab and keeps its entry'),
     )
-    await browser.saveScreenshot('.output/onboarding-preview/save-before.png')
     await $('button=Watch example').click()
     await expect($('.tree-demo')).toHaveAttribute('data-phase', 'after')
     await expect(sampleItem('reference')).toHaveAttribute('data-state', 'saved')
     await expect(
       sampleItem('reference').$('button[aria-label="Save"]'),
     ).not.toBeExisting()
-    await browser.saveScreenshot('.output/onboarding-preview/save-after.png')
     await $('button=Replay example').click()
     await expect($('.tree-demo')).toHaveAttribute('data-phase', 'after')
     await feature('close')
@@ -329,9 +320,6 @@ describe('Session Flow introduction', () => {
     ).toBeDisplayed()
     expect(await tabIds()).toEqual(tabsBefore)
     await $('.private-example-tree').scrollIntoView()
-    await browser.saveScreenshot(
-      '.output/onboarding-preview/private-windows.png',
-    )
     await $('button=Next').click()
     await expect($('h1')).toHaveText('Include Private Windows')
     await expect($('main section > p')).toHaveText(
@@ -420,9 +408,6 @@ describe('Session Flow introduction', () => {
       )
     })
     expect(introPlacement).toBe(true)
-    await browser.saveScreenshot(
-      '.output/onboarding-preview/settings-show-intro.png',
-    )
     const replayHandles = await browser.getWindowHandles()
     await $('button=Show Intro').click()
     await switchToNewHandle(replayHandles, introductionUrl)
@@ -578,9 +563,6 @@ describe('Session Flow introduction', () => {
       )
     })
     expect(cursorAboveToolbar).toBe(true)
-    await browser.saveScreenshot(
-      '.output/onboarding-preview/note-add-click.png',
-    )
     await expect($('.tree-demo')).toHaveAttribute('data-phase', 'after')
     await expect(sampleItem('note')).toBeDisplayed()
     await $('button=Next tip').click()
@@ -597,9 +579,6 @@ describe('Session Flow introduction', () => {
     await expect($('.modal-container')).toBeDisplayed()
     await expect($('.tree-demo')).toHaveAttribute('data-motion', 'confirm')
     await expect($('.modal-textarea')).toHaveValue('Projects')
-    await browser.saveScreenshot(
-      '.output/onboarding-preview/note-edit-confirm.png',
-    )
     await expect($('.tree-demo')).toHaveAttribute('data-phase', 'after')
     await expect(sampleItem('note')).toHaveText('Projects')
     await $('button=Next tip').click()
@@ -619,7 +598,6 @@ describe('Session Flow introduction', () => {
       await expect(sampleItem(id)).toHaveElementClass('indentLevel-1')
     for (const id of ['research', 'reference'])
       await expect(sampleItem(id)).toHaveElementClass('indentLevel-2')
-    await browser.saveScreenshot('.output/onboarding-preview/note-group.png')
     await sampleItem('note').$('.tree-item-action-button').click()
     await expect(sampleItem('window')).not.toBeExisting()
     await expect(sampleItem('second-window')).not.toBeExisting()
@@ -668,7 +646,6 @@ describe('Session Flow introduction', () => {
       'data-state',
       'live',
     )
-    await browser.saveScreenshot('.output/onboarding-preview/save-window.png')
     await feature('close')
     await $('.example-choices').$('button=Window').click()
     await $('button=Watch example').click()
@@ -688,7 +665,6 @@ describe('Session Flow introduction', () => {
     )
     await expect($('.tree-item-window-count')).toHaveText('6')
     await expect(sampleItem('unloaded-2')).not.toBeExisting()
-    await browser.saveScreenshot('.output/onboarding-preview/window-bar.png')
     await feature('tab-groups')
     await expect(sampleItem('research')).toHaveAttribute(
       'title',
@@ -701,7 +677,6 @@ describe('Session Flow introduction', () => {
     await expect(
       sampleItem('research').$('.tree-item-tab-group-indicator'),
     ).toBeDisplayed()
-    await browser.saveScreenshot('.output/onboarding-preview/tab-groups.png')
     await feature('containers')
     await expect(sampleItem('research')).toHaveAttribute(
       'title',
@@ -721,7 +696,6 @@ describe('Session Flow introduction', () => {
     await expect(
       sampleItem('other-tab').$('.tree-item-container-icon'),
     ).not.toBeExisting()
-    await browser.saveScreenshot('.output/onboarding-preview/containers.png')
   })
 
   it('explains hidden indicators and opens their settings without losing the current tip', async () => {
@@ -996,8 +970,6 @@ describe('Session Flow introduction', () => {
     await expect(sampleItem('window').$('.tree-item-title')).toHaveText(
       'Travel',
     )
-    await fs.mkdir('.output/onboarding-preview', { recursive: true })
-    await browser.saveScreenshot('.output/onboarding-preview/item-labels.png')
     expect(await tabIds()).toEqual(tabsBefore)
   })
 
