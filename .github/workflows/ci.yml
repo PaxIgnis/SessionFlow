@@ -77,48 +77,54 @@ jobs:
       - name: Run non-E2E tests
         run: pnpm run test:non-e2e
 
+  discover_e2e:
+    name: Discover E2E specs
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Build E2E spec matrix
+        id: set-matrix
+        shell: bash
+        run: |
+          matrix="$(node --input-type=module <<'NODE'
+          import { readdirSync } from 'node:fs';
+
+          const root = 'tests/e2e';
+          const restartSpec = `${root}/startup-persistence.spec.mjs`;
+
+          function findSpecs(directory) {
+            return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+              const path = `${directory}/${entry.name}`;
+              if (entry.isDirectory()) return findSpecs(path);
+              if (entry.isFile() && path.endsWith('.spec.mjs') && path !== restartSpec) {
+                return [path];
+              }
+              return [];
+            });
+          }
+
+          const include = findSpecs(root).sort().map((spec) => ({
+            name: spec.slice(root.length + 1).replace(/\.spec\.mjs$/, ''),
+            spec: `./${spec}`,
+          }));
+          if (include.length === 0) throw new Error('No regular E2E specs found.');
+          process.stdout.write(JSON.stringify({ include }));
+          NODE
+          )"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
   e2e:
     name: e2e (${{ matrix.name }})
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    needs: discover_e2e
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - name: containers
-            spec: ./tests/e2e/containers.spec.mjs
-          - name: context-menu-presentation
-            spec: ./tests/e2e/context-menu-presentation.spec.mjs
-          - name: external-drops
-            spec: ./tests/e2e/external-drops.spec.mjs
-          - name: favicons-and-redirect
-            spec: ./tests/e2e/favicons-and-redirect.spec.mjs
-          - name: item-lifecycle
-            spec: ./tests/e2e/item-lifecycle.spec.mjs
-          - name: keyboard
-            spec: ./tests/e2e/keyboard.spec.mjs
-          - name: layout-stability
-            spec: ./tests/e2e/layout-stability.spec.mjs
-          - name: onboarding
-            spec: ./tests/e2e/onboarding.spec.mjs
-          - name: performance-resilience
-            spec: ./tests/e2e/performance-resilience.spec.mjs
-          - name: private-windows
-            spec: ./tests/e2e/private-windows.spec.mjs
-          - name: reopen-closed-tab
-            spec: ./tests/e2e/reopen-closed-tab.spec.mjs
-          - name: runtime-synchronization
-            spec: ./tests/e2e/runtime-synchronization.spec.mjs
-          - name: session-snapshots
-            spec: ./tests/e2e/session-snapshots.spec.mjs
-          - name: session-tree-smoke
-            spec: ./tests/e2e/session-tree-smoke.spec.mjs
-          - name: session-tree-workflows
-            spec: ./tests/e2e/session-tree-workflows.spec.mjs
-          - name: settings
-            spec: ./tests/e2e/settings.spec.mjs
-          - name: tab-groups
-            spec: ./tests/e2e/tab-groups.spec.mjs
+      matrix: ${{ fromJSON(needs.discover_e2e.outputs.matrix) }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -147,12 +153,40 @@ jobs:
         run: sudo apt-get update && sudo apt-get install --yes openbox
 
       - name: Run E2E tests
-        run: >-
-          pnpm run zip:firefox && xvfb-run --auto-servernum bash -c
-          "openbox --sm-disable & sleep 1; pnpm exec wdio run
-          ./wdio.conf.mjs --spec '${{ matrix.spec }}'"
+        run: |
+          set -o pipefail
+          {
+            pnpm run zip:firefox && xvfb-run --auto-servernum bash -c \
+              "openbox --sm-disable & sleep 1; pnpm exec wdio run ./wdio.conf.mjs --spec '${{ matrix.spec }}'"
+          } 2>&1 | tee e2e.log
         env:
           WDIO_FIREFOX_BINARY: ${{ steps.firefox.outputs.firefox-path }}
+
+      - name: Write E2E job summary
+        if: ${{ always() }}
+        env:
+          E2E_SPEC: ${{ matrix.spec }}
+          E2E_RESULT: ${{ job.status }}
+        run: |
+          {
+            echo "### E2E: \`${E2E_SPEC#./tests/e2e/}\`"
+            echo
+            echo "**Job result:** $E2E_RESULT"
+            echo
+            if [ -f e2e.log ]; then
+              if grep -E 'tests/e2e/|✓|✖|passing|failing|pending|Spec Files:' e2e.log \
+                | sed -E 's/^\[[^]]+\][[:space:]]*//' > e2e-summary.txt \
+                && [ -s e2e-summary.txt ]; then
+                echo '```text'
+                cat e2e-summary.txt
+                echo '```'
+              else
+                echo "No WDIO summary lines were found in the log."
+              fi
+            else
+              echo "WDIO did not produce a log."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
   e2e_restart:
     name: e2e (startup-persistence, Firefox Developer Edition)
@@ -186,12 +220,41 @@ jobs:
         run: sudo apt-get update && sudo apt-get install --yes openbox
 
       - name: Run startup-persistence E2E test
-        run: >-
-          xvfb-run --auto-servernum bash -c "openbox --sm-disable & sleep 1;
-          pnpm run zip:firefox && pnpm run test:e2e:restart"
+        run: |
+          set -o pipefail
+          {
+            xvfb-run --auto-servernum bash -c \
+              "openbox --sm-disable & sleep 1; pnpm run zip:firefox && pnpm run test:e2e:restart"
+          } 2>&1 | tee e2e.log
         env:
           WDIO_FIREFOX_BINARY: ${{ steps.firefox.outputs.firefox-path }}
           WDIO_REQUIRE_PERSISTENT_ADDON: 'true'
+
+      - name: Write E2E job summary
+        if: ${{ always() }}
+        env:
+          E2E_SPEC: ./tests/e2e/startup-persistence.spec.mjs
+          E2E_RESULT: ${{ job.status }}
+        run: |
+          {
+            echo "### E2E: \`${E2E_SPEC#./tests/e2e/}\` (Firefox Developer Edition)"
+            echo
+            echo "**Job result:** $E2E_RESULT"
+            echo
+            if [ -f e2e.log ]; then
+              if grep -E 'tests/e2e/|✓|✖|passing|failing|pending|Spec Files:' e2e.log \
+                | sed -E 's/^\[[^]]+\][[:space:]]*//' > e2e-summary.txt \
+                && [ -s e2e-summary.txt ]; then
+                echo '```text'
+                cat e2e-summary.txt
+                echo '```'
+              else
+                echo "No WDIO summary lines were found in the log."
+              fi
+            else
+              echo "WDIO did not produce a log."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
   summary:
     name: CI summary
