@@ -8,18 +8,28 @@ export const FIREFOX_EXTENSION_ID =
 export const FIREFOX_EXTENSION_UUID = '11111111-1111-4111-8111-111111111111'
 export const SESSION_TREE_URL = `moz-extension://${FIREFOX_EXTENSION_UUID}/sessiontree.html`
 
-export async function installSessionFlowAddon() {
+export async function installSessionFlowAddon({
+  requirePersistent = false,
+} = {}) {
   const extensionPath = await findFirefoxExtensionPackage()
   const extension = await fs.readFile(extensionPath)
-  return installAddOnWithPrivateBrowsing(extension.toString('base64'))
+  return installAddOnWithPrivateBrowsing(
+    extension.toString('base64'),
+    requirePersistent,
+  )
 }
 
-async function installAddOnWithPrivateBrowsing(addon) {
+async function installAddOnWithPrivateBrowsing(addon, requirePersistent) {
   const persistentResult = await requestAddOnInstall(addon, false)
   if (persistentResult.ok) return persistentResult.value
 
   if (!persistentResult.message.includes('ERROR_SIGNEDSTATE_REQUIRED')) {
     throw new Error(persistentResult.message)
+  }
+  if (requirePersistent) {
+    throw new Error(
+      'The Firefox restart E2E requires a persistent extension install. Use Firefox Developer Edition, Nightly, ESR, or a signed extension package.',
+    )
   }
 
   const temporaryResult = await requestAddOnInstall(addon, true)

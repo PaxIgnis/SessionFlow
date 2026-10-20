@@ -56,7 +56,9 @@ export const config = {
   },
   before: async (capabilities) => {
     if (capabilities.browserName === 'firefox') {
-      const addonId = await installSessionFlowAddon()
+      const addonId = await installSessionFlowAddon({
+        requirePersistent: process.env.WDIO_REQUIRE_PERSISTENT_ADDON === 'true',
+      })
       console.log(`Installed SessionFlow Firefox add-on: ${addonId}`)
     }
   },

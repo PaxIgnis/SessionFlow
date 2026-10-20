@@ -78,9 +78,47 @@ jobs:
         run: pnpm run test:non-e2e
 
   e2e:
-    name: e2e
+    name: e2e (${{ matrix.name }})
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: containers
+            spec: ./tests/e2e/containers.spec.mjs
+          - name: context-menu-presentation
+            spec: ./tests/e2e/context-menu-presentation.spec.mjs
+          - name: external-drops
+            spec: ./tests/e2e/external-drops.spec.mjs
+          - name: favicons-and-redirect
+            spec: ./tests/e2e/favicons-and-redirect.spec.mjs
+          - name: item-lifecycle
+            spec: ./tests/e2e/item-lifecycle.spec.mjs
+          - name: keyboard
+            spec: ./tests/e2e/keyboard.spec.mjs
+          - name: layout-stability
+            spec: ./tests/e2e/layout-stability.spec.mjs
+          - name: onboarding
+            spec: ./tests/e2e/onboarding.spec.mjs
+          - name: performance-resilience
+            spec: ./tests/e2e/performance-resilience.spec.mjs
+          - name: private-windows
+            spec: ./tests/e2e/private-windows.spec.mjs
+          - name: reopen-closed-tab
+            spec: ./tests/e2e/reopen-closed-tab.spec.mjs
+          - name: runtime-synchronization
+            spec: ./tests/e2e/runtime-synchronization.spec.mjs
+          - name: session-snapshots
+            spec: ./tests/e2e/session-snapshots.spec.mjs
+          - name: session-tree-smoke
+            spec: ./tests/e2e/session-tree-smoke.spec.mjs
+          - name: session-tree-workflows
+            spec: ./tests/e2e/session-tree-workflows.spec.mjs
+          - name: settings
+            spec: ./tests/e2e/settings.spec.mjs
+          - name: tab-groups
+            spec: ./tests/e2e/tab-groups.spec.mjs
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -109,14 +147,55 @@ jobs:
         run: sudo apt-get update && sudo apt-get install --yes openbox
 
       - name: Run E2E tests
-        run: xvfb-run --auto-servernum bash -c "openbox --sm-disable & sleep 1; pnpm run test:e2e"
+        run: >-
+          xvfb-run --auto-servernum bash -c "openbox --sm-disable & sleep 1;
+          pnpm exec wdio run ./wdio.conf.mjs --spec '${{ matrix.spec }}'"
         env:
           WDIO_FIREFOX_BINARY: ${{ steps.firefox.outputs.firefox-path }}
+
+  e2e_restart:
+    name: e2e (startup-persistence, Firefox Developer Edition)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 12.4.2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Set up Firefox Developer Edition
+        id: firefox
+        uses: browser-actions/setup-firefox@v1
+        with:
+          firefox-version: latest-devedition
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install window manager
+        run: sudo apt-get update && sudo apt-get install --yes openbox
+
+      - name: Run startup-persistence E2E test
+        run: >-
+          xvfb-run --auto-servernum bash -c "openbox --sm-disable & sleep 1;
+          pnpm run zip:firefox && pnpm run test:e2e:restart"
+        env:
+          WDIO_FIREFOX_BINARY: ${{ steps.firefox.outputs.firefox-path }}
+          WDIO_REQUIRE_PERSISTENT_ADDON: 'true'
 
   summary:
     name: CI summary
     runs-on: ubuntu-24.04
-    needs: [checks, tests, e2e]
+    needs: [checks, tests, e2e, e2e_restart]
     if: ${{ always() }}
     steps:
       - name: Write workflow summary
@@ -126,6 +205,7 @@ jobs:
           LINT: ${{ needs.checks.outputs.lint }}
           TESTS: ${{ needs.tests.result }}
           E2E: ${{ needs.e2e.result }}
+          E2E_RESTART: ${{ needs.e2e_restart.result }}
         run: |
           status() {
             case "$1" in
@@ -146,5 +226,6 @@ jobs:
             echo "| Type-check | $(status "$TYPECHECK") |"
             echo "| Lint | $(status "$LINT") |"
             echo "| Non-E2E tests | $(status "$TESTS") |"
-            echo "| E2E tests | $(status "$E2E") |"
+            echo "| E2E spec jobs | $(status "$E2E") |"
+            echo "| E2E restart test | $(status "$E2E_RESTART") |"
           } >> "$GITHUB_STEP_SUMMARY"
