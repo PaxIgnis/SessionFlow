@@ -18,17 +18,21 @@ jobs:
     name: checks
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    outputs:
+      formatting: ${{ steps.formatting.outcome }}
+      typecheck: ${{ steps.typecheck.outcome }}
+      lint: ${{ steps.lint.outcome }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 12.4.2
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: pnpm
@@ -37,12 +41,15 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Check formatting
+        id: formatting
         run: pnpm exec prettier . --check
 
       - name: Type-check
+        id: typecheck
         run: pnpm run compile
 
       - name: Lint
+        id: lint
         run: pnpm run lint
 
   tests:
@@ -54,12 +61,12 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 12.4.2
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: pnpm
@@ -79,12 +86,12 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 12.4.2
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: pnpm
@@ -105,3 +112,39 @@ jobs:
         run: xvfb-run --auto-servernum bash -c "openbox --sm-disable & sleep 1; pnpm run test:e2e"
         env:
           WDIO_FIREFOX_BINARY: ${{ steps.firefox.outputs.firefox-path }}
+
+  summary:
+    name: CI summary
+    runs-on: ubuntu-24.04
+    needs: [checks, tests, e2e]
+    if: ${{ always() }}
+    steps:
+      - name: Write workflow summary
+        env:
+          FORMATTING: ${{ needs.checks.outputs.formatting }}
+          TYPECHECK: ${{ needs.checks.outputs.typecheck }}
+          LINT: ${{ needs.checks.outputs.lint }}
+          TESTS: ${{ needs.tests.result }}
+          E2E: ${{ needs.e2e.result }}
+        run: |
+          status() {
+            case "$1" in
+              success) echo "✅ Passed" ;;
+              failure) echo "❌ Failed" ;;
+              cancelled) echo "⚪ Cancelled" ;;
+              skipped) echo "⚪ Skipped" ;;
+              *) echo "⚪ Not run" ;;
+            esac
+          }
+
+          {
+            echo "## CI results"
+            echo
+            echo "| Check | Result |"
+            echo "|---|---|"
+            echo "| Formatting | $(status "$FORMATTING") |"
+            echo "| Type-check | $(status "$TYPECHECK") |"
+            echo "| Lint | $(status "$LINT") |"
+            echo "| Non-E2E tests | $(status "$TESTS") |"
+            echo "| E2E tests | $(status "$E2E") |"
+          } >> "$GITHUB_STEP_SUMMARY"
