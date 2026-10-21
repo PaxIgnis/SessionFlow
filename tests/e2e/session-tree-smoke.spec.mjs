@@ -12,13 +12,13 @@ import {
 } from './support/session-tree-popup.mjs'
 
 describe('SessionFlow Firefox extension smoke', () => {
-  it('packages the Firefox 139 tab-groups compatibility contract (PD-MV-01/03)', async () => {
+  it('packages the Firefox 140 tab-groups compatibility contract (PD-MV-01/03)', async () => {
     const manifest = JSON.parse(
       await readFile('.output/firefox-mv2/manifest.json', 'utf8'),
     )
 
     expect(manifest.browser_specific_settings?.gecko?.strict_min_version).toBe(
-      '139.0',
+      '140.0',
     )
     expect(manifest.permissions).toContain('tabGroups')
   })

@@ -89,7 +89,8 @@ export async function resumeIntroductionAfterPrivateAccessChange(): Promise<void
     ONBOARDING_STORAGE_KEY
   ] as OnboardingRecord | undefined
   if (latest?.privateAccessResume?.expiresAt === marker.expiresAt) {
-    const { privateAccessResume: _marker, ...progress } = latest
+    const progress = { ...latest }
+    delete progress.privateAccessResume
     await browser.storage.local.set({ [ONBOARDING_STORAGE_KEY]: progress })
   }
 }

@@ -29,7 +29,7 @@
     "test:integration": "vitest run tests/integration",
     "test:regression": "vitest run tests/regression",
     "test:property": "vitest run --passWithNoTests tests/property",
-    "test:non-e2e": "pnpm run test:unit && pnpm run test:integration && pnpm run test:regression && pnpm run test:property",
+    "test:non-e2e": "vitest run --passWithNoTests tests/unit tests/integration tests/regression tests/property",
     "test:all": "pnpm run test:non-e2e && pnpm run test:e2e",
     "test:coverage:all": "pnpm run test:coverage && pnpm run test:e2e:coverage && pnpm run coverage:merge",
     "test:e2e:workflows": "wdio run ./wdio.conf.mjs",

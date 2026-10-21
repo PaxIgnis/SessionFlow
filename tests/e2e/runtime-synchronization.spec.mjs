@@ -18,8 +18,19 @@ describe('runtime synchronization workflows', () => {
     const beforeTitle = 'SF Runtime Before Reload'
     const afterTitle = 'SF Runtime After Reload'
     const originalHandle = await browser.getWindowHandle()
-    await browser.url(fixtureDataUrl(beforeTitle))
+    // Opening the popup first ensures the background and event listeners are
+    // ready before the test loads its fixture page.
     const popup = await openSessionTreePopup()
+    await browser.switchToWindow(originalHandle)
+    await browser.url(fixtureDataUrl(beforeTitle))
+    await browser.waitUntil(
+      async () => (await browser.getTitle()) === beforeTitle,
+      {
+        timeout: 10_000,
+        timeoutMsg: `Expected fixture tab "${beforeTitle}" to finish loading.`,
+      },
+    )
+    await browser.switchToWindow(popup.popupHandle)
     const sessionTree = new SessionTreePage()
     await sessionTree.waitForItemTextVisible(beforeTitle)
 

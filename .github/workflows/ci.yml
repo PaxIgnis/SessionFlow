@@ -1,0 +1,338 @@
+name: CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, review_requested]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  formatting:
+    name: formatting
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 12.4.2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check formatting
+        run: pnpm exec prettier . --check
+
+  typecheck:
+    name: type-check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 12.4.2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type-check
+        run: pnpm run compile
+
+  lint:
+    name: lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 12.4.2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm run lint
+
+  tests:
+    name: tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 12.4.2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run non-E2E tests
+        run: pnpm run test:non-e2e
+
+  discover_e2e:
+    name: Discover E2E specs
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Build E2E spec matrix
+        id: set-matrix
+        shell: bash
+        run: |
+          matrix="$(node --input-type=module <<'NODE'
+          import { readdirSync } from 'node:fs';
+
+          const root = 'tests/e2e';
+          const restartSpec = `${root}/startup-persistence.spec.mjs`;
+
+          function findSpecs(directory) {
+            return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+              const path = `${directory}/${entry.name}`;
+              if (entry.isDirectory()) return findSpecs(path);
+              if (entry.isFile() && path.endsWith('.spec.mjs') && path !== restartSpec) {
+                return [path];
+              }
+              return [];
+            });
+          }
+
+          const include = findSpecs(root).sort().map((spec) => ({
+            name: spec.slice(root.length + 1).replace(/\.spec\.mjs$/, ''),
+            spec: `./${spec}`,
+          }));
+          if (include.length === 0) throw new Error('No regular E2E specs found.');
+          process.stdout.write(JSON.stringify({ include }));
+          NODE
+          )"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
+  e2e:
+    name: e2e (${{ matrix.name }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    needs: discover_e2e
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.discover_e2e.outputs.matrix) }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 12.4.2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Set up Firefox
+        id: firefox
+        uses: browser-actions/setup-firefox@v1
+        with:
+          firefox-version: latest
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install window manager
+        run: sudo apt-get update && sudo apt-get install --yes openbox
+
+      - name: Run E2E tests
+        run: |
+          set -o pipefail
+          {
+            pnpm run zip:firefox && xvfb-run --auto-servernum bash -c \
+              "openbox --sm-disable & sleep 1; pnpm exec wdio run ./wdio.conf.mjs --spec '${{ matrix.spec }}'"
+          } 2>&1 | tee e2e.log
+        env:
+          WDIO_FIREFOX_BINARY: ${{ steps.firefox.outputs.firefox-path }}
+
+      - name: Write E2E job summary
+        if: ${{ always() }}
+        env:
+          E2E_SPEC: ${{ matrix.spec }}
+          E2E_RESULT: ${{ job.status }}
+        run: |
+          {
+            echo "### E2E: \`${E2E_SPEC#./tests/e2e/}\`"
+            echo
+            echo "**Job result:** $E2E_RESULT"
+            echo
+            if [ -f e2e.log ]; then
+              if grep -E 'tests/e2e/|✓|✖|passing|failing|pending|Spec Files:' e2e.log \
+                | sed -E 's/^\[[^]]+\][[:space:]]*//' > e2e-summary.txt \
+                && [ -s e2e-summary.txt ]; then
+                echo '```text'
+                cat e2e-summary.txt
+                echo '```'
+              else
+                echo "No WDIO summary lines were found in the log."
+              fi
+            else
+              echo "WDIO did not produce a log."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  e2e_restart:
+    name: e2e (startup-persistence, Firefox Developer Edition)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 12.4.2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Set up Firefox Developer Edition
+        id: firefox
+        uses: browser-actions/setup-firefox@v1
+        with:
+          firefox-version: latest-devedition
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install window manager
+        run: sudo apt-get update && sudo apt-get install --yes openbox
+
+      - name: Run startup-persistence E2E test
+        run: |
+          set -o pipefail
+          {
+            xvfb-run --auto-servernum bash -c \
+              "openbox --sm-disable & sleep 1; pnpm run zip:firefox && pnpm run test:e2e:restart"
+          } 2>&1 | tee e2e.log
+        env:
+          WDIO_FIREFOX_BINARY: ${{ steps.firefox.outputs.firefox-path }}
+          WDIO_REQUIRE_PERSISTENT_ADDON: 'true'
+
+      - name: Write E2E job summary
+        if: ${{ always() }}
+        env:
+          E2E_SPEC: ./tests/e2e/startup-persistence.spec.mjs
+          E2E_RESULT: ${{ job.status }}
+        run: |
+          {
+            echo "### E2E: \`${E2E_SPEC#./tests/e2e/}\` (Firefox Developer Edition)"
+            echo
+            echo "**Job result:** $E2E_RESULT"
+            echo
+            if [ -f e2e.log ]; then
+              if grep -E 'tests/e2e/|✓|✖|passing|failing|pending|Spec Files:' e2e.log \
+                | sed -E 's/^\[[^]]+\][[:space:]]*//' > e2e-summary.txt \
+                && [ -s e2e-summary.txt ]; then
+                echo '```text'
+                cat e2e-summary.txt
+                echo '```'
+              else
+                echo "No WDIO summary lines were found in the log."
+              fi
+            else
+              echo "WDIO did not produce a log."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  summary:
+    name: CI summary
+    runs-on: ubuntu-24.04
+    needs: [formatting, typecheck, lint, tests, e2e, e2e_restart]
+    if: ${{ always() }}
+    steps:
+      - name: Write workflow summary
+        env:
+          FORMATTING: ${{ needs.formatting.result }}
+          TYPECHECK: ${{ needs.typecheck.result }}
+          LINT: ${{ needs.lint.result }}
+          TESTS: ${{ needs.tests.result }}
+          E2E: ${{ needs.e2e.result }}
+          E2E_RESTART: ${{ needs.e2e_restart.result }}
+        run: |
+          status() {
+            case "$1" in
+              success) echo "✅ Passed" ;;
+              failure) echo "❌ Failed" ;;
+              cancelled) echo "⚪ Cancelled" ;;
+              skipped) echo "⚪ Skipped" ;;
+              *) echo "⚪ Not run" ;;
+            esac
+          }
+
+          {
+            echo "## CI results"
+            echo
+            echo "| Check | Result |"
+            echo "|---|---|"
+            echo "| Formatting | $(status "$FORMATTING") |"
+            echo "| Type-check | $(status "$TYPECHECK") |"
+            echo "| Lint | $(status "$LINT") |"
+            echo "| Non-E2E tests | $(status "$TESTS") |"
+            echo "| E2E spec jobs | $(status "$E2E") |"
+            echo "| E2E restart test | $(status "$E2E_RESTART") |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ "$FORMATTING" != success || "$TYPECHECK" != success || "$LINT" != success || \
+            "$TESTS" != success || "$E2E" != success || "$E2E_RESTART" != success ]]; then
+            echo "::error::One or more required CI jobs did not succeed."
+            exit 1
+          fi

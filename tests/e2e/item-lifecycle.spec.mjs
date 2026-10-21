@@ -3,6 +3,7 @@ import {
   reloadExtensionBackgroundPage,
   writeStoredSessionTree,
 } from './support/extension-lifecycle.mjs'
+import { FIREFOX_EXTENSION_UUID } from './support/firefox-extension.mjs'
 import {
   cleanupSeededTabs,
   extensionFixtureTitle,
@@ -589,6 +590,29 @@ async function openLifecycleSession(titles = [SESSION_FIXTURE_TITLES.initial]) {
       return titles.every((title) => trackedTitles.includes(title))
     },
     `Expected lifecycle fixtures in tree: ${titles.join(', ')}.`,
+  )
+  await closeFirstRunOnboardingTab()
+}
+
+async function closeFirstRunOnboardingTab() {
+  const popupHandle = popup.popupHandle
+  const onboardingUrl = `moz-extension://${FIREFOX_EXTENSION_UUID}/onboarding.html`
+
+  for (const handle of await browser.getWindowHandles()) {
+    await browser.switchToWindow(handle)
+    if ((await browser.getUrl()).startsWith(onboardingUrl)) {
+      await browser.closeWindow()
+      break
+    }
+  }
+
+  await browser.switchToWindow(popupHandle)
+  await sessionTree.waitForBackgroundTree(
+    (tree) =>
+      windowsInTree(tree)
+        .flatMap((windowItem) => tabsInWindow(windowItem))
+        .every((tab) => !tab.title.includes('/onboarding.html')),
+    'Expected the first-run onboarding tab to be closed.',
   )
 }
 
