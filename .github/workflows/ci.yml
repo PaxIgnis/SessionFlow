@@ -2,7 +2,7 @@ name: CI
 
 on:
   pull_request:
-    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review, review_requested]
   push:
     branches: [main]
 
@@ -14,14 +14,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  checks:
-    name: checks
+  formatting:
+    name: formatting
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    outputs:
-      formatting: ${{ steps.formatting.outcome }}
-      typecheck: ${{ steps.typecheck.outcome }}
-      lint: ${{ steps.lint.outcome }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -41,15 +37,56 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Check formatting
-        id: formatting
         run: pnpm exec prettier . --check
 
+  typecheck:
+    name: type-check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 12.4.2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
       - name: Type-check
-        id: typecheck
         run: pnpm run compile
 
+  lint:
+    name: lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 12.4.2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
       - name: Lint
-        id: lint
         run: pnpm run lint
 
   tests:
@@ -259,14 +296,14 @@ jobs:
   summary:
     name: CI summary
     runs-on: ubuntu-24.04
-    needs: [checks, tests, e2e, e2e_restart]
+    needs: [formatting, typecheck, lint, tests, e2e, e2e_restart]
     if: ${{ always() }}
     steps:
       - name: Write workflow summary
         env:
-          FORMATTING: ${{ needs.checks.outputs.formatting }}
-          TYPECHECK: ${{ needs.checks.outputs.typecheck }}
-          LINT: ${{ needs.checks.outputs.lint }}
+          FORMATTING: ${{ needs.formatting.result }}
+          TYPECHECK: ${{ needs.typecheck.result }}
+          LINT: ${{ needs.lint.result }}
           TESTS: ${{ needs.tests.result }}
           E2E: ${{ needs.e2e.result }}
           E2E_RESTART: ${{ needs.e2e_restart.result }}
@@ -293,3 +330,9 @@ jobs:
             echo "| E2E spec jobs | $(status "$E2E") |"
             echo "| E2E restart test | $(status "$E2E_RESTART") |"
           } >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ "$FORMATTING" != success || "$TYPECHECK" != success || "$LINT" != success || \
+            "$TESTS" != success || "$E2E" != success || "$E2E_RESTART" != success ]]; then
+            echo "::error::One or more required CI jobs did not succeed."
+            exit 1
+          fi
