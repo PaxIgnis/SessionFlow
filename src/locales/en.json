@@ -564,6 +564,7 @@
   "shortcutAddSeparator": "Add separator",
   "shortcutClose": "Delete Item",
   "shortcutCollapse": "Collapse / expand selected item",
+  "shortcutDuplicate": "Duplicate selected item(s)",
   "shortcutEdit": "Edit title / label / note",
   "shortcutPin": "Pin / unpin tab",
   "shortcutReload": "Reload tab",

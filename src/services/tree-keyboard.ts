@@ -256,6 +256,17 @@ async function runShortcut(
       else if (target.type === TreeItemType.SEPARATOR)
         Messages.removeSeparator(target.uid)
     }
+  } else if (key === 'shortcutDuplicate') {
+    const scope =
+      Settings.values.duplicateTreeItemDescendants === 'complete-subtree'
+        ? 'always'
+        : Settings.values.duplicateTreeItemDescendants === 'collapsed'
+          ? 'collapsed'
+          : 'never'
+    await Messages.duplicateTreeItems(
+      selectedForScope(scope).map((target) => target.uid),
+      false,
+    )
   } else if (key === 'shortcutSave') {
     const targets = selectedForScope(Settings.values.contextMenuSaveDescendants)
     await Messages.saveWindows(

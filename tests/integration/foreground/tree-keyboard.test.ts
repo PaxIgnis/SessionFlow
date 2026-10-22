@@ -377,7 +377,7 @@ describe('tree keyboard interaction', () => {
     expectForegroundIndexes()
   })
 
-  it('runs opt-in close/save/reload/pin actions and edits the selected kind', async () => {
+  it('runs opt-in close/save/reload/pin/duplicate actions and edits the selected kind', async () => {
     const items = fixture()
     selectKeyboardItem(items[1])
     const close = vi.spyOn(Messages, 'closeTab').mockResolvedValue()
@@ -386,15 +386,19 @@ describe('tree keyboard interaction', () => {
     const reload = vi.spyOn(Messages, 'reloadTabs').mockResolvedValue()
     const pin = vi.spyOn(Messages, 'pinTabs').mockResolvedValue()
     const unpin = vi.spyOn(Messages, 'unpinTabs').mockResolvedValue()
+    const duplicate = vi
+      .spyOn(Messages, 'duplicateTreeItems')
+      .mockImplementation(() => {})
     for (const [setting, letter] of [
       ['shortcutClose', 'C'],
       ['shortcutSave', 'S'],
       ['shortcutReload', 'R'],
       ['shortcutPin', 'P'],
+      ['shortcutDuplicate', 'D'],
       ['shortcutEdit', 'E'],
     ] as const)
       Settings.values[setting] = letter
-    for (const letter of ['c', 's', 'r', 'p'])
+    for (const letter of ['c', 's', 'r', 'p', 'd'])
       await handleTreeKeydown(key(letter), items)
     expect(close).toHaveBeenCalledWith(
       (items[1] as { id: number }).id,
@@ -403,11 +407,26 @@ describe('tree keyboard interaction', () => {
     expect(save).toHaveBeenCalledWith([items[1]])
     expect(reload).toHaveBeenCalledWith([items[1]])
     expect(pin).toHaveBeenCalledWith([items[1]])
+    expect(duplicate).toHaveBeenCalledWith(['parent'], false)
     ;(items[1] as { pinned: boolean }).pinned = true
     await handleTreeKeydown(key('p'), items)
     expect(unpin).toHaveBeenCalledWith([items[1]])
     await handleTreeKeydown(key('e'), items)
     expect(ModalState.active?.kind).toBe('editCustomLabel')
+  })
+
+  it('duplicates descendants according to the configured duplicate scope', async () => {
+    const items = fixture()
+    selectKeyboardItem(items[1])
+    Settings.values.shortcutDuplicate = 'D'
+    Settings.values.duplicateTreeItemDescendants = 'complete-subtree'
+    const duplicate = vi
+      .spyOn(Messages, 'duplicateTreeItems')
+      .mockImplementation(() => {})
+
+    await handleTreeKeydown(key('d'), items)
+
+    expect(duplicate).toHaveBeenCalledWith(['parent', 'child'], false)
   })
 
   it('closes saved items immediately, like the close button, without opening a modal', async () => {

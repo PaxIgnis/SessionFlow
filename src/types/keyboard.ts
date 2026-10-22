@@ -2,12 +2,13 @@ export const TREE_SHORTCUT_KEYS = [
   'shortcutActivate',
   'shortcutCollapse',
   'shortcutClose',
-  'shortcutSave',
+  'shortcutDuplicate',
+  'shortcutPin',
   'shortcutReload',
+  'shortcutSave',
   'shortcutEdit',
   'shortcutAddNote',
   'shortcutAddSeparator',
-  'shortcutPin',
 ] as const
 
 export type TreeShortcutKey = (typeof TREE_SHORTCUT_KEYS)[number]
@@ -26,10 +27,11 @@ export const DEFAULT_TREE_SHORTCUTS: KeyboardSettings = {
   shortcutActivate: 'Enter',
   shortcutCollapse: 'Space',
   shortcutClose: '',
-  shortcutSave: '',
+  shortcutDuplicate: '',
+  shortcutPin: '',
   shortcutReload: '',
+  shortcutSave: '',
   shortcutEdit: '',
   shortcutAddNote: '',
   shortcutAddSeparator: '',
-  shortcutPin: '',
 }
