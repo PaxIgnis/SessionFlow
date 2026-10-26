@@ -187,27 +187,45 @@ jobs:
 
       - name: Restore window manager packages
         id: openbox-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: openbox-debs
-          key: openbox-v2-${{ steps.image.outputs.version }}
+          key: openbox-v3-${{ steps.image.outputs.version }}
 
+      # The runner's Azure mirror sometimes stalls on single files, so apt only
+      # lists the packages and curl fetches each one, abandoning slow transfers
+      # and falling back to other Ubuntu mirrors.
       - name: Download window manager packages
         if: ${{ steps.openbox-cache.outputs.cache-hit != 'true' }}
-        timeout-minutes: 5
+        timeout-minutes: 8
         run: |
-          mkdir -p openbox-debs/partial
           sudo apt-get update
-          sudo apt-get install --yes --download-only --no-install-recommends \
-            -o Dir::Cache::archives="$PWD/openbox-debs" \
-            -o Acquire::Retries=3 -o Acquire::http::Timeout=20 openbox
-          sudo rm -rf openbox-debs/partial openbox-debs/lock
-          sudo chown -R "$USER" openbox-debs
+          sudo apt-get install --yes --print-uris --no-install-recommends openbox \
+            | grep "^'" > openbox-uris.txt
+          mkdir -p openbox-debs
+          while read -r uri file _size hash; do
+            pool="$(sed -E "s#^'.*/(pool/[^']*)'\$#\1#" <<< "$uri")"
+            algorithm="${hash%%:*}"
+            for mirror in \
+              http://azure.archive.ubuntu.com/ubuntu \
+              http://archive.ubuntu.com/ubuntu \
+              https://mirrors.edge.kernel.org/ubuntu; do
+              if curl --fail --silent --show-error --location --retry 2 \
+                --connect-timeout 10 --speed-limit 50000 --speed-time 15 \
+                --output "openbox-debs/$file" "$mirror/$pool" \
+                && echo "${hash#*:}  openbox-debs/$file" | "${algorithm,,}sum" --check --quiet; then
+                continue 2
+              fi
+              echo "::warning::Could not download $file from $mirror"
+            done
+            echo "::error::Could not download $file from any mirror"
+            exit 1
+          done < openbox-uris.txt
           ls openbox-debs/openbox_*.deb
           ls -1 openbox-debs
 
       - name: Upload E2E setup
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: e2e-setup
           include-hidden-files: true
@@ -252,16 +270,16 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Download E2E setup
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: e2e-setup
 
       - name: Install window manager
         run: |
-          sudo apt-get install --yes --no-install-recommends --no-download ./openbox-debs/*.deb || {
+          sudo dpkg --install openbox-debs/*.deb || {
             echo "::warning::Cached window manager packages were incomplete; installing from the Ubuntu mirror."
             sudo apt-get update
-            sudo apt-get install --yes --no-install-recommends openbox
+            sudo apt-get install --yes --fix-broken --no-install-recommends openbox
           }
 
       - name: Run E2E tests
@@ -330,16 +348,16 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Download E2E setup
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: e2e-setup
 
       - name: Install window manager
         run: |
-          sudo apt-get install --yes --no-install-recommends --no-download ./openbox-debs/*.deb || {
+          sudo dpkg --install openbox-debs/*.deb || {
             echo "::warning::Cached window manager packages were incomplete; installing from the Ubuntu mirror."
             sudo apt-get update
-            sudo apt-get install --yes --no-install-recommends openbox
+            sudo apt-get install --yes --fix-broken --no-install-recommends openbox
           }
 
       - name: Run startup-persistence E2E test
