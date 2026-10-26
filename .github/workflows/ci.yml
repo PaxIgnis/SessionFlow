@@ -190,17 +190,21 @@ jobs:
         uses: actions/cache@v4
         with:
           path: openbox-debs
-          key: openbox-${{ steps.image.outputs.version }}
+          key: openbox-v2-${{ steps.image.outputs.version }}
 
       - name: Download window manager packages
         if: ${{ steps.openbox-cache.outputs.cache-hit != 'true' }}
         timeout-minutes: 5
         run: |
+          mkdir -p openbox-debs/partial
           sudo apt-get update
           sudo apt-get install --yes --download-only --no-install-recommends \
+            -o Dir::Cache::archives="$PWD/openbox-debs" \
             -o Acquire::Retries=3 -o Acquire::http::Timeout=20 openbox
-          mkdir -p openbox-debs
-          cp /var/cache/apt/archives/*.deb openbox-debs/
+          sudo rm -rf openbox-debs/partial openbox-debs/lock
+          sudo chown -R "$USER" openbox-debs
+          ls openbox-debs/openbox_*.deb
+          ls -1 openbox-debs
 
       - name: Upload E2E setup
         uses: actions/upload-artifact@v4
@@ -254,7 +258,8 @@ jobs:
 
       - name: Install window manager
         run: |
-          sudo apt-get install --yes --no-install-recommends ./openbox-debs/*.deb || {
+          sudo apt-get install --yes --no-install-recommends --no-download ./openbox-debs/*.deb || {
+            echo "::warning::Cached window manager packages were incomplete; installing from the Ubuntu mirror."
             sudo apt-get update
             sudo apt-get install --yes --no-install-recommends openbox
           }
@@ -331,7 +336,8 @@ jobs:
 
       - name: Install window manager
         run: |
-          sudo apt-get install --yes --no-install-recommends ./openbox-debs/*.deb || {
+          sudo apt-get install --yes --no-install-recommends --no-download ./openbox-debs/*.deb || {
+            echo "::warning::Cached window manager packages were incomplete; installing from the Ubuntu mirror."
             sudo apt-get update
             sudo apt-get install --yes --no-install-recommends openbox
           }
