@@ -32,6 +32,6 @@ and the test helper discovers the catalog automatically. Extend the catalog test
 The WXT module supports `1`/`n` or `0`/`1`/`n` selection. Languages requiring
 other plural rules need a pluralization solution beyond the current module.
 
-Run `pnpm test`, `pnpm run compile`, and `pnpm run build:firefox`. Check the
+Run `pnpm test`, `pnpm run compile`, and `pnpm run build`. Check the
 extension in Firefox with indended interface languages, including
 settings, menus, dialog wrapping, private-window onboarding, and import/export.

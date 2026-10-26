@@ -12,7 +12,7 @@ grouped restoration, and native pin/unpin convergence. Run it alone while
 iterating with:
 
 ```bash
-pnpm run zip:firefox
+pnpm run zip
 pnpm exec wdio run ./wdio.conf.mjs --spec ./tests/e2e/item-lifecycle.spec.mjs
 ```
 
@@ -20,7 +20,7 @@ This command runs Firefox headed by default because the workflow tests depend on
 Firefox extension window events that are unreliable in headless mode. To opt
 into the unstable headless path for diagnostics, set `WDIO_HEADLESS=true`.
 
-The WDIO suite packages the Firefox extension with `pnpm run zip:firefox`, starts Firefox through geckodriver, installs the generated XPI into the test profile with `browser.installAddOn(..., false)`, and opens `sessiontree.html` through a deterministic `moz-extension://` URL.
+The WDIO suite packages the Firefox extension with `pnpm run zip`, starts Firefox through geckodriver, installs the generated XPI into the test profile with `browser.installAddOn(..., false)`, and opens `sessiontree.html` through a deterministic `moz-extension://` URL.
 
 The ordinary workflow configuration excludes `startup-persistence.spec.mjs`.
 That spec runs through `wdio.restart.conf.mjs`, which creates an isolated temporary
