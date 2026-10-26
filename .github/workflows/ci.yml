@@ -155,11 +155,96 @@ jobs:
           )"
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
 
+  # Build the extension and download the window manager once
+  e2e_setup:
+    name: Prepare E2E
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 12.4.2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Firefox extension
+        run: pnpm run zip
+
+      - name: Identify runner image
+        id: image
+        run: echo "version=$ImageOS-$ImageVersion" >> "$GITHUB_OUTPUT"
+
+      - name: Restore window manager packages
+        id: openbox-cache
+        uses: actions/cache@v6
+        with:
+          path: openbox-debs
+          key: openbox-v3-${{ steps.image.outputs.version }}
+
+      # The runner's Azure mirror sometimes stalls on single files, so apt only
+      # lists the packages and curl fetches each one, abandoning slow transfers
+      # and falling back to other Ubuntu mirrors. apt then checks the files
+      # against the signed package index and refetches any that do not match.
+      - name: Download window manager packages
+        if: ${{ steps.openbox-cache.outputs.cache-hit != 'true' }}
+        timeout-minutes: 8
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --print-uris --no-install-recommends openbox \
+            | grep "^'" > openbox-uris.txt
+          mkdir -p openbox-debs/partial
+          while read -r uri file _; do
+            pool="$(sed -E "s#^'.*/(pool/[^']*)'\$#\1#" <<< "$uri")"
+            for mirror in \
+              http://azure.archive.ubuntu.com/ubuntu \
+              http://archive.ubuntu.com/ubuntu \
+              https://mirrors.edge.kernel.org/ubuntu; do
+              if curl --fail --silent --show-error --location --retry 2 \
+                --connect-timeout 10 --speed-limit 50000 --speed-time 15 \
+                --output "openbox-debs/$file" "$mirror/$pool"; then
+                continue 2
+              fi
+              echo "::warning::Could not download $file from $mirror"
+            done
+            echo "::error::Could not download $file from any mirror"
+            exit 1
+          done < openbox-uris.txt
+          sudo apt-get install --yes --download-only --no-install-recommends \
+            -o Dir::Cache::archives="$PWD/openbox-debs" openbox
+          sudo rm -rf openbox-debs/partial openbox-debs/lock
+          sudo chown -R "$USER" openbox-debs
+          ls openbox-debs/openbox_*.deb
+          ls -1 openbox-debs
+
+      - name: Upload E2E setup
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-setup
+          include-hidden-files: true
+          retention-days: 1
+          if-no-files-found: error
+          path: |
+            .output/session-flow-*.zip
+            !.output/session-flow-*-sources.zip
+            .output/firefox-mv2/
+            openbox-debs/
+
   e2e:
     name: e2e (${{ matrix.name }})
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    needs: discover_e2e
+    needs: [discover_e2e, e2e_setup]
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.discover_e2e.outputs.matrix) }}
@@ -187,14 +272,24 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Download E2E setup
+        uses: actions/download-artifact@v8
+        with:
+          name: e2e-setup
+
       - name: Install window manager
-        run: sudo apt-get update && sudo apt-get install --yes openbox
+        run: |
+          sudo dpkg --install openbox-debs/*.deb || {
+            echo "::warning::Cached window manager packages were incomplete; installing from the Ubuntu mirror."
+            sudo apt-get update
+            sudo apt-get install --yes --fix-broken --no-install-recommends openbox
+          }
 
       - name: Run E2E tests
         run: |
           set -o pipefail
           {
-            pnpm run zip && xvfb-run --auto-servernum bash -c \
+            xvfb-run --auto-servernum bash -c \
               "openbox --sm-disable & sleep 1; pnpm exec wdio run ./wdio.conf.mjs --spec '${{ matrix.spec }}'"
           } 2>&1 | tee e2e.log
         env:
@@ -230,6 +325,7 @@ jobs:
     name: e2e (startup-persistence, Firefox Developer Edition)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    needs: e2e_setup
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -254,15 +350,25 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Download E2E setup
+        uses: actions/download-artifact@v8
+        with:
+          name: e2e-setup
+
       - name: Install window manager
-        run: sudo apt-get update && sudo apt-get install --yes openbox
+        run: |
+          sudo dpkg --install openbox-debs/*.deb || {
+            echo "::warning::Cached window manager packages were incomplete; installing from the Ubuntu mirror."
+            sudo apt-get update
+            sudo apt-get install --yes --fix-broken --no-install-recommends openbox
+          }
 
       - name: Run startup-persistence E2E test
         run: |
           set -o pipefail
           {
             xvfb-run --auto-servernum bash -c \
-              "openbox --sm-disable & sleep 1; pnpm run zip && pnpm run test:e2e:restart"
+              "openbox --sm-disable & sleep 1; pnpm run test:e2e:restart"
           } 2>&1 | tee e2e.log
         env:
           WDIO_FIREFOX_BINARY: ${{ steps.firefox.outputs.firefox-path }}
@@ -297,7 +403,7 @@ jobs:
   summary:
     name: CI summary
     runs-on: ubuntu-24.04
-    needs: [formatting, typecheck, lint, tests, e2e, e2e_restart]
+    needs: [formatting, typecheck, lint, tests, e2e_setup, e2e, e2e_restart]
     if: ${{ always() }}
     steps:
       - name: Write workflow summary
@@ -306,6 +412,7 @@ jobs:
           TYPECHECK: ${{ needs.typecheck.result }}
           LINT: ${{ needs.lint.result }}
           TESTS: ${{ needs.tests.result }}
+          E2E_SETUP: ${{ needs.e2e_setup.result }}
           E2E: ${{ needs.e2e.result }}
           E2E_RESTART: ${{ needs.e2e_restart.result }}
         run: |
@@ -328,12 +435,14 @@ jobs:
             echo "| Type-check | $(status "$TYPECHECK") |"
             echo "| Lint | $(status "$LINT") |"
             echo "| Non-E2E tests | $(status "$TESTS") |"
+            echo "| E2E setup | $(status "$E2E_SETUP") |"
             echo "| E2E spec jobs | $(status "$E2E") |"
             echo "| E2E restart test | $(status "$E2E_RESTART") |"
           } >> "$GITHUB_STEP_SUMMARY"
 
           if [[ "$FORMATTING" != success || "$TYPECHECK" != success || "$LINT" != success || \
-            "$TESTS" != success || "$E2E" != success || "$E2E_RESTART" != success ]]; then
+            "$TESTS" != success || "$E2E_SETUP" != success || "$E2E" != success || \
+            "$E2E_RESTART" != success ]]; then
             echo "::error::One or more required CI jobs did not succeed."
             exit 1
           fi
