@@ -42,7 +42,9 @@ describe('onboarding pointer animation', () => {
       return 1
     })
     vi.stubGlobal('cancelAnimationFrame', vi.fn())
-    const start = performance.now()
+    // A round start keeps (start + 100) - start exactly 100, so the final
+    // frame reaches full progress instead of stopping a rounding error short.
+    const start = 1000
     vi.spyOn(performance, 'now').mockReturnValue(start)
     const update = vi.fn()
     const moving = moveDemoPointer(
