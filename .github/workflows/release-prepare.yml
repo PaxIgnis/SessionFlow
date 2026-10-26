@@ -1,0 +1,102 @@
+name: Prepare release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to release, using MAJOR.MINOR.PATCH version format
+        required: true
+        type: string
+
+permissions:
+  actions: write
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: prepare-release
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Open release pull request
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      VERSION: ${{ inputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v6
+        with:
+          ref: main
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Validate version
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs'
+
+          const next = process.env.VERSION
+          const current = JSON.parse(readFileSync('package.json', 'utf8')).version
+          if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(next)) {
+            console.error(`::error::"${next}" is not a MAJOR.MINOR.PATCH version.`)
+            process.exit(1)
+          }
+
+          const nextParts = next.split('.').map(Number)
+          const currentParts = current.split('.').map(Number)
+          const difference = nextParts.map((part, i) => part - currentParts[i]).find((d) => d !== 0) ?? 0
+          if (difference <= 0) {
+            console.error(`::error::${next} must be greater than the current version ${current}.`)
+            process.exit(1)
+          }
+          NODE
+
+          if git ls-remote --exit-code --tags origin "refs/tags/v$VERSION" > /dev/null; then
+            echo "::error::Tag v$VERSION already exists."
+            exit 1
+          fi
+          if git ls-remote --exit-code --heads origin "refs/heads/release/v$VERSION" > /dev/null; then
+            echo "::error::Branch release/v$VERSION already exists."
+            exit 1
+          fi
+
+      - name: Bump version and push release branch
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync } from 'node:fs'
+
+          const text = readFileSync('package.json', 'utf8')
+          const updated = text.replace(/"version": "[^"]+"/, `"version": "${process.env.VERSION}"`)
+          if (updated === text) throw new Error('Could not update package.json version.')
+          writeFileSync('package.json', updated)
+          NODE
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898283+github-actions[bot]@users.noreply.github.com'
+          git switch --create "release/v$VERSION"
+          git commit --all --message "chore: release v$VERSION"
+          git push origin "release/v$VERSION"
+
+      - name: Open pull request
+        shell: bash
+        run: |
+          gh pr create \
+            --base main \
+            --head "release/v$VERSION" \
+            --title "chore: release v$VERSION" \
+            --body "Bumps the version to \`$VERSION\`.
+
+          After merging, tag the merge commit \`v$VERSION\`, build with \`pnpm run zip\`, and submit the zips to AMO."
+
+      # Pull requests opened with GITHUB_TOKEN do not trigger pull_request
+      # workflows, so start CI explicitly to report the required check.
+      - name: Run CI on release branch
+        run: gh workflow run ci.yml --ref "release/v$VERSION"
