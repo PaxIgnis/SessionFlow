@@ -69,7 +69,7 @@ async function findFirefoxExtensionPackage() {
   const fileNames = await fs.readdir(outputDir)
   const firefoxPackages = await Promise.all(
     fileNames
-      .filter((fileName) => fileName.endsWith('-firefox.zip'))
+      .filter((fileName) => /^session-flow-\d+\.\d+\.\d+\.zip$/.test(fileName))
       .map(async (fileName) => {
         const packagePath = path.join(outputDir, fileName)
         const stats = await fs.stat(packagePath)
@@ -81,7 +81,7 @@ async function findFirefoxExtensionPackage() {
 
   if (!firefoxPackages[0]) {
     throw new Error(
-      'Firefox extension package was not found. Run `pnpm run zip:firefox` first.',
+      'Firefox extension package was not found. Run `pnpm run zip` first.',
     )
   }
 

@@ -5,6 +5,7 @@ on:
     types: [opened, synchronize, reopened, ready_for_review, review_requested]
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -193,7 +194,7 @@ jobs:
         run: |
           set -o pipefail
           {
-            pnpm run zip:firefox && xvfb-run --auto-servernum bash -c \
+            pnpm run zip && xvfb-run --auto-servernum bash -c \
               "openbox --sm-disable & sleep 1; pnpm exec wdio run ./wdio.conf.mjs --spec '${{ matrix.spec }}'"
           } 2>&1 | tee e2e.log
         env:
@@ -261,7 +262,7 @@ jobs:
           set -o pipefail
           {
             xvfb-run --auto-servernum bash -c \
-              "openbox --sm-disable & sleep 1; pnpm run zip:firefox && pnpm run test:e2e:restart"
+              "openbox --sm-disable & sleep 1; pnpm run zip && pnpm run test:e2e:restart"
           } 2>&1 | tee e2e.log
         env:
           WDIO_FIREFOX_BINARY: ${{ steps.firefox.outputs.firefox-path }}

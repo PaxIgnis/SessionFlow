@@ -1,6 +1,22 @@
-import createSvgSpritePlugin from 'vite-plugin-svg-sprite'
+import { execSync } from 'node:child_process'
 import istanbul from 'vite-plugin-istanbul'
+import createSvgSpritePlugin from 'vite-plugin-svg-sprite'
 import { defineConfig } from 'wxt'
+
+// Keep gitignored files out of the sources zip.
+function gitIgnoredPaths(): string[] {
+  try {
+    return execSync(
+      'git ls-files --others --ignored --exclude-standard --directory',
+      { encoding: 'utf8' },
+    )
+      .split('\n')
+      .filter(Boolean)
+      .map((path) => (path.endsWith('/') ? `${path}**` : path))
+  } catch {
+    return []
+  }
+}
 
 // See https://wxt.dev/api/config.html
 export default defineConfig({
@@ -99,5 +115,9 @@ export default defineConfig({
     }
 
     return { plugins }
+  },
+  zip: {
+    artifactTemplate: '{{name}}-{{version}}.zip',
+    excludeSources: gitIgnoredPaths(),
   },
 })
