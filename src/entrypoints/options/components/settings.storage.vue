@@ -571,7 +571,7 @@ function fileTimestamp(value: number) {
       </ul>
       <p>{{ i18n.t('importedSnapshotsAreProtectedAutomatically') }}</p>
       <a
-        href="https://github.com/PaxIgnis/SessionFlowExtension/blob/main/docs/importing-snapshots.md"
+        href="https://github.com/PaxIgnis/SessionFlow/blob/main/docs/importing-snapshots.md"
         target="_blank"
         rel="noopener noreferrer"
         >{{ i18n.t('howToExportAndImportSnapshots') }}</a

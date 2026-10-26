@@ -45,17 +45,25 @@ Session Flow is a free, open-source Firefox extension that brings your open tabs
 
 ## Installation
 
-Requires **Firefox 140 or later**. Until Session Flow is available on Firefox Add-ons, you can install an unsigned build from [GitHub Releases](https://github.com/PaxIgnis/SessionFlowExtension/releases) using **Firefox Developer Edition or Firefox Nightly**.
+<p align="center">
+  <a href="https://addons.mozilla.org/firefox/addon/session-flow/">
+    <img src="https://blog.mozilla.org/addons/files/2020/04/get-the-addon-fx-apr-2020.svg" alt="Get the add-on for Firefox" height="60" />
+  </a>
+</p>
 
-1. Open [GitHub Releases](https://github.com/PaxIgnis/SessionFlowExtension/releases) and download the release's `.xpi` file from **Assets**. The **Source code** archives are for development and cannot be installed directly.
-2. In Firefox Developer Edition or Nightly, open `about:config` and accept the prompt.
-3. Search for `xpinstall.signatures.required` and set it to `false`. This allows unsigned extensions to be installed in that Firefox profile.
-4. Open `about:addons`, click the gear menu, and choose **Install Add-on From File…**.
-5. Select the downloaded `.xpi` file and confirm the installation and requested permissions.
+Requires **Firefox 140 or later**.
 
-This installation persists across browser restarts. Standard Firefox and Firefox Beta require a Mozilla-signed extension for permanent installation. See [Mozilla's unsigned extension installation instructions](https://extensionworkshop.com/documentation/develop/test-permission-requests/#permission-requests-for-extension-installation) for details.
+Install Session Flow from [Firefox Add-ons](https://addons.mozilla.org/en-GB/firefox/addon/session-flow/). Firefox keeps it up to date automatically.
 
-To update, download a newer release's `.xpi` and install it using the same steps. You can also [run Session Flow from source](#development).
+You can also install a Mozilla-signed build from [GitHub Releases](https://github.com/PaxIgnis/SessionFlow/releases):
+
+1. Open the latest release and download the `.xpi` file from **Assets**. The **Source code** archives are for development and cannot be installed directly.
+2. In Firefox, open `about:addons`, click the gear menu, and choose **Install Add-on From File…**.
+3. Select the downloaded `.xpi` file and confirm the installation and requested permissions.
+
+Release `.xpi` files are the same signed builds published on Firefox Add-ons, so Firefox updates them automatically too. You can also [run Session Flow from source](#development).
+
+Changes in each version are listed in the [release notes](https://github.com/PaxIgnis/SessionFlow/releases).
 
 ## Getting started
 
@@ -116,27 +124,27 @@ Private-window access is optional and must be allowed in Firefox. Keeping privat
 Session Flow is built with **WXT, Vue 3, and TypeScript**. Install Node.js and pnpm, then run:
 
 ```sh
-git clone https://github.com/PaxIgnis/SessionFlowExtension.git
-cd SessionFlowExtension
+git clone https://github.com/PaxIgnis/SessionFlow.git
+cd SessionFlow
 pnpm install
-pnpm run dev:firefox
+pnpm run dev
 ```
 
 Useful commands:
 
-| Command                  | Purpose                                                |
-| ------------------------ | ------------------------------------------------------ |
-| `pnpm test`              | Run unit, integration, regression, and property tests. |
-| `pnpm run compile`       | Check TypeScript and Vue types.                        |
-| `pnpm run test:e2e`      | Build and run Firefox end-to-end tests.                |
-| `pnpm run build:firefox` | Build the Firefox extension.                           |
-| `pnpm run zip:firefox`   | Create Firefox extension and source archives.          |
+| Command             | Purpose                                                |
+| ------------------- | ------------------------------------------------------ |
+| `pnpm test`         | Run unit, integration, regression, and property tests. |
+| `pnpm run compile`  | Check TypeScript and Vue types.                        |
+| `pnpm run test:e2e` | Build and run Firefox end-to-end tests.                |
+| `pnpm run build`    | Build the Firefox extension.                           |
+| `pnpm run zip`      | Create Firefox extension and source archives.          |
 
 Build output is written to `.output/`. See the [E2E testing guide](tests/e2e/README.md) for browser-test setup and the [localization guide](docs/localization.md) for translations.
 
 ## Feedback and contributions
 
-Start in [GitHub Discussions](https://github.com/PaxIgnis/SessionFlowExtension/discussions) for questions, bug reports, feature ideas, and proposed contributions. Search existing discussions first, then start a new discussion if your topic has not been covered.
+Start in [GitHub Discussions](https://github.com/PaxIgnis/SessionFlow/discussions) for questions, bug reports, feature ideas, and proposed contributions. Search existing discussions first, then start a new discussion if your topic has not been covered.
 
 Please open an issue only after a maintainer has given you permission to do so. When opening an approved issue, link to the original discussion so the context stays together.
 
