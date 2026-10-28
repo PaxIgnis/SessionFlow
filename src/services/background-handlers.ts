@@ -1130,6 +1130,14 @@ async function tabsOnAttached(
     }
     return true
   }
+  // The session tree page moved into its own window (e.g. Firefox "Add tab to
+  // taskbar", #73): drop it from its source window instead of tracking it.
+  const isAttachedToSessionTreeWindow = (): boolean => {
+    if (attachInfo.newWindowId !== Tree.sessionTreeWindowId) return false
+    if (pendingDetachedTab) commitPendingDetachedTab(tabId, pendingDetachedTab)
+    return true
+  }
+  if (isAttachedToSessionTreeWindow()) return
   let window = Tree.Items.filter(Tree.isWindow).find(
     (w) => w.id === attachInfo.newWindowId,
   )
@@ -1137,6 +1145,7 @@ async function tabsOnAttached(
     SessionRestore.beginWindowClassification(attachInfo.newWindowId)
     await SessionRestore.waitForWindowClassification(attachInfo.newWindowId)
     if (!refreshPendingDetachedTab()) return
+    if (isAttachedToSessionTreeWindow()) return
     window = Tree.Items.filter(Tree.isWindow).find(
       (w) => w.id === attachInfo.newWindowId,
     )

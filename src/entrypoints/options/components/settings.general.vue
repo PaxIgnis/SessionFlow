@@ -3,7 +3,10 @@ import { i18n } from '@/services/i18n'
 import ToggleButton from '@/components/ToggleButton.vue'
 import { Settings } from '@/services/settings'
 import { OPTIONS } from '@/types/settings'
-import { openIntroduction } from '@/services/onboarding-client'
+import {
+  openIntroduction,
+  openSessionTreeInTab,
+} from '@/services/onboarding-client'
 import { ref } from 'vue'
 
 const introductionError = ref('')
@@ -68,6 +71,30 @@ async function showIntroduction(startAt: 'welcome' | 'tips' = 'welcome') {
         :options="OPTIONS.boolean"
         @update="Settings.saveSettingsToStorage()"
       />
+      <ToggleButton
+        :label="i18n.t('hideTheSessionTreeWindowFromTheTree')"
+        :description="i18n.t('hideTheSessionTreeWindowFromTheTreeDescription')"
+        v-model="Settings.values.sessionTreeWindowDetection"
+        :options="OPTIONS.sessionTreeWindowDetection"
+        @update="Settings.saveSettingsToStorage()"
+      />
+      <div class="row">
+        <div class="row-text">
+          <span class="row-label">{{
+            i18n.t('openTheSessionTreeInATab')
+          }}</span>
+          <p class="row-desc">
+            {{ i18n.t('openTheSessionTreeInATabDescription') }}
+          </p>
+        </div>
+        <button
+          type="button"
+          class="introduction-button"
+          @click="openSessionTreeInTab()"
+        >
+          {{ i18n.t('openInTab') }}
+        </button>
+      </div>
       <ToggleButton
         :label="i18n.t('restoreThePreviousSessionOnStartup')"
         v-model="Settings.values.restorePreviousSessionOnStartup"

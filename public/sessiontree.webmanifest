@@ -1,0 +1,15 @@
+{
+  "name": "Session Flow",
+  "short_name": "Session Flow",
+  "start_url": "/sessiontree.html",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#181818",
+  "icons": [
+    {
+      "src": "/icon/session-flow.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

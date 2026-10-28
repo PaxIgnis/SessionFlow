@@ -63,10 +63,17 @@ export function saveWindow(windowUid: UID): void {
  */
 export async function addWindow(windowId: number): Promise<void> {
   console.log('Adding Window', windowId)
+  if (windowId === Tree.sessionTreeWindowId) return
   if (!Tree.Items.filter(Tree.isWindow).some((w) => w.id === windowId)) {
     const win = await browser.windows.get(windowId, { populate: true })
     if (!win) {
       console.error('Window not found:', windowId)
+      return
+    }
+    // The session tree page can land in its own window before it registers
+    // itself, e.g. via Firefox "Add tab to taskbar" (#73).
+    if (Tree.isSessionTreeWindow(win)) {
+      Tree.sessionTreeWindowId = windowId
       return
     }
     const newWindow: Window = {

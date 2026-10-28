@@ -44,6 +44,7 @@ let unsubscribeFromTreeUpdates: (() => void) | undefined
 let removeRuntimeListener: (() => void) | undefined
 let removeContextMenuListener: (() => void) | undefined
 let removeKeyboardListener: (() => void) | undefined
+let removeTabAttachedListener: (() => void) | undefined
 let isSessionTreeUnmounted = false
 
 // Save Session Tree Window location and size before closing.
@@ -271,6 +272,23 @@ onMounted(async () => {
   if (typeof currentWindow.id === 'number') {
     Messages.registerSessionTreeWindow(currentWindow.id)
   }
+
+  // Moving this tab to another window (e.g. Firefox "Add tab to taskbar")
+  // does not reload the page, so register the new window explicitly.
+  const currentTab = await window.browser.tabs.getCurrent()
+  if (isSessionTreeUnmounted || currentTab?.id === undefined) return
+  const attachedListener = (
+    tabId: number,
+    attachInfo: browser.tabs._OnAttachedAttachInfo,
+  ) => {
+    if (tabId === currentTab.id) {
+      Messages.registerSessionTreeWindow(attachInfo.newWindowId)
+    }
+  }
+  window.browser.tabs.onAttached.addListener(attachedListener)
+  removeTabAttachedListener = () => {
+    window.browser.tabs.onAttached.removeListener(attachedListener)
+  }
 })
 
 // reset sessionTree to non-ref object to avoid zombie dead object
@@ -281,6 +299,7 @@ onBeforeUnmount(() => {
   removeRuntimeListener?.()
   removeContextMenuListener?.()
   removeKeyboardListener?.()
+  removeTabAttachedListener?.()
 })
 
 // Handler functions

@@ -7,6 +7,7 @@ import OnboardingTreeDemo from '@/components/OnboardingTreeDemo.vue'
 import {
   completeIntroduction,
   openIntroduction,
+  openSessionTreeInTab,
   saveOnboardingRetention,
   saveOnboardingStartup,
 } from '@/services/onboarding-client'
@@ -95,6 +96,14 @@ describe('introduction presentation and commands', () => {
     })
     expect(fake.storage.local.set).not.toHaveBeenCalled()
     expect(fake.tabs.remove).not.toHaveBeenCalled()
+  })
+
+  it('opens the session tree in a normal tab for Web App setup (#73)', async () => {
+    const fake = installFakeBrowser()
+    await openSessionTreeInTab()
+    expect(fake.tabs.create).toHaveBeenCalledWith({
+      url: 'moz-extension://test-id/sessiontree.html',
+    })
   })
 
   it('finishes without sending preferences again', async () => {
