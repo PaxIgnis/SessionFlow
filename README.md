@@ -84,6 +84,10 @@ Tabs have three states:
 
 By default, **Ctrl+F2** opens settings and **Ctrl+Alt+S** takes a snapshot. Customize these and tree actions in **Settings → Keyboard shortcuts**. Browser or operating system shortcuts may take priority.
 
+## Running as a web app
+
+On Windows and Linux, you can pin the session tree to the taskbar as a Firefox web app, so it opens in its own window with its own taskbar icon. Snap and macOS are not supported yet. Firefox does not let extensions set this up, so it takes a few manual steps. See the [web app guide](docs/web-app.md) for supported platforms, setup and limitations.
+
 ## Compatibility with other extensions
 
 Session Flow listens for Firefox tab and window events and opens, closes, moves, and restores tabs and windows to manage your session tree. Other extensions that automatically manage tabs, windows, or sessions can react to the same events and make conflicting changes, causing unexpected behavior.
