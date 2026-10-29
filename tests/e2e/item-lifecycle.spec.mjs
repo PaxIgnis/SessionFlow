@@ -598,21 +598,27 @@ async function closeFirstRunOnboardingTab() {
   const popupHandle = popup.popupHandle
   const onboardingUrl = `moz-extension://${FIREFOX_EXTENSION_UUID}/onboarding.html`
 
-  for (const handle of await browser.getWindowHandles()) {
-    await browser.switchToWindow(handle)
-    if ((await browser.getUrl()).startsWith(onboardingUrl)) {
-      await browser.closeWindow()
-      break
-    }
-  }
-
-  await browser.switchToWindow(popupHandle)
-  await sessionTree.waitForBackgroundTree(
-    (tree) =>
-      windowsInTree(tree)
+  // The onboarding tab can still be loading (reported as about:blank) when
+  // this runs, so keep looking until the tree no longer shows it.
+  await browser.waitUntil(
+    async () => {
+      for (const handle of await browser.getWindowHandles()) {
+        await browser.switchToWindow(handle)
+        if ((await browser.getUrl()).startsWith(onboardingUrl)) {
+          await browser.closeWindow()
+          break
+        }
+      }
+      await browser.switchToWindow(popupHandle)
+      const tree = await sessionTree.backgroundTreeSnapshot()
+      return windowsInTree(tree)
         .flatMap((windowItem) => tabsInWindow(windowItem))
-        .every((tab) => !tab.title.includes('/onboarding.html')),
-    'Expected the first-run onboarding tab to be closed.',
+        .every((tab) => !tab.title.includes('/onboarding.html'))
+    },
+    {
+      timeout: 10_000,
+      timeoutMsg: 'Expected the first-run onboarding tab to be closed.',
+    },
   )
 }
 
