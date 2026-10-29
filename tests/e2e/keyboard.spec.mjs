@@ -708,12 +708,16 @@ describe('keyboard mappings and tree navigation', () => {
       'Expected window closed and removed by keyboard.',
     )
     await expect(await page.treeItemByUid(fixture.uid)).not.toBeExisting()
-    const focusedUid = await browser.execute(() =>
-      document.activeElement
-        ?.closest('.tree-item')
-        ?.getAttribute('drag-and-drop-id'),
+    // Focus moves to a neighbouring row after the removed row re-renders.
+    await browser.waitUntil(
+      () =>
+        browser.execute(() =>
+          document.activeElement
+            ?.closest('.tree-item')
+            ?.getAttribute('drag-and-drop-id'),
+        ),
+      { timeoutMsg: 'Expected focus to move to another tree row.' },
     )
-    expect(focusedUid).toBeTruthy()
     await expect(await $('.tree-item-selected')).not.toBeExisting()
     await browser.keys('ArrowDown')
     await expect(await $('.tree-item-selected')).toBeExisting()

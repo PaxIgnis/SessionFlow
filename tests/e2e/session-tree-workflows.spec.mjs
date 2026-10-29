@@ -1381,6 +1381,7 @@ describe('critical Firefox UI workflows', () => {
     await switchToPrimaryBrowserWindow()
     await openFixtureWindow(seed, SESSION_FIXTURE_TITLES.gamma)
     await browser.switchToWindow(popup.popupHandle)
+    await waitForTreeTab(SESSION_FIXTURE_TITLES.gamma)
     const beforeClose = await sessionTree.backgroundTreeSnapshot()
     const beforeWindow = windowsInTree(beforeClose).find((windowItem) =>
       tabsInWindow(windowItem).some(
@@ -1437,10 +1438,7 @@ describe('critical Firefox UI workflows', () => {
     await switchToPrimaryBrowserWindow()
     await openFixtureTab(seed, SESSION_FIXTURE_TITLES.alpha)
     await browser.switchToWindow(popup.popupHandle)
-    const before = await sessionTree.backgroundTreeSnapshot()
-    const original = windowsInTree(before)
-      .flatMap((windowItem) => tabsInWindow(windowItem))
-      .find((tab) => tab.title === SESSION_FIXTURE_TITLES.alpha)
+    const original = await waitForTreeTab(SESSION_FIXTURE_TITLES.alpha)
     await expectFirefoxSessionIdentity('tab', original?.id, original?.uid)
 
     await closeSeededTab(seed, SESSION_FIXTURE_TITLES.alpha)
@@ -1489,9 +1487,16 @@ describe('critical Firefox UI workflows', () => {
 
     await closeSeededTab(seed, SESSION_FIXTURE_TITLES.alpha)
     await browser.switchToWindow(popup.popupHandle)
-    const saved = windowsInTree(await sessionTree.backgroundTreeSnapshot())
-      .flatMap((windowItem) => tabsInWindow(windowItem))
-      .find((tab) => tab.uid === original?.uid)
+    let saved
+    await sessionTree.waitForBackgroundTree((tree) => {
+      saved = windowsInTree(tree)
+        .flatMap((windowItem) => tabsInWindow(windowItem))
+        .find(
+          (tab) =>
+            tab.uid === original?.uid && tab.state === TreeItemState.Saved,
+        )
+      return saved !== undefined
+    }, 'Expected the closed tab to be saved before reopening it.')
     await sessionTree.sendTreeCommand({
       action: 'openTab',
       tabUid: saved.uid,
@@ -1540,10 +1545,7 @@ describe('critical Firefox UI workflows', () => {
     await switchToPrimaryBrowserWindow()
     await openFixtureTab(seed, SESSION_FIXTURE_TITLES.alpha)
     await browser.switchToWindow(popup.popupHandle)
-    const before = await sessionTree.backgroundTreeSnapshot()
-    const original = windowsInTree(before)
-      .flatMap((windowItem) => tabsInWindow(windowItem))
-      .find((tab) => tab.title === SESSION_FIXTURE_TITLES.alpha)
+    const original = await waitForTreeTab(SESSION_FIXTURE_TITLES.alpha)
     await expectFirefoxSessionIdentity('tab', original?.id, original?.uid)
     await closeSeededTab(seed, SESSION_FIXTURE_TITLES.alpha)
     await browser.switchToWindow(popup.popupHandle)
@@ -1910,6 +1912,21 @@ async function restoreMostRecentFirefoxSessionWithShortcut() {
       .up(Key.Ctrl)
       .perform()
   })
+}
+
+/**
+ * The background tree picks up a new tab and its title asynchronously, so a
+ * single snapshot taken right after opening it can miss the tab.
+ */
+async function waitForTreeTab(title) {
+  let found
+  await sessionTree.waitForBackgroundTree((tree) => {
+    found = windowsInTree(tree)
+      .flatMap((windowItem) => tabsInWindow(windowItem))
+      .find((tab) => tab.title === title && tab.id !== undefined)
+    return found !== undefined
+  }, `Expected the "${title}" tab to appear in the session tree.`)
+  return found
 }
 
 async function expectFirefoxSessionIdentity(type, browserId, expectedUid) {
