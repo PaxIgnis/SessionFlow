@@ -278,8 +278,23 @@ describe('Session Flow introduction', () => {
     const tabsAfter = await tabIds()
     expect(tabsAfter).toEqual(tabsBefore)
     await expect(browser).toHaveUrl(introductionUrl)
+    await feature('web-app')
+    await expect($('.tab-guide h2')).toHaveText('16. Run the tree as a web app')
+    await expect($('.tree-demo')).not.toBeExisting()
+    await expect(
+      $('.web-app-guide').$('a=Open General settings'),
+    ).toHaveAttribute(
+      'href',
+      expect.stringMatching(/\/options\.html#settings_general$/),
+    )
+    await expect(
+      $('.web-app-guide').$('a=Read the web app guide'),
+    ).toHaveAttribute(
+      'href',
+      'https://github.com/PaxIgnis/SessionFlow/blob/main/docs/web-app.md',
+    )
     await feature('private')
-    await expect($('.tab-guide h2')).toHaveText('16. Private windows and tabs')
+    await expect($('.tab-guide h2')).toHaveText('17. Private windows and tabs')
     await expect($('.tab-guide')).toHaveText(
       expect.stringContaining('mask icon'),
     )

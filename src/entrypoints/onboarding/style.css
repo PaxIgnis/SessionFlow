@@ -140,6 +140,18 @@ small {
   padding-inline-start: 12px;
   font-size: 13px;
 }
+.web-app-guide ol {
+  margin: 0;
+  padding-inline-start: 20px;
+  display: grid;
+  gap: 6px;
+}
+.web-app-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+}
+.web-app-links a,
 .indicator-settings a {
   color: var(--state-live);
   text-underline-offset: 3px;
