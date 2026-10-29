@@ -13,6 +13,7 @@ export const DEFAULT_SETTINGS: Settings = {
   duplicateTreeItemDescendants: 'selected-only',
   duplicatedItemState: 'saved',
   reconnectFirefoxRestoredItems: true,
+  sessionTreeWindowDetection: 'popup-only',
 
   // Context Menu
   contextMenuDeleteDescendants: 'collapsed',

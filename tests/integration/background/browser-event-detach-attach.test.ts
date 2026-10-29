@@ -455,6 +455,56 @@ describe('background browser-event detach and attach ordering', () => {
     expect(mocks.addTab.mock.calls[0]?.[10]).toBe('tab-10')
   })
 
+  it('drops a tab moved into the registered session tree window (#73)', async () => {
+    const { fakeBrowser, initializeListeners, mocks } =
+      await loadBackgroundHandlers()
+    const { Tree } = await import('@/services/background-tree')
+    Tree.sessionTreeWindowId = 88
+    mocks.Items.push(
+      treeWindow(20, 'window-source', [treeTab(7, 'window-source')]),
+    )
+    initializeListeners()
+
+    fakeBrowser.tabs.onDetached.emit(7, { oldWindowId: 20, oldPosition: 3 })
+    await fakeBrowser.tabs.onAttached.emitAsync(7, {
+      newWindowId: 88,
+      newPosition: 0,
+    })
+
+    expect(mocks.removeTab).toHaveBeenCalledWith('tab-7')
+    expect(mocks.addTab).not.toHaveBeenCalled()
+    expect(mocks.beginWindowClassification).not.toHaveBeenCalledWith(88)
+  })
+
+  it('drops a tab whose new window is recognised as the session tree during classification (#73)', async () => {
+    const { fakeBrowser, initializeListeners, mocks } =
+      await loadBackgroundHandlers()
+    const { Tree } = await import('@/services/background-tree')
+    mocks.Items.push(
+      treeWindow(20, 'window-source', [treeTab(7, 'window-source')]),
+    )
+    const classification = deferred<'new-window'>()
+    mocks.waitForWindowClassification.mockReturnValueOnce(
+      classification.promise,
+    )
+    initializeListeners()
+
+    fakeBrowser.tabs.onDetached.emit(7, { oldWindowId: 20, oldPosition: 3 })
+    const attach = fakeBrowser.tabs.onAttached.emitAsync(7, {
+      newWindowId: 88,
+      newPosition: 0,
+    })
+    await vi.waitFor(() => {
+      expect(mocks.beginWindowClassification).toHaveBeenCalledWith(88)
+    })
+    Tree.sessionTreeWindowId = 88
+    classification.resolve('new-window')
+    await attach
+
+    expect(mocks.removeTab).toHaveBeenCalledWith('tab-7')
+    expect(mocks.addTab).not.toHaveBeenCalled()
+  })
+
   it('cancels an attach that resumes after the detached tab closes (EV-20)', async () => {
     const { fakeBrowser, initializeListeners, mocks } =
       await loadBackgroundHandlers()

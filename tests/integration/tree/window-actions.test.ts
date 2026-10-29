@@ -33,6 +33,37 @@ describe('window actions', () => {
     vi.unstubAllGlobals()
   })
 
+  it('does not add a window that already shows the session tree as its only tab (#73)', async () => {
+    Settings.values.sessionTreeWindowDetection = 'popup-and-single-tab'
+    vi.mocked(browser.windows.get).mockResolvedValue({
+      id: 88,
+      type: 'normal',
+      incognito: false,
+      focused: true,
+      tabs: [
+        {
+          id: 7,
+          url: browser.runtime.getURL('/sessiontree.html'),
+        } as browser.tabs.Tab,
+      ],
+    } as browser.windows.Window)
+
+    await Tree.addWindow(88)
+
+    expect(Tree.sessionTreeWindowId).toBe(88)
+    expect(Tree.Items).toEqual([])
+    expectTreeInvariants()
+  })
+
+  it('does not add the registered session tree window (#73)', async () => {
+    Tree.sessionTreeWindowId = 88
+
+    await Tree.addWindow(88)
+
+    expect(browser.windows.get).not.toHaveBeenCalled()
+    expect(Tree.Items).toEqual([])
+  })
+
   it('records private identity when Firefox creates a private window', async () => {
     vi.mocked(browser.windows.get).mockResolvedValue({
       id: 20,
@@ -1184,8 +1215,9 @@ describe('window actions', () => {
     expect(Tree.windowsByUid.get(realWindow.uid)).toBe(realWindow)
   })
 
-  it('opens a popup when Session Flow is already open in a normal tab', async () => {
+  it('focuses a single-tab Session Flow window when single-tab detection is on (#73)', async () => {
     Settings.values.openSessionTreeInSameLocation = false
+    Settings.values.sessionTreeWindowDetection = 'popup-and-single-tab'
     vi.mocked(browser.windows.getAll).mockResolvedValue([
       {
         id: 90,
@@ -1198,23 +1230,53 @@ describe('window actions', () => {
         ],
       } as browser.windows.Window,
     ])
-    const createWindowSpy = vi
-      .spyOn(OnCreatedQueue, 'createWindowAndWait')
-      .mockResolvedValue({ id: 100 } as browser.windows.Window)
+    const createWindowSpy = vi.spyOn(OnCreatedQueue, 'createWindowAndWait')
 
     await Tree.openSessionTree()
 
-    expect(browser.windows.update).not.toHaveBeenCalledWith(90, {
-      focused: true,
-    })
-    expect(createWindowSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: 'popup',
-        url: 'sessiontree.html',
-      }),
-    )
-    expect(Tree.sessionTreeWindowId).toBe(100)
+    expect(Tree.sessionTreeWindowId).toBe(90)
+    expect(browser.windows.update).toHaveBeenCalledWith(90, { focused: true })
+    expect(createWindowSpy).not.toHaveBeenCalled()
   })
+
+  it.each([
+    { detection: 'popup-only', withSibling: false },
+    { detection: 'popup-and-single-tab', withSibling: true },
+  ] as const)(
+    'opens a popup when Session Flow is already open in a normal tab (detection=$detection, sibling=$withSibling)',
+    async ({ detection, withSibling }) => {
+      Settings.values.openSessionTreeInSameLocation = false
+      Settings.values.sessionTreeWindowDetection = detection
+      const tabs = [
+        {
+          id: 91,
+          url: browser.runtime.getURL('/sessiontree.html'),
+        } as browser.tabs.Tab,
+      ]
+      if (withSibling) {
+        tabs.push({ id: 92, url: 'https://example.test/' } as browser.tabs.Tab)
+      }
+      vi.mocked(browser.windows.getAll).mockResolvedValue([
+        { id: 90, type: 'normal', tabs } as browser.windows.Window,
+      ])
+      const createWindowSpy = vi
+        .spyOn(OnCreatedQueue, 'createWindowAndWait')
+        .mockResolvedValue({ id: 100 } as browser.windows.Window)
+
+      await Tree.openSessionTree()
+
+      expect(browser.windows.update).not.toHaveBeenCalledWith(90, {
+        focused: true,
+      })
+      expect(createWindowSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'popup',
+          url: 'sessiontree.html',
+        }),
+      )
+      expect(Tree.sessionTreeWindowId).toBe(100)
+    },
+  )
 
   it('does not register or remove a normal window containing a Session Flow tab', async () => {
     const tab = createTab('normal-session-tree-tab' as UID, { id: 91 })
@@ -1242,6 +1304,59 @@ describe('window actions', () => {
     expect(Tree.tabsByUid.get(tab.uid)).toBe(tab)
     expect(Tree.tabsByUid.get(sibling.uid)).toBe(sibling)
     expect(browser.storage.local.set).not.toHaveBeenCalled()
+    expectTreeInvariants()
+  })
+
+  it('keeps a single-tab Session Flow window as a user window by default', async () => {
+    const tab = createTab('single-tab' as UID, { id: 91 })
+    const window = createWindow('single-tab-window' as UID, [tab], {
+      id: 90,
+      state: State.OPEN,
+    })
+    vi.mocked(browser.windows.get).mockResolvedValue({
+      id: window.id,
+      type: 'normal',
+      tabs: [
+        {
+          id: tab.id,
+          url: browser.runtime.getURL('/sessiontree.html'),
+        } as browser.tabs.Tab,
+      ],
+    } as browser.windows.Window)
+
+    await Tree.registerSessionTreeWindow(window.id)
+
+    expect(Tree.sessionTreeWindowId).toBeUndefined()
+    expect(Tree.windowsByUid.get(window.uid)).toBe(window)
+    expect(Tree.tabsByUid.get(tab.uid)).toBe(tab)
+    expectTreeInvariants()
+  })
+
+  it('registers and removes a single-tab Session Flow window when single-tab detection is on (#73)', async () => {
+    Settings.values.sessionTreeWindowDetection = 'popup-and-single-tab'
+    const tab = createTab('web-app-tab' as UID, { id: 91 })
+    const window = createWindow('web-app-window' as UID, [tab], {
+      id: 90,
+      state: State.OPEN,
+    })
+    vi.mocked(browser.windows.get).mockResolvedValue({
+      id: window.id,
+      type: 'normal',
+      tabs: [
+        {
+          id: tab.id,
+          url: browser.runtime.getURL('/sessiontree.html'),
+        } as browser.tabs.Tab,
+      ],
+    } as browser.windows.Window)
+
+    await Tree.registerSessionTreeWindow(window.id)
+    await flushMicrotasks()
+
+    expect(Tree.sessionTreeWindowId).toBe(window.id)
+    expect(Tree.Items).not.toContain(window)
+    expect(Tree.windowsByUid.has(window.uid)).toBe(false)
+    expect(Tree.tabsByUid.has(tab.uid)).toBe(false)
     expectTreeInvariants()
   })
 

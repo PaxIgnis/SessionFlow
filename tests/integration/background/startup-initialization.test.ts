@@ -87,6 +87,48 @@ describe('startup initialization', () => {
     expectTreeInvariants()
   })
 
+  it.each([
+    { detection: 'popup-only', isSessionTree: false },
+    { detection: 'popup-and-single-tab', isSessionTree: true },
+  ] as const)(
+    'handles a single-tab Session Flow window at startup (detection=$detection)',
+    async ({ detection, isSessionTree }) => {
+      Settings.values.sessionTreeWindowDetection = detection
+      vi.mocked(browser.windows.getAll).mockResolvedValue([
+        {
+          id: 90,
+          type: 'normal',
+          alwaysOnTop: false,
+          incognito: false,
+          focused: true,
+          tabs: [
+            {
+              id: 91,
+              windowId: 90,
+              index: 0,
+              active: true,
+              discarded: false,
+              pinned: false,
+              title: 'Session Flow',
+              url: browser.runtime.getURL('/sessiontree.html'),
+            } as browser.tabs.Tab,
+          ],
+        } as browser.windows.Window,
+      ])
+
+      await Tree.initializeWindows()
+
+      if (isSessionTree) {
+        expect(Tree.sessionTreeWindowId).toBe(90)
+        expect(Tree.Items).toEqual([])
+      } else {
+        expect(Tree.sessionTreeWindowId).toBeUndefined()
+        expect(Tree.Items).toHaveLength(1)
+      }
+      expectTreeInvariants()
+    },
+  )
+
   it('keeps a normal window containing a manually opened Session Flow tab', async () => {
     const sessionTreeUrl = browser.runtime.getURL('/sessiontree.html')
     vi.mocked(browser.windows.getAll).mockResolvedValue([

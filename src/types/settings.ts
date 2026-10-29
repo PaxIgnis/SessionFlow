@@ -15,6 +15,7 @@ export interface Settings extends KeyboardSettings {
   duplicateTreeItemDescendants: (typeof SETTINGS_TYPES.duplicateTreeItemDescendants)[number]
   duplicatedItemState: (typeof SETTINGS_TYPES.duplicatedItemState)[number]
   reconnectFirefoxRestoredItems: boolean
+  sessionTreeWindowDetection: (typeof SETTINGS_TYPES.sessionTreeWindowDetection)[number]
 
   // Context Menu
   contextMenuDeleteDescendants: (typeof SETTINGS_TYPES.contextMenuDeleteDescendants)[number]
@@ -98,6 +99,7 @@ export const SETTINGS_TYPES = {
   contextMenuSaveDescendants: ['always', 'collapsed', 'never'],
   contextMenuPinDescendants: ['always', 'collapsed', 'never'],
   duplicatedItemState: ['saved', 'match-original'],
+  sessionTreeWindowDetection: ['popup-only', 'popup-and-single-tab'],
   tabGroupDropBehavior: ['same-group-both-adjacent', 'any-adjacent-group'],
   tabGroupColorIndicator: ['right', 'left', 'hidden'],
   tabGroupInfoOnHover: ['always', 'grouped-only', 'never'],
@@ -135,6 +137,10 @@ export const OPTIONS = {
   duplicatedItemState: [
     { label: i18n.t('alwaysSaved'), value: 'saved' },
     { label: i18n.t('matchOriginalItems'), value: 'match-original' },
+  ],
+  sessionTreeWindowDetection: [
+    { label: i18n.t('popupOnly'), value: 'popup-only' },
+    { label: i18n.t('popupAndSingleTab'), value: 'popup-and-single-tab' },
   ],
   tabGroupDropBehavior: [
     { label: i18n.t('sameGroup'), value: 'same-group-both-adjacent' },

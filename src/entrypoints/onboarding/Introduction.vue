@@ -46,7 +46,10 @@ const tipDescriptions = ONBOARDING_FEATURES.map(
 const currentFeature = computed(() => ONBOARDING_FEATURES[tip.value])
 const demoAction = computed(() => {
   const id = currentFeature.value.id
-  return id === 'states' || id === 'private' || id === 'keyboard'
+  return id === 'states' ||
+    id === 'private' ||
+    id === 'keyboard' ||
+    id === 'web-app'
     ? undefined
     : id
 })
@@ -79,6 +82,11 @@ const indicatorSettingsUrl = computed(() =>
 const keyboardSettingsUrl = computed(() =>
   browser.runtime.getURL('/options.html#settings_keyboard'),
 )
+const generalSettingsUrl = computed(() =>
+  browser.runtime.getURL('/options.html#settings_general'),
+)
+const WEB_APP_GUIDE_URL =
+  'https://github.com/PaxIgnis/SessionFlow/blob/main/docs/web-app.md'
 const welcomeItems = computed<OnboardingExampleItem[]>(() => [
   {
     id: 'projects',
@@ -526,6 +534,32 @@ async function openSettings() {
             >{{ i18n.t('keyboardMappings') }}</a
           >
         </div>
+        <div
+          v-else-if="currentFeature.id === 'web-app'"
+          class="web-app-guide"
+        >
+          <ol>
+            <li>{{ i18n.t('onboardingWebAppStepSetting') }}</li>
+            <li>{{ i18n.t('onboardingWebAppStepStartup') }}</li>
+            <li>{{ i18n.t('onboardingWebAppStepOpen') }}</li>
+            <li>{{ i18n.t('onboardingWebAppStepPin') }}</li>
+          </ol>
+          <p class="fine-print">{{ i18n.t('onboardingWebAppGuideNote') }}</p>
+          <p class="web-app-links">
+            <a
+              :href="generalSettingsUrl"
+              target="_blank"
+              rel="noopener"
+              >{{ i18n.t('onboardingWebAppSettings') }}</a
+            >
+            <a
+              :href="WEB_APP_GUIDE_URL"
+              target="_blank"
+              rel="noopener"
+              >{{ i18n.t('onboardingWebAppGuide') }}</a
+            >
+          </p>
+        </div>
         <TabStateLegend v-else-if="currentFeature.id === 'states'" />
         <template v-else-if="currentFeature.id === 'private'">
           <OnboardingTreePreview
@@ -547,7 +581,9 @@ async function openSettings() {
           {{ i18n.t('onboardingCloseDelete') }}
         </p>
         <p
-          v-if="currentFeature.id !== 'keyboard'"
+          v-if="
+            currentFeature.id !== 'keyboard' && currentFeature.id !== 'web-app'
+          "
           class="fine-print"
         >
           {{ i18n.t('onboardingDemoSafe') }}

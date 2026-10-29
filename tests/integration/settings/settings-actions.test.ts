@@ -181,6 +181,20 @@ describe('settings actions', () => {
     ).toMatchObject({ sessionSnapshotIntervalUnit: 'minutes' })
   })
 
+  it('validates the session tree window detection setting (#73)', async () => {
+    const { normalizeSettings } = await import('@/services/settings-actions')
+
+    expect(normalizeSettings({})).toMatchObject({
+      sessionTreeWindowDetection: 'popup-only',
+    })
+    expect(
+      normalizeSettings({ sessionTreeWindowDetection: 'popup-and-single-tab' }),
+    ).toMatchObject({ sessionTreeWindowDetection: 'popup-and-single-tab' })
+    expect(
+      normalizeSettings({ sessionTreeWindowDetection: 'always' }),
+    ).toMatchObject({ sessionTreeWindowDetection: 'popup-only' })
+  })
+
   it('keeps default settings immutable when runtime settings change', () => {
     Settings.values.refreshFaviconsAfterPeriodOfTime = true
 

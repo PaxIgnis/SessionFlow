@@ -15,6 +15,16 @@ export function openIntroduction(
   })
 }
 
+/**
+ * Opens the session tree in a normal tab, where Firefox offers
+ * "Add tab to taskbar" to turn it into a Web App (#73).
+ */
+export function openSessionTreeInTab(): Promise<browser.tabs.Tab> {
+  return browser.tabs.create({
+    url: browser.runtime.getURL('/sessiontree.html'),
+  })
+}
+
 export function completeIntroduction(
   command: OnboardingCompletionCommand,
 ): Promise<void> {

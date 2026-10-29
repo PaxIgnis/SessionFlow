@@ -22,15 +22,23 @@ const startupOpenTabUids = new Set<UID>()
 const pendingStartupTabUids = new Set<UID>()
 let sessionTreePersistenceQueue = Promise.resolve()
 
-function isSessionTreePopupWindow(window: browser.windows.Window): boolean {
-  if (window.type !== 'popup') return false
+/**
+ * A window counts as the Session Tree window when it is a popup showing the
+ * session tree. With sessionTreeWindowDetection set to 'popup-and-single-tab',
+ * any window whose only tab is the session tree counts too. That covers Firefox
+ * Web App (taskbar tab) windows, which report type 'normal' (#73).
+ */
+export function isSessionTreeWindow(window: browser.windows.Window): boolean {
   const sessionTreeUrl = browser.runtime.getURL('/sessiontree.html')
-  return Boolean(
-    window.tabs?.some(
-      (tab) =>
-        tab.url === sessionTreeUrl || tab.url?.startsWith(`${sessionTreeUrl}?`),
-    ),
-  )
+  const isSessionTreeTab = (tab: browser.tabs.Tab) =>
+    tab.url === sessionTreeUrl || tab.url?.startsWith(`${sessionTreeUrl}?`)
+  if (window.type === 'popup') {
+    return Boolean(window.tabs?.some(isSessionTreeTab))
+  }
+  if (Settings.values.sessionTreeWindowDetection !== 'popup-and-single-tab') {
+    return false
+  }
+  return window.tabs?.length === 1 && Boolean(isSessionTreeTab(window.tabs[0]))
 }
 
 /**
@@ -53,7 +61,7 @@ export async function initializeWindows(): Promise<void> {
       }
     })
     currentWindows.forEach((win) => {
-      if (isSessionTreePopupWindow(win)) {
+      if (isSessionTreeWindow(win)) {
         if (win.id !== undefined) {
           Tree.sessionTreeWindowId = win.id
           const persistedPopup = Tree.Items.filter(Tree.isWindow).find(
@@ -715,9 +723,8 @@ export async function openSessionTree(): Promise<void> {
   const existingSessionTreeWindow =
     openWindows.find(
       (window) =>
-        window.id === Tree.sessionTreeWindowId &&
-        isSessionTreePopupWindow(window),
-    ) ?? openWindows.find(isSessionTreePopupWindow)
+        window.id === Tree.sessionTreeWindowId && isSessionTreeWindow(window),
+    ) ?? openWindows.find(isSessionTreeWindow)
   if (existingSessionTreeWindow?.id !== undefined) {
     Tree.sessionTreeWindowId = existingSessionTreeWindow.id
     await browser.windows.update(existingSessionTreeWindow.id, {
@@ -763,8 +770,8 @@ export async function openSessionTree(): Promise<void> {
 }
 
 /**
- * Registers a verified Session Tree popup window.
- * Removes the popup from the session tree if it was indexed as a user window.
+ * Registers a verified Session Tree window.
+ * Removes the window from the session tree if it was indexed as a user window.
  *
  */
 export async function registerSessionTreeWindow(
@@ -776,7 +783,7 @@ export async function registerSessionTreeWindow(
   } catch {
     return
   }
-  if (!isSessionTreePopupWindow(browserWindow)) return
+  if (!isSessionTreeWindow(browserWindow)) return
 
   Tree.sessionTreeWindowId = windowId
   // remove windowId from session tree if it exists there as a saved window, since it's now the live session tree window

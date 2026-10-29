@@ -75,6 +75,11 @@ export const ONBOARDING_FEATURES = [
     description: 'onboardingKeyboardDescription',
   },
   {
+    id: 'web-app',
+    title: 'onboardingWebApp',
+    description: 'onboardingWebAppDescription',
+  },
+  {
     id: 'private',
     title: 'onboardingPrivate',
     description: 'onboardingPrivateDescription',
