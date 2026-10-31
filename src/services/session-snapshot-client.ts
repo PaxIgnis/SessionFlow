@@ -54,6 +54,10 @@ export const SessionSnapshotClient = {
     }),
   clear: () =>
     request<Record<string, never>>({ action: 'clearSessionSnapshots' }),
+  applyRetention: () =>
+    request<Record<string, never>>({
+      action: 'applySessionSnapshotRetention',
+    }),
   export: (snapshotId: string) =>
     request<SessionSnapshotExport>({
       action: 'getSessionSnapshotExport',

@@ -1,3 +1,4 @@
+import { FAVICON_CACHE_STORAGE_KEY } from '@/defaults/constants'
 import { DEFAULT_FAVICON_URL } from '@/defaults/favicons'
 import { Settings } from '@/services/settings'
 import {
@@ -84,7 +85,7 @@ export function onFaviconError(event: Event): void {
 export class FaviconService {
   private static readonly DEFAULT_CONFIG: FaviconStorageConfig = {
     expiryDays: 7,
-    storageKey: 'sessionflow-favicon-cache',
+    storageKey: FAVICON_CACHE_STORAGE_KEY,
   }
 
   private cache: Map<string, FaviconCacheEntry>

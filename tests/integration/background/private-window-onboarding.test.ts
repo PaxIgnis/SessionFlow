@@ -121,7 +121,7 @@ describe('first-run introduction', () => {
       command: 'import',
     })
     expect(fake.tabs.create).toHaveBeenCalledWith({
-      url: 'moz-extension://test-id/options.html#settings_storage',
+      url: 'moz-extension://test-id/options.html#settings_snapshots',
     })
     expect(openTree).not.toHaveBeenCalled()
     expect(fake.tabs.remove).not.toHaveBeenCalled()
@@ -245,7 +245,7 @@ describe('first-run introduction', () => {
       }),
     ).resolves.toBeUndefined()
     expect(fake.tabs.create).toHaveBeenCalledWith({
-      url: 'moz-extension://test-id/options.html#settings_storage',
+      url: 'moz-extension://test-id/options.html#settings_snapshots',
     })
   })
 

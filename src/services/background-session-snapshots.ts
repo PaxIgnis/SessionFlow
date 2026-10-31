@@ -10,7 +10,10 @@ import {
   type SessionSnapshotRepository,
 } from '@/services/session-snapshot-repository'
 import { parseSessionSnapshotImport } from '@/services/session-snapshot-import'
-import { snapshotIdsToRetain } from '@/services/session-snapshot-retention'
+import {
+  snapshotIdsToRetain,
+  snapshotRetentionPolicy,
+} from '@/services/session-snapshot-retention'
 import { projectSnapshotForRestore } from '@/services/session-snapshot-restore'
 import { Settings } from '@/services/settings'
 import type {
@@ -94,6 +97,15 @@ export class SessionSnapshotService {
 
   async handleSettingsUpdated(): Promise<void> {
     await this.rescheduleAlarm()
+    await this.applyRetention()
+  }
+
+  /** Prunes immediately, so a tighter retention policy takes effect now. */
+  applyRetention(): Promise<void> {
+    return this.serialize(async () => {
+      this.pruneRetryPending = true
+      await this.retryPendingPrune()
+    })
   }
 
   markTreeInitialized(): void {
@@ -148,6 +160,13 @@ export class SessionSnapshotService {
       }
       if (message.action === 'clearSessionSnapshots') {
         await this.clear()
+        return { ok: true, data: {} }
+      }
+      if (message.action === 'applySessionSnapshotRetention') {
+        // The settings page saved the policy just before asking; read it
+        // rather than racing the settingsUpdated message that reloads it.
+        await Settings.loadSettingsFromStorage()
+        await this.applyRetention()
         return { ok: true, data: {} }
       }
       if (message.action === 'getSessionSnapshotExport') {
@@ -368,7 +387,13 @@ export class SessionSnapshotService {
     now: number = this.now(),
   ): Promise<void> {
     const current = metadata ?? (await this.repository.listMetadata())
-    await this.repository.deleteExcept(snapshotIdsToRetain(current, now))
+    await this.repository.deleteExcept(
+      snapshotIdsToRetain(
+        current,
+        now,
+        snapshotRetentionPolicy(Settings.values),
+      ),
+    )
   }
 
   private async retryPendingPrune(
@@ -438,7 +463,8 @@ function isSnapshotRequest(value: unknown): value is SessionSnapshotRequest {
   if (
     message.action === 'listSessionSnapshots' ||
     message.action === 'createSessionSnapshot' ||
-    message.action === 'clearSessionSnapshots'
+    message.action === 'clearSessionSnapshots' ||
+    message.action === 'applySessionSnapshotRetention'
   ) {
     return true
   }

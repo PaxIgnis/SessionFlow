@@ -1,6 +1,6 @@
 # Exporting and importing snapshots
 
-You can bring saved tabs and sessions from other programs into Session Flow using **Import snapshot** in **Settings → Storage**.
+You can bring saved tabs and sessions from other programs into Session Flow using **Import snapshot** in **Settings → Snapshots**.
 
 ## Supported formats
 
@@ -16,7 +16,7 @@ Only the JSON formats listed above are supported. See the program sections below
 ## Import into Session Flow
 
 1. Export a JSON file using the instructions for your program below.
-2. Open Session Flow **Settings → Storage**.
+2. Open Session Flow **Settings → Snapshots**.
 3. Click **Import snapshot** beside **Take a snapshot now**.
 4. Select the JSON file.
 
@@ -26,7 +26,7 @@ Importing does not open tabs or change your active session tree. Select the snap
 
 ## Session Flow
 
-1. Open **Settings → Storage**.
+1. Open **Settings → Snapshots**.
 2. Select an existing snapshot, or click **Take a snapshot now** first.
 3. Click **Save as JSON** in the snapshot preview.
 4. Import the downloaded file in the other Session Flow installation.

@@ -18,7 +18,7 @@ describe('layout stability', () => {
       await importLargeSnapshot('wide-b')
       await browser.refresh()
       await options.page.expectLoaded()
-      await options.page.selectSection('settings_storage')
+      await options.page.selectSection('settings_snapshots')
       await expect($('.snapshot-entry')).toBeDisplayed()
       await browser.waitUntil(
         async () => (await $$('.snapshot-tree .tree-item')).length > 100,
@@ -37,7 +37,7 @@ describe('layout stability', () => {
         const panel = document.querySelector('.content-panel')
         const toolbar = document.querySelector('.snapshot-toolbar')
         const browserElement = document.querySelector('.snapshot-browser')
-        const section = document.querySelector('#settings_storage')
+        const section = document.querySelector('#settings_snapshots')
         const history = document.querySelector('.snapshot-history')
         const collected = []
 

@@ -191,7 +191,7 @@ async function completeIntroduction(
   if (command === 'continue') await Tree.openSessionTree()
   if (command === 'import') {
     await browser.tabs.create({
-      url: browser.runtime.getURL('/options.html#settings_storage'),
+      url: browser.runtime.getURL('/options.html#settings_snapshots'),
     })
   }
 }

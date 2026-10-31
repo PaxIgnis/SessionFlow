@@ -518,9 +518,9 @@ describe('Session Flow introduction', () => {
     await expect($('h1')).toHaveText('Make yourself at home')
     const previous = await browser.getWindowHandles()
     await $('button=Import a session').click()
-    await switchToNewHandle(previous, `${optionsUrl}#settings_storage`)
-    await expect($('#settings_storage')).toBeDisplayed()
-    await expect($('#nav-item-settings_storage')).toHaveAttribute(
+    await switchToNewHandle(previous, `${optionsUrl}#settings_snapshots`)
+    await expect($('#settings_snapshots')).toBeDisplayed()
+    await expect($('#nav-item-settings_snapshots')).toHaveAttribute(
       'aria-current',
       'true',
     )
@@ -1107,7 +1107,7 @@ describe('Session Flow introduction', () => {
       await expect($('h1')).toHaveText('Make yourself at home')
       const beforeImport = await browser.getWindowHandles()
       await $('button=Import a session').click()
-      await switchToNewHandle(beforeImport, `${optionsUrl}#settings_storage`)
+      await switchToNewHandle(beforeImport, `${optionsUrl}#settings_snapshots`)
       expect((await storedState()).privateWindowOnboarding.status).toBe(
         'completed',
       )

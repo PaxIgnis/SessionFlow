@@ -113,6 +113,10 @@
     "1": "$1 Momentaufnahme",
     "n": "$1 Momentaufnahmen"
   },
+  "countSnapshotsDeleted": {
+    "1": "$1 Momentaufnahme gelöscht.",
+    "n": "$1 Momentaufnahmen gelöscht."
+  },
   "countTab": {
     "1": "$1 Tab",
     "n": "$1 Tabs"
@@ -139,6 +143,7 @@
   "deleteAllSnapshotsIncludingProtectedSnapshots": "Alle Momentaufnahmen einschließlich der geschützten löschen?",
   "deleteAllSnapshotsLabel": "Alle Momentaufnahmen löschen",
   "deleteItems": "Session Flow konnte die ausgewählten Elemente nicht löschen: $1",
+  "deleteOlderSnapshots": "Ältere Momentaufnahmen löschen",
   "deleteSelectedItems": "Ausgewählte Elemente löschen",
   "deleteSnapshot": "Momentaufnahme löschen",
   "deleteSnapshotAt": "Die Momentaufnahme vom $1 löschen?",
@@ -244,8 +249,38 @@
   "invalidTopLevelSnapshotItemType": "Ungültiger Elementtyp auf oberster Ebene der Momentaufnahme",
   "invalidTransientField": "Ungültiges temporäres Feld in der Momentaufnahme: $1",
   "keepCollapsedStateOnDrop": "Einklappzustand beim Ablegen beibehalten",
+  "keepDailySnapshots": "Tägliche Momentaufnahmen",
+  "keepDailySnapshotsDescription": {
+    "1": "Die neueste Momentaufnahme des letzten $1 Tags behalten.",
+    "n": "Die neueste Momentaufnahme jedes der letzten $1 Tage behalten."
+  },
   "keepFaviconsUpToDate": "Favicons aktuell halten",
   "keepHierarchyOnDrop": "Hierarchie beim Ablegen beibehalten",
+  "keepMonthlySnapshots": "Monatliche Momentaufnahmen",
+  "keepMonthlySnapshotsDescription": {
+    "1": "Die neueste Momentaufnahme des letzten $1 Monats behalten.",
+    "n": "Die neueste Momentaufnahme jedes der letzten $1 Monate behalten."
+  },
+  "keepNewestSnapshots": "Neueste Momentaufnahmen",
+  "keepNewestSnapshotsDescription": {
+    "1": "Die neueste Momentaufnahme behalten, unabhängig vom Alter.",
+    "n": "Die $1 neuesten Momentaufnahmen behalten, unabhängig vom Alter."
+  },
+  "keepRecentSnapshots": "Aktuelle Momentaufnahmen",
+  "keepRecentSnapshotsDescription": {
+    "1": "Jede Momentaufnahme der letzten $1 Stunde behalten.",
+    "n": "Jede Momentaufnahme der letzten $1 Stunden behalten."
+  },
+  "keepWeeklySnapshots": "Wöchentliche Momentaufnahmen",
+  "keepWeeklySnapshotsDescription": {
+    "1": "Die neueste Momentaufnahme der letzten $1 Woche behalten.",
+    "n": "Die neueste Momentaufnahme jeder der letzten $1 Wochen behalten."
+  },
+  "keepYearlySnapshots": "Jährliche Momentaufnahmen",
+  "keepYearlySnapshotsDescription": {
+    "1": "Die neueste Momentaufnahme des letzten $1 Jahres behalten.",
+    "n": "Die neueste Momentaufnahme jedes der letzten $1 Jahre behalten."
+  },
   "keyboardActionFailed": "Die Tastaturaktion konnte nicht abgeschlossen werden.",
   "keyboardClearAction": "Tastenkürzel für $1 leeren",
   "keyboardDeleteWarning": "Entfernt das Element dauerhaft aus dem Sitzungsbaum, auch gespeicherte Elemente. Offene Tabs und Fenster werden auch in Firefox geschlossen.",
@@ -273,6 +308,7 @@
   "leftEdge": "Linker Rand",
   "linksDraggedFromOutsideFirefoxBecomeSavedTabs": "Links von außerhalb von Firefox werden als gespeicherte Tabs eingefügt.",
   "localeCode": "de",
+  "manualSnapshotsAreNeverRemovedAutomatically": "Selbst erstellte Momentaufnahmen werden geschützt und daher nie automatisch entfernt.",
   "matchOpenWindowsToSavedWindowsAtStartup": "Offene Fenster beim Start gespeicherten Fenstern zuordnen",
   "matchOriginalItems": "Wie die Originalelemente",
   "minutes": "Minuten",
@@ -339,7 +375,7 @@
   "onboardingExampleSecondWindow": "Planungsfenster",
   "onboardingExampleWindow": "Recherchefenster",
   "onboardingFinish": "Richte dich ein",
-  "onboardingFinishDescription": "Automatische Momentaufnahmen sind standardmäßig aktiv und bewahren Kopien deines Baums auf diesem Gerät. Unter Einstellungen → Speicher kannst du Sitzungen prüfen, wiederherstellen, importieren oder exportieren. Exportiere eine Kopie für eine Sicherung außerhalb dieses Firefox-Profils.",
+  "onboardingFinishDescription": "Automatische Momentaufnahmen sind standardmäßig aktiv und bewahren Kopien deines Baums auf diesem Gerät. Unter Einstellungen → Momentaufnahmen kannst du Sitzungen prüfen, wiederherstellen, importieren oder exportieren. Exportiere eine Kopie für eine Sicherung außerhalb dieses Firefox-Profils.",
   "onboardingFocus": "3. Einen Tab aktivieren",
   "onboardingFocusAfter": "Recherche ist jetzt aktiv. Ein farbiger Rahmen markiert die Zeile.",
   "onboardingFocusBefore": "Recherche ist geladen, aber nicht der aktive Tab in seinem Fenster.",
@@ -428,7 +464,7 @@
   "onboardingSkip": "Einführung überspringen",
   "onboardingSkipTips": "Tipps überspringen",
   "onboardingStart": "Wähle deinen Einstieg",
-  "onboardingStartDescription": "Beginne mit deinen aktuellen Tabs oder importiere eine gespeicherte Sitzung. Importieren geht auch später unter Einstellungen → Speicher.",
+  "onboardingStartDescription": "Beginne mit deinen aktuellen Tabs oder importiere eine gespeicherte Sitzung. Importieren geht auch später unter Einstellungen → Momentaufnahmen.",
   "onboardingStateActive": "Aktiv",
   "onboardingStateActiveDescription": "Farbiger Rahmen: der aktive Tab im fokussierten Firefox-Fenster.",
   "onboardingStateFocusNote": "Aktiv beschreibt den Fokus. Offen, entladen und gespeichert beschreiben den Zustand des Tabs; dafür steht der Punkt.",
@@ -517,6 +553,8 @@
   "reloadTabs": "Tabs neu laden",
   "removalTabUnconfirmed": "Es konnte nicht festgestellt werden, ob Firefox den Tab $1 entfernt hat: $2",
   "removalWindowUnconfirmed": "Es konnte nicht festgestellt werden, ob Firefox das Fenster $1 entfernt hat: $2",
+  "removeOlderSnapshotsAutomatically": "Ältere Momentaufnahmen automatisch entfernen",
+  "removeOlderSnapshotsAutomaticallyDescription": "Mit zunehmendem Alter werden weniger Momentaufnahmen behalten: alle aktuellen, danach eine pro Tag, Woche, Monat und Jahr. Geschützte Momentaufnahmen werden nie entfernt. Wenn deaktiviert, bleiben alle Momentaufnahmen erhalten.",
   "reopenTheTreeAtItsLastSizeAndPosition": "Baum mit der letzten Größe und Position öffnen",
   "reopenWindowsInTheirLastPosition": "Fenster an ihrer letzten Position öffnen",
   "requiresWebsiteAccessPermission": "Erfordert die Berechtigung zum Zugriff auf Websites.",
@@ -527,6 +565,10 @@
   "restoreTreeChanged": "Der aktive Sitzungsbaum hat sich während der Wiederherstellung wiederholt geändert. Bitte versuchen Sie es erneut.",
   "restoreWithoutSafetySnapshot": "Ohne Sicherung wiederherstellen",
   "restoredItems": "$1 wiederhergestellt.",
+  "retentionDeletesSnapshots": {
+    "1": "Mit diesen Einstellungen wird jetzt $1 Momentaufnahme gelöscht. Dies kann nicht rückgängig gemacht werden.",
+    "n": "Mit diesen Einstellungen werden jetzt $1 Momentaufnahmen gelöscht. Dies kann nicht rückgängig gemacht werden."
+  },
   "right": "Rechts",
   "rightEdge": "Rechter Rand",
   "rightclickActionsApplyToTheItemsYouSelectedTheseSettings": "Rechtsklick-Aktionen gelten für die ausgewählten Elemente. Diese Einstellungen legen fest, wann eine Aktion auch nicht ausgewählte Unterelemente einschließt.",
@@ -613,14 +655,26 @@
   "snapshotUnavailableDetails": "Die Daten dieser Momentaufnahme konnten nicht gelesen werden. Sie kann nicht wiederhergestellt oder exportiert werden. Durch Löschen werden $1 freigegeben.",
   "snapshotUnprotected": "Schutz der Momentaufnahme aufgehoben.",
   "snapshotWindowChild": "Fenster-Unterelement",
+  "snapshots": "Momentaufnahmen",
   "snapshotsCaptureTheWholeTreeSoYouCanRollBack": "Momentaufnahmen erfassen den gesamten Baum, damit Sie einen früheren Zustand wiederherstellen können.",
-  "snapshotsYouTakeYourselfAreNeverRemovedToMakeRoom": "Selbst erstellte Momentaufnahmen werden nie entfernt, um Platz zu schaffen.",
+  "snapshotsToKeep": "Zu behaltende Momentaufnahmen",
+  "snapshotsToKeepDescription": "Eine Momentaufnahme wird behalten, wenn eine dieser Regeln auf sie zutrifft. Alle anderen werden entfernt.",
   "softFade": "Sanfter Verlauf",
   "someTabGroupDetailsWereUnavailableDefaultColorsOrNames": "Einige Details zu Tab-Gruppen waren nicht verfügbar. Standardfarben oder -namen wurden verwendet.",
   "sourceSaved": "Quelle gespeichert am $1",
   "stateDetail": "Zustand: $1",
   "stateOfDuplicatedItems": "Zustand duplizierter Elemente",
   "storage": "Speicher",
+  "storageFaviconCache": "Favicon-Cache",
+  "storageIntro": "Session Flow speichert alle Daten im Firefox-Profil auf diesem Gerät.",
+  "storageOther": "Sonstiges",
+  "storageOtherDescription": "Fortschritt der Einführung und Fensterpositionen.",
+  "storageSessionTree": "Sitzungsbaum",
+  "storageSessionTreeDescription": "Fenster, Tabs, Notizen und Trennlinien, geöffnet und gespeichert.",
+  "storageSizesAreEstimates": "Die Größen sind Schätzungen der gespeicherten Daten. Firefox kann auf dem Datenträger mehr Platz belegen.",
+  "storageTotal": "Gesamt",
+  "storageUsageUnavailable": "Der Speicherverbrauch konnte nicht ermittelt werden.",
+  "storageUsed": "Belegter Speicher",
   "strongFade": "Kräftiger Verlauf",
   "supportedImportFormats": "Unterstützte Importformate",
   "tabCreationNoId": "Beim Erstellen des Tabs wurde keine ID zurückgegeben.",

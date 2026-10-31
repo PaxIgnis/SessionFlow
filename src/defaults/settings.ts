@@ -24,11 +24,20 @@ export const DEFAULT_SETTINGS: Settings = {
 
   // Storage
   retainPrivateWindows: false,
+
+  // Snapshots
   automaticSessionSnapshots: true,
   sessionSnapshotInterval: 30,
   sessionSnapshotIntervalUnit: 'minutes',
   protectManualSessionSnapshots: true,
   includePrivateWindowsInSessionSnapshots: false,
+  pruneSessionSnapshots: true,
+  sessionSnapshotKeepRecentHours: 6,
+  sessionSnapshotKeepNewest: 10,
+  sessionSnapshotKeepDays: 10,
+  sessionSnapshotKeepWeeks: 8,
+  sessionSnapshotKeepMonths: 12,
+  sessionSnapshotKeepYears: 5,
 
   // Windows
   focusWindowOnOpen: true,

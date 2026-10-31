@@ -113,6 +113,10 @@
     "1": "$1 snapshot",
     "n": "$1 snapshots"
   },
+  "countSnapshotsDeleted": {
+    "1": "$1 snapshot deleted.",
+    "n": "$1 snapshots deleted."
+  },
   "countTab": {
     "1": "$1 tab",
     "n": "$1 tabs"
@@ -139,6 +143,7 @@
   "deleteAllSnapshotsIncludingProtectedSnapshots": "Delete all snapshots, including protected snapshots?",
   "deleteAllSnapshotsLabel": "Delete all snapshots",
   "deleteItems": "Session Flow could not delete the selected items: $1",
+  "deleteOlderSnapshots": "Delete older snapshots",
   "deleteSelectedItems": "Delete Selected Items",
   "deleteSnapshot": "Delete Snapshot",
   "deleteSnapshotAt": "Delete snapshot from $1?",
@@ -244,8 +249,38 @@
   "invalidTopLevelSnapshotItemType": "Invalid top-level snapshot item type",
   "invalidTransientField": "Invalid transient snapshot field: $1",
   "keepCollapsedStateOnDrop": "Keep collapsed state on drop",
+  "keepDailySnapshots": "Daily snapshots",
+  "keepDailySnapshotsDescription": {
+    "1": "Keep the newest snapshot from the last $1 day.",
+    "n": "Keep the newest snapshot from each of the last $1 days."
+  },
   "keepFaviconsUpToDate": "Keep favicons up to date",
   "keepHierarchyOnDrop": "Keep hierarchy on drop",
+  "keepMonthlySnapshots": "Monthly snapshots",
+  "keepMonthlySnapshotsDescription": {
+    "1": "Keep the newest snapshot from the last $1 month.",
+    "n": "Keep the newest snapshot from each of the last $1 months."
+  },
+  "keepNewestSnapshots": "Newest snapshots",
+  "keepNewestSnapshotsDescription": {
+    "1": "Keep the newest snapshot, whatever its age.",
+    "n": "Keep the $1 newest snapshots, whatever their age."
+  },
+  "keepRecentSnapshots": "Recent snapshots",
+  "keepRecentSnapshotsDescription": {
+    "1": "Keep every snapshot from the last $1 hour.",
+    "n": "Keep every snapshot from the last $1 hours."
+  },
+  "keepWeeklySnapshots": "Weekly snapshots",
+  "keepWeeklySnapshotsDescription": {
+    "1": "Keep the newest snapshot from the last $1 week.",
+    "n": "Keep the newest snapshot from each of the last $1 weeks."
+  },
+  "keepYearlySnapshots": "Yearly snapshots",
+  "keepYearlySnapshotsDescription": {
+    "1": "Keep the newest snapshot from the last $1 year.",
+    "n": "Keep the newest snapshot from each of the last $1 years."
+  },
   "keyboardActionFailed": "The keyboard action could not be completed.",
   "keyboardClearAction": "Clear shortcut for $1",
   "keyboardDeleteWarning": "Permanently removes the item from the session tree, including saved items. Open tabs and windows are also closed in Firefox.",
@@ -273,6 +308,7 @@
   "leftEdge": "Left Edge",
   "linksDraggedFromOutsideFirefoxBecomeSavedTabs": "Links dragged from outside Firefox become saved tabs.",
   "localeCode": "en",
+  "manualSnapshotsAreNeverRemovedAutomatically": "Snapshots you take yourself are protected, so they are never removed automatically.",
   "matchOpenWindowsToSavedWindowsAtStartup": "Match open windows to saved windows at startup",
   "matchOriginalItems": "Match Original Items",
   "minutes": "Minutes",
@@ -339,7 +375,7 @@
   "onboardingExampleSecondWindow": "Planning window",
   "onboardingExampleWindow": "Research window",
   "onboardingFinish": "Make yourself at home",
-  "onboardingFinishDescription": "Automatic snapshots are on by default and keep copies of your tree on this device. In Settings → Storage you can review, restore, import, or export sessions. Export a copy if you need a backup outside this Firefox profile.",
+  "onboardingFinishDescription": "Automatic snapshots are on by default and keep copies of your tree on this device. In Settings → Snapshots you can review, restore, import, or export sessions. Export a copy if you need a backup outside this Firefox profile.",
   "onboardingFocus": "3. Focus a tab",
   "onboardingFocusAfter": "Research is now active. A colored outline marks its row.",
   "onboardingFocusBefore": "Research is live, but is not the active tab in its window.",
@@ -428,7 +464,7 @@
   "onboardingSkip": "Skip introduction",
   "onboardingSkipTips": "Skip tips",
   "onboardingStart": "Choose how to start",
-  "onboardingStartDescription": "Start with your current tabs, or bring a saved session from another manager. You can import later in Settings → Storage.",
+  "onboardingStartDescription": "Start with your current tabs, or bring a saved session from another manager. You can import later in Settings → Snapshots.",
   "onboardingStateActive": "Active",
   "onboardingStateActiveDescription": "Colored outline: the active tab in the focused Firefox window.",
   "onboardingStateFocusNote": "Active describes focus. Live, unloaded, and saved describe the tab’s state; the dot represents that state.",
@@ -517,6 +553,8 @@
   "reloadTabs": "Reload tabs",
   "removalTabUnconfirmed": "Could not confirm whether Firefox removed tab $1: $2",
   "removalWindowUnconfirmed": "Could not confirm whether Firefox removed window $1: $2",
+  "removeOlderSnapshotsAutomatically": "Remove older snapshots automatically",
+  "removeOlderSnapshotsAutomaticallyDescription": "As snapshots age, fewer are kept: every recent one, then one per day, week, month, and year. Protected snapshots are never removed. When off, every snapshot is kept.",
   "reopenTheTreeAtItsLastSizeAndPosition": "Reopen the tree at its last size and position",
   "reopenWindowsInTheirLastPosition": "Reopen windows in their last position",
   "requiresWebsiteAccessPermission": "Requires website access permission.",
@@ -527,6 +565,10 @@
   "restoreTreeChanged": "The active session tree changed repeatedly during restore; please try again.",
   "restoreWithoutSafetySnapshot": "Restore Without Safety Snapshot",
   "restoredItems": "Restored $1.",
+  "retentionDeletesSnapshots": {
+    "1": "With these settings, $1 snapshot will be deleted now. This cannot be undone.",
+    "n": "With these settings, $1 snapshots will be deleted now. This cannot be undone."
+  },
   "right": "Right",
   "rightEdge": "Right Edge",
   "rightclickActionsApplyToTheItemsYouSelectedTheseSettings": "Right-click actions apply to the items you selected. These settings decide when an action also reaches children you did not select.",
@@ -613,14 +655,26 @@
   "snapshotUnavailableDetails": "This snapshot's data could not be read, so it cannot be restored or exported. Deleting it will free $1.",
   "snapshotUnprotected": "Snapshot unprotected.",
   "snapshotWindowChild": "window child",
+  "snapshots": "Snapshots",
   "snapshotsCaptureTheWholeTreeSoYouCanRollBack": "Snapshots capture the whole tree so you can roll back to an earlier state.",
-  "snapshotsYouTakeYourselfAreNeverRemovedToMakeRoom": "Snapshots you take yourself are never removed to make room.",
+  "snapshotsToKeep": "Snapshots to keep",
+  "snapshotsToKeepDescription": "A snapshot is kept if any of these rules match it. All others are removed.",
   "softFade": "Soft Fade",
   "someTabGroupDetailsWereUnavailableDefaultColorsOrNames": "Some tab group details were unavailable. Default colors or names were used.",
   "sourceSaved": "source saved $1",
   "stateDetail": "State: $1",
   "stateOfDuplicatedItems": "State of duplicated items",
   "storage": "Storage",
+  "storageFaviconCache": "Favicon cache",
+  "storageIntro": "Session Flow keeps all of its data in your Firefox profile on this device.",
+  "storageOther": "Other",
+  "storageOtherDescription": "Onboarding progress and window positions.",
+  "storageSessionTree": "Session tree",
+  "storageSessionTreeDescription": "Windows, tabs, notes, and separators, both open and saved.",
+  "storageSizesAreEstimates": "Sizes are estimates of the stored data. Firefox may use more space on disk.",
+  "storageTotal": "Total",
+  "storageUsageUnavailable": "Storage usage could not be measured.",
+  "storageUsed": "Space used",
   "strongFade": "Strong Fade",
   "supportedImportFormats": "Supported Import Formats",
   "tabCreationNoId": "Tab creation returned no ID",

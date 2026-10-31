@@ -68,7 +68,7 @@ describe('session snapshot workflows', () => {
       })
       await browser.refresh()
       await options.page.expectLoaded()
-      await options.page.selectSection('settings_storage')
+      await options.page.selectSection('settings_snapshots')
       await expect($('[data-testid="snapshot-import-source"]')).toHaveText(
         expect.stringContaining('Imported from Tabs Outliner'),
       )
@@ -104,7 +104,7 @@ describe('session snapshot workflows', () => {
       await sendSnapshotRequest({ action: 'clearSessionSnapshots' })
       await browser.refresh()
       await options.page.expectLoaded()
-      await options.page.selectSection('settings_storage')
+      await options.page.selectSection('settings_snapshots')
       const treeBefore = await readPersistedSessionTree()
       const handlesBefore = await browser.getWindowHandles()
       const input = await $('[data-testid="import-snapshot-file"]')
@@ -150,7 +150,7 @@ describe('session snapshot workflows', () => {
       expect(await browser.getWindowHandles()).toEqual(handlesBefore)
       await browser.refresh()
       await options.page.expectLoaded()
-      await options.page.selectSection('settings_storage')
+      await options.page.selectSection('settings_snapshots')
       await expect($('[data-testid="snapshot-import-source"]')).toHaveText(
         'Imported from Tab Session Manager',
       )
@@ -179,7 +179,7 @@ describe('session snapshot workflows', () => {
       await sendSnapshotRequest({ action: 'clearSessionSnapshots' })
       await browser.refresh()
       await options.page.expectLoaded()
-      await options.page.selectSection('settings_storage')
+      await options.page.selectSection('settings_snapshots')
       const treeBefore = await readPersistedSessionTree()
       const handlesBefore = await browser.getWindowHandles()
       const input = await $('[data-testid="import-snapshot-file"]')
@@ -224,7 +224,7 @@ describe('session snapshot workflows', () => {
       expect(await browser.getWindowHandles()).toEqual(handlesBefore)
       await browser.refresh()
       await options.page.expectLoaded()
-      await options.page.selectSection('settings_storage')
+      await options.page.selectSection('settings_snapshots')
       await expect($('[data-testid="snapshot-import-source"]')).toHaveText(
         'Imported from Session Buddy',
       )
@@ -253,7 +253,7 @@ describe('session snapshot workflows', () => {
       await sendSnapshotRequest({ action: 'clearSessionSnapshots' })
       await browser.refresh()
       await options.page.expectLoaded()
-      await options.page.selectSection('settings_storage')
+      await options.page.selectSection('settings_snapshots')
       const treeBefore = await readPersistedSessionTree()
       const handlesBefore = await browser.getWindowHandles()
       const fixturePath = path.resolve(
@@ -299,7 +299,7 @@ describe('session snapshot workflows', () => {
       expect(await browser.getWindowHandles()).toEqual(handlesBefore)
       await browser.refresh()
       await options.page.expectLoaded()
-      await options.page.selectSection('settings_storage')
+      await options.page.selectSection('settings_snapshots')
       await expect($('[data-testid="snapshot-import-source"]')).toHaveText(
         expect.stringContaining('Imported from Tabs Outliner'),
       )
@@ -349,7 +349,7 @@ describe('session snapshot workflows', () => {
       await sendSnapshotRequest({ action: 'clearSessionSnapshots' })
       await browser.refresh()
       await options.page.expectLoaded()
-      await options.page.selectSection('settings_storage')
+      await options.page.selectSection('settings_snapshots')
       await expect($('[data-testid="import-snapshot"]')).toBeEnabled()
       const treeBefore = await readPersistedSessionTree()
       const handlesBefore = await browser.getWindowHandles()
@@ -403,7 +403,7 @@ describe('session snapshot workflows', () => {
       )
       await browser.refresh()
       await options.page.expectLoaded()
-      await options.page.selectSection('settings_storage')
+      await options.page.selectSection('settings_snapshots')
       await expect(
         $('.snapshot-entry [aria-label="Protected snapshot"]'),
       ).toBeDisplayed()
@@ -433,9 +433,9 @@ describe('session snapshot workflows', () => {
       await sendSnapshotRequest({ action: 'clearSessionSnapshots' })
       await browser.refresh()
       await options.page.expectLoaded()
-      await options.page.selectSection('settings_storage')
+      await options.page.selectSection('settings_snapshots')
 
-      const section = await $('#settings_storage')
+      const section = await $('#settings_snapshots')
       await expect(section).toBeDisplayed()
       const createButton = await $('[data-testid="create-snapshot"]')
       await expect(createButton).toBeEnabled()
@@ -594,7 +594,7 @@ describe('session snapshot workflows', () => {
 
       await browser.refresh()
       await options.page.expectLoaded()
-      await options.page.selectSection('settings_storage')
+      await options.page.selectSection('settings_snapshots')
       const flattenedItems = snapshot.data.payload.items.flatMap((item) =>
         item.type === 0 ? [item, ...item.children] : [item],
       )
@@ -678,10 +678,117 @@ describe('session snapshot workflows', () => {
     }
   })
 
+  it('asks before a tighter retention policy deletes snapshots and shows storage usage', async () => {
+    const options = await openOptionsPage()
+    try {
+      await sendSnapshotRequest({ action: 'clearSessionSnapshots' })
+      // Unprotected snapshots taken moments apart, with no rolling window, so
+      // only the newest-count rule decides what survives.
+      await storeSettings({
+        protectManualSessionSnapshots: false,
+        sessionSnapshotKeepRecentHours: 0,
+      })
+      for (let index = 0; index < 3; index += 1) {
+        const created = await sendSnapshotRequest({
+          action: 'createSessionSnapshot',
+        })
+        expect(created).toMatchObject({ ok: true, data: { protected: false } })
+      }
+      await browser.refresh()
+      await options.page.expectLoaded()
+      await options.page.selectSection('settings_snapshots')
+      await expect($$('.snapshot-entry')).toBeElementsArrayOfSize(3)
+
+      const newest = await $(
+        '//div[contains(@class, "number-container")][.//label[normalize-space()="Newest snapshots"]]//input[@type="number"]',
+      )
+      const setNewest = async (value) => {
+        await newest.click()
+        await browser.keys(['Control', 'a'])
+        await browser.keys(value)
+      }
+      // The check runs once typing settles, and each confirmation is a new
+      // element, so look the dialog up afresh every time.
+      const retentionDialog = async () => {
+        await browser.waitUntil(
+          async () => (await $('[role="dialog"]')).isDisplayed(),
+          {
+            timeout: 10_000,
+            timeoutMsg: 'Expected the retention confirmation dialog.',
+          },
+        )
+        return $('[role="dialog"]')
+      }
+
+      await setNewest('1')
+      const cancelled = await retentionDialog()
+      await expect(cancelled).toHaveText(
+        expect.stringContaining('2 snapshots will be deleted now'),
+      )
+      await cancelled.$('button=Cancel').click()
+      await expect(newest).toHaveValue('10')
+      await expect($$('.snapshot-entry')).toBeElementsArrayOfSize(3)
+
+      // Saving another setting before the check runs must not save, and
+      // prune against, the unconfirmed limit.
+      await setNewest('1')
+      await options.page.setToggle('Include private windows', 'On')
+      await options.page.expectStoredSetting(
+        'includePrivateWindowsInSessionSnapshots',
+        true,
+      )
+      const raced = await retentionDialog()
+      const listedWhileAsking = await sendSnapshotRequest({
+        action: 'listSessionSnapshots',
+      })
+      expect(listedWhileAsking.data.snapshots).toHaveLength(3)
+      await options.page.expectStoredSetting('sessionSnapshotKeepNewest', 10)
+      await raced.$('button=Cancel').click()
+      await expect(newest).toHaveValue('10')
+
+      await setNewest('1')
+      const confirmed = await retentionDialog()
+      await confirmed.$('button=Delete').click()
+      await options.page.expectStoredSetting('sessionSnapshotKeepNewest', 1)
+      await browser.waitUntil(
+        async () => (await $$('.snapshot-entry')).length === 1,
+        {
+          timeout: 10_000,
+          timeoutMsg: 'Expected only the newest snapshot to remain.',
+        },
+      )
+      const listed = await sendSnapshotRequest({
+        action: 'listSessionSnapshots',
+      })
+      expect(listed.data.snapshots).toHaveLength(1)
+
+      await options.page.selectSection('settings_storage')
+      const snapshotUsage = await $(
+        '[data-testid="storage-usage"] [data-category="snapshots"] .storage-usage-bytes',
+      )
+      await browser.waitUntil(
+        async () => /\d/.test(await snapshotUsage.getText()),
+        {
+          timeout: 10_000,
+          timeoutMsg: 'Expected the Storage section to measure snapshots.',
+        },
+      )
+    } finally {
+      await storeSettings({
+        protectManualSessionSnapshots: true,
+        includePrivateWindowsInSessionSnapshots: false,
+        sessionSnapshotKeepRecentHours: 6,
+        sessionSnapshotKeepNewest: 10,
+      })
+      await sendSnapshotRequest({ action: 'clearSessionSnapshots' })
+      await closeOptionsPage(options.optionsHandle, options.originalHandle)
+    }
+  })
+
   it('persists interval settings and reschedules the snapshot alarm', async () => {
     const options = await openOptionsPage()
     try {
-      await options.page.selectSection('settings_storage')
+      await options.page.selectSection('settings_snapshots')
       const interval = await $(
         '//div[contains(@class, "number-container")][.//label[normalize-space()="Snapshot every"]]',
       )
@@ -728,3 +835,20 @@ describe('session snapshot workflows', () => {
     }
   })
 })
+
+function storeSettings(patch) {
+  return browser.executeAsync((values, done) => {
+    window.browser.storage.local
+      .get('settings')
+      .then(({ settings }) =>
+        window.browser.storage.local.set({
+          settings: { ...(settings || {}), ...values },
+        }),
+      )
+      .then(() =>
+        window.browser.runtime.sendMessage({ type: 'settingsUpdated' }),
+      )
+      .then(() => done({ ok: true }))
+      .catch((error) => done({ ok: false, error: String(error) }))
+  }, patch)
+}
