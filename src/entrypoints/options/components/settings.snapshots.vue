@@ -1,0 +1,1513 @@
+<script setup lang="ts">
+import NumberInput from '@/components/NumberInput.vue'
+import ToggleButton from '@/components/ToggleButton.vue'
+import { Favicons } from '@/services/favicons'
+import {
+  formatList,
+  formatNumber,
+  getDisplayLocale,
+  i18n,
+} from '@/services/i18n'
+import { localizedImportWarning } from '@/services/localized-import-warnings'
+import { SessionSnapshotClient } from '@/services/session-snapshot-client'
+import {
+  snapshotIdsToRetain,
+  snapshotRetentionPolicy,
+} from '@/services/session-snapshot-retention'
+import { Settings } from '@/services/settings'
+import { NUMERIC_SETTING_BOUNDS } from '@/services/settings-actions'
+import { formatBytes } from '@/services/storage-usage'
+import type {
+  SessionSnapshotCounts,
+  SessionSnapshotMetadata,
+  SessionSnapshotRecord,
+  SessionSnapshotRestoreMode,
+} from '@/types/session-snapshots'
+import { SESSION_SNAPSHOT_IMPORT_SOURCE_LABELS } from '@/types/session-snapshots'
+import { OPTIONS, type Settings as SettingsValues } from '@/types/settings'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import SnapshotConfirmationModal from './SnapshotConfirmationModal.vue'
+import SnapshotTree from './SnapshotTree.vue'
+import { SNAPSHOTS_CHANGED_EVENT } from './storage-events'
+
+type RetentionCountKey =
+  | 'sessionSnapshotKeepRecentHours'
+  | 'sessionSnapshotKeepNewest'
+  | 'sessionSnapshotKeepDays'
+  | 'sessionSnapshotKeepWeeks'
+  | 'sessionSnapshotKeepMonths'
+  | 'sessionSnapshotKeepYears'
+
+type RetentionSettings = Pick<
+  SettingsValues,
+  RetentionCountKey | 'pruneSessionSnapshots'
+>
+
+// Ordered like the policy itself: recent history first, then thinner samples
+// over longer periods.
+const RETENTION_FIELDS = [
+  {
+    key: 'sessionSnapshotKeepRecentHours',
+    label: 'keepRecentSnapshots',
+    description: 'keepRecentSnapshotsDescription',
+  },
+  {
+    key: 'sessionSnapshotKeepNewest',
+    label: 'keepNewestSnapshots',
+    description: 'keepNewestSnapshotsDescription',
+  },
+  {
+    key: 'sessionSnapshotKeepDays',
+    label: 'keepDailySnapshots',
+    description: 'keepDailySnapshotsDescription',
+  },
+  {
+    key: 'sessionSnapshotKeepWeeks',
+    label: 'keepWeeklySnapshots',
+    description: 'keepWeeklySnapshotsDescription',
+  },
+  {
+    key: 'sessionSnapshotKeepMonths',
+    label: 'keepMonthlySnapshots',
+    description: 'keepMonthlySnapshotsDescription',
+  },
+  {
+    key: 'sessionSnapshotKeepYears',
+    label: 'keepYearlySnapshots',
+    description: 'keepYearlySnapshotsDescription',
+  },
+] as const satisfies readonly {
+  key: RetentionCountKey
+  label: string
+  description: string
+}[]
+
+// Long enough that typing "12" is not briefly applied as "1".
+const RETENTION_SETTLE_MS = 800
+
+interface ConfirmationState {
+  kind: 'confirm' | 'error'
+  title: string
+  message: string
+  confirmLabel?: string
+  danger?: boolean
+  resolve?: (confirmed: boolean) => void
+}
+
+const snapshots = ref<SessionSnapshotMetadata[]>([])
+const selectedRecord = ref<SessionSnapshotRecord>()
+const selectedSnapshotId = ref<string>()
+const selectedUids = ref<string[]>([])
+const totalBytes = ref(0)
+const activeTreeEmpty = ref(true)
+const loading = ref(false)
+const importFileInput = ref<HTMLInputElement>()
+const successMessage = ref('')
+const confirmation = ref<ConfirmationState>()
+const groupedSnapshots = computed(() => groupSnapshotsByPeriod(snapshots.value))
+const selectedMetadata = computed(() =>
+  snapshots.value.find((snapshot) => snapshot.id === selectedSnapshotId.value),
+)
+const maxSnapshotTabs = computed(() =>
+  Math.max(1, ...snapshots.value.map((snapshot) => snapshot.counts.tabs)),
+)
+// Built once per snapshot list rather than re-sorting inside the row loop.
+const snapshotDeltas = computed(() => {
+  const chronological = [...snapshots.value].sort(
+    (left, right) => left.createdAt - right.createdAt,
+  )
+  const deltas = new Map<string, string>()
+  chronological.forEach((snapshot, index) => {
+    // The oldest snapshot has no predecessor. That is not "no change", so it
+    // gets no delta at all rather than a misleading ±0.
+    if (index === 0) {
+      deltas.set(snapshot.id, '')
+      return
+    }
+    const delta = snapshot.counts.tabs - chronological[index - 1].counts.tabs
+    deltas.set(
+      snapshot.id,
+      delta > 0
+        ? `+${formatNumber(delta)}`
+        : delta < 0
+          ? `−${formatNumber(Math.abs(delta))}`
+          : '±0',
+    )
+  })
+  return deltas
+})
+// Stating a schedule the user has not configured is worse than stating none,
+// so this follows the live setting instead of the default interval.
+const emptyHistoryMessage = computed(() => {
+  if (!Settings.values.automaticSessionSnapshots) {
+    return i18n.t('noSnapshotsYetAutomaticSnapshotsAreOffSoTakeOne')
+  }
+  const unit =
+    Settings.values.sessionSnapshotIntervalUnit === 'hours' ? 'hour' : 'minute'
+  return i18n.t('snapshotScheduleEmpty', [
+    pluralize(Settings.values.sessionSnapshotInterval, unit),
+  ])
+})
+// One source of truth for the restore vocabulary, so the button and the
+// dialog it opens can never drift apart.
+const restoreLabel = computed(() =>
+  selectedUids.value.length === 0
+    ? i18n.t('restoreEverything')
+    : i18n.t('restoreItems', [pluralize(selectedUids.value.length, 'item')]),
+)
+let successTimer: ReturnType<typeof setTimeout> | undefined
+let retentionTimer: ReturnType<typeof setTimeout> | undefined
+let retentionChangeInProgress = false
+// Retention edits stay here until confirmed. Every other control on the page
+// saves the whole of Settings.values, so an unconfirmed limit kept there could
+// be saved, and pruned against, without asking.
+const retentionDraft = reactive(retentionSettings(Settings.values))
+
+// Follow changes saved elsewhere, such as another settings page, unless the
+// user is part-way through an edit here.
+watch(
+  () => retentionSettings(Settings.values),
+  (saved) => {
+    if (!retentionTimer && !retentionChangeInProgress) {
+      Object.assign(retentionDraft, saved)
+    }
+  },
+)
+
+const intervalMin = computed(() =>
+  Settings.values.sessionSnapshotIntervalUnit === 'hours' ? 1 : 5,
+)
+const intervalMax = computed(() =>
+  Settings.values.sessionSnapshotIntervalUnit === 'hours' ? 24 : 1440,
+)
+
+onMounted(async () => {
+  await Favicons.init()
+  await refresh()
+})
+
+onBeforeUnmount(() => {
+  if (successTimer) clearTimeout(successTimer)
+  if (retentionTimer) clearTimeout(retentionTimer)
+})
+
+async function refresh(preferredId?: string) {
+  await run(async () => {
+    const result = await SessionSnapshotClient.list()
+    snapshots.value = result.snapshots
+    totalBytes.value = result.totalBytes
+    window.dispatchEvent(new Event(SNAPSHOTS_CHANGED_EVENT))
+    activeTreeEmpty.value = result.activeTreeEmpty
+    const currentId = preferredId ?? selectedSnapshotId.value
+    const nextId = snapshots.value.some((item) => item.id === currentId)
+      ? currentId
+      : snapshots.value[0]?.id
+    if (nextId) await selectSnapshot(nextId)
+    else {
+      selectedSnapshotId.value = undefined
+      selectedRecord.value = undefined
+    }
+  })
+}
+
+async function selectSnapshot(id: string) {
+  selectedSnapshotId.value = id
+  selectedRecord.value = undefined
+  selectedUids.value = []
+  const metadata = snapshots.value.find((snapshot) => snapshot.id === id)
+  if (!metadata?.available) return
+  await run(async () => {
+    try {
+      selectedRecord.value = await SessionSnapshotClient.get(id)
+    } catch (error) {
+      const current = snapshots.value.find((snapshot) => snapshot.id === id)
+      if (current) current.available = false
+      throw error
+    }
+  })
+}
+
+async function saveSettings() {
+  await run(() => Settings.saveSettingsToStorage())
+}
+
+function scheduleRetentionChange() {
+  if (retentionTimer) clearTimeout(retentionTimer)
+  retentionTimer = setTimeout(() => {
+    retentionTimer = undefined
+    void applyRetentionChange()
+  }, RETENTION_SETTLE_MS)
+}
+
+// A tighter policy deletes snapshots as soon as it is saved, so count what it
+// would remove first and let the user back out before anything is lost.
+async function applyRetentionChange() {
+  if (retentionTimer) {
+    clearTimeout(retentionTimer)
+    retentionTimer = undefined
+  }
+  // Leaving a number field while the dialog is open emits another update.
+  // Check again once the open dialog settles instead of replacing it.
+  if (retentionChangeInProgress) {
+    scheduleRetentionChange()
+    return
+  }
+  retentionChangeInProgress = true
+  try {
+    await confirmAndSaveRetention()
+  } finally {
+    retentionChangeInProgress = false
+  }
+}
+
+async function confirmAndSaveRetention() {
+  const draft = retentionSettings(retentionDraft)
+  const current = await run(() => SessionSnapshotClient.list())
+  if (!current) {
+    Object.assign(retentionDraft, retentionSettings(Settings.values))
+    return
+  }
+  const removed =
+    current.snapshots.length -
+    snapshotIdsToRetain(
+      current.snapshots,
+      Date.now(),
+      snapshotRetentionPolicy(draft),
+    ).size
+  if (
+    removed > 0 &&
+    !(await confirmAction({
+      title: i18n.t('deleteOlderSnapshots'),
+      message: i18n.t('retentionDeletesSnapshots', removed, [
+        formatNumber(removed),
+      ]),
+      confirmLabel: i18n.t('delete'),
+      danger: true,
+    }))
+  ) {
+    Object.assign(retentionDraft, retentionSettings(Settings.values))
+    return
+  }
+  Object.assign(Settings.values, draft)
+  await saveSettings()
+  if (removed === 0) return
+  await run(() => SessionSnapshotClient.applyRetention())
+  await refresh()
+  showSuccess(i18n.t('countSnapshotsDeleted', removed, [formatNumber(removed)]))
+}
+
+function retentionSettings(source: RetentionSettings): RetentionSettings {
+  return {
+    pruneSessionSnapshots: source.pruneSessionSnapshots,
+    sessionSnapshotKeepRecentHours: source.sessionSnapshotKeepRecentHours,
+    sessionSnapshotKeepNewest: source.sessionSnapshotKeepNewest,
+    sessionSnapshotKeepDays: source.sessionSnapshotKeepDays,
+    sessionSnapshotKeepWeeks: source.sessionSnapshotKeepWeeks,
+    sessionSnapshotKeepMonths: source.sessionSnapshotKeepMonths,
+    sessionSnapshotKeepYears: source.sessionSnapshotKeepYears,
+  }
+}
+
+function retentionDescription(field: (typeof RETENTION_FIELDS)[number]) {
+  const count = retentionDraft[field.key]
+  return i18n.t(field.description, count, [formatNumber(count)])
+}
+
+async function createSnapshot() {
+  await run(async () => {
+    const created = await SessionSnapshotClient.create()
+    if (!created) {
+      showError(
+        i18n.t('snapshotNotCreated'),
+        i18n.t('theActiveSessionTreeIsEmpty'),
+      )
+      return
+    }
+    await refresh(created?.id)
+    showSuccess(i18n.t('snapshotCreated'))
+  })
+}
+
+async function importSnapshot(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  // Reset before reading so the same file can be selected again after an error.
+  input.value = ''
+  if (!file) return
+  await run(async () => {
+    const imported = await SessionSnapshotClient.import(await file.text())
+    await refresh(imported.id)
+    showSuccess(i18n.t('snapshotImportedAndProtected'))
+  })
+}
+
+async function toggleProtected(snapshot: SessionSnapshotMetadata) {
+  await run(async () => {
+    await SessionSnapshotClient.setProtected(snapshot.id, !snapshot.protected)
+    await refresh(snapshot.id)
+    showSuccess(
+      snapshot.protected
+        ? i18n.t('snapshotUnprotected')
+        : i18n.t('snapshotProtected'),
+    )
+  })
+}
+
+async function deleteSnapshot(snapshot: SessionSnapshotMetadata) {
+  if (
+    !(await confirmAction({
+      title: i18n.t('deleteSnapshot'),
+      message: i18n.t('deleteSnapshotAt', [formatDate(snapshot.createdAt)]),
+      confirmLabel: i18n.t('delete'),
+      danger: true,
+    }))
+  )
+    return
+  await run(async () => {
+    await SessionSnapshotClient.delete(snapshot.id)
+    await refresh()
+    showSuccess(i18n.t('snapshotDeleted'))
+  })
+}
+
+async function clearSnapshots() {
+  if (
+    !(await confirmAction({
+      title: i18n.t('deleteAllSnapshots'),
+      message: i18n.t('deleteAllSnapshotsIncludingProtectedSnapshots'),
+      confirmLabel: i18n.t('deleteAll'),
+      danger: true,
+    }))
+  )
+    return
+  await run(async () => {
+    await SessionSnapshotClient.clear()
+    await refresh()
+    showSuccess(i18n.t('allSnapshotsDeleted'))
+  })
+}
+
+async function exportSnapshot(copy: boolean) {
+  const id = selectedRecord.value?.metadata.id
+  if (!id) return
+  await run(async () => {
+    if (copy) {
+      // Request from the click gesture, before fetching the snapshot.
+      const granted = await browser.permissions.request({
+        permissions: ['clipboardWrite'],
+      })
+      if (!granted) throw new Error(i18n.t('clipboardWritePermissionDenied'))
+    }
+    const exported = await SessionSnapshotClient.export(id)
+    const json = JSON.stringify(exported, null, 2)
+    if (copy) {
+      await navigator.clipboard.writeText(json)
+      showSuccess(i18n.t('snapshotJSONCopied'))
+      return
+    }
+    const url = URL.createObjectURL(
+      new Blob([json], { type: 'application/json' }),
+    )
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `session-flow-snapshot-${fileTimestamp(exported.metadata.createdAt)}.json`
+    anchor.click()
+    URL.revokeObjectURL(url)
+    showSuccess(i18n.t('snapshotJSONExported'))
+  })
+}
+
+async function restore(
+  mode: SessionSnapshotRestoreMode,
+  allowWithoutSafetySnapshot = false,
+) {
+  const record = selectedRecord.value
+  if (!record) return
+  if (mode === 'selected' && selectedUids.value.length === 0) return
+  if (!allowWithoutSafetySnapshot) {
+    const counts = await run(() =>
+      SessionSnapshotClient.restoreSummary({
+        snapshotId: record.metadata.id,
+        mode,
+        selectedUids: mode === 'selected' ? [...selectedUids.value] : [],
+      }),
+    )
+    if (!counts) return
+    if (
+      !(await confirmAction({
+        title: restoreLabel.value,
+        message: i18n.t('restoreAppend', [formatCountsSentence(counts)]),
+        confirmLabel: restoreLabel.value,
+      }))
+    )
+      return
+  }
+  await run(async () => {
+    try {
+      const counts = await SessionSnapshotClient.restore({
+        snapshotId: record.metadata.id,
+        mode,
+        selectedUids: mode === 'selected' ? [...selectedUids.value] : [],
+        allowWithoutSafetySnapshot,
+      })
+      await refresh(record.metadata.id)
+      showSuccess(i18n.t('restoredItems', [formatCountsSentence(counts)]))
+    } catch (error) {
+      if (
+        (error as Error & { code?: string }).code === 'safety-snapshot-failed'
+      ) {
+        const proceed = await confirmAction({
+          title: i18n.t('safetySnapshotFailed'),
+          message: i18n.t(
+            'sessionFlowCouldNotCreateThePrerestoreSafetySnapshotRestore',
+          ),
+          confirmLabel: i18n.t('restoreWithoutSafetySnapshot'),
+          danger: true,
+        })
+        if (proceed) await restore(mode, true)
+        return
+      }
+      throw error
+    }
+  })
+}
+
+function confirmAction(
+  options: Omit<ConfirmationState, 'kind' | 'resolve'>,
+): Promise<boolean> {
+  return new Promise((resolve) => {
+    confirmation.value = { kind: 'confirm', ...options, resolve }
+  })
+}
+
+function finishConfirmation(confirmed: boolean) {
+  const current = confirmation.value
+  confirmation.value = undefined
+  current?.resolve?.(confirmed)
+}
+
+function showSuccess(message: string): void {
+  if (successTimer) clearTimeout(successTimer)
+  successMessage.value = message
+  successTimer = setTimeout(() => {
+    successMessage.value = ''
+    successTimer = undefined
+  }, 3_000)
+}
+
+function showError(title: string, message: string): void {
+  confirmation.value = { kind: 'error', title, message }
+}
+
+async function run<T>(operation: () => Promise<T>): Promise<T | undefined> {
+  loading.value = true
+  try {
+    return await operation()
+  } catch (error) {
+    showError(
+      i18n.t('snapshotOperationFailed'),
+      error instanceof Error ? error.message : String(error),
+    )
+    return undefined
+  } finally {
+    loading.value = false
+  }
+}
+
+function formatDate(value: number) {
+  return new Date(value).toLocaleString(getDisplayLocale())
+}
+function formatTime(value: number) {
+  return new Date(value).toLocaleTimeString(getDisplayLocale(), {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+function pluralize(count: number, noun: string) {
+  const keys = {
+    window: 'countWindow',
+    tab: 'countTab',
+    note: 'countNote',
+    separator: 'countSeparator',
+    item: 'countItem',
+    hour: 'countHour',
+    minute: 'countMinute',
+  } as const
+  return i18n.t(keys[noun as keyof typeof keys], count, [formatNumber(count)])
+}
+function formatCounts(counts: SessionSnapshotCounts) {
+  return [
+    pluralize(counts.windows, 'window'),
+    pluralize(counts.tabs, 'tab'),
+    pluralize(counts.notes, 'note'),
+    pluralize(counts.separators, 'separator'),
+  ].join(' · ')
+}
+// The compact "·" form suits a list row. Prose needs commas and an "and", and
+// should not name item types the snapshot does not contain.
+function formatCountsSentence(counts: SessionSnapshotCounts) {
+  const parts = [
+    [counts.windows, 'window'],
+    [counts.tabs, 'tab'],
+    [counts.notes, 'note'],
+    [counts.separators, 'separator'],
+  ]
+    .filter(([count]) => (count as number) > 0)
+    .map(([count, noun]) => pluralize(count as number, noun as string))
+
+  if (parts.length === 0) return i18n.t('nothing')
+  if (parts.length === 1) return parts[0]
+  return formatList(parts)
+}
+function triggerLabel(trigger: SessionSnapshotMetadata['trigger']) {
+  return {
+    periodic: i18n.t('takenOnASchedule'),
+    startup: i18n.t('takenAtStartup'),
+    'before-restore': i18n.t('takenBeforeARestore'),
+    manual: i18n.t('takenByYou'),
+    import: i18n.t('imported'),
+  }[trigger]
+}
+function snapshotBarWidth(snapshot: SessionSnapshotMetadata) {
+  return `${Math.max(2, (snapshot.counts.tabs / maxSnapshotTabs.value) * 100)}%`
+}
+function snapshotDelta(snapshot: SessionSnapshotMetadata) {
+  return snapshotDeltas.value.get(snapshot.id) ?? ''
+}
+function restoreSelectedSnapshot() {
+  return restore(selectedUids.value.length > 0 ? 'selected' : 'all')
+}
+function groupSnapshotsByPeriod(items: SessionSnapshotMetadata[]) {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const groups = new Map<string, SessionSnapshotMetadata[]>()
+  for (const snapshot of items) {
+    const date = new Date(snapshot.createdAt)
+    const day = new Date(date)
+    day.setHours(0, 0, 0, 0)
+    const daysAgo = Math.round((today.getTime() - day.getTime()) / 86_400_000)
+    const label =
+      daysAgo === 0
+        ? i18n.t('today')
+        : daysAgo === 1
+          ? i18n.t('yesterday')
+          : daysAgo < 7
+            ? i18n.t('previous7Days')
+            : date.toLocaleDateString(getDisplayLocale(), {
+                month: 'long',
+                year: 'numeric',
+              })
+    const group = groups.get(label) ?? []
+    group.push(snapshot)
+    groups.set(label, group)
+  }
+  return [...groups].map(([label, entries]) => ({ label, entries }))
+}
+function fileTimestamp(value: number) {
+  const date = new Date(value)
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}-${String(date.getHours()).padStart(2, '0')}${String(date.getMinutes()).padStart(2, '0')}`
+}
+</script>
+
+<template>
+  <section
+    id="settings_snapshots"
+    class="content-panel-section section section-wide"
+  >
+    <h2 class="section-title">{{ i18n.t('snapshots') }}</h2>
+    <p class="section-intro">
+      {{ i18n.t('snapshotsCaptureTheWholeTreeSoYouCanRollBack') }}
+    </p>
+    <div class="section-body rows">
+      <ToggleButton
+        :label="i18n.t('takeSnapshotsAutomatically')"
+        v-model="Settings.values.automaticSessionSnapshots"
+        :options="OPTIONS.boolean"
+        @update="saveSettings"
+      />
+    </div>
+    <div
+      class="dependents"
+      :data-disabled="!Settings.values.automaticSessionSnapshots"
+      :inert="!Settings.values.automaticSessionSnapshots"
+    >
+      <NumberInput
+        :label="i18n.t('snapshotEvery')"
+        v-model:value="Settings.values.sessionSnapshotInterval"
+        v-model:selected-unit="Settings.values.sessionSnapshotIntervalUnit"
+        :units="OPTIONS.sessionSnapshotIntervalUnit"
+        :min="intervalMin"
+        :max="intervalMax"
+        :disabled="!Settings.values.automaticSessionSnapshots"
+        @update="saveSettings"
+      />
+    </div>
+    <div class="rows">
+      <ToggleButton
+        :label="i18n.t('protectManualSnapshots')"
+        :description="i18n.t('manualSnapshotsAreNeverRemovedAutomatically')"
+        v-model="Settings.values.protectManualSessionSnapshots"
+        :options="OPTIONS.boolean"
+        @update="saveSettings"
+      />
+      <ToggleButton
+        :label="i18n.t('includePrivateWindows')"
+        v-model="Settings.values.includePrivateWindowsInSessionSnapshots"
+        :options="OPTIONS.boolean"
+        @update="saveSettings"
+      />
+      <ToggleButton
+        :label="i18n.t('removeOlderSnapshotsAutomatically')"
+        :description="i18n.t('removeOlderSnapshotsAutomaticallyDescription')"
+        v-model="retentionDraft.pruneSessionSnapshots"
+        :options="OPTIONS.boolean"
+        @update="applyRetentionChange"
+      />
+    </div>
+    <div
+      class="dependents"
+      data-testid="snapshot-retention"
+      :data-disabled="!retentionDraft.pruneSessionSnapshots"
+      :inert="!retentionDraft.pruneSessionSnapshots"
+    >
+      <div class="retention-intro">
+        <p class="row-label">{{ i18n.t('snapshotsToKeep') }}</p>
+        <p class="row-desc">{{ i18n.t('snapshotsToKeepDescription') }}</p>
+      </div>
+      <NumberInput
+        v-for="field in RETENTION_FIELDS"
+        :id="field.key"
+        :key="field.key"
+        :label="i18n.t(field.label)"
+        :description="retentionDescription(field)"
+        v-model:value="retentionDraft[field.key]"
+        :min="NUMERIC_SETTING_BOUNDS[field.key]?.min"
+        :max="NUMERIC_SETTING_BOUNDS[field.key]?.max"
+        :disabled="!retentionDraft.pruneSessionSnapshots"
+        @update="scheduleRetentionChange"
+      />
+    </div>
+
+    <p class="eyebrow">{{ i18n.t('snapshotHistory') }}</p>
+    <div class="snapshot-toolbar workspace-bar">
+      <button
+        type="button"
+        class="btn btn-primary"
+        data-testid="create-snapshot"
+        :disabled="loading || activeTreeEmpty"
+        :aria-describedby="
+          activeTreeEmpty ? 'empty-tree-snapshot-help' : undefined
+        "
+        @click="createSnapshot"
+      >
+        {{ i18n.t('takeASnapshotNow') }}
+      </button>
+      <button
+        type="button"
+        class="btn"
+        data-testid="import-snapshot"
+        :disabled="loading"
+        :title="i18n.t('importASnapshot')"
+        @click="importFileInput?.click()"
+      >
+        {{ i18n.t('importSnapshot') }}
+      </button>
+      <input
+        ref="importFileInput"
+        type="file"
+        accept=".json,application/json"
+        :aria-label="i18n.t('importASnapshot')"
+        data-testid="import-snapshot-file"
+        hidden
+        @change="importSnapshot"
+      />
+      <span class="snapshot-toolbar-summary workspace-summary"
+        >{{
+          i18n.t('countSnapshot', snapshots.length, [
+            formatNumber(snapshots.length),
+          ])
+        }}
+        · {{ formatBytes(totalBytes) }}</span
+      >
+      <button
+        type="button"
+        class="btn-quiet-danger"
+        :disabled="loading || snapshots.length === 0"
+        @click="clearSnapshots"
+      >
+        {{ i18n.t('deleteAllSnapshotsLabel') }}
+      </button>
+    </div>
+    <details class="snapshot-import-help">
+      <summary>{{ i18n.t('supportedImportFormats') }}</summary>
+      <ul>
+        <li
+          v-for="(label, source) in SESSION_SNAPSHOT_IMPORT_SOURCE_LABELS"
+          :key="source"
+        >
+          {{ label }} — (.json)
+        </li>
+      </ul>
+      <p>{{ i18n.t('importedSnapshotsAreProtectedAutomatically') }}</p>
+      <a
+        href="https://github.com/PaxIgnis/SessionFlow/blob/main/docs/importing-snapshots.md"
+        target="_blank"
+        rel="noopener noreferrer"
+        >{{ i18n.t('howToExportAndImportSnapshots') }}</a
+      >
+    </details>
+    <small
+      v-if="activeTreeEmpty"
+      id="empty-tree-snapshot-help"
+      >{{ i18n.t('theActiveSessionTreeIsEmptySoThereIsNothing') }}</small
+    >
+
+    <div class="snapshot-browser workspace">
+      <aside class="snapshot-history">
+        <p
+          v-if="snapshots.length === 0"
+          class="snapshot-history-empty"
+        >
+          {{ emptyHistoryMessage }}
+        </p>
+        <template
+          v-for="group in groupedSnapshots"
+          :key="group.label"
+        >
+          <h3 class="snapshot-group-label">{{ group.label }}</h3>
+          <button
+            v-for="snapshot in group.entries"
+            :key="snapshot.id"
+            type="button"
+            class="snapshot-entry"
+            :class="{
+              active: selectedSnapshotId === snapshot.id,
+              unavailable: !snapshot.available,
+            }"
+            :aria-current="selectedSnapshotId === snapshot.id"
+            :aria-label="`${formatDate(snapshot.createdAt)}, ${formatCounts(snapshot.counts)}, ${triggerLabel(snapshot.trigger)}${snapshot.protected ? i18n.t('protectedSnapshot') : ''}`"
+            @click="selectSnapshot(snapshot.id)"
+          >
+            <span class="snapshot-entry-line">
+              <strong class="snapshot-entry-title">
+                {{ formatTime(snapshot.createdAt) }}
+                <svg
+                  v-if="snapshot.protected"
+                  class="snapshot-protected-icon"
+                  viewBox="0 0 16 16"
+                  role="img"
+                  :aria-label="i18n.t('protectedSnapshotLabel')"
+                >
+                  <title>{{ i18n.t('protectedSnapshotLabel') }}</title>
+                  <rect
+                    x="3"
+                    y="7"
+                    width="10"
+                    height="7"
+                    rx="1"
+                    fill="currentColor"
+                  />
+                  <path
+                    d="M5 7V5a3 3 0 0 1 6 0v2"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                  />
+                </svg>
+                <svg
+                  v-if="snapshot.trigger === 'import'"
+                  class="snapshot-imported-icon"
+                  viewBox="0 0 16 16"
+                  role="img"
+                  :aria-label="i18n.t('importedSnapshot')"
+                >
+                  <title>{{ i18n.t('importedSnapshot') }}</title>
+                  <path
+                    d="M8 2v7m-3-3 3 3 3-3M3 10v3h10v-3"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+              </strong>
+              <span class="snapshot-tab-count">{{
+                i18n.t('countTab', snapshot.counts.tabs, [
+                  formatNumber(snapshot.counts.tabs),
+                ])
+              }}</span>
+            </span>
+            <span class="snapshot-meter">
+              <span class="snapshot-track">
+                <span
+                  class="snapshot-fill"
+                  :style="{ width: snapshotBarWidth(snapshot) }"
+                ></span>
+              </span>
+              <span class="snapshot-delta">{{ snapshotDelta(snapshot) }}</span>
+            </span>
+            <span
+              v-if="!snapshot.available"
+              class="snapshot-unavailable-tag"
+              >{{ i18n.t('unavailable') }}</span
+            >
+          </button>
+        </template>
+      </aside>
+      <main class="snapshot-preview">
+        <template v-if="selectedRecord">
+          <header class="snapshot-detail-head">
+            <h3>{{ formatDate(selectedRecord.metadata.createdAt) }}</h3>
+            <p
+              v-if="selectedRecord.metadata.importSummary"
+              class="snapshot-detail-meta"
+              data-testid="snapshot-import-source"
+            >
+              {{
+                i18n.t('importedFrom', [
+                  SESSION_SNAPSHOT_IMPORT_SOURCE_LABELS[
+                    selectedRecord.metadata.importSummary.source
+                  ],
+                ])
+              }}
+              <template
+                v-if="
+                  selectedRecord.metadata.importSummary.sourceCreatedAt !==
+                  undefined
+                "
+              >
+                ·
+                {{
+                  i18n.t('sourceSaved', [
+                    formatDate(
+                      selectedRecord.metadata.importSummary.sourceCreatedAt,
+                    ),
+                  ])
+                }}
+              </template>
+            </p>
+            <p class="snapshot-detail-meta">
+              {{ triggerLabel(selectedRecord.metadata.trigger) }} ·
+              {{ formatBytes(selectedRecord.metadata.sizeBytes)
+              }}<template
+                v-if="selectedRecord.metadata.containsPrivateWindows"
+                >{{ i18n.t('includesPrivateWindows') }}</template
+              ><template v-if="selectedRecord.metadata.protected">{{
+                i18n.t('protected')
+              }}</template>
+            </p>
+            <div class="snapshot-stats">
+              <div
+                v-for="stat in [
+                  [i18n.t('windows'), selectedRecord.metadata.counts.windows],
+                  [i18n.t('tabsLabel'), selectedRecord.metadata.counts.tabs],
+                  [i18n.t('notes'), selectedRecord.metadata.counts.notes],
+                  [
+                    i18n.t('separators'),
+                    selectedRecord.metadata.counts.separators,
+                  ],
+                ]"
+                :key="stat[0]"
+                class="snapshot-stat"
+              >
+                <strong>{{ formatNumber(Number(stat[1])) }}</strong>
+                <span>{{ stat[0] }}</span>
+              </div>
+            </div>
+            <details
+              v-if="selectedRecord.metadata.importSummary?.warnings.length"
+              class="snapshot-import-warnings"
+              data-testid="snapshot-import-warnings"
+            >
+              <summary>
+                {{
+                  i18n.t('importConversionDetails', [
+                    formatNumber(
+                      selectedRecord.metadata.importSummary.warnings.length,
+                    ),
+                  ])
+                }}
+              </summary>
+              <ul>
+                <li
+                  v-for="warning in selectedRecord.metadata.importSummary
+                    .warnings"
+                  :key="warning.code"
+                >
+                  {{
+                    localizedImportWarning(
+                      selectedRecord.metadata.importSummary!.source,
+                      warning,
+                    )
+                  }}
+                  ({{ formatNumber(warning.count) }})
+                </li>
+              </ul>
+            </details>
+          </header>
+          <div class="snapshot-tree-scroll">
+            <SnapshotTree
+              :payload="selectedRecord.payload"
+              :favicon-service="Favicons"
+              @selection-change="selectedUids = $event"
+            />
+          </div>
+          <footer class="snapshot-preview-toolbar snapshot-detail-footer">
+            <!-- Actions that read the snapshot's contents. -->
+            <span class="snapshot-selected-actions">
+              <button
+                type="button"
+                class="btn btn-primary"
+                @click="restoreSelectedSnapshot"
+              >
+                {{ restoreLabel }}
+              </button>
+              <button
+                type="button"
+                class="btn"
+                @click="exportSnapshot(false)"
+              >
+                {{ i18n.t('saveAsJSON') }}
+              </button>
+              <button
+                type="button"
+                class="btn"
+                @click="exportSnapshot(true)"
+              >
+                {{ i18n.t('copyJSON') }}
+              </button>
+            </span>
+            <!-- Actions that govern whether the snapshot continues to exist. -->
+            <span class="snapshot-record-actions">
+              <button
+                type="button"
+                class="btn"
+                @click="toggleProtected(selectedRecord.metadata)"
+              >
+                {{
+                  selectedRecord.metadata.protected
+                    ? i18n.t('unprotect')
+                    : i18n.t('protect')
+                }}
+              </button>
+              <button
+                type="button"
+                class="btn-quiet-danger"
+                @click="deleteSnapshot(selectedRecord.metadata)"
+              >
+                {{ i18n.t('deleteThisSnapshot') }}
+              </button>
+            </span>
+          </footer>
+        </template>
+        <div
+          v-else-if="selectedMetadata && !selectedMetadata.available"
+          class="snapshot-detail-empty unavailable-detail"
+        >
+          <div>
+            <h3>{{ i18n.t('snapshotUnavailable') }}</h3>
+            <p>
+              {{
+                i18n.t('snapshotUnavailableDetails', [
+                  formatBytes(selectedMetadata.sizeBytes),
+                ])
+              }}
+            </p>
+            <button
+              type="button"
+              class="btn-quiet-danger"
+              @click="deleteSnapshot(selectedMetadata)"
+            >
+              {{ i18n.t('deleteThisSnapshot') }}
+            </button>
+          </div>
+        </div>
+        <div
+          v-else
+          class="snapshot-detail-empty"
+        >
+          {{ i18n.t('pickASnapshotToSeeWhatItContains') }}
+        </div>
+      </main>
+    </div>
+    <div
+      v-if="successMessage"
+      class="snapshot-success-toast"
+      role="status"
+      aria-live="polite"
+    >
+      {{ successMessage }}
+    </div>
+    <SnapshotConfirmationModal
+      v-if="confirmation"
+      :kind="confirmation.kind"
+      :title="confirmation.title"
+      :message="confirmation.message"
+      :confirm-label="confirmation.confirmLabel"
+      :danger="confirmation.danger"
+      @confirm="finishConfirmation(true)"
+      @cancel="finishConfirmation(false)"
+    />
+  </section>
+</template>
+
+<style scoped>
+.retention-intro {
+  padding: 12px 0 10px;
+  border-bottom: 1px solid var(--options-hairline);
+}
+
+.retention-intro p {
+  margin: 0;
+}
+
+.retention-intro .row-label {
+  font-weight: 600;
+}
+
+.retention-intro .row-desc {
+  margin-top: 3px;
+}
+
+.snapshot-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  margin-bottom: 12px;
+}
+
+.snapshot-toolbar-summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--options-text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.snapshot-import-help {
+  margin-bottom: 16px;
+  color: var(--options-text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+
+.snapshot-import-help summary {
+  width: fit-content;
+  cursor: pointer;
+}
+
+.snapshot-import-help ul {
+  margin: 8px 0;
+  padding-left: 24px;
+}
+
+.snapshot-import-help p {
+  margin: 8px 0;
+}
+
+.snapshot-import-help a {
+  color: var(--text-color-primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.snapshot-browser {
+  display: grid;
+  grid-template-columns: 288px minmax(0, 1fr);
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  height: 528px;
+  overflow: hidden;
+  border: 1px solid var(--options-hairline-strong);
+  border-radius: 10px;
+}
+
+.snapshot-history {
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  border-right: 1px solid var(--options-hairline-strong);
+  background: var(--background-color-secondary);
+}
+
+.snapshot-history-empty {
+  margin: 0;
+  padding: 20px 14px;
+  color: var(--options-text-muted);
+  font-size: 0.8125rem;
+}
+
+.snapshot-entry {
+  position: relative;
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 9px 14px 11px;
+  border: 0;
+  border-bottom: 1px solid var(--options-hairline);
+  background: transparent;
+  color: var(--text-color-primary);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.snapshot-entry:hover {
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.snapshot-entry.active {
+  background: var(--options-accent-wash);
+}
+
+.snapshot-entry.active::before {
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  width: 2px;
+  background: var(--button-active-background);
+  content: '';
+}
+
+.snapshot-entry.unavailable {
+  opacity: 0.55;
+}
+
+.snapshot-group-label {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: 0;
+  padding: 9px 14px 7px;
+  background: var(--background-color-secondary);
+  color: var(--options-text-faint);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.085em;
+  text-transform: uppercase;
+}
+
+.snapshot-entry-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.snapshot-entry-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-color-primary);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  font-weight: 400;
+}
+
+.snapshot-protected-icon {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
+  color: var(--button-active-background);
+}
+
+.snapshot-imported-icon {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  color: var(--options-text-muted);
+}
+
+.snapshot-tab-count {
+  color: var(--header-text-color);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.snapshot-tab-count small {
+  color: var(--options-text-faint);
+  font-size: 0.6875rem;
+}
+
+.snapshot-meter {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 7px;
+}
+
+.snapshot-track {
+  flex: 1;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--data-track);
+}
+
+.snapshot-fill {
+  display: block;
+  height: 100%;
+  border-radius: 0 3px 3px 0;
+  background: var(--data-bar);
+}
+
+.snapshot-entry.unavailable .snapshot-fill {
+  background: var(--options-text-faint);
+}
+
+.snapshot-delta {
+  min-width: 34px;
+  color: var(--options-text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.snapshot-unavailable-tag {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(217, 138, 138, 0.14);
+  color: #d98a8a;
+  font-size: 0.6875rem;
+}
+
+.snapshot-preview {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.snapshot-detail-head {
+  padding: 16px 20px 14px;
+  border-bottom: 1px solid var(--options-hairline);
+}
+
+.snapshot-detail-head h3,
+.unavailable-detail h3 {
+  margin: 0;
+  color: var(--header-text-color);
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.snapshot-detail-meta {
+  margin: 5px 0 0;
+  color: var(--options-text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+}
+
+.snapshot-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  margin-top: 14px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--options-hairline);
+}
+
+.snapshot-import-warnings {
+  margin-top: 12px;
+  color: var(--options-text-muted);
+  font-size: 0.8125rem;
+}
+
+.snapshot-import-warnings summary {
+  cursor: pointer;
+}
+
+.snapshot-import-warnings ul {
+  max-height: 100px;
+  overflow-y: auto;
+  margin: 8px 0 0;
+  padding-left: 20px;
+}
+
+.snapshot-stat {
+  padding: 9px 12px;
+  background: var(--options-surface);
+}
+
+.snapshot-stat strong {
+  display: block;
+  color: var(--header-text-color);
+  font-family: var(--font-mono);
+  font-size: 1.125rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+.snapshot-stat span {
+  display: block;
+  margin-top: 2px;
+  color: var(--options-text-faint);
+  font-size: 0.6875rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.snapshot-tree-scroll {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  padding: 8px 0 12px;
+}
+
+.snapshot-preview-toolbar {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--options-hairline-strong);
+  background: var(--background-color-secondary);
+}
+
+/* The cluster must be allowed to shrink and wrap. Without this it holds the
+   row at its full width and pushes Delete past the workspace's
+   overflow: hidden edge, where it cannot be reached at all. */
+.snapshot-selected-actions {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* Restore leads; the three snapshot-level actions read as one quieter group. */
+.snapshot-detail-footer .btn:not(.btn-primary) {
+  border-color: var(--options-hairline);
+  color: var(--options-text-muted);
+}
+
+.snapshot-detail-footer .btn:not(.btn-primary):hover {
+  border-color: var(--options-hairline-strong);
+  color: var(--text-color-primary);
+}
+
+/* Lifecycle actions sit apart from the content actions, right-aligned on a
+   wide row without claiming an entire line once the toolbar wraps. */
+.snapshot-record-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.snapshot-footer-spacer {
+  display: none;
+}
+
+.snapshot-detail-empty {
+  display: grid;
+  flex: 1;
+  place-items: center;
+  padding: 24px;
+  color: var(--options-text-muted);
+  font-size: 0.8125rem;
+  text-align: center;
+}
+
+.unavailable-detail p {
+  max-width: 48ch;
+  line-height: 1.5;
+}
+
+.snapshot-success-toast {
+  position: fixed;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1100;
+  max-width: min(420px, calc(100vw - 36px));
+  padding: 10px 14px;
+  border: 1px solid rgb(87, 155, 102);
+  border-radius: 6px;
+  background: rgb(36, 75, 45);
+  color: rgb(214, 245, 221);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  font-size: 0.8125rem;
+}
+.btn {
+  cursor: pointer;
+  padding: 6px 13px;
+  border: 1px solid var(--options-hairline-strong);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-color-primary);
+  font-family: inherit;
+  font-size: 0.8125rem;
+}
+
+.btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--header-text-color);
+}
+
+.btn-primary {
+  border-color: transparent;
+  background: var(--button-active-background);
+  color: var(--button-active-foreground);
+  font-weight: 500;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--button-active-background-hover);
+  color: var(--button-active-foreground);
+}
+
+.btn-quiet-danger {
+  padding: 6px 4px;
+  border: 0;
+  background: transparent;
+  color: var(--options-text-faint);
+  font-family: inherit;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.btn-quiet-danger:hover:not(:disabled) {
+  color: #d98a8a;
+}
+
+@media (max-width: 1080px) {
+  .snapshot-browser {
+    grid-template-columns: 250px minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 900px) {
+  .snapshot-browser {
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
+
+  .snapshot-selected-actions {
+    flex-wrap: wrap;
+  }
+}
+</style>

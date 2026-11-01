@@ -140,6 +140,7 @@ export type SessionSnapshotRequest =
     }
   | { action: 'deleteSessionSnapshot'; snapshotId: string }
   | { action: 'clearSessionSnapshots' }
+  | { action: 'applySessionSnapshotRetention' }
   | { action: 'getSessionSnapshotExport'; snapshotId: string }
   | {
       action: 'getSessionSnapshotRestoreSummary'

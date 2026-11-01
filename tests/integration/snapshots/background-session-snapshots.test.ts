@@ -601,6 +601,67 @@ describe('background session snapshots', () => {
     })
   })
 
+  it('prunes with the updated retention settings as soon as they change', async () => {
+    await seedSnapshots(['newest', 'older', 'oldest'])
+    await service.handleSettingsUpdated()
+    expect(repository.records.size).toBe(3)
+
+    Object.assign(Settings.values, {
+      sessionSnapshotKeepRecentHours: 0,
+      sessionSnapshotKeepNewest: 1,
+      sessionSnapshotKeepDays: 0,
+      sessionSnapshotKeepWeeks: 0,
+      sessionSnapshotKeepMonths: 0,
+      sessionSnapshotKeepYears: 0,
+    })
+    await service.handleSettingsUpdated()
+
+    expect([...repository.records.keys()]).toEqual(['newest'])
+  })
+
+  it('keeps every snapshot while automatic removal is turned off', async () => {
+    await seedSnapshots(['newest', 'older', 'oldest'])
+    Object.assign(Settings.values, {
+      pruneSessionSnapshots: false,
+      sessionSnapshotKeepRecentHours: 0,
+      sessionSnapshotKeepNewest: 1,
+      sessionSnapshotKeepDays: 0,
+      sessionSnapshotKeepWeeks: 0,
+      sessionSnapshotKeepMonths: 0,
+      sessionSnapshotKeepYears: 0,
+    })
+
+    await service.handleSettingsUpdated()
+    expect(repository.records.size).toBe(3)
+
+    Settings.values.pruneSessionSnapshots = true
+    await service.handleSettingsUpdated()
+    expect([...repository.records.keys()]).toEqual(['newest'])
+  })
+
+  it('applies the saved retention policy on request before replying', async () => {
+    await seedSnapshots(['newest', 'older', 'oldest'])
+    // The settings page saves first and asks second; the background's copy
+    // may not have caught up, so the request must read storage itself.
+    vi.mocked(browser.storage.local.get).mockResolvedValue({
+      settings: {
+        ...DEFAULT_SETTINGS,
+        sessionSnapshotKeepRecentHours: 0,
+        sessionSnapshotKeepNewest: 2,
+        sessionSnapshotKeepDays: 0,
+        sessionSnapshotKeepWeeks: 0,
+        sessionSnapshotKeepMonths: 0,
+        sessionSnapshotKeepYears: 0,
+      },
+    })
+
+    await expect(
+      service.handleRuntimeMessage({ action: 'applySessionSnapshotRetention' }),
+    ).resolves.toEqual({ ok: true, data: {} })
+
+    expect([...repository.records.keys()]).toEqual(['newest', 'older'])
+  })
+
   it('routes typed runtime requests and ignores unrelated messages', async () => {
     const created = await service.capture('manual')
 
@@ -645,6 +706,30 @@ describe('background session snapshots', () => {
       }),
     ).toBeUndefined()
   })
+
+  // Ids are given newest first; each is a year older than the one before, so
+  // only the newest-count and protection rules can keep them under a policy
+  // whose periods are all zero.
+  async function seedSnapshots(ids: string[]) {
+    const now = 1_000
+    for (const [index, id] of ids.entries()) {
+      await repository.create(
+        {
+          id,
+          schemaVersion: 1,
+          createdAt: now - index * 365 * 24 * 60 * 60 * 1000,
+          trigger: 'periodic',
+          protected: false,
+          digest: id,
+          sizeBytes: 1,
+          counts: { windows: 0, tabs: 0, notes: 1, separators: 0 },
+          containsPrivateWindows: false,
+          available: true,
+        },
+        { schemaVersion: 1, items: [note(`${id}-note`)] },
+      )
+    }
+  }
 })
 
 function note(uid: string): TopLevelTreeItem {

@@ -26,11 +26,20 @@ export interface Settings extends KeyboardSettings {
 
   // Storage
   retainPrivateWindows: boolean
+
+  // Snapshots
   automaticSessionSnapshots: boolean
   sessionSnapshotInterval: number
   sessionSnapshotIntervalUnit: (typeof SETTINGS_TYPES.sessionSnapshotIntervalUnit)[number]
   protectManualSessionSnapshots: boolean
   includePrivateWindowsInSessionSnapshots: boolean
+  pruneSessionSnapshots: boolean
+  sessionSnapshotKeepRecentHours: number
+  sessionSnapshotKeepNewest: number
+  sessionSnapshotKeepDays: number
+  sessionSnapshotKeepWeeks: number
+  sessionSnapshotKeepMonths: number
+  sessionSnapshotKeepYears: number
 
   // Windows
   focusWindowOnOpen: boolean

@@ -18,11 +18,17 @@ export interface SettingsSectionPosition {
   offsetTop: number
 }
 
-const NUMERIC_SETTING_BOUNDS: Partial<
+export const NUMERIC_SETTING_BOUNDS: Partial<
   Record<keyof Settings, { min: number; max: number }>
 > = {
   openWindowsInSameLocationUpdateInterval: { min: 1, max: 3600 },
   refreshFaviconsAfterPeriodOfTimeValue: { min: 1, max: 999 },
+  sessionSnapshotKeepRecentHours: { min: 0, max: 168 },
+  sessionSnapshotKeepNewest: { min: 1, max: 1000 },
+  sessionSnapshotKeepDays: { min: 0, max: 365 },
+  sessionSnapshotKeepWeeks: { min: 0, max: 520 },
+  sessionSnapshotKeepMonths: { min: 0, max: 240 },
+  sessionSnapshotKeepYears: { min: 0, max: 100 },
 }
 const FAVICON_PERMISSION_ORIGINS = new Set(['http://*/*', 'https://*/*'])
 const FAVICON_PERMISSION_REMOVED_MESSAGE = 'faviconPermissionsRemoved'

@@ -148,6 +148,40 @@ describe('settings actions', () => {
     })
   })
 
+  it('keeps the previous retention policy for installs that predate the setting', async () => {
+    const { normalizeSettings } = await import('@/services/settings-actions')
+
+    expect(
+      normalizeSettings({ automaticSessionSnapshots: true }),
+    ).toMatchObject({
+      pruneSessionSnapshots: true,
+      sessionSnapshotKeepRecentHours: 6,
+      sessionSnapshotKeepNewest: 10,
+      sessionSnapshotKeepDays: 10,
+      sessionSnapshotKeepWeeks: 8,
+      sessionSnapshotKeepMonths: 12,
+      sessionSnapshotKeepYears: 5,
+    })
+  })
+
+  it('clamps retention limits to their bounds', async () => {
+    const { normalizeSettings } = await import('@/services/settings-actions')
+
+    expect(
+      normalizeSettings({
+        sessionSnapshotKeepRecentHours: -3,
+        sessionSnapshotKeepNewest: 0,
+        sessionSnapshotKeepDays: 9_999,
+        sessionSnapshotKeepYears: 101,
+      }),
+    ).toMatchObject({
+      sessionSnapshotKeepRecentHours: 0,
+      sessionSnapshotKeepNewest: 1,
+      sessionSnapshotKeepDays: 365,
+      sessionSnapshotKeepYears: 100,
+    })
+  })
+
   it('fills missing snapshot settings and validates snapshot intervals', async () => {
     const { normalizeSettings } = await import('@/services/settings-actions')
 

@@ -72,7 +72,7 @@ Changes in each version are listed in the [release notes](https://github.com/Pax
 3. Double-click an open tab to focus it, or a saved tab to reopen it. These are the default actions and can be changed in settings.
 4. Drag an item onto the middle of another item to nest it beneath that item. Drop above or below to place it alongside the other item. Collapse branches to keep related pages together.
 5. Use **Save** on a tab or window row to close it while keeping it in the tree. Use **Delete** to remove it from the tree and close it if it is open.
-6. Open **Settings → Storage** to review snapshots, restore items, or export a backup.
+6. Open **Settings → Snapshots** to review snapshots, restore items, or export a backup.
 
 Tabs have three states:
 
@@ -96,7 +96,9 @@ Session Flow listens for Firefox tab and window events and opens, closes, moves,
 
 ## Snapshots and backups
 
-Automatic snapshots are enabled by default. In **Settings → Storage**, you can change the schedule, take a snapshot immediately, preview its contents, and restore selected items or the whole tree.
+Automatic snapshots are enabled by default. In **Settings → Snapshots**, you can change the schedule, take a snapshot immediately, preview its contents, and restore selected items or the whole tree.
+
+Older snapshots are thinned out as they age. Protected snapshots are never removed; imported snapshots and, by default, the ones you take yourself are protected. You can change the limits or turn automatic removal off in the same section; if a change would delete existing snapshots, Session Flow asks first. **Settings → Storage** shows how much space the session tree, snapshots, favicon cache, and settings use.
 
 Use **Save as JSON** in a snapshot preview to keep a backup outside your Firefox profile. Local snapshots do not provide a backup if the profile itself is lost or removed. There is no built-in cloud sync.
 
