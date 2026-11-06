@@ -193,6 +193,8 @@ describe('startup lifecycle', () => {
     const capturePersistedStartupTree = vi.fn().mockResolvedValue(undefined)
     const stampOpenTreeIdentities = vi.fn().mockResolvedValue(undefined)
     const initializeListeners = vi.fn()
+    const holdBrowserEventsUntilStartup = vi.fn()
+    const releaseHeldBrowserEvents = vi.fn()
     const scheduleSessionTreeOpenOnStartup = vi.fn()
     const snapshotSettingsUpdated = vi.fn().mockResolvedValue(undefined)
     const faviconSettingsUpdated = vi
@@ -211,8 +213,10 @@ describe('startup lifecycle', () => {
       DeferredEventsQueue: { initializeDeferredEventsQueue: vi.fn() },
     }))
     vi.doMock('@/services/background-handlers', () => ({
+      holdBrowserEventsUntilStartup,
       initializeContainerListeners: vi.fn(),
       initializeListeners,
+      releaseHeldBrowserEvents,
     }))
     vi.doMock('@/services/background-private-window-onboarding', () => ({
       initializePrivateWindowOnboarding: vi.fn(),
@@ -270,8 +274,13 @@ describe('startup lifecycle', () => {
       capturePersistedStartupTree.mock.invocationCallOrder[0],
     ).toBeLessThan(initializeContainers.mock.invocationCallOrder[0])
     expect(initializeContainers.mock.invocationCallOrder[0]).toBeLessThan(
-      initializeWindows.mock.invocationCallOrder[0],
+      holdBrowserEventsUntilStartup.mock.invocationCallOrder[0],
     )
+    // Browser events are listened for before the windows are read, and held
+    // until the tree is ready, so changes made in between are not lost.
+    expect(
+      holdBrowserEventsUntilStartup.mock.invocationCallOrder[0],
+    ).toBeLessThan(initializeWindows.mock.invocationCallOrder[0])
     expect(initializeWindows.mock.invocationCallOrder[0]).toBeLessThan(
       stampOpenTreeIdentities.mock.invocationCallOrder[0],
     )
@@ -281,6 +290,9 @@ describe('startup lifecycle', () => {
     // Startup restoration creates browser windows, and that creation handshake
     // only completes once the listeners are live, so it has to run after them.
     expect(initializeListeners.mock.invocationCallOrder[0]).toBeLessThan(
+      releaseHeldBrowserEvents.mock.invocationCallOrder[0],
+    )
+    expect(releaseHeldBrowserEvents.mock.invocationCallOrder[0]).toBeLessThan(
       restoreStartupTabs.mock.invocationCallOrder[0],
     )
     expect(restoreStartupTabs.mock.invocationCallOrder[0]).toBeLessThan(
@@ -306,6 +318,8 @@ describe('startup lifecycle', () => {
     const restoreStartupTabs = vi.fn().mockResolvedValue(undefined)
     const stampOpenTreeIdentities = vi.fn().mockResolvedValue(undefined)
     const initializeListeners = vi.fn()
+    const holdBrowserEventsUntilStartup = vi.fn()
+    const releaseHeldBrowserEvents = vi.fn()
     const scheduleSessionTreeOpenOnStartup = vi.fn()
     const setupSettingsUpdatedListener = vi.fn()
     const settingsValues = { automaticSessionSnapshots: false }
@@ -321,8 +335,10 @@ describe('startup lifecycle', () => {
       DeferredEventsQueue: { initializeDeferredEventsQueue: vi.fn() },
     }))
     vi.doMock('@/services/background-handlers', () => ({
+      holdBrowserEventsUntilStartup,
       initializeContainerListeners: vi.fn(),
       initializeListeners,
+      releaseHeldBrowserEvents,
     }))
     vi.doMock('@/services/background-private-window-onboarding', () => ({
       initializePrivateWindowOnboarding: vi.fn(),

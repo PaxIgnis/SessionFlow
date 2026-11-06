@@ -1,18 +1,18 @@
-import { i18n } from '@/services/i18n'
 import * as Actions from '@/services/background-actions'
 import { updateBadge } from '@/services/background-actions'
 import { Browser } from '@/services/background-browser'
 import { coordinateCommand } from '@/services/background-command-coordinator'
-import { Favicons } from '@/services/favicons'
 import {
-  isCommandOwnedTabRemoval,
   isCommandOwnedTabRelocation,
+  isCommandOwnedTabRemoval,
   isCommandOwnedWindowRemoval,
 } from '@/services/background-command-removal'
 import { OnCreatedQueue } from '@/services/background-on-created-queue'
-import { Tree } from '@/services/background-tree'
-import { initializeSessionTreePort } from '@/services/runtime-port-service'
 import * as SessionRestore from '@/services/background-session-restore'
+import { Tree } from '@/services/background-tree'
+import { Favicons } from '@/services/favicons'
+import { i18n } from '@/services/i18n'
+import { initializeSessionTreePort } from '@/services/runtime-port-service'
 import { Selection } from '@/services/selection'
 import { Settings } from '@/services/settings'
 import { normalizeEditTextValue, storedTabIdentity } from '@/services/utils'
@@ -130,37 +130,109 @@ export function initializeListeners() {
   browser.runtime.onInstalled.addListener(updateBadge)
   browser.runtime.onMessage.addListener(onMessage)
   browser.runtime.onStartup.addListener(updateBadge)
-  browser.tabs.onActivated.addListener(tabsOnActivated)
-  browser.tabs.onAttached.addListener(
-    withAsyncListenerErrorBoundary('tab-attached', tabsOnAttached),
-  )
   browser.tabs.onCreated.addListener(updateBadge)
-  browser.tabs.onCreated.addListener(
-    withAsyncListenerErrorBoundary('tab-created', tabsOnCreated),
-  )
-  browser.tabs.onDetached.addListener(tabsOnDetached)
-  browser.tabs.onMoved.addListener(
-    withAsyncListenerErrorBoundary('tab-moved', tabsOnMoved),
-  )
   browser.tabs.onRemoved.addListener(updateBadge)
-  browser.tabs.onRemoved.addListener(tabsOnRemoved)
+  initializeBrowserEventListeners()
+}
+
+let browserEventListenersInitialized = false
+let heldBrowserEvents: Promise<void> | undefined
+let releaseBrowserEvents: (() => void) | undefined
+
+/**
+ * Starts listening for tab, window and tab group events before startup reads
+ * the open windows and tabs, but holds every event until
+ * releaseHeldBrowserEvents() is called.
+ */
+export function holdBrowserEventsUntilStartup(): void {
+  if (!heldBrowserEvents) {
+    heldBrowserEvents = new Promise((resolve) => {
+      releaseBrowserEvents = resolve
+    })
+  }
+  initializeBrowserEventListeners()
+}
+
+/** Handles the held browser events, and later ones as they arrive. */
+export function releaseHeldBrowserEvents(): void {
+  const release = releaseBrowserEvents
+  heldBrowserEvents = undefined
+  releaseBrowserEvents = undefined
+  release?.()
+}
+
+function initializeBrowserEventListeners(): void {
+  if (browserEventListenersInitialized) return
+  browserEventListenersInitialized = true
+
+  browser.tabs.onActivated.addListener(afterHeldEvents(tabsOnActivated))
+  browser.tabs.onAttached.addListener(
+    afterHeldEvents(
+      withAsyncListenerErrorBoundary('tab-attached', tabsOnAttached),
+    ),
+  )
+  browser.tabs.onCreated.addListener(
+    afterHeldEvents(
+      withAsyncListenerErrorBoundary('tab-created', tabsOnCreated),
+    ),
+  )
+  browser.tabs.onDetached.addListener(afterHeldEvents(tabsOnDetached))
+  browser.tabs.onMoved.addListener(
+    afterHeldEvents(withAsyncListenerErrorBoundary('tab-moved', tabsOnMoved)),
+  )
+  browser.tabs.onRemoved.addListener(afterHeldEvents(tabsOnRemoved))
   browser.tabs.onUpdated.addListener(
-    withAsyncListenerErrorBoundary('tab-updated', tabsOnUpdated),
+    afterHeldEvents(
+      withAsyncListenerErrorBoundary('tab-updated', tabsOnUpdated),
+    ),
   )
   browser.tabs.onUpdated.addListener(
-    withAsyncListenerErrorBoundary('tab-favicon-updated', tabsOnUpdatedFavicon),
+    afterHeldEvents(
+      withAsyncListenerErrorBoundary(
+        'tab-favicon-updated',
+        tabsOnUpdatedFavicon,
+      ),
+    ),
   )
-  browser.tabGroups.onCreated.addListener(tabGroupsOnCreatedOrUpdated)
+  browser.tabGroups.onCreated.addListener(
+    afterHeldEvents(tabGroupsOnCreatedOrUpdated),
+  )
   browser.tabGroups.onMoved.addListener(
-    withAsyncListenerErrorBoundary('tab-group-moved', Tree.tabGroupMoved),
+    afterHeldEvents(
+      withAsyncListenerErrorBoundary('tab-group-moved', Tree.tabGroupMoved),
+    ),
   )
-  browser.tabGroups.onRemoved.addListener(tabGroupsOnRemoved)
-  browser.tabGroups.onUpdated.addListener(tabGroupsOnCreatedOrUpdated)
+  browser.tabGroups.onRemoved.addListener(afterHeldEvents(tabGroupsOnRemoved))
+  browser.tabGroups.onUpdated.addListener(
+    afterHeldEvents(tabGroupsOnCreatedOrUpdated),
+  )
   browser.windows.onCreated.addListener(
-    withAsyncListenerErrorBoundary('window-created', windowsOnCreated),
+    afterHeldEvents(
+      withAsyncListenerErrorBoundary('window-created', windowsOnCreated),
+    ),
   )
-  browser.windows.onFocusChanged.addListener(windowsOnFocusChanged)
-  browser.windows.onRemoved.addListener(windowsOnRemoved)
+  browser.windows.onFocusChanged.addListener(
+    afterHeldEvents(windowsOnFocusChanged),
+  )
+  browser.windows.onRemoved.addListener(afterHeldEvents(windowsOnRemoved))
+}
+
+/**
+ * Calls the listener straight away unless startup is holding events. Held
+ * calls all wait on one promise, so they run in arrival order on release.
+ */
+function afterHeldEvents<TArgs extends unknown[]>(
+  listener: (...args: TArgs) => void | Promise<void>,
+): (...args: TArgs) => void | Promise<void> {
+  return (...args: TArgs): void | Promise<void> => {
+    const held = heldBrowserEvents
+    if (!held) return listener(...args)
+    return held
+      .then(() => listener(...args))
+      .catch((error) => {
+        console.error('Background listener failed after startup:', error)
+      })
+  }
 }
 
 /**
