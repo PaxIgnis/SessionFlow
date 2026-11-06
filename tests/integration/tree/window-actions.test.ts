@@ -20,8 +20,8 @@ describe('window actions', () => {
   beforeEach(() => {
     installFakeBrowser()
     resetTree()
-    OnCreatedQueue.pendingWindowCount = 0
-    OnCreatedQueue.pendingTabCount = 0
+    OnCreatedQueue.unregisteredWindowCreations = 0
+    OnCreatedQueue.unregisteredTabCreations = 0
     OnCreatedQueue.pendingWindows = new Map()
     OnCreatedQueue.pendingTabs = new Map()
     Object.assign(Settings.values, settingsDefaults)

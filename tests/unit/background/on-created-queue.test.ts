@@ -6,14 +6,22 @@ import {
   installFakeBrowser,
 } from '../../helpers/fake-browser'
 
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise
+  })
+  return { promise, resolve }
+}
+
 describe('on-created queue', () => {
   let fakeBrowser: FakeBrowser
 
   beforeEach(() => {
     vi.useRealTimers()
     fakeBrowser = installFakeBrowser()
-    OnCreatedQueue.pendingWindowCount = 0
-    OnCreatedQueue.pendingTabCount = 0
+    OnCreatedQueue.unregisteredWindowCreations = 0
+    OnCreatedQueue.unregisteredTabCreations = 0
     OnCreatedQueue.pendingWindows = new Map()
     OnCreatedQueue.pendingTabs = new Map()
   })
@@ -29,7 +37,6 @@ describe('on-created queue', () => {
 
     expect(OnCreatedQueue.pendingTabs.get(10)).toEqual({
       id: 10,
-      complete: false,
       creatorResolved: true,
       listenerResolved: true,
     })
@@ -41,7 +48,6 @@ describe('on-created queue', () => {
 
     expect(OnCreatedQueue.pendingWindows.get(20)).toEqual({
       id: 20,
-      complete: false,
       creatorResolved: true,
       listenerResolved: true,
     })
@@ -67,6 +73,80 @@ describe('on-created queue', () => {
     expect(OnCreatedQueue.pendingWindows.has(20)).toBe(false)
   })
 
+  it('does not hold a user-created tab while an extension tab waits for its event', async () => {
+    vi.useFakeTimers()
+    fakeBrowser.tabs.create.mockResolvedValue({
+      id: 42,
+      windowId: 20,
+    } as browser.tabs.Tab)
+    const creation = OnCreatedQueue.createTabAndWait({
+      url: 'https://never-announced.test',
+    })
+    const rejection = expect(creation).rejects.toThrow(
+      'Timed out waiting for Firefox tab creation event',
+    )
+    await flushMicrotasks()
+
+    const userTab = OnCreatedQueue.isNewTabExtensionGenerated(77)
+    await vi.advanceTimersByTimeAsync(100)
+
+    await expect(userTab).resolves.toBe(false)
+    expect(OnCreatedQueue.pendingTabs.has(77)).toBe(false)
+    await vi.advanceTimersByTimeAsync(15000)
+    await rejection
+  })
+
+  it('does not hold a user-created window while an extension window waits for its event', async () => {
+    vi.useFakeTimers()
+    fakeBrowser.windows.create.mockResolvedValue({
+      id: 9,
+      tabs: [{ id: 101, windowId: 9 }],
+    } as browser.windows.Window)
+    const creation = OnCreatedQueue.createWindowAndWait({
+      url: 'https://never-announced.test',
+    })
+    const rejection = expect(creation).rejects.toThrow(
+      'Timed out waiting for Firefox window creation event',
+    )
+    await flushMicrotasks()
+
+    const userWindow = OnCreatedQueue.isNewWindowExtensionGenerated(30)
+    const userTab = OnCreatedQueue.isNewTabExtensionGenerated(301)
+    await vi.advanceTimersByTimeAsync(100)
+
+    await expect(userWindow).resolves.toBe(false)
+    await expect(userTab).resolves.toBe(false)
+    await vi.advanceTimersByTimeAsync(15000)
+    await rejection
+  })
+
+  it('holds a tab announced before its creator learns the ID, then claims it', async () => {
+    vi.useFakeTimers()
+    const created = deferred<browser.tabs.Tab>()
+    fakeBrowser.tabs.create.mockReturnValue(created.promise)
+    const creation = OnCreatedQueue.createTabAndWait({
+      url: 'https://early-event.test',
+    })
+    await flushMicrotasks()
+
+    // Firefox fires onCreated before tabs.create() resolves.
+    const check = OnCreatedQueue.isNewTabExtensionGenerated(42)
+    let checked = false
+    void check.then(() => {
+      checked = true
+    })
+    await vi.advanceTimersByTimeAsync(300)
+    expect(checked).toBe(false)
+
+    created.resolve({ id: 42, windowId: 20 } as browser.tabs.Tab)
+    await vi.advanceTimersByTimeAsync(200)
+
+    await expect(check).resolves.toBe(true)
+    await expect(creation).resolves.toMatchObject({ id: 42 })
+    expect(OnCreatedQueue.pendingTabs.size).toBe(0)
+    expect(OnCreatedQueue.unregisteredTabCreations).toBe(0)
+  })
+
   it('createTabAndWait waits for listener resolution before resolving created tab', async () => {
     vi.useFakeTimers()
     const createdTab = { id: 42, url: 'https://created.test' }
@@ -81,10 +161,10 @@ describe('on-created queue', () => {
     await flushMicrotasks()
 
     expect(fakeBrowser.tabs.create).toHaveBeenCalledWith(properties)
-    expect(OnCreatedQueue.pendingTabCount).toBe(1)
+    // The ID is claimed, so other tabs no longer wait on this creation.
+    expect(OnCreatedQueue.unregisteredTabCreations).toBe(0)
     expect(OnCreatedQueue.pendingTabs.get(42)).toEqual({
       id: 42,
-      complete: false,
       creatorResolved: true,
       listenerResolved: false,
     })
@@ -97,13 +177,28 @@ describe('on-created queue', () => {
 
     await expect(result).resolves.toBe(createdTab)
     expect(resolved).toBe(true)
-    expect(OnCreatedQueue.pendingTabCount).toBe(1)
-    expect(OnCreatedQueue.pendingTabs.get(42)).toEqual({
+    expect(OnCreatedQueue.unregisteredTabCreations).toBe(0)
+    expect(OnCreatedQueue.pendingTabs.has(42)).toBe(false)
+  })
+
+  it('answers the listener as soon as the creator has claimed the tab', async () => {
+    vi.useFakeTimers()
+    fakeBrowser.tabs.create.mockResolvedValue({
       id: 42,
-      complete: true,
-      creatorResolved: true,
-      listenerResolved: true,
+      windowId: 20,
+    } as browser.tabs.Tab)
+    const creation = OnCreatedQueue.createTabAndWait({
+      url: 'https://claimed.test',
     })
+    await flushMicrotasks()
+
+    await expect(OnCreatedQueue.isNewTabExtensionGenerated(42)).resolves.toBe(
+      true,
+    )
+    await vi.advanceTimersByTimeAsync(100)
+
+    await expect(creation).resolves.toMatchObject({ id: 42 })
+    expect(OnCreatedQueue.pendingTabs.size).toBe(0)
   })
 
   it('createTabAndWait rolls back pending tab count and rethrows when creation fails', async () => {
@@ -118,7 +213,7 @@ describe('on-created queue', () => {
     expect(fakeBrowser.tabs.create).toHaveBeenCalledWith({
       url: 'https://failed.test',
     })
-    expect(OnCreatedQueue.pendingTabCount).toBe(0)
+    expect(OnCreatedQueue.unregisteredTabCreations).toBe(0)
     expect(errorSpy).toHaveBeenCalledWith('Error creating tab:', error)
   })
 
@@ -132,7 +227,7 @@ describe('on-created queue', () => {
       OnCreatedQueue.createTabAndWait({ url: 'https://missing-id.test' }),
     ).rejects.toThrow('Tab creation returned no ID')
 
-    expect(OnCreatedQueue.pendingTabCount).toBe(0)
+    expect(OnCreatedQueue.unregisteredTabCreations).toBe(0)
     expect(OnCreatedQueue.pendingTabs.size).toBe(0)
     expect(errorSpy).toHaveBeenCalledWith('Tab ID is undefined')
   })
@@ -155,7 +250,7 @@ describe('on-created queue', () => {
 
     await rejection
     expect(fakeBrowser.tabs.remove).toHaveBeenCalledWith(42)
-    expect(OnCreatedQueue.pendingTabCount).toBe(0)
+    expect(OnCreatedQueue.unregisteredTabCreations).toBe(0)
     expect(OnCreatedQueue.pendingTabs.size).toBe(0)
     expect(vi.getTimerCount()).toBe(0)
   })
@@ -178,8 +273,8 @@ describe('on-created queue', () => {
 
     await rejection
     expect(fakeBrowser.windows.remove).toHaveBeenCalledWith(9)
-    expect(OnCreatedQueue.pendingWindowCount).toBe(0)
-    expect(OnCreatedQueue.pendingTabCount).toBe(0)
+    expect(OnCreatedQueue.unregisteredWindowCreations).toBe(0)
+    expect(OnCreatedQueue.unregisteredTabCreations).toBe(0)
     expect(OnCreatedQueue.pendingWindows.size).toBe(0)
     expect(OnCreatedQueue.pendingTabs.size).toBe(0)
     expect(vi.getTimerCount()).toBe(0)
@@ -196,8 +291,8 @@ describe('on-created queue', () => {
     ).rejects.toThrow('Tab ID is undefined')
 
     expect(fakeBrowser.windows.remove).toHaveBeenCalledWith(9)
-    expect(OnCreatedQueue.pendingWindowCount).toBe(0)
-    expect(OnCreatedQueue.pendingTabCount).toBe(0)
+    expect(OnCreatedQueue.unregisteredWindowCreations).toBe(0)
+    expect(OnCreatedQueue.unregisteredTabCreations).toBe(0)
     expect(OnCreatedQueue.pendingWindows.size).toBe(0)
     expect(OnCreatedQueue.pendingTabs.size).toBe(0)
   })
@@ -228,14 +323,17 @@ describe('on-created queue', () => {
       left: 0,
       top: -300,
     })
-    expect(OnCreatedQueue.pendingWindowCount).toBe(1)
-    expect(OnCreatedQueue.pendingTabCount).toBe(2)
+    // The window and its tabs are claimed as soon as windows.create() returns,
+    // before its listener answers.
+    expect(OnCreatedQueue.unregisteredWindowCreations).toBe(0)
+    expect(OnCreatedQueue.unregisteredTabCreations).toBe(0)
     expect(OnCreatedQueue.pendingWindows.get(9)).toEqual({
       id: 9,
-      complete: false,
       creatorResolved: true,
       listenerResolved: false,
     })
+    expect(OnCreatedQueue.pendingTabs.get(101)?.creatorResolved).toBe(true)
+    expect(OnCreatedQueue.pendingTabs.get(102)?.creatorResolved).toBe(true)
 
     await vi.advanceTimersByTimeAsync(100)
     expect(resolved).toBe(false)
@@ -246,13 +344,11 @@ describe('on-created queue', () => {
 
     expect(OnCreatedQueue.pendingTabs.get(101)).toEqual({
       id: 101,
-      complete: false,
       creatorResolved: true,
       listenerResolved: false,
     })
     expect(OnCreatedQueue.pendingTabs.get(102)).toEqual({
       id: 102,
-      complete: false,
       creatorResolved: true,
       listenerResolved: false,
     })
@@ -264,9 +360,8 @@ describe('on-created queue', () => {
 
     await expect(result).resolves.toBe(createdWindow)
     expect(resolved).toBe(true)
-    expect(OnCreatedQueue.pendingWindows.get(9)?.complete).toBe(true)
-    expect(OnCreatedQueue.pendingTabs.get(101)?.complete).toBe(true)
-    expect(OnCreatedQueue.pendingTabs.get(102)?.complete).toBe(true)
+    expect(OnCreatedQueue.pendingWindows.size).toBe(0)
+    expect(OnCreatedQueue.pendingTabs.size).toBe(0)
   })
 
   it('createWindowAndWait restores pinned state for moved pinned tabs', async () => {
@@ -284,7 +379,9 @@ describe('on-created queue', () => {
 
     expect(fakeBrowser.tabs.get).toHaveBeenCalledWith(7)
     expect(fakeBrowser.windows.create).toHaveBeenCalledWith(properties)
-    expect(OnCreatedQueue.pendingTabCount).toBe(1)
+    await flushMicrotasks()
+    expect(OnCreatedQueue.unregisteredTabCreations).toBe(0)
+    expect(OnCreatedQueue.pendingTabs.get(7)?.creatorResolved).toBe(true)
 
     OnCreatedQueue.addPendingWindowToQueue(10, false, true)
     await vi.advanceTimersByTimeAsync(100)
@@ -295,7 +392,7 @@ describe('on-created queue', () => {
 
     await expect(result).resolves.toBe(createdWindow)
     expect(fakeBrowser.tabs.update).toHaveBeenCalledWith(7, { pinned: true })
-    expect(OnCreatedQueue.pendingTabs.get(7)?.complete).toBe(true)
+    expect(OnCreatedQueue.pendingTabs.has(7)).toBe(false)
   })
 
   it('removes a created window when post-creation position update fails', async () => {
@@ -316,8 +413,8 @@ describe('on-created queue', () => {
     ).rejects.toBe(error)
 
     expect(fakeBrowser.windows.remove).toHaveBeenCalledWith(9)
-    expect(OnCreatedQueue.pendingWindowCount).toBe(0)
-    expect(OnCreatedQueue.pendingTabCount).toBe(0)
+    expect(OnCreatedQueue.unregisteredWindowCreations).toBe(0)
+    expect(OnCreatedQueue.unregisteredTabCreations).toBe(0)
     expect(OnCreatedQueue.pendingWindows.has(9)).toBe(false)
     expect(OnCreatedQueue.pendingTabs.has(101)).toBe(false)
   })

@@ -1,11 +1,27 @@
 import { i18n } from '@/services/i18n'
 import { OnCreatedQueue } from '@/services/background-on-created-queue'
+import type { PendingItem } from '@/types/session-tree'
 
 const CREATION_EVENT_TIMEOUT_MS = 15000
 const CREATION_EVENT_POLL_MS = 100
 
+/**
+ * How extension-created tabs and windows are told apart from the user's:
+ *
+ * Firefox fires onCreated before tabs.create() or windows.create() resolves,
+ * so a listener can see an extension tab before its creator knows the ID.
+ * Each creator counts itself as unregistered until create() returns, then
+ * claims the returned IDs in the pending map and stops counting itself in the
+ * same synchronous step.
+ *
+ * A listener therefore only has to wait while some create() call has not yet
+ * returned. Once none are outstanding, an ID nobody claimed belongs to the
+ * user. Waiting for whole creations to finish instead would hold every user
+ * tab behind an extension tab whose event is slow or never arrives.
+ */
+
 function waitForListenerResolution(
-  pendingItems: Map<number, { listenerResolved: boolean; complete: boolean }>,
+  pendingItems: Map<number, PendingItem>,
   id: number,
   itemType: 'tab' | 'window',
 ): Promise<void> {
@@ -14,7 +30,7 @@ function waitForListenerResolution(
     const interval = setInterval(() => {
       const item = pendingItems.get(id)
       if (item?.listenerResolved) {
-        item.complete = true
+        pendingItems.delete(id)
         clearInterval(interval)
         resolve()
         return
@@ -32,6 +48,36 @@ function waitForListenerResolution(
           ),
         )
       }
+    }, CREATION_EVENT_POLL_MS)
+  })
+}
+
+/**
+ * Answers a creation listener: true once a creator has claimed the ID, false
+ * once no create() call is still waiting for the ID Firefox will return.
+ */
+function waitForCreatorClaim(
+  pendingItems: Map<number, PendingItem>,
+  id: number,
+  unregisteredCreations: () => number,
+): Promise<boolean> {
+  return new Promise((resolve) => {
+    const settle = (): boolean => {
+      const item = pendingItems.get(id)
+      if (item?.creatorResolved) {
+        item.listenerResolved = true
+        resolve(true)
+        return true
+      }
+      if (unregisteredCreations() === 0) {
+        resolve(false)
+        return true
+      }
+      return false
+    }
+    if (settle()) return
+    const interval = setInterval(() => {
+      if (settle()) clearInterval(interval)
     }, CREATION_EVENT_POLL_MS)
   })
 }
@@ -57,7 +103,6 @@ export function addPendingTabToQueue(
   if (!OnCreatedQueue.pendingTabs.has(tabId)) {
     OnCreatedQueue.pendingTabs.set(tabId, {
       id: tabId,
-      complete: false,
       creatorResolved: creatorResolved,
       listenerResolved: listenerResolved,
     })
@@ -94,7 +139,6 @@ export function addPendingWindowToQueue(
   if (!OnCreatedQueue.pendingWindows.has(windowId)) {
     OnCreatedQueue.pendingWindows.set(windowId, {
       id: windowId,
-      complete: false,
       creatorResolved: creatorResolved,
       listenerResolved: listenerResolved,
     })
@@ -111,71 +155,37 @@ export function addPendingWindowToQueue(
 }
 
 /**
- * Checks if a tab was created by the extension by tracking it in the pending tabs queue.
+ * Checks if a tab was created by the extension.
  * Returns true if the tab was created by the extension, false if created by user action.
- * This function is called be the onCreated listener for new tabs.
+ * This function is called by the onCreated and onAttached listeners for tabs.
  *
  * @param {number} tabId - The ID of the tab to check.
  * @returns {Promise<boolean>} A promise that resolves to true if tab was created by extension.
  */
-export async function isNewTabExtensionGenerated(
-  tabId: number,
-): Promise<boolean> {
-  const waitForTabId = (tabId: number): Promise<boolean> => {
-    return new Promise((resolve) => {
-      const interval = setInterval(() => {
-        if (OnCreatedQueue.pendingTabCount > 0) {
-          addPendingTabToQueue(tabId, false, true)
-          const tab = OnCreatedQueue.pendingTabs.get(tabId)
-          if (tab && tab.complete) {
-            OnCreatedQueue.pendingTabCount--
-            OnCreatedQueue.pendingTabs.delete(tabId)
-            clearInterval(interval)
-            resolve(true)
-          }
-        } else {
-          OnCreatedQueue.pendingTabs.delete(tabId)
-          clearInterval(interval)
-          resolve(false)
-        }
-      }, 100)
-    })
-  }
-  return await waitForTabId(tabId)
+export function isNewTabExtensionGenerated(tabId: number): Promise<boolean> {
+  return waitForCreatorClaim(
+    OnCreatedQueue.pendingTabs,
+    tabId,
+    () => OnCreatedQueue.unregisteredTabCreations,
+  )
 }
 
 /**
- * Checks if a window was created by the extension by tracking it in the pending windows queue.
+ * Checks if a window was created by the extension.
  * Returns true if the window was created by the extension, false if created by user action.
- * This function is called be the onCreated listener for new windows.
+ * This function is called by the onCreated listener for new windows.
  *
  * @param {number} windowId - The ID of the window to check.
  * @returns {Promise<boolean>} A promise that resolves to true if window was created by extension.
  */
-export async function isNewWindowExtensionGenerated(
+export function isNewWindowExtensionGenerated(
   windowId: number,
 ): Promise<boolean> {
-  const waitForWindowId = (windowId: number): Promise<boolean> => {
-    return new Promise((resolve) => {
-      const interval = setInterval(() => {
-        if (OnCreatedQueue.pendingWindowCount > 0) {
-          addPendingWindowToQueue(windowId, false, true)
-          const window = OnCreatedQueue.pendingWindows.get(windowId)
-          if (window && window.complete) {
-            OnCreatedQueue.pendingWindowCount--
-            OnCreatedQueue.pendingWindows.delete(windowId)
-            clearInterval(interval)
-            resolve(true)
-          }
-        } else {
-          OnCreatedQueue.pendingWindows.delete(windowId)
-          clearInterval(interval)
-          resolve(false)
-        }
-      }, 100)
-    })
-  }
-  return await waitForWindowId(windowId)
+  return waitForCreatorClaim(
+    OnCreatedQueue.pendingWindows,
+    windowId,
+    () => OnCreatedQueue.unregisteredWindowCreations,
+  )
 }
 
 /**
@@ -184,9 +194,9 @@ export async function isNewWindowExtensionGenerated(
  * before continuing.
  *
  * The function:
- * 1. Increments pending tab count
+ * 1. Counts the creation as unregistered
  * 2. Creates new tab
- * 3. Adds tab to pending queue
+ * 3. Claims the tab ID and stops counting the creation
  * 4. Waits for listener to resolve
  *
  * @param {Object} properties - The properties to create the tab with
@@ -197,29 +207,22 @@ export async function isNewWindowExtensionGenerated(
 export async function createTabAndWait(
   properties: browser.tabs._CreateCreateProperties,
 ): Promise<browser.tabs.Tab> {
-  OnCreatedQueue.pendingTabCount++
+  OnCreatedQueue.unregisteredTabCreations++
   const tab = await browser.tabs.create(properties).catch((error) => {
     console.error('Error creating tab:', error)
-    OnCreatedQueue.pendingTabCount--
+    releaseUnregisteredCreations(0, 1)
     throw error
   })
+  if (tab.id !== undefined) addPendingTabToQueue(tab.id, true, false)
+  releaseUnregisteredCreations(0, 1)
   if (tab.id === undefined) {
     console.error('Tab ID is undefined')
-    OnCreatedQueue.pendingTabCount = Math.max(
-      0,
-      OnCreatedQueue.pendingTabCount - 1,
-    )
     throw new Error(i18n.t('tabCreationNoId'))
   }
-  addPendingTabToQueue(tab.id, true, false)
   try {
     await waitForListenerResolution(OnCreatedQueue.pendingTabs, tab.id, 'tab')
   } catch (error) {
     OnCreatedQueue.pendingTabs.delete(tab.id)
-    OnCreatedQueue.pendingTabCount = Math.max(
-      0,
-      OnCreatedQueue.pendingTabCount - 1,
-    )
     await browser.tabs.remove(tab.id).catch(() => undefined)
     throw error
   }
@@ -232,10 +235,10 @@ export async function createTabAndWait(
  * before continuing.
  *
  * The function:
- * 1. Increments pending window count
+ * 1. Counts the window and its requested tabs as unregistered
  * 2. Creates new window
- * 3. Adds window to pending queue
- * 4. Waits for listener to resolve
+ * 3. Claims the window and tab IDs and stops counting them
+ * 4. Waits for listeners to resolve
  *
  * @param {Object} properties - The properties to create the window with
  * @returns {Promise<browser.windows.Window>} The fully initialized window object
@@ -245,7 +248,6 @@ export async function createTabAndWait(
 export async function createWindowAndWait(
   properties?: browser.windows._CreateCreateData,
 ): Promise<browser.windows.Window> {
-  OnCreatedQueue.pendingWindowCount++
   let tabCount = 0
   if (properties?.url) {
     // Handle both string and string[] cases
@@ -270,22 +272,23 @@ export async function createWindowAndWait(
     )
     tabCount += ids.length
   }
-  if (tabCount > 0) OnCreatedQueue.pendingTabCount += tabCount
+  OnCreatedQueue.unregisteredWindowCreations++
+  OnCreatedQueue.unregisteredTabCreations += tabCount
 
   const window = await browser.windows
     .create(properties || {})
     .catch((error) => {
       console.error('Error creating window:', error)
-      OnCreatedQueue.pendingWindowCount = Math.max(
-        0,
-        OnCreatedQueue.pendingWindowCount - 1,
-      )
-      OnCreatedQueue.pendingTabCount = Math.max(
-        0,
-        OnCreatedQueue.pendingTabCount - tabCount,
-      )
+      releaseUnregisteredCreations(1, tabCount)
       throw error
     })
+  if (window.id !== undefined) addPendingWindowToQueue(window.id, true, false)
+  if (tabCount > 0) {
+    for (const tab of window.tabs ?? []) {
+      if (tab.id !== undefined) addPendingTabToQueue(tab.id, true, false)
+    }
+  }
+  releaseUnregisteredCreations(1, tabCount)
   try {
     if (window.id === undefined || !window.tabs) {
       throw new Error(i18n.t('windowCreationIncomplete'))
@@ -306,24 +309,17 @@ export async function createWindowAndWait(
       await browser.windows.update(window.id, positionUpdate)
     }
 
-    addPendingWindowToQueue(window.id, true, false)
     await waitForListenerResolution(
       OnCreatedQueue.pendingWindows,
       window.id,
       'window',
     )
     if (tabCount > 0) {
-      const promises: Promise<void>[] = []
-      for (const tab of window.tabs) {
-        if (!tab.id) {
-          throw new Error(i18n.t('tabIdMissing'))
-        }
-        addPendingTabToQueue(tab.id, true, false)
-        promises.push(
-          waitForListenerResolution(OnCreatedQueue.pendingTabs, tab.id, 'tab'),
-        )
-      }
-      await Promise.all(promises)
+      await Promise.all(
+        window.tabs.map((tab) =>
+          waitForListenerResolution(OnCreatedQueue.pendingTabs, tab.id!, 'tab'),
+        ),
+      )
       // then pin tabs that were previously pinned
       for (const tab of window.tabs) {
         if ((tab.id && pinnedTabIds.has(tab.id)) || tab.pinned) {
@@ -339,14 +335,6 @@ export async function createWindowAndWait(
     for (const tab of window.tabs ?? []) {
       if (tab.id !== undefined) OnCreatedQueue.pendingTabs.delete(tab.id)
     }
-    OnCreatedQueue.pendingWindowCount = Math.max(
-      0,
-      OnCreatedQueue.pendingWindowCount - 1,
-    )
-    OnCreatedQueue.pendingTabCount = Math.max(
-      0,
-      OnCreatedQueue.pendingTabCount - tabCount,
-    )
     if (window.id !== undefined) {
       await browser.windows.remove(window.id).catch((removeError) => {
         console.error('Error removing partially created window:', removeError)
@@ -354,4 +342,15 @@ export async function createWindowAndWait(
     }
     throw error
   }
+}
+
+function releaseUnregisteredCreations(windows: number, tabs: number): void {
+  OnCreatedQueue.unregisteredWindowCreations = Math.max(
+    0,
+    OnCreatedQueue.unregisteredWindowCreations - windows,
+  )
+  OnCreatedQueue.unregisteredTabCreations = Math.max(
+    0,
+    OnCreatedQueue.unregisteredTabCreations - tabs,
+  )
 }
