@@ -366,3 +366,20 @@ async function executeFirefoxChromeScript(scriptFunction, args = []) {
 
   return response.json()
 }
+
+/**
+ * Writes a line to Firefox's stdout, which geckodriver records in its log, so
+ * the log can be split by test.
+ */
+export async function writeFirefoxStdoutLine(line) {
+  return withFirefoxChromeContext(async () => {
+    await executeFirefoxChromeScript(
+      (text) => {
+        dump(`${text}
+`)
+        return true
+      },
+      [line],
+    )
+  })
+}
