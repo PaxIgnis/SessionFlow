@@ -5,6 +5,12 @@ import {
   writeE2eCoverageReport,
 } from './tests/e2e/support/e2e-coverage.mjs'
 import {
+  E2E_LOG_DIRECTORY,
+  firefoxConsolePrefs,
+  markTestStart,
+  printFirefoxConsoleOnFailure,
+} from './tests/e2e/support/extension-console.mjs'
+import {
   FIREFOX_EXTENSION_ID,
   FIREFOX_EXTENSION_UUID,
   installSessionFlowAddon,
@@ -31,6 +37,7 @@ export const config = {
             [FIREFOX_EXTENSION_ID]: FIREFOX_EXTENSION_UUID,
           }),
           'xpinstall.signatures.required': false,
+          ...firefoxConsolePrefs,
         },
       },
       'wdio:geckodriverOptions': {
@@ -39,6 +46,7 @@ export const config = {
     },
   ],
   logLevel: 'warn',
+  outputDir: E2E_LOG_DIRECTORY,
   bail: 0,
   waitforTimeout: 10_000,
   connectionRetryTimeout: 120_000,
@@ -62,7 +70,11 @@ export const config = {
       console.log(`Installed SessionFlow Firefox add-on: ${addonId}`)
     }
   },
-  afterTest: async (test) => {
+  beforeTest: async (test) => {
+    await markTestStart(test)
+  },
+  afterTest: async (test, _context, result) => {
+    await printFirefoxConsoleOnFailure(test, result)
     await collectCoverageFromOpenWindows(test.title)
   },
   onComplete: async () => {

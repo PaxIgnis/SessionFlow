@@ -295,6 +295,18 @@ jobs:
         env:
           WDIO_FIREFOX_BINARY: ${{ steps.firefox.outputs.firefox-path }}
 
+      - name: Upload E2E logs
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-logs-${{ matrix.name }}
+          include-hidden-files: true
+          retention-days: 7
+          if-no-files-found: ignore
+          path: |
+            e2e.log
+            .output/e2e-logs/
+
       - name: Write E2E job summary
         if: ${{ always() }}
         env:
@@ -373,6 +385,18 @@ jobs:
         env:
           WDIO_FIREFOX_BINARY: ${{ steps.firefox.outputs.firefox-path }}
           WDIO_REQUIRE_PERSISTENT_ADDON: 'true'
+
+      - name: Upload E2E logs
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-logs-startup-persistence
+          include-hidden-files: true
+          retention-days: 7
+          if-no-files-found: ignore
+          path: |
+            e2e.log
+            .output/e2e-logs/
 
       - name: Write E2E job summary
         if: ${{ always() }}

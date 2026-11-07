@@ -598,28 +598,45 @@ async function closeFirstRunOnboardingTab() {
   const popupHandle = popup.popupHandle
   const onboardingUrl = `moz-extension://${FIREFOX_EXTENSION_UUID}/onboarding.html`
 
+  // What the last pass saw, so a timeout says whether WebDriver never found
+  // the tab or the tree kept it after it closed.
+  let closedTabs = 0
+  let lastHandleUrls = []
+  let lastTreeTabs = []
+
   // The onboarding tab can still be loading (reported as about:blank) when
   // this runs, so keep looking until the tree no longer shows it.
-  await browser.waitUntil(
-    async () => {
-      for (const handle of await browser.getWindowHandles()) {
-        await browser.switchToWindow(handle)
-        if ((await browser.getUrl()).startsWith(onboardingUrl)) {
-          await browser.closeWindow()
-          break
+  try {
+    await browser.waitUntil(
+      async () => {
+        lastHandleUrls = []
+        for (const handle of await browser.getWindowHandles()) {
+          await browser.switchToWindow(handle)
+          const url = await browser.getUrl()
+          lastHandleUrls.push(url.slice(0, 120))
+          if (url.startsWith(onboardingUrl)) {
+            await browser.closeWindow()
+            closedTabs += 1
+            break
+          }
         }
-      }
-      await browser.switchToWindow(popupHandle)
-      const tree = await sessionTree.backgroundTreeSnapshot()
-      return windowsInTree(tree)
-        .flatMap((windowItem) => tabsInWindow(windowItem))
-        .every((tab) => !tab.title.includes('/onboarding.html'))
-    },
-    {
-      timeout: 10_000,
-      timeoutMsg: 'Expected the first-run onboarding tab to be closed.',
-    },
-  )
+        await browser.switchToWindow(popupHandle)
+        const tree = await sessionTree.backgroundTreeSnapshot()
+        lastTreeTabs = windowsInTree(tree)
+          .flatMap((windowItem) => tabsInWindow(windowItem))
+          .map((tab) => ({ title: tab.title, state: tab.state }))
+        return lastTreeTabs.every(
+          (tab) => !tab.title.includes('/onboarding.html'),
+        )
+      },
+      { timeout: 10_000 },
+    )
+  } catch (error) {
+    throw new Error(
+      `Expected the first-run onboarding tab to be closed. Closed ${closedTabs} onboarding tab(s). Last window URLs: ${JSON.stringify(lastHandleUrls)}. Last tree tabs: ${JSON.stringify(lastTreeTabs)}`,
+      { cause: error },
+    )
+  }
 }
 
 async function onlyTrackedTab(title) {

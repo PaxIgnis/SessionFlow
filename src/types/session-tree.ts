@@ -122,7 +122,6 @@ export enum State {
 
 export interface PendingItem {
   id: number
-  complete: boolean
   creatorResolved: boolean
   listenerResolved: boolean
 }

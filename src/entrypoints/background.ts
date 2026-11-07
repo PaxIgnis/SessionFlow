@@ -43,11 +43,18 @@ async function initializeBackground(): Promise<void> {
     console.error('Failed to initialize session snapshots:', error)
   }
   await Tree.initializeContainers()
-  await Tree.initializeWindows()
-  if (Tree.initialized) SessionSnapshots.markTreeInitialized()
-  await stampOpenTreeIdentities()
+  // Listen before initializeWindows reads the open windows and tabs, so
+  // nothing that changes while the tree is being built goes unseen.
+  BackgroundHandlers.holdBrowserEventsUntilStartup()
+  try {
+    await Tree.initializeWindows()
+    if (Tree.initialized) SessionSnapshots.markTreeInitialized()
+    await stampOpenTreeIdentities()
 
-  BackgroundHandlers.initializeListeners()
+    BackgroundHandlers.initializeListeners()
+  } finally {
+    BackgroundHandlers.releaseHeldBrowserEvents()
+  }
   // After the listeners exist, so restored windows can complete their creation
   // handshake instead of waiting out the creation timeout.
   await Tree.restoreStartupTabs()
