@@ -236,6 +236,7 @@ describe('startup lifecycle', () => {
         initializeContainers,
         initializeWindows,
         restoreStartupTabs,
+        refreshWindowPositionInterval: vi.fn(),
         saveSessionTreeToStorage: vi.fn(),
       },
     }))
@@ -358,6 +359,7 @@ describe('startup lifecycle', () => {
         initializeContainers,
         initializeWindows,
         restoreStartupTabs,
+        refreshWindowPositionInterval: vi.fn(),
         saveSessionTreeToStorage: vi.fn(),
       },
     }))

@@ -598,29 +598,46 @@ async function closeFirstRunOnboardingTab() {
   const popupHandle = popup.popupHandle
   const onboardingUrl = `moz-extension://${FIREFOX_EXTENSION_UUID}/onboarding.html`
 
-  // What the last pass saw, so a timeout says whether WebDriver never found
-  // the tab or the tree kept it after it closed.
+  // What the last pass saw, so a timeout says whether the tab was never found
+  // or the tree kept it after it closed.
   let closedTabs = 0
-  let lastHandleUrls = []
+  let lastSeenTabs = []
   let lastTreeTabs = []
 
-  // The onboarding tab can still be loading (reported as about:blank) when
-  // this runs, so keep looking until the tree no longer shows it.
+  // The onboarding tab can sit at about:blank for a long time before it
+  // loads, so WebDriver's URL never matches it. Firefox's tab title already
+  // names the onboarding page while it loads, so close it through the
+  // extension API by URL or title instead.
   try {
     await browser.waitUntil(
       async () => {
-        lastHandleUrls = []
-        for (const handle of await browser.getWindowHandles()) {
-          await browser.switchToWindow(handle)
-          const url = await browser.getUrl()
-          lastHandleUrls.push(url.slice(0, 120))
-          if (url.startsWith(onboardingUrl)) {
-            await browser.closeWindow()
-            closedTabs += 1
-            break
-          }
-        }
         await browser.switchToWindow(popupHandle)
+        const result = await browser.executeAsync((targetUrl, done) => {
+          window.browser.tabs
+            .query({})
+            .then(async (tabs) => {
+              const onboardingTabs = tabs.filter(
+                (tab) =>
+                  tab.url?.startsWith(targetUrl) ||
+                  tab.title?.includes('/onboarding.html'),
+              )
+              await window.browser.tabs.remove(
+                onboardingTabs.map((tab) => tab.id),
+              )
+              done({
+                closed: onboardingTabs.length,
+                seen: tabs.map((tab) => ({
+                  url: tab.url?.slice(0, 120),
+                  title: tab.title?.slice(0, 80),
+                })),
+              })
+            })
+            .catch((error) =>
+              done({ closed: 0, seen: [], error: String(error) }),
+            )
+        }, onboardingUrl)
+        closedTabs += result.closed
+        lastSeenTabs = result.error ? [result.error] : result.seen
         const tree = await sessionTree.backgroundTreeSnapshot()
         lastTreeTabs = windowsInTree(tree)
           .flatMap((windowItem) => tabsInWindow(windowItem))
@@ -633,7 +650,7 @@ async function closeFirstRunOnboardingTab() {
     )
   } catch (error) {
     throw new Error(
-      `Expected the first-run onboarding tab to be closed. Closed ${closedTabs} onboarding tab(s). Last window URLs: ${JSON.stringify(lastHandleUrls)}. Last tree tabs: ${JSON.stringify(lastTreeTabs)}`,
+      `Expected the first-run onboarding tab to be closed. Closed ${closedTabs} onboarding tab(s). Last Firefox tabs: ${JSON.stringify(lastSeenTabs)}. Last tree tabs: ${JSON.stringify(lastTreeTabs)}`,
       { cause: error },
     )
   }

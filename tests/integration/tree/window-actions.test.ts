@@ -1020,6 +1020,31 @@ describe('window actions', () => {
     expect(vi.getTimerCount()).toBe(0)
   })
 
+  it('starts position capture after a settings reload without waiting for a separate message', () => {
+    vi.useFakeTimers()
+    Settings.values.openWindowsInSameLocation = false
+    // The openWindowsInSameLocationUpdated message can be handled before the
+    // settings reload that enables the feature.
+    Tree.updateWindowPositionInterval()
+    expect(Tree.windowPositionInterval).toBeUndefined()
+
+    Settings.values.openWindowsInSameLocation = true
+    Tree.refreshWindowPositionInterval()
+
+    expect(Tree.windowPositionInterval).toBeDefined()
+  })
+
+  it('keeps the running position timer when unrelated settings reload', () => {
+    vi.useFakeTimers()
+    Settings.values.openWindowsInSameLocation = true
+    Tree.updateWindowPositionInterval()
+    const timer = Tree.windowPositionInterval
+
+    Tree.refreshWindowPositionInterval()
+
+    expect(Tree.windowPositionInterval).toBe(timer)
+  })
+
   it('does no position-capture work after repeated enable/disable cycles (PF-09)', async () => {
     vi.useFakeTimers()
     Settings.values.openWindowsInSameLocationUpdateInterval = 1
