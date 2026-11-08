@@ -13,7 +13,9 @@ describe('layout stability', () => {
   it('keeps the storage snapshot browser within the options panel while a large snapshot loads', async () => {
     const options = await openOptionsPage()
     try {
-      await sendSnapshotRequest({ action: 'clearSessionSnapshots' })
+      expect(
+        await sendSnapshotRequest({ action: 'clearSessionSnapshots' }),
+      ).toMatchObject({ ok: true })
       await importLargeSnapshot('wide-a')
       await importLargeSnapshot('wide-b')
       await browser.refresh()

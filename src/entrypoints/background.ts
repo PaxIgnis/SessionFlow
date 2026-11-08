@@ -15,6 +15,7 @@ export default defineBackground(() => {
   })
 
   DeferredEventsQueue.initializeDeferredEventsQueue()
+  SessionSnapshots.listenForRequests()
   Actions.setupBrowserActionMenu()
   let startBackground: () => void = () => undefined
   const backgroundReady = new Promise<void>((resolve, reject) => {
@@ -60,6 +61,7 @@ async function initializeBackground(): Promise<void> {
   await Tree.restoreStartupTabs()
   Actions.scheduleSessionTreeOpenOnStartup()
   Settings.setupSettingsUpdatedListener(async () => {
+    Tree.refreshWindowPositionInterval()
     // Apply private-tree retention immediately when the preference changes.
     await Tree.saveSessionTreeToStorage()
     try {

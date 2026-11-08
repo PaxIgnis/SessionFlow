@@ -244,6 +244,9 @@ describe('favicon and redirect workflows', () => {
       'Show and cache favicons for private tabs',
       'Off',
     )
+    // The toggle shows as active before the settings save finishes, and
+    // closing the page then can drop the save.
+    await options.page.expectStoredSetting('cachePrivateTabFavicons', false)
     await closeOptionsPage(options.optionsHandle, popup.popupHandle)
     const privateFallback = await waitForFavicon(
       uid,
@@ -253,8 +256,15 @@ describe('favicon and redirect workflows', () => {
       /private-browsing|M15\.931/,
     )
 
-    const cache = await readFaviconCache()
-    expect(cache.entries.some((entry) => entry.url === '127.0.0.1')).toBe(false)
+    // The tree shows the fallback as soon as its own settings reload; the
+    // background purges the stored entry separately, after that.
+    await browser.waitUntil(
+      async () => {
+        const cache = await readFaviconCache()
+        return !cache.entries.some((entry) => entry.url === '127.0.0.1')
+      },
+      { timeoutMsg: 'Expected the private favicon entry to be purged.' },
+    )
   })
 
   it('shares an allowed private favicon cache entry with normal tabs without pruning it on private close (PD-FR-06)', async () => {
@@ -312,9 +322,10 @@ describe('favicon and redirect workflows', () => {
     await sessionTree.waitForItemTextNotVisible('FV Shared Private')
     const cache = await readFaviconCache()
     expect(cache.entries.some((entry) => entry.url === '127.0.0.1')).toBe(true)
-    expect(await waitForFavicon(normalUid, (src) => src === privateSrc)).toBe(
-      privateSrc,
-    )
+    // Both fixture pages share the 127.0.0.1 entry, which holds whichever
+    // favicon Firefox reported last; it can report the normal tab's own icon
+    // again once the private tab closes. A pruned entry shows the default.
+    await waitForFavicon(normalUid, (src) => !isDefaultIcon(src))
   })
 
   it('shows a blank dark background before the redirect module is ready', async () => {
@@ -406,16 +417,28 @@ describe('favicon and redirect workflows', () => {
     return item.$('.tree-item-favicon').getAttribute('src')
   }
 
+  function describeFaviconSrc(src) {
+    if (!src) return String(src)
+    if (isDefaultIcon(src)) return `default (${src.slice(0, 80)})`
+    return src.length > 120
+      ? `${src.slice(0, 120)}… (${src.length} chars)`
+      : src
+  }
+
   async function waitForFavicon(uid, predicate) {
     let src = ''
     await browser.switchToWindow(popup.popupHandle)
-    await browser.waitUntil(
-      async () => {
+    try {
+      await browser.waitUntil(async () => {
         src = await faviconSrc(uid)
         return predicate(src)
-      },
-      { timeoutMsg: `Expected favicon state for tree item ${uid}.` },
-    )
+      })
+    } catch (error) {
+      throw new Error(
+        `Expected favicon state for tree item ${uid}. Last src: ${describeFaviconSrc(src)}`,
+        { cause: error },
+      )
+    }
     return src
   }
 

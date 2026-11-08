@@ -4,15 +4,6 @@ import NumberInput from '@/components/NumberInput.vue'
 import ToggleButton from '@/components/ToggleButton.vue'
 import { Settings } from '@/services/settings'
 import { OPTIONS } from '@/types/settings'
-
-function updateLocation() {
-  Settings.saveSettingsToStorage()
-  setTimeout(() => {
-    browser.runtime.sendMessage({
-      action: 'openWindowsInSameLocationUpdated',
-    })
-  }, 5000)
-}
 </script>
 
 <template>
@@ -39,7 +30,7 @@ function updateLocation() {
         :label="i18n.t('reopenWindowsInTheirLastPosition')"
         v-model="Settings.values.openWindowsInSameLocation"
         :options="OPTIONS.boolean"
-        @update="updateLocation()"
+        @update="Settings.saveSettingsToStorage()"
       />
     </div>
     <div
@@ -58,7 +49,7 @@ function updateLocation() {
         :min="1"
         :max="3600"
         :disabled="!Settings.values.openWindowsInSameLocation"
-        @update="updateLocation()"
+        @update="Settings.saveSettingsToStorage()"
       />
     </div>
     <p class="eyebrow">{{ i18n.t('whenAWindowCloses') }}</p>

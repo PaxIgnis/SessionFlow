@@ -14,6 +14,7 @@ vi.mock('@/services/favicon-refresh', () => ({
 vi.mock('@/services/background-session-snapshots', () => ({
   SessionSnapshots: {
     handleSettingsUpdated: vi.fn().mockResolvedValue(undefined),
+    listenForRequests: vi.fn(),
   },
 }))
 

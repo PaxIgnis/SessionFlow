@@ -13,7 +13,20 @@ import { setFirefoxExtensionPrivateBrowsingAllowed } from './support/firefox-chr
 const introductionUrl = `moz-extension://${FIREFOX_EXTENSION_UUID}/onboarding.html`
 const optionsUrl = `moz-extension://${FIREFOX_EXTENSION_UUID}/options.html`
 
-const feature = (id) => $(`.tip-tabs button[data-feature-id="${id}"]`).click()
+// Buttons stay disabled while the page loads or saves, and WebDriver clicks a
+// disabled button without error, so wait for it to be enabled first.
+async function clickEnabled(element) {
+  await expect(element).toBeEnabled()
+  await element.click()
+}
+const clickButton = (label) => clickEnabled($(`button=${label}`))
+// A feature tab saves progress before it swaps the example, so wait for the
+// swap; otherwise the next click can land on the previous feature's example.
+async function feature(id) {
+  const tab = $(`.tip-tabs button[data-feature-id="${id}"]`)
+  await clickEnabled(tab)
+  await expect(tab).toHaveAttribute('aria-current', 'step')
+}
 const sampleItem = (id) => $(`.tree-demo [data-example-id="${id}"]`)
 
 async function expectHeadingFocus(selector) {
@@ -35,8 +48,25 @@ async function tabIds() {
   )
 }
 
+async function closeTabsWithUrl(url) {
+  const result = await browser.executeAsync((prefix, done) => {
+    window.browser.tabs
+      .query({})
+      .then((tabs) =>
+        window.browser.tabs.remove(
+          tabs
+            .filter((tab) => tab.url?.startsWith(prefix))
+            .map((tab) => tab.id),
+        ),
+      )
+      .then(() => done({ ok: true }))
+      .catch((error) => done({ ok: false, error: String(error) }))
+  }, url)
+  if (!result.ok) throw new Error(`Failed to close ${url}: ${result.error}`)
+}
+
 async function openFeatures() {
-  await $('button=Next').click()
+  await clickButton('Next')
   await expect($('h1')).toHaveText('Features')
 }
 
@@ -175,7 +205,7 @@ describe('Session Flow introduction', () => {
     await expectHeadingFocus('.tab-guide h2')
     await browser.refresh()
     await expect($('.tab-guide h2')).toHaveText('3. Focus a tab')
-    await $('button=Watch example').click()
+    await clickButton('Watch example')
     await expect($('.tree-demo')).toHaveAttribute('data-phase', 'after')
     await expect(sampleItem('research')).toHaveAttribute('data-state', 'active')
     const activeStyle = await browser.execute(() => {
@@ -200,7 +230,7 @@ describe('Session Flow introduction', () => {
         document.querySelector('.tree-demo [data-example-id="reference"]')
           .offsetTop,
     )
-    await $('button=Watch example').click()
+    await clickButton('Watch example')
     await expect($('.demo-drag-preview')).toBeDisplayed()
     const initialDrag = await browser.execute(() => ({
       sourceTop: document.querySelector(
@@ -220,8 +250,8 @@ describe('Session Flow introduction', () => {
     await expect(sampleItem('reference')).not.toBeExisting()
     await sampleItem('research').$('.tree-item-action-button').click()
     await expect(sampleItem('reference')).toBeDisplayed()
-    await $('button=Drop above').click()
-    await $('button=Watch example').click()
+    await clickButton('Drop above')
+    await clickButton('Watch example')
     await expect(sampleItem('research')).toHaveElementClass('drag-over-above')
     await expect($('.tree-demo')).toHaveAttribute('data-phase', 'after')
     await expect(sampleItem('reference')).toHaveElementClass('indentLevel-1')
@@ -238,8 +268,8 @@ describe('Session Flow introduction', () => {
       'separator',
       'other-tab',
     ])
-    await $('button=Drop below').click()
-    await $('button=Watch example').click()
+    await clickButton('Drop below')
+    await clickButton('Watch example')
     await expect(sampleItem('research')).toHaveElementClass('drag-over-below')
     await expect($('.tree-demo')).toHaveAttribute('data-phase', 'after')
     await expect(sampleItem('reference')).toHaveElementClass('indentLevel-1')
@@ -262,17 +292,17 @@ describe('Session Flow introduction', () => {
     await expect($('.guide-warning')).toHaveText(
       expect.stringContaining('Save closes a tab and keeps its entry'),
     )
-    await $('button=Watch example').click()
+    await clickButton('Watch example')
     await expect($('.tree-demo')).toHaveAttribute('data-phase', 'after')
     await expect(sampleItem('reference')).toHaveAttribute('data-state', 'saved')
     await expect(
       sampleItem('reference').$('button[aria-label="Save"]'),
     ).not.toBeExisting()
-    await $('button=Replay example').click()
+    await clickButton('Replay example')
     await expect($('.tree-demo')).toHaveAttribute('data-phase', 'after')
     await feature('close')
     await expect($('.tab-guide h2')).toHaveText('4. Close a tab or window')
-    await $('button=Watch example').click()
+    await clickButton('Watch example')
     await expect($('.tree-demo')).toHaveAttribute('data-phase', 'after')
     await expect(sampleItem('reference')).not.toBeExisting()
     const tabsAfter = await tabIds()
@@ -335,7 +365,7 @@ describe('Session Flow introduction', () => {
     ).toBeDisplayed()
     expect(await tabIds()).toEqual(tabsBefore)
     await $('.private-example-tree').scrollIntoView()
-    await $('button=Next').click()
+    await clickButton('Next')
     await expect($('h1')).toHaveText('Include Private Windows')
     await expect($('main section > p')).toHaveText(
       expect.stringContaining(
@@ -345,7 +375,7 @@ describe('Session Flow introduction', () => {
     await browser.refresh()
     await expect($('h1')).toHaveText('Include Private Windows')
     await expect($('.retention input')).not.toBeChecked()
-    await $('button=Next').click()
+    await clickButton('Next')
     await expect($('h1')).toHaveText('Make yourself at home')
     await expect($('.eyebrow')).toHaveText('Step 4 of 4')
     await expect($('.start-choices')).toHaveText(
@@ -367,8 +397,8 @@ describe('Session Flow introduction', () => {
       if (enabled) await expect($('.startup-choice input')).toBeChecked()
       else await expect($('.startup-choice input')).not.toBeChecked()
     }
-    await $('button=Back').click()
-    await $('button=Next').click()
+    await clickButton('Back')
+    await clickButton('Next')
     await browser.refresh()
     await expect($('.startup-choice input')).toBeChecked()
     await expect($('.settings-access')).toHaveText(
@@ -377,16 +407,32 @@ describe('Session Flow introduction', () => {
       ),
     )
     const settingsHandles = await browser.getWindowHandles()
-    await $('button=Open Settings').click()
+    await clickButton('Open Settings')
     await switchToNewHandle(settingsHandles, optionsUrl)
     await expect($('#settings_general')).toBeDisplayed()
-    await browser.closeWindow()
+    // Switch back before closing the settings tab, through the extension
+    // API: closing the tab WebDriver is switched to can leave later element
+    // lookups in this tab pointing at the closed one.
     await browser.switchToWindow(introductionHandle)
-    await expect($('h1')).toHaveText('Make yourself at home')
+    await closeTabsWithUrl(optionsUrl)
+    let lastHeading
+    try {
+      await browser.waitUntil(async () => {
+        lastHeading = await browser.execute(
+          () => document.querySelector('h1')?.textContent?.trim() ?? null,
+        )
+        return lastHeading === 'Make yourself at home'
+      })
+    } catch (error) {
+      throw new Error(
+        `Expected the introduction to show its last step again. Last heading: ${JSON.stringify(lastHeading)}`,
+        { cause: error },
+      )
+    }
     await expect($('.startup-choice input')).toBeChecked()
     expect((await storedState()).privateWindowOnboarding.status).toBe('pending')
     const previous = await browser.getWindowHandles()
-    await $('button=Open Session Flow').click()
+    await clickButton('Open Session Flow')
     await switchToNewHandle(previous, SESSION_TREE_URL)
     await expect($('.tree-introduction')).not.toBeExisting()
     const finished = await storedState()
@@ -424,10 +470,10 @@ describe('Session Flow introduction', () => {
     })
     expect(introPlacement).toBe(true)
     const replayHandles = await browser.getWindowHandles()
-    await $('button=Show Intro').click()
+    await clickButton('Show Intro')
     await switchToNewHandle(replayHandles, introductionUrl)
     await expect($('h1')).toHaveText('Welcome to Session Flow')
-    await $('button=Skip introduction').click()
+    await clickButton('Skip introduction')
     await expect($('h1')).toHaveText('You are ready to explore')
   })
 
@@ -478,11 +524,11 @@ describe('Session Flow introduction', () => {
           ? { matches: true }
           : matchMedia(query)
     })
-    await $('button=Replay example').click()
+    await clickButton('Replay example')
     await expect($('.tree-demo')).toHaveAttribute('data-phase', 'after')
     await expect($('.demo-cursor')).not.toBeExisting()
     const tabsBeforeSkip = await tabIds()
-    await $('button=Skip tips').click()
+    await clickButton('Skip tips')
     await expect($('h1')).toHaveText('Include Private Windows')
     await $('.retention input').click()
     await browser.waitUntil(async () => {
@@ -496,7 +542,7 @@ describe('Session Flow introduction', () => {
     expect((await storedState()).privateWindowOnboarding.status).toBe('pending')
     await browser.refresh()
     await expect($('.retention input')).toBeChecked()
-    await $('button=Next').click()
+    await clickButton('Next')
     await expect($('h1')).toHaveText('Make yourself at home')
     await expectHeadingFocus('h1')
     await $('input[value="import"]').click()
@@ -507,17 +553,17 @@ describe('Session Flow introduction', () => {
     expect(skipped.privateWindowOnboarding.destination).toBe('import')
     expect(skipped.settings.retainPrivateWindows).toBe(true)
     expect(await tabIds()).toEqual(tabsBeforeSkip)
-    await $('button=Back').click()
+    await clickButton('Back')
     await expect($('h1')).toHaveText('Include Private Windows')
-    await $('button=Back').click()
+    await clickButton('Back')
     await expect($('.tab-guide h2')).toHaveText('5. Save a tab or window')
     await expectHeadingFocus('.tab-guide h2')
-    await $('button=Skip tips').click()
-    await $('button=Next').click()
+    await clickButton('Skip tips')
+    await clickButton('Next')
     await browser.refresh()
     await expect($('h1')).toHaveText('Make yourself at home')
     const previous = await browser.getWindowHandles()
-    await $('button=Import a session').click()
+    await clickButton('Import a session')
     await switchToNewHandle(previous, `${optionsUrl}#settings_snapshots`)
     await expect($('#settings_snapshots')).toBeDisplayed()
     await expect($('#nav-item-settings_snapshots')).toHaveAttribute(
@@ -560,12 +606,12 @@ describe('Session Flow introduction', () => {
   it('adds and edits a local note with the real controls, then groups windows beneath it', async () => {
     await openFeatures()
     const tabsBefore = await tabIds()
-    await $('.tip-tabs').$('button=9. Add a note').click()
+    await clickEnabled($('.tip-tabs').$('button=9. Add a note'))
     await expect(sampleItem('note')).not.toBeExisting()
     await $('.tree-demo .toolbar-button[aria-label="Add note"]').click()
     await expect(sampleItem('note')).toHaveText('New note')
     await expect(sampleItem('note')).toHaveElementClass('indentLevel-0')
-    await $('button=Replay example').click()
+    await clickButton('Replay example')
     await expect($('.tree-demo')).toHaveAttribute('data-motion', 'click')
     const cursorAboveToolbar = await browser.execute(() => {
       const cursor = document.querySelector('.demo-pointer')
@@ -580,15 +626,15 @@ describe('Session Flow introduction', () => {
     expect(cursorAboveToolbar).toBe(true)
     await expect($('.tree-demo')).toHaveAttribute('data-phase', 'after')
     await expect(sampleItem('note')).toBeDisplayed()
-    await $('button=Next tip').click()
+    await clickButton('Next tip')
     await expect($('.tab-guide h2')).toHaveText('10. Edit note text')
     await sampleItem('note').doubleClick()
     await expect($('.modal-container')).toBeDisplayed()
     await $('.modal-textarea').setValue('Travel plans')
-    await $('button=OK').click()
+    await clickButton('OK')
     await expect(sampleItem('note')).toHaveText('Travel plans')
     await expect($('.modal-container')).not.toBeExisting()
-    await $('button=Replay example').click()
+    await clickButton('Replay example')
     await expect($('.tree-demo')).toHaveAttribute('data-motion', 'approach')
     await expect($('.modal-container')).not.toBeExisting()
     await expect($('.modal-container')).toBeDisplayed()
@@ -596,7 +642,7 @@ describe('Session Flow introduction', () => {
     await expect($('.modal-textarea')).toHaveValue('Projects')
     await expect($('.tree-demo')).toHaveAttribute('data-phase', 'after')
     await expect(sampleItem('note')).toHaveText('Projects')
-    await $('button=Next tip').click()
+    await clickButton('Next tip')
     await expect($('.tab-guide h2')).toHaveText(
       '11. Group windows under a note',
     )
@@ -604,7 +650,7 @@ describe('Session Flow introduction', () => {
     await expect($('.tab-guide h2')).toHaveText(
       '11. Group windows under a note',
     )
-    await $('button=Watch example').click()
+    await clickButton('Watch example')
     await expect($('.demo-drag-preview')).toBeDisplayed()
     await expect(sampleItem('window')).toHaveElementClass('indentLevel-0')
     await expect(sampleItem('note')).toHaveElementClass('drag-over-mid')
@@ -640,20 +686,20 @@ describe('Session Flow introduction', () => {
       'labels',
     ])
     await feature('note-edit')
-    await $('button=Watch example').click()
+    await clickButton('Watch example')
     await feature('open')
     await expect($('.modal-container')).not.toBeExisting()
     await expect($('.demo-pointer')).not.toBeExisting()
     await expect(sampleItem('reference')).toHaveAttribute('data-state', 'saved')
-    await $('button=Watch example').click()
+    await clickButton('Watch example')
     await expect($('.tree-demo')).toHaveAttribute('data-phase', 'after')
     await expect(sampleItem('reference')).toHaveAttribute(
       'data-state',
       'active',
     )
     await feature('save')
-    await $('.example-choices').$('button=Window').click()
-    await $('button=Watch example').click()
+    await clickEnabled($('.example-choices').$('button=Window'))
+    await clickButton('Watch example')
     await expect($('.tree-demo')).toHaveAttribute('data-phase', 'after')
     for (const id of ['window', 'research', 'reference'])
       await expect(sampleItem(id)).toHaveAttribute('data-state', 'saved')
@@ -662,8 +708,8 @@ describe('Session Flow introduction', () => {
       'live',
     )
     await feature('close')
-    await $('.example-choices').$('button=Window').click()
-    await $('button=Watch example').click()
+    await clickEnabled($('.example-choices').$('button=Window'))
+    await clickButton('Watch example')
     await expect($('.tree-demo')).toHaveAttribute('data-phase', 'after')
     for (const id of ['window', 'research', 'reference'])
       await expect(sampleItem(id)).not.toBeExisting()
@@ -751,7 +797,7 @@ describe('Session Flow introduction', () => {
         'aria-current',
         'true',
       )
-      await $('#settings_tab_groups').$('button=Right Edge').click()
+      await clickEnabled($('#settings_tab_groups').$('button=Right Edge'))
       await browser.switchToWindow(introductionHandle)
       await expect($('.tab-guide h2')).toHaveText('13. Tab groups')
       await expect(
@@ -779,7 +825,7 @@ describe('Session Flow introduction', () => {
         'aria-current',
         'true',
       )
-      await $('#settings_containers').$('button=Soft Fade').click()
+      await clickEnabled($('#settings_containers').$('button=Soft Fade'))
       await browser.switchToWindow(introductionHandle)
       // The notice stays while the independent icon preference remains off.
       await expect($('.indicator-settings span')).toBeExisting()
@@ -796,7 +842,7 @@ describe('Session Flow introduction', () => {
       const iconRow = await $(
         '//section[@id="settings_containers"]//div[contains(@class,"toggle-container")][.//label[normalize-space()="Container icon"]]',
       )
-      await iconRow.$('button=Right').click()
+      await clickEnabled(iconRow.$('button=Right'))
       await browser.switchToWindow(introductionHandle)
       await expect(
         sampleItem('research').$('.tree-item-container-icon'),
@@ -819,7 +865,7 @@ describe('Session Flow introduction', () => {
     await openFeatures()
     await feature('multi-select')
     const tabsBefore = await tabIds()
-    await $('button=Watch example').click()
+    await clickButton('Watch example')
     await expect($('.tree-demo')).toHaveAttribute('data-phase', 'after')
     await expect(sampleItem('research')).toHaveElementClass(
       'tree-item-selected',
@@ -830,18 +876,18 @@ describe('Session Flow introduction', () => {
     await expect(sampleItem('reference')).not.toHaveElementClass(
       'tree-item-selected',
     )
-    await $('.example-choices').$('button=Shift-click').click()
-    await $('button=Watch example').click()
+    await clickEnabled($('.example-choices').$('button=Shift-click'))
+    await clickButton('Watch example')
     await expect($('.tree-demo')).toHaveAttribute('data-phase', 'after')
     for (const id of ['research', 'reference', 'other-tab'])
       await expect(sampleItem(id)).toHaveElementClass('tree-item-selected')
-    await $('.example-choices').$('button=Drag selection').click()
+    await clickEnabled($('.example-choices').$('button=Drag selection'))
     const beforeTop = await browser.execute(
       () =>
         document.querySelector('.tree-demo [data-example-id="research"]')
           .offsetTop,
     )
-    await $('button=Watch example').click()
+    await clickButton('Watch example')
     await expect($('.demo-drag-preview')).toHaveText(
       expect.stringContaining('2 tabs'),
     )
@@ -862,15 +908,17 @@ describe('Session Flow introduction', () => {
     await expect($('.tree-demo')).toHaveAttribute('data-phase', 'after')
     for (const id of ['research', 'reference'])
       await expect(sampleItem(id)).toHaveElementClass('indentLevel-2')
-    await $('.example-choices').$('button=Context menu').click()
-    await $('button=Watch example').click()
+    await clickEnabled($('.example-choices').$('button=Context menu'))
+    await clickButton('Watch example')
     await expect($('.demo-context-menu')).toBeDisplayed()
     await expect($('.demo-context-menu button')).toHaveText('Save')
     await expect($('.tree-demo')).toHaveAttribute('data-phase', 'after')
     for (const id of ['research', 'reference'])
       await expect(sampleItem(id)).toHaveAttribute('data-state', 'saved')
-    await $('.example-choices').$('button=Windows and collapsed items').click()
-    await $('button=Watch example').click()
+    await clickEnabled(
+      $('.example-choices').$('button=Windows and collapsed items'),
+    )
+    await clickButton('Watch example')
     await expect(sampleItem('branch')).toHaveElementClass(
       'example-actions-visible',
     )
@@ -905,8 +953,8 @@ describe('Session Flow introduction', () => {
     for (const id of ['branch', 'branch-child-1', 'branch-child-2', 'last-tab'])
       await expect(sampleItem(id)).toHaveAttribute('data-state', 'saved')
 
-    await $('.example-choices').$('button=Ctrl-click').click()
-    await $('button=Watch example').click()
+    await clickEnabled($('.example-choices').$('button=Ctrl-click'))
+    await clickButton('Watch example')
     await expect($('.demo-pointer')).toBeExisting()
     await sampleItem('research').click()
     await expect($('.tree-demo')).toHaveAttribute('data-phase', 'before')
@@ -919,8 +967,8 @@ describe('Session Flow introduction', () => {
           ? { matches: true }
           : original(query)
     })
-    await $('.example-choices').$('button=Shift-click').click()
-    await $('button=Watch example').click()
+    await clickEnabled($('.example-choices').$('button=Shift-click'))
+    await clickButton('Watch example')
     await expect($('.selection-count')).toHaveText('Selected items: 3')
     await expect($('.demo-pointer')).not.toBeExisting()
     expect(await tabIds()).toEqual(tabsBefore)
@@ -930,7 +978,7 @@ describe('Session Flow introduction', () => {
     await openFeatures()
     await feature('labels')
     const tabsBefore = await tabIds()
-    await $('button=Watch example').click()
+    await clickButton('Watch example')
     await expect($('.demo-context-menu button')).toHaveText('Edit Label')
     await expect($('.modal-container')).toBeDisplayed()
     await expect($('.tree-demo')).toHaveAttribute('data-phase', 'after')
@@ -947,13 +995,13 @@ describe('Session Flow introduction', () => {
     await browser.keys(['Control', 'a'])
     await browser.keys('Backspace')
     await expect($('.modal-input')).toHaveValue('')
-    await $('button=OK').click()
+    await clickButton('OK')
     await expect(
       sampleItem('research').$('.tree-item-custom-label'),
     ).not.toBeExisting()
     await expect(sampleItem('research')).toHaveText('Research')
-    await $('.example-choices').$('button=Window').click()
-    await $('button=Watch example').click()
+    await clickEnabled($('.example-choices').$('button=Window'))
+    await clickButton('Watch example')
     await expect($('.demo-context-menu button')).toHaveText('Edit Title')
     await expect($('.tree-demo')).toHaveAttribute('data-phase', 'after')
     await expect(sampleItem('window').$('.tree-item-title')).toHaveText(
@@ -962,14 +1010,14 @@ describe('Session Flow introduction', () => {
     await sampleItem('window').click({ button: 'right' })
     await $('.demo-context-menu button').click()
     await $('.modal-input').setValue('Travel')
-    await $('button=OK').click()
+    await clickButton('OK')
     await expect(sampleItem('window').$('.tree-item-title')).toHaveText(
       'Travel',
     )
     await sampleItem('window').click({ button: 'right' })
     await $('.demo-context-menu button').click()
     await $('.modal-input').setValue('Cancelled change')
-    await $('button=Cancel').click()
+    await clickButton('Cancel')
     await expect(sampleItem('window').$('.tree-item-title')).toHaveText(
       'Travel',
     )
@@ -978,7 +1026,7 @@ describe('Session Flow introduction', () => {
     await $('.demo-context-menu button').click()
     await expect($('.modal-input')).toHaveValue('')
     await $('.modal-input').setValue('Work')
-    await $('button=OK').click()
+    await clickButton('OK')
     await expect(
       sampleItem('research').$('.tree-item-custom-label'),
     ).toHaveText('Work')
@@ -994,14 +1042,14 @@ describe('Session Flow introduction', () => {
         Promise.reject(new Error('private access unavailable'))
     })
     await openFeatures()
-    await $('button=Skip tips').click()
+    await clickButton('Skip tips')
     await expect($('h1')).toHaveText('Include Private Windows')
     await expect($('.access-status strong')).toHaveText('Not allowed')
     await expect($('button=Next')).toBeEnabled()
     await expect($('button=Skip introduction')).toBeEnabled()
-    await $('button=Check again').click()
+    await clickButton('Check again')
     await expect($('button=Next')).toBeEnabled()
-    await $('button=Next').click()
+    await clickButton('Next')
     await expect($('h1')).toHaveText('Make yourself at home')
     await expect($('.settings-access button')).toBeEnabled()
   })
@@ -1036,11 +1084,11 @@ describe('Session Flow introduction', () => {
       introductionHandle = await browser.getWindowHandle()
       await expect($('h1')).toHaveText('Welcome to Session Flow')
       await openFeatures()
-      await $('button=Skip tips').click()
-      await $('button=Next').click()
+      await clickButton('Skip tips')
+      await clickButton('Next')
       await $('input[value="import"]').click()
       await expect($('button=Import a session')).toBeEnabled()
-      await $('button=Back').click()
+      await clickButton('Back')
       await expect($('.access-status strong')).toHaveText('Not allowed')
 
       // Both checkbox values persist immediately, without completing the tour.
@@ -1103,10 +1151,10 @@ describe('Session Flow introduction', () => {
         resumed.privateWindowOnboarding.privateAccessResume,
       ).toBeUndefined()
       expect(resumed.settings.retainPrivateWindows).toBe(false)
-      await $('button=Next').click()
+      await clickButton('Next')
       await expect($('h1')).toHaveText('Make yourself at home')
       const beforeImport = await browser.getWindowHandles()
-      await $('button=Import a session').click()
+      await clickButton('Import a session')
       await switchToNewHandle(beforeImport, `${optionsUrl}#settings_snapshots`)
       expect((await storedState()).privateWindowOnboarding.status).toBe(
         'completed',

@@ -227,6 +227,7 @@ describe('startup lifecycle', () => {
     vi.doMock('@/services/background-session-snapshots', () => ({
       SessionSnapshots: {
         initialize: initializeSnapshots,
+        listenForRequests: vi.fn(),
         capturePersistedStartupTree,
         handleSettingsUpdated: snapshotSettingsUpdated,
       },
@@ -236,6 +237,7 @@ describe('startup lifecycle', () => {
         initializeContainers,
         initializeWindows,
         restoreStartupTabs,
+        refreshWindowPositionInterval: vi.fn(),
         saveSessionTreeToStorage: vi.fn(),
       },
     }))
@@ -349,6 +351,7 @@ describe('startup lifecycle', () => {
     vi.doMock('@/services/background-session-snapshots', () => ({
       SessionSnapshots: {
         initialize: initializeSnapshots,
+        listenForRequests: vi.fn(),
         capturePersistedStartupTree,
         handleSettingsUpdated: vi.fn().mockResolvedValue(undefined),
       },
@@ -358,6 +361,7 @@ describe('startup lifecycle', () => {
         initializeContainers,
         initializeWindows,
         restoreStartupTabs,
+        refreshWindowPositionInterval: vi.fn(),
         saveSessionTreeToStorage: vi.fn(),
       },
     }))

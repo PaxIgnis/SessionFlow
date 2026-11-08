@@ -330,6 +330,7 @@ export function updateWindowPositionInterval(): void {
     clearInterval(Tree.windowPositionInterval)
     Tree.windowPositionInterval = undefined
   }
+  appliedWindowPositionSettings = windowPositionSettingsKey()
   if (!Settings.values.openWindowsInSameLocation) {
     return
   }
@@ -370,6 +371,26 @@ export function updateWindowPositionInterval(): void {
       console.error('Error updating window positions:', error)
     }
   }, intervalMs)
+}
+
+let appliedWindowPositionSettings: string | undefined
+
+function windowPositionSettingsKey(): string {
+  return JSON.stringify([
+    Settings.values.openWindowsInSameLocation,
+    Settings.values.openWindowsInSameLocationUpdateInterval,
+    Settings.values.openWindowsInSameLocationUpdateIntervalUnit,
+  ])
+}
+
+/**
+ * Restarts window position tracking when its settings changed since it was
+ * last started. Runs after every settings reload, so the change applies even
+ * when an openWindowsInSameLocationUpdated message arrives before the reload.
+ */
+export function refreshWindowPositionInterval(): void {
+  if (windowPositionSettingsKey() === appliedWindowPositionSettings) return
+  updateWindowPositionInterval()
 }
 
 /**
