@@ -20,8 +20,13 @@ async function clickEnabled(element) {
   await element.click()
 }
 const clickButton = (label) => clickEnabled($(`button=${label}`))
-const feature = (id) =>
-  clickEnabled($(`.tip-tabs button[data-feature-id="${id}"]`))
+// A feature tab saves progress before it swaps the example, so wait for the
+// swap; otherwise the next click can land on the previous feature's example.
+async function feature(id) {
+  const tab = $(`.tip-tabs button[data-feature-id="${id}"]`)
+  await clickEnabled(tab)
+  await expect(tab).toHaveAttribute('aria-current', 'step')
+}
 const sampleItem = (id) => $(`.tree-demo [data-example-id="${id}"]`)
 
 async function expectHeadingFocus(selector) {
@@ -41,6 +46,23 @@ async function tabIds() {
       .query({})
       .then((tabs) => done(tabs.map((tab) => tab.id))),
   )
+}
+
+async function closeTabsWithUrl(url) {
+  const result = await browser.executeAsync((prefix, done) => {
+    window.browser.tabs
+      .query({})
+      .then((tabs) =>
+        window.browser.tabs.remove(
+          tabs
+            .filter((tab) => tab.url?.startsWith(prefix))
+            .map((tab) => tab.id),
+        ),
+      )
+      .then(() => done({ ok: true }))
+      .catch((error) => done({ ok: false, error: String(error) }))
+  }, url)
+  if (!result.ok) throw new Error(`Failed to close ${url}: ${result.error}`)
 }
 
 async function openFeatures() {
@@ -388,20 +410,25 @@ describe('Session Flow introduction', () => {
     await clickButton('Open Settings')
     await switchToNewHandle(settingsHandles, optionsUrl)
     await expect($('#settings_general')).toBeDisplayed()
-    await browser.closeWindow()
+    // Switch back before closing the settings tab, through the extension
+    // API: closing the tab WebDriver is switched to can leave later element
+    // lookups in this tab pointing at the closed one.
     await browser.switchToWindow(introductionHandle)
-    // Look the heading up again on each try: a reference found while Firefox
-    // is still switching back from the closed settings tab can be stale.
-    await browser.waitUntil(
-      async () => {
-        try {
-          return (await $('h1').getText()) === 'Make yourself at home'
-        } catch {
-          return false
-        }
-      },
-      { timeoutMsg: 'Expected the introduction to show its last step again.' },
-    )
+    await closeTabsWithUrl(optionsUrl)
+    let lastHeading
+    try {
+      await browser.waitUntil(async () => {
+        lastHeading = await browser.execute(
+          () => document.querySelector('h1')?.textContent?.trim() ?? null,
+        )
+        return lastHeading === 'Make yourself at home'
+      })
+    } catch (error) {
+      throw new Error(
+        `Expected the introduction to show its last step again. Last heading: ${JSON.stringify(lastHeading)}`,
+        { cause: error },
+      )
+    }
     await expect($('.startup-choice input')).toBeChecked()
     expect((await storedState()).privateWindowOnboarding.status).toBe('pending')
     const previous = await browser.getWindowHandles()

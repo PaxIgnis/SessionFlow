@@ -429,22 +429,35 @@ describe('Firefox item lifecycle workflows', () => {
       width: 900,
       height: 700,
     })
-    const normalWindow = await firefoxWindowSnapshot(original.window.id)
-    const expectedNormalBounds = {
-      left: normalWindow.left,
-      top: normalWindow.top,
-      width: normalWindow.width,
-      height: normalWindow.height,
+    // Compare against Firefox's live bounds on every pass: the window manager
+    // can still adjust the window after windows.update resolves, and the
+    // tracker records wherever the window settles.
+    let liveBounds
+    let trackedBounds
+    try {
+      await browser.waitUntil(async () => {
+        const live = await firefoxWindowSnapshot(original.window.id)
+        liveBounds = {
+          left: live.left,
+          top: live.top,
+          width: live.width,
+          height: live.height,
+        }
+        const tree = await sessionTree.backgroundTreeSnapshot()
+        trackedBounds = windowsInTree(tree).find(
+          (windowItem) => windowItem.uid === original.window.uid,
+        )?.windowPosition
+        return (
+          live.state === 'normal' &&
+          JSON.stringify(trackedBounds) === JSON.stringify(liveBounds)
+        )
+      })
+    } catch (error) {
+      throw new Error(
+        `Expected initial normal-state bounds to be captured. Firefox: ${JSON.stringify(liveBounds)}. Tracked: ${JSON.stringify(trackedBounds)}`,
+        { cause: error },
+      )
     }
-    await sessionTree.waitForBackgroundTree((tree) => {
-      const tracked = windowsInTree(tree).find(
-        (windowItem) => windowItem.uid === original.window.uid,
-      )
-      return (
-        JSON.stringify(tracked?.windowPosition) ===
-        JSON.stringify(expectedNormalBounds)
-      )
-    }, 'Expected initial normal-state bounds to be captured.')
 
     for (const state of ['maximized', 'minimized', 'fullscreen']) {
       const before = await trackedWindowPosition(original.window.uid)

@@ -59,6 +59,10 @@ export class SessionSnapshotService {
   private resolveTreeInitialized!: () => void
   private alarmListenerRegistered = false
   private runtimeListenerRegistered = false
+  private initialized = false
+  // Requests that arrive before initialize() finishes wait on this.
+  private initialization: Promise<void> = Promise.resolve()
+  private resolveInitialization: (() => void) | undefined
   private readonly repository: SessionSnapshotRepository
   private readonly getTreeItems: () => readonly TopLevelTreeItem[]
   private readonly now: () => number
@@ -82,17 +86,39 @@ export class SessionSnapshotService {
         Tree.appendTreeItemsAfterPersist(restoredItems, expectedCurrentItems))
   }
 
+  /**
+   * Answers snapshot requests from the moment the background starts. Without
+   * a listener, a request sent while startup is still loading settings (such
+   * as from an options page Firefox restored) resolves with no response.
+   * Requests wait until initialize() finishes.
+   */
+  listenForRequests(): void {
+    if (this.runtimeListenerRegistered) return
+    if (!this.initialized && !this.resolveInitialization) {
+      this.initialization = new Promise<void>((resolve) => {
+        this.resolveInitialization = resolve
+      })
+    }
+    browser.runtime.onMessage.addListener(this.handleRuntimeMessage)
+    this.runtimeListenerRegistered = true
+  }
+
   async initialize(): Promise<void> {
-    if (!this.runtimeListenerRegistered) {
-      browser.runtime.onMessage.addListener(this.handleRuntimeMessage)
-      this.runtimeListenerRegistered = true
+    try {
+      this.listenForRequests()
+      if (!this.alarmListenerRegistered) {
+        browser.alarms.onAlarm.addListener(this.handleAlarm)
+        this.alarmListenerRegistered = true
+      }
+      await this.repository.initialize()
+      await this.rescheduleAlarm()
+    } finally {
+      // Release waiting requests even when startup failed; each one then
+      // reports its own error.
+      this.initialized = true
+      this.resolveInitialization?.()
+      this.resolveInitialization = undefined
     }
-    if (!this.alarmListenerRegistered) {
-      browser.alarms.onAlarm.addListener(this.handleAlarm)
-      this.alarmListenerRegistered = true
-    }
-    await this.repository.initialize()
-    await this.rescheduleAlarm()
   }
 
   async handleSettingsUpdated(): Promise<void> {
@@ -138,6 +164,7 @@ export class SessionSnapshotService {
     message: SessionSnapshotRequest,
   ): Promise<SessionSnapshotResponse> {
     try {
+      await this.initialization
       if (message.action === 'listSessionSnapshots') {
         return { ok: true, data: await this.list() }
       }

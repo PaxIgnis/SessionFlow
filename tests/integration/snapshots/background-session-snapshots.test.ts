@@ -58,6 +58,37 @@ describe('background session snapshots', () => {
     )
   })
 
+  it('answers a request sent before initialization once storage is ready', async () => {
+    service.listenForRequests()
+    const listSpy = vi.spyOn(repository, 'listMetadata')
+
+    const response = service.handleRuntimeMessage({
+      action: 'listSessionSnapshots',
+    })
+    await Promise.resolve()
+    expect(listSpy).not.toHaveBeenCalled()
+
+    await service.initialize()
+
+    await expect(response).resolves.toMatchObject({
+      ok: true,
+      data: { snapshots: [] },
+    })
+    expect(repository.initialized).toBe(true)
+  })
+
+  it('releases early requests when initialization fails', async () => {
+    service.listenForRequests()
+    vi.spyOn(repository, 'initialize').mockRejectedValue(new Error('db failed'))
+    const response = service.handleRuntimeMessage({
+      action: 'listSessionSnapshots',
+    })
+
+    await expect(service.initialize()).rejects.toThrow('db failed')
+
+    await expect(response).resolves.toHaveProperty('ok')
+  })
+
   it('reschedules hours and clears the alarm when automatic snapshots are disabled', async () => {
     Settings.values.sessionSnapshotInterval = 2
     Settings.values.sessionSnapshotIntervalUnit = 'hours'

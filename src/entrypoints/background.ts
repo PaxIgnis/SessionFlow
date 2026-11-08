@@ -15,6 +15,7 @@ export default defineBackground(() => {
   })
 
   DeferredEventsQueue.initializeDeferredEventsQueue()
+  SessionSnapshots.listenForRequests()
   Actions.setupBrowserActionMenu()
   let startBackground: () => void = () => undefined
   const backgroundReady = new Promise<void>((resolve, reject) => {
