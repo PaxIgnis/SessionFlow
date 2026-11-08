@@ -256,8 +256,15 @@ describe('favicon and redirect workflows', () => {
       /private-browsing|M15\.931/,
     )
 
-    const cache = await readFaviconCache()
-    expect(cache.entries.some((entry) => entry.url === '127.0.0.1')).toBe(false)
+    // The tree shows the fallback as soon as its own settings reload; the
+    // background purges the stored entry separately, after that.
+    await browser.waitUntil(
+      async () => {
+        const cache = await readFaviconCache()
+        return !cache.entries.some((entry) => entry.url === '127.0.0.1')
+      },
+      { timeoutMsg: 'Expected the private favicon entry to be purged.' },
+    )
   })
 
   it('shares an allowed private favicon cache entry with normal tabs without pruning it on private close (PD-FR-06)', async () => {
