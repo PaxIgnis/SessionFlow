@@ -2050,6 +2050,29 @@ describe('background handlers', () => {
     })
   })
 
+  it('routes unload commands to tabs.discard and reports Firefox rejections', async () => {
+    const { fakeBrowser, initializeListeners, mocks } =
+      await loadBackgroundHandlers()
+    initializeListeners()
+    const dispatchCommand = getDispatchCommand(mocks.initializeSessionTreePort)
+
+    await dispatchCommand({
+      action: 'unloadTab',
+      tabId: 31,
+      tabUid: 'tab-31' as UID,
+    })
+    expect(fakeBrowser.tabs.discard).toHaveBeenCalledWith(31)
+
+    fakeBrowser.tabs.discard.mockRejectedValueOnce(new Error('no such tab'))
+    await expect(
+      dispatchCommand({
+        action: 'unloadTab',
+        tabId: 32,
+        tabUid: 'tab-32' as UID,
+      }),
+    ).rejects.toThrow('no such tab')
+  })
+
   it('routes note and collapse commands to tree methods with command payload fields', async () => {
     const { initializeListeners, mocks } = await loadBackgroundHandlers()
     initializeListeners()

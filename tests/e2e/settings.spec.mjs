@@ -96,6 +96,7 @@ describe('settings workflows', () => {
       'duplicateTreeItemDescendants',
       'contextMenuOpenDescendants',
       'contextMenuReloadDescendants',
+      'contextMenuUnloadDescendants',
       'contextMenuSaveDescendants',
       'contextMenuPinDescendants',
       'includeChildrenOfSelectedItemsWhenIndenting',

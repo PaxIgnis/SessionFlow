@@ -9,6 +9,7 @@ import {
   type ContextMenuDescendantScope,
 } from '@/services/selection-actions'
 import { Settings } from '@/services/settings'
+import { canUnloadTab } from '@/services/tree-utils'
 import { ContextMenuItem } from '@/types/context-menu'
 import { State, type Tab, TreeItemType } from '@/types/session-tree'
 
@@ -102,6 +103,18 @@ export const contextMenuItemsTab: Record<string, () => ContextMenuItem> = {
       icon: 'reload',
       enabled: tabs.some(isOpenTab),
       action: () => Messages.reloadTabs(tabs),
+    }
+  },
+
+  unloadTab: () => {
+    const tabs = selectedTabsForScope(
+      Settings.values.contextMenuUnloadDescendants,
+    )
+    return {
+      id: 'unloadTab',
+      label: i18n.t('unload'),
+      enabled: tabs.some(canUnloadTab),
+      action: () => Messages.unloadTabs(tabs),
     }
   },
 

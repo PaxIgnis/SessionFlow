@@ -63,6 +63,12 @@ export interface ReloadTabMessage {
   tabUid: UID
 }
 
+export interface UnloadTabMessage {
+  action: 'unloadTab'
+  tabId: number
+  tabUid: UID
+}
+
 export interface SaveTabMessage {
   action: 'saveTab'
   tabId: number
@@ -283,6 +289,7 @@ export type SessionTreeMessage =
   | ToggleCollapseTabMessage
   | ToggleCollapseNoteMessage
   | ToggleCollapseWindowMessage
+  | UnloadTabMessage
   | UnpinTabMessage
   | UpdateCustomLabelMessage
   | UpdateNoteTextMessage

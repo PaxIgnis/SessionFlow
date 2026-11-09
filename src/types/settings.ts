@@ -21,6 +21,7 @@ export interface Settings extends KeyboardSettings {
   contextMenuDeleteDescendants: (typeof SETTINGS_TYPES.contextMenuDeleteDescendants)[number]
   contextMenuOpenDescendants: (typeof SETTINGS_TYPES.contextMenuOpenDescendants)[number]
   contextMenuReloadDescendants: (typeof SETTINGS_TYPES.contextMenuReloadDescendants)[number]
+  contextMenuUnloadDescendants: (typeof SETTINGS_TYPES.contextMenuUnloadDescendants)[number]
   contextMenuSaveDescendants: (typeof SETTINGS_TYPES.contextMenuSaveDescendants)[number]
   contextMenuPinDescendants: (typeof SETTINGS_TYPES.contextMenuPinDescendants)[number]
 
@@ -105,6 +106,7 @@ export const SETTINGS_TYPES = {
   contextMenuDeleteDescendants: ['always', 'collapsed', 'never'],
   contextMenuOpenDescendants: ['always', 'collapsed', 'never'],
   contextMenuReloadDescendants: ['always', 'collapsed', 'never'],
+  contextMenuUnloadDescendants: ['always', 'collapsed', 'never'],
   contextMenuSaveDescendants: ['always', 'collapsed', 'never'],
   contextMenuPinDescendants: ['always', 'collapsed', 'never'],
   duplicatedItemState: ['saved', 'match-original'],

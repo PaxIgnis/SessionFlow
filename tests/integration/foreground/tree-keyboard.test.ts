@@ -415,6 +415,24 @@ describe('tree keyboard interaction', () => {
     expect(ModalState.active?.kind).toBe('editCustomLabel')
   })
 
+  it('unloads selected tabs, including descendants per the unload scope', async () => {
+    const items = fixture()
+    selectKeyboardItem(items[1])
+    Settings.values.shortcutUnload = 'U'
+    const unload = vi.spyOn(Messages, 'unloadTabs').mockResolvedValue()
+
+    Settings.values.contextMenuUnloadDescendants = 'never'
+    await handleTreeKeydown(key('u'), items)
+    expect(unload).toHaveBeenLastCalledWith([items[1]])
+
+    Settings.values.contextMenuUnloadDescendants = 'always'
+    await handleTreeKeydown(key('u'), items)
+    expect(unload).toHaveBeenLastCalledWith([
+      expect.objectContaining({ uid: 'parent' }),
+      expect.objectContaining({ uid: 'child' }),
+    ])
+  })
+
   it('duplicates descendants according to the configured duplicate scope', async () => {
     const items = fixture()
     selectKeyboardItem(items[1])

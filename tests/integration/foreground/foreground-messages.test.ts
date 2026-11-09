@@ -1130,6 +1130,35 @@ describe('foreground message helpers', () => {
     expect(showPrivateWindowAccessRequired).toHaveBeenCalledWith('tab')
   })
 
+  it('unloads only loaded tabs that are not active in their window', async () => {
+    const { unloadTabs } = await import('@/services/foreground-messages')
+    const saved = makeForegroundTab('saved' as UID, {
+      id: -1,
+      state: State.SAVED,
+    })
+    const open = makeForegroundTab('open' as UID, {
+      id: 10,
+      state: State.OPEN,
+    })
+    const active = makeForegroundTab('active' as UID, {
+      id: 11,
+      state: State.OPEN,
+      active: true,
+    })
+    const discarded = makeForegroundTab('discarded' as UID, {
+      id: 12,
+      state: State.DISCARDED,
+    })
+
+    await unloadTabs([saved, active, discarded])
+    expect(sendTreeCommand).not.toHaveBeenCalled()
+
+    await unloadTabs([saved, open, active, discarded])
+    expect(sendTreeCommand.mock.calls.map(([message]) => message)).toEqual([
+      { action: 'unloadTab', tabId: 10, tabUid: 'open' },
+    ])
+  })
+
   it('filters bulk tab actions to items eligible for each action', async () => {
     const { pinTabs, reloadTabs, saveTabs, unpinTabs } =
       await import('@/services/foreground-messages')
