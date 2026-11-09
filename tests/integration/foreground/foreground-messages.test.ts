@@ -638,6 +638,147 @@ describe('foreground message helpers', () => {
     await Promise.all([first, second])
   })
 
+  it('opens only saved windows, waiting for each before starting the next', async () => {
+    const { openWindows } = await import('@/services/foreground-messages')
+    const first = makeForegroundWindow('window-a' as UID, [], {
+      state: State.SAVED,
+    })
+    const live = makeForegroundWindow('window-live' as UID, [], {
+      state: State.OPEN,
+    })
+    const second = makeForegroundWindow('window-b' as UID, [], {
+      state: State.SAVED,
+    })
+    resetForegroundTree([first, live, second])
+    sendTreeCommand.mockClear()
+    let finishFirst!: () => void
+    sendTreeCommand.mockImplementationOnce(
+      () =>
+        new Promise<undefined>((resolve) => {
+          finishFirst = () => resolve(undefined)
+        }),
+    )
+
+    const opening = openWindows([first, live, second])
+    await vi.waitFor(() => expect(sendTreeCommand).toHaveBeenCalledOnce())
+    expect(sendTreeCommand).toHaveBeenCalledWith({
+      action: 'openWindow',
+      windowUid: 'window-a',
+    })
+
+    finishFirst()
+    await opening
+    expect(sendTreeCommand).toHaveBeenCalledTimes(2)
+    expect(sendTreeCommand).toHaveBeenLastCalledWith({
+      action: 'openWindow',
+      windowUid: 'window-b',
+    })
+  })
+
+  it('keeps opening the remaining windows after one fails', async () => {
+    const { openWindows } = await import('@/services/foreground-messages')
+    const first = makeForegroundWindow('window-a' as UID, [], {
+      state: State.SAVED,
+    })
+    const second = makeForegroundWindow('window-b' as UID, [], {
+      state: State.SAVED,
+    })
+    resetForegroundTree([first, second])
+    sendTreeCommand.mockClear()
+    showNotification.mockClear()
+    sendTreeCommand.mockRejectedValueOnce(new Error('open failed'))
+
+    await openWindows([first, second])
+
+    expect(sendTreeCommand).toHaveBeenCalledTimes(2)
+    expect(showNotification).toHaveBeenCalledWith(
+      expect.stringMatching(/could not open 1 of 2 windows/),
+    )
+  })
+
+  it('skips private windows when private access is not allowed', async () => {
+    const { openWindows } = await import('@/services/foreground-messages')
+    const regular = makeForegroundWindow('window-regular' as UID, [], {
+      state: State.SAVED,
+    })
+    const privateWindow = makeForegroundWindow('window-private' as UID, [], {
+      state: State.SAVED,
+      incognito: true,
+    })
+    resetForegroundTree([regular, privateWindow])
+    sendTreeCommand.mockClear()
+    showPrivateWindowAccessRequired.mockClear()
+    isPrivateWindowAccessAllowed.mockResolvedValueOnce(false)
+
+    await openWindows([regular, privateWindow])
+
+    expect(showPrivateWindowAccessRequired).toHaveBeenCalledWith('window')
+    expect(sendTreeCommand).toHaveBeenCalledOnce()
+    expect(sendTreeCommand).toHaveBeenCalledWith({
+      action: 'openWindow',
+      windowUid: 'window-regular',
+    })
+  })
+
+  it('keeps every selected window in one container recovery request', async () => {
+    const { openWindows, resolveContainerRecoveryModal } =
+      await import('@/services/foreground-messages')
+    const work = {
+      cookieStoreId: 'firefox-container-work',
+      name: 'Work',
+      color: 'blue',
+      colorCode: '#37adff',
+      icon: 'briefcase',
+    }
+    const personal = {
+      ...work,
+      cookieStoreId: 'firefox-container-personal',
+      name: 'Personal',
+    }
+    const first = makeForegroundWindow(
+      'window-work' as UID,
+      [makeForegroundTab('tab-work' as UID, { container: work })],
+      { state: State.SAVED },
+    )
+    const second = makeForegroundWindow(
+      'window-personal' as UID,
+      [makeForegroundTab('tab-personal' as UID, { container: personal })],
+      { state: State.SAVED },
+    )
+    resetForegroundTree([first, second])
+    sendTreeCommand.mockClear()
+
+    await openWindows([first, second])
+    await vi.waitFor(() => {
+      expect(ModalState.active?.kind).toBe('containerRecovery')
+    })
+
+    expect(ModalState.active).toMatchObject({
+      target: {
+        type: 'windows',
+        windowUids: ['window-work', 'window-personal'],
+      },
+      missingContainers: [work, personal],
+    })
+    expect(sendTreeCommand).not.toHaveBeenCalled()
+
+    await resolveContainerRecoveryModal('without-container')
+
+    expect(sendTreeCommand).toHaveBeenNthCalledWith(1, {
+      action: 'openWindow',
+      windowUid: 'window-work',
+      containerRecovery: 'without-container',
+      containerRecoveryStoreIds: ['firefox-container-work'],
+    })
+    expect(sendTreeCommand).toHaveBeenNthCalledWith(2, {
+      action: 'openWindow',
+      windowUid: 'window-personal',
+      containerRecovery: 'without-container',
+      containerRecoveryStoreIds: ['firefox-container-personal'],
+    })
+    expect(ModalState.active).toBeNull()
+  })
+
   it('keeps every selected tab in one bulk container recovery request', async () => {
     const { openTabs, resolveContainerRecoveryModal } =
       await import('@/services/foreground-messages')

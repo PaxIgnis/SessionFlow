@@ -208,6 +208,16 @@ function selectedForScope(scope: 'always' | 'collapsed' | 'never'): TreeItem[] {
   )
 }
 
+/** Tab-only shortcuts act on selected tabs and on every tab of selected windows. */
+function selectedTabsForShortcut(
+  scope: 'always' | 'collapsed' | 'never',
+): Tab[] {
+  return collectContextMenuActionItems(
+    [...Selection.getSelectedWindows(), ...Selection.getSelectedTabs()],
+    scope,
+  ).filter((target): target is Tab => target.type === TreeItemType.TAB)
+}
+
 async function runShortcut(
   key: TreeShortcutKey,
   item?: TreeItem,
@@ -282,22 +292,17 @@ async function runShortcut(
       ),
     )
   } else if (key === 'shortcutReload') {
-    const tabs = collectContextMenuActionItems(
-      Selection.getSelectedTabs(),
-      Settings.values.contextMenuReloadDescendants,
-    ).filter((target): target is Tab => target.type === TreeItemType.TAB)
-    await Messages.reloadTabs(tabs)
+    await Messages.reloadTabs(
+      selectedTabsForShortcut(Settings.values.contextMenuReloadDescendants),
+    )
   } else if (key === 'shortcutUnload') {
-    const tabs = collectContextMenuActionItems(
-      Selection.getSelectedTabs(),
-      Settings.values.contextMenuUnloadDescendants,
-    ).filter((target): target is Tab => target.type === TreeItemType.TAB)
-    await Messages.unloadTabs(tabs)
+    await Messages.unloadTabs(
+      selectedTabsForShortcut(Settings.values.contextMenuUnloadDescendants),
+    )
   } else if (key === 'shortcutPin') {
-    const tabs = collectContextMenuActionItems(
-      Selection.getSelectedTabs(),
+    const tabs = selectedTabsForShortcut(
       Settings.values.contextMenuPinDescendants,
-    ).filter((target): target is Tab => target.type === TreeItemType.TAB)
+    )
     if (tabs.every((tab) => tab.pinned)) await Messages.unpinTabs(tabs)
     else await Messages.pinTabs(tabs)
   }

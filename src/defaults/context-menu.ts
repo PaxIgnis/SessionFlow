@@ -4,15 +4,18 @@ export const WINDOW_MENU: ContextMenuConfig = [
   { type: ContextMenuItemType.Action, id: 'createNote' },
   { type: ContextMenuItemType.Action, id: 'createSeparator' },
   { type: ContextMenuItemType.Action, id: 'duplicateTreeItem' },
-  // 'newTab',
+  { type: ContextMenuItemType.Action, id: 'newTab' },
+  { type: ContextMenuItemType.Action, id: 'openWindow' },
+  { type: ContextMenuItemType.Action, id: 'reloadWindow' },
+  { type: ContextMenuItemType.Action, id: 'unloadWindow' },
   { type: ContextMenuItemType.Action, id: 'saveWindow' },
+  { type: ContextMenuItemType.Action, id: 'copyWindowUrls' },
   { type: ContextMenuItemType.Action, id: 'deleteTreeItem' },
   { type: ContextMenuItemType.Action, id: 'editWindowTitle' },
   { type: ContextMenuItemType.Action, id: 'treeItemIndentIncrease' },
   { type: ContextMenuItemType.Action, id: 'treeItemIndentDecrease' },
   // 'minimizeWindow',
   // 'maximizeWindow',
-  // 'unloadWindow',
 ]
 
 export const TAB_MENU: ContextMenuConfig = [

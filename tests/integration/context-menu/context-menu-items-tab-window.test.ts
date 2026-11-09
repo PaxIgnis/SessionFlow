@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Selection } from '@/services/selection'
 import { Settings } from '@/services/settings'
 import { SessionTree } from '@/services/foreground-tree'
@@ -18,9 +18,16 @@ const pinTabs = vi.hoisted(() => vi.fn())
 const unpinTabs = vi.hoisted(() => vi.fn())
 const setTabsContainer = vi.hoisted(() => vi.fn())
 const saveWindows = vi.hoisted(() => vi.fn())
+const openWindows = vi.hoisted(() => vi.fn())
 const openModal = vi.hoisted(() => vi.fn())
+const showNotification = vi.hoisted(() => vi.fn())
+
+vi.mock('@/services/notification-state', () => ({
+  showNotification,
+}))
 
 vi.mock('@/services/foreground-messages', () => ({
+  openWindows,
   openTabs,
   reloadTabs,
   unloadTabs,
@@ -323,6 +330,186 @@ describe('window context menu items', () => {
       await import('@/services/context-menu-items-window')
 
     expect(contextMenuItemsWindow.saveWindow().enabled).toBe(true)
+  })
+
+  function selectWindows(
+    ...windows: ReturnType<typeof makeForegroundWindow>[]
+  ) {
+    resetForegroundTree(windows)
+    Selection.selectedItems.value = windows.map((window) => ({
+      item: SessionTree.windowsByUid.get(window.uid)!,
+      type: SelectionType.WINDOW,
+    }))
+  }
+
+  it('opens only saved windows and is disabled when none are selected', async () => {
+    const saved = makeForegroundWindow('window-saved' as UID, [], {
+      state: State.SAVED,
+    })
+    const live = makeForegroundWindow('window-live' as UID, [], {
+      state: State.OPEN,
+    })
+    const { contextMenuItemsWindow } =
+      await import('@/services/context-menu-items-window')
+
+    selectWindows(live)
+    expect(contextMenuItemsWindow.openWindow().enabled).toBe(false)
+
+    selectWindows(saved, live)
+    const open = contextMenuItemsWindow.openWindow()
+    expect(open.enabled).toBe(true)
+    open.action?.()
+    expect(openWindows).toHaveBeenCalledWith([
+      expect.objectContaining({ uid: saved.uid }),
+    ])
+  })
+
+  it('reloads and unloads every tab of the selected window, ignoring descendant scope', async () => {
+    const tabs = [
+      makeForegroundTab('tab-open' as UID, { state: State.OPEN }),
+      makeForegroundTab('tab-unloaded' as UID, { state: State.DISCARDED }),
+      makeForegroundTab('tab-saved' as UID, { state: State.SAVED }),
+    ]
+    selectWindows(
+      makeForegroundWindow('window-1' as UID, tabs, { state: State.OPEN }),
+    )
+    Settings.values.contextMenuReloadDescendants = 'never'
+    Settings.values.contextMenuUnloadDescendants = 'never'
+    const { contextMenuItemsWindow } =
+      await import('@/services/context-menu-items-window')
+    const everyTab = tabs.map(({ uid }) => expect.objectContaining({ uid }))
+
+    const reload = contextMenuItemsWindow.reloadWindow()
+    expect(reload).toMatchObject({ id: 'reloadWindow', label: 'Reload tabs' })
+    reload.action?.()
+    expect(reloadTabs).toHaveBeenCalledWith(everyTab)
+
+    const unload = contextMenuItemsWindow.unloadWindow()
+    expect(unload).toMatchObject({ id: 'unloadWindow', label: 'Unload tabs' })
+    unload.action?.()
+    expect(unloadTabs).toHaveBeenCalledWith(everyTab)
+  })
+
+  it('disables reload and unload when no tab can be acted on', async () => {
+    selectWindows(
+      makeForegroundWindow(
+        'window-1' as UID,
+        [makeForegroundTab('tab-saved' as UID, { state: State.SAVED })],
+        { state: State.SAVED },
+      ),
+    )
+    const { contextMenuItemsWindow } =
+      await import('@/services/context-menu-items-window')
+
+    expect(contextMenuItemsWindow.reloadWindow().enabled).toBe(false)
+    expect(contextMenuItemsWindow.unloadWindow().enabled).toBe(false)
+  })
+
+  it('creates a new tab in each selected live window only', async () => {
+    const browser = installFakeBrowser()
+    const saved = makeForegroundWindow('window-saved' as UID, [], {
+      state: State.SAVED,
+    })
+    const live = makeForegroundWindow('window-live' as UID, [], {
+      id: 42,
+      state: State.OPEN,
+    })
+    const { contextMenuItemsWindow } =
+      await import('@/services/context-menu-items-window')
+
+    selectWindows(saved)
+    expect(contextMenuItemsWindow.newTab().enabled).toBe(false)
+
+    selectWindows(saved, live)
+    const newTab = contextMenuItemsWindow.newTab()
+    expect(newTab.enabled).toBe(true)
+    newTab.action?.()
+    expect(browser.tabs.create).toHaveBeenCalledOnce()
+    expect(browser.tabs.create).toHaveBeenCalledWith({ windowId: 42 })
+  })
+
+  describe('copying URLs', () => {
+    const urls = ['https://a.test/', 'https://b.test/']
+    function selectWindowWithTabs() {
+      selectWindows(
+        makeForegroundWindow(
+          'window-1' as UID,
+          [
+            makeForegroundTab('tab-a' as UID, {
+              state: State.OPEN,
+              url: urls[0],
+            }),
+            makeForegroundTab('tab-b' as UID, {
+              state: State.SAVED,
+              url: urls[1],
+            }),
+          ],
+          { state: State.OPEN },
+        ),
+      )
+    }
+
+    afterEach(() => {
+      vi.unstubAllGlobals()
+    })
+
+    it('copies open and saved tab URLs, one per line', async () => {
+      const browser = installFakeBrowser()
+      browser.permissions.request.mockResolvedValue(true)
+      const writeText = vi.fn().mockResolvedValue(undefined)
+      vi.stubGlobal('navigator', { clipboard: { writeText } })
+      selectWindowWithTabs()
+      const { contextMenuItemsWindow } =
+        await import('@/services/context-menu-items-window')
+
+      const copy = contextMenuItemsWindow.copyWindowUrls()
+      expect(copy.enabled).toBe(true)
+      copy.action?.()
+
+      // The permission request must start inside the click gesture.
+      expect(browser.permissions.request).toHaveBeenCalledWith({
+        permissions: ['clipboardWrite'],
+      })
+      await vi.waitFor(() => {
+        expect(writeText).toHaveBeenCalledWith(urls.join('\n'))
+      })
+      await vi.waitFor(() => {
+        expect(showNotification).toHaveBeenCalledWith('URLs copied.')
+      })
+    })
+
+    it('reports failure and writes nothing when permission is denied', async () => {
+      const browser = installFakeBrowser()
+      browser.permissions.request.mockResolvedValue(false)
+      const consoleError = vi
+        .spyOn(console, 'error')
+        .mockImplementation(() => {})
+      const writeText = vi.fn()
+      vi.stubGlobal('navigator', { clipboard: { writeText } })
+      selectWindowWithTabs()
+      const { contextMenuItemsWindow } =
+        await import('@/services/context-menu-items-window')
+
+      contextMenuItemsWindow.copyWindowUrls().action?.()
+
+      await vi.waitFor(() => {
+        expect(showNotification).toHaveBeenCalledWith(
+          'Session Flow could not copy the URLs.',
+        )
+      })
+      expect(writeText).not.toHaveBeenCalled()
+      consoleError.mockRestore()
+    })
+
+    it('is disabled for a window with no tabs', async () => {
+      selectWindows(
+        makeForegroundWindow('window-1' as UID, [], { state: State.OPEN }),
+      )
+      const { contextMenuItemsWindow } =
+        await import('@/services/context-menu-items-window')
+
+      expect(contextMenuItemsWindow.copyWindowUrls().enabled).toBe(false)
+    })
   })
 
   it('dispatches window actions and opens edit title modal', async () => {
