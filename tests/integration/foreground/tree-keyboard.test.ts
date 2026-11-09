@@ -415,6 +415,29 @@ describe('tree keyboard interaction', () => {
     expect(ModalState.active?.kind).toBe('editCustomLabel')
   })
 
+  it('applies reload, unload and pin shortcuts to every tab of a selected window', async () => {
+    const items = fixture()
+    selectKeyboardItem(items[0])
+    Settings.values.shortcutReload = 'R'
+    Settings.values.shortcutUnload = 'U'
+    Settings.values.shortcutPin = 'P'
+    // A window always expands to its tabs, whatever the descendant scope says.
+    Settings.values.contextMenuReloadDescendants = 'never'
+    Settings.values.contextMenuUnloadDescendants = 'never'
+    Settings.values.contextMenuPinDescendants = 'never'
+    const reload = vi.spyOn(Messages, 'reloadTabs').mockResolvedValue()
+    const unload = vi.spyOn(Messages, 'unloadTabs').mockResolvedValue()
+    const pin = vi.spyOn(Messages, 'pinTabs').mockResolvedValue()
+    const windowTabs = items.slice(1, 4)
+
+    for (const letter of ['r', 'u', 'p'])
+      await handleTreeKeydown(key(letter), items)
+
+    expect(reload).toHaveBeenCalledWith(windowTabs)
+    expect(unload).toHaveBeenCalledWith(windowTabs)
+    expect(pin).toHaveBeenCalledWith(windowTabs)
+  })
+
   it('unloads selected tabs, including descendants per the unload scope', async () => {
     const items = fixture()
     selectKeyboardItem(items[1])

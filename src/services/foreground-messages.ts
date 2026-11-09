@@ -39,10 +39,13 @@ async function sendActionCommand(
 async function sendBulkCommands(
   messages: Messages.SessionTreeMessage[],
   failureMessage: (failedCount: number, totalCount: number) => string,
+  sequential = false,
 ): Promise<void> {
-  const results = await Promise.allSettled(
-    messages.map((message) => sendTreeCommand(message)),
-  )
+  const results = sequential
+    ? await settleInOrder(messages)
+    : await Promise.allSettled(
+        messages.map((message) => sendTreeCommand(message)),
+      )
   const failedCount = results.filter(
     (result) => result.status === 'rejected',
   ).length
@@ -59,6 +62,16 @@ async function sendBulkCommands(
   if (notificationParts.length > 0) {
     showNotification(notificationParts.join(' '))
   }
+}
+
+async function settleInOrder(messages: Messages.SessionTreeMessage[]) {
+  const results: PromiseSettledResult<
+    Awaited<ReturnType<typeof sendTreeCommand>>
+  >[] = []
+  for (const message of messages) {
+    results.push(...(await Promise.allSettled([sendTreeCommand(message)])))
+  }
+  return results
 }
 
 // ==============================
@@ -487,6 +500,36 @@ export function saveWindows(windows: Array<Window>): Promise<void> {
   )
 }
 
+export async function openWindows(windows: Array<Window>): Promise<void> {
+  let eligibleWindows = windows.filter((window) => window.state === State.SAVED)
+  if (
+    eligibleWindows.some((window) => window.incognito) &&
+    !(await isPrivateWindowAccessAllowed())
+  ) {
+    eligibleWindows = eligibleWindows.filter((window) => !window.incognito)
+    showPrivateWindowAccessRequired('window')
+  }
+  if (eligibleWindows.length === 0) return
+  const windowUids = eligibleWindows.map((window) => window.uid)
+  // One prompt covers the whole selection; a prompt per window would replace
+  // the previous one and silently drop that window.
+  const target: ContainerRecoveryTarget = { type: 'windows', windowUids }
+  const missing = await missingContainers(recoveryTargetTabs(target))
+  if (missing.length > 0) {
+    openContainerRecoveryModal(target, missing)
+    return
+  }
+  await sendBulkCommands(
+    windowUids.map((windowUid) => ({ action: 'openWindow', windowUid })),
+    (failedCount, totalCount) =>
+      i18n.t('failedOpenWindows', [
+        formatNumber(failedCount),
+        formatNumber(totalCount),
+      ]),
+    true,
+  )
+}
+
 export async function windowDoubleClick(
   windowUid: UID,
   windowId: number,
@@ -575,6 +618,9 @@ function copyContainerRecoveryTarget(
   if (target.type === 'tabs') {
     return { type: 'tabs', tabs: target.tabs.map((tab) => ({ ...tab })) }
   }
+  if (target.type === 'windows') {
+    return { type: 'windows', windowUids: [...target.windowUids] }
+  }
   return { ...target }
 }
 
@@ -609,9 +655,38 @@ async function sendContainerRecoveryTarget(
     }
     return
   }
+  if (target.type === 'windows') {
+    while (target.windowUids.length > 0) {
+      const windowUid = target.windowUids[0]
+      const storeIds = new Set(
+        windowTabs(windowUid).map((tab) => tab.container?.cookieStoreId),
+      )
+      await sendOpenWindowTarget(
+        windowUid,
+        recovery
+          ? {
+              ...recovery,
+              storeIds: recovery.storeIds.filter((id) => storeIds.has(id)),
+            }
+          : undefined,
+      )
+      target.windowUids.shift()
+    }
+    return
+  }
+  await sendOpenWindowTarget(target.windowUid, recovery)
+}
+
+async function sendOpenWindowTarget(
+  windowUid: UID,
+  recovery?: {
+    strategy: Messages.ContainerRecoveryStrategy
+    storeIds: string[]
+  },
+): Promise<void> {
   await sendTreeCommand({
     action: 'openWindow',
-    windowUid: target.windowUid,
+    windowUid,
     ...(recovery
       ? {
           containerRecovery: recovery.strategy,
@@ -621,10 +696,16 @@ async function sendContainerRecoveryTarget(
   })
 }
 
+function remainingBulkTargets(target: ContainerRecoveryTarget): number {
+  if (target.type === 'tabs') return target.tabs.length
+  if (target.type === 'windows') return target.windowUids.length
+  return 0
+}
+
 async function retainRemainingBulkRecoveryTarget(
   target: ContainerRecoveryTarget,
 ): Promise<void> {
-  if (target.type !== 'tabs' || target.tabs.length === 0) return
+  if (remainingBulkTargets(target) === 0) return
   const remainingMissingContainers = await missingContainers(
     recoveryTargetTabs(target),
   )
@@ -646,11 +727,17 @@ function recoveryTargetTabs(target: ContainerRecoveryTarget): Tab[] {
       return tab ? [tab] : []
     })
   }
-  const window = SessionTree.windowsByUid.get(target.windowUid)
+  if (target.type === 'windows') return target.windowUids.flatMap(windowTabs)
+  return windowTabs(target.windowUid)
+}
+
+function windowTabs(windowUid: UID): Tab[] {
   return (
-    window?.children.filter(
-      (item): item is Tab => item.type === TreeItemType.TAB,
-    ) ?? []
+    SessionTree.windowsByUid
+      .get(windowUid)
+      ?.children.filter(
+        (item): item is Tab => item.type === TreeItemType.TAB,
+      ) ?? []
   )
 }
 

@@ -57,6 +57,7 @@ export type ContainerRecoveryTarget =
       tabs: ContainerRecoveryTabTarget[]
     }
   | { type: 'window'; windowUid: UID }
+  | { type: 'windows'; windowUids: UID[] }
 
 export const ModalState = reactive<{
   active: ActiveModal
