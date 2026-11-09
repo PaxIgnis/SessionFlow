@@ -1,7 +1,7 @@
 import { $, browser, expect } from '@wdio/globals'
 import { Key } from 'webdriverio'
 import { openOptionsPage } from './support/options-page.mjs'
-import { SessionTreePage } from './support/session-tree-page.mjs'
+import { SessionTreePage, TreeItemState } from './support/session-tree-page.mjs'
 import { openSessionTreePopup } from './support/session-tree-popup.mjs'
 import {
   fixtureDataUrl,
@@ -26,6 +26,7 @@ const defaultShortcuts = {
   shortcutClose: '',
   shortcutSave: '',
   shortcutReload: '',
+  shortcutUnload: '',
   shortcutPin: '',
   shortcutAddNote: '',
   shortcutAddSeparator: '',
@@ -416,6 +417,53 @@ describe('keyboard mappings and tree navigation', () => {
       await $('[aria-labelledby="edit-text-modal-title"]'),
     ).toBeDisplayed()
     await browser.keys('Escape')
+  })
+
+  it('unloads a background tab in Firefox and shows it as unloaded in the tree', async () => {
+    await openTree({ shortcutUnload: 'U' })
+    // The second tab takes focus, leaving the first one eligible for unloading.
+    await browser.newWindow(fixtureDataUrl('Keyboard unload background'), {
+      type: 'window',
+    })
+    await browser.newWindow(fixtureDataUrl('Keyboard unload active'), {
+      type: 'tab',
+    })
+    await browser.switchToWindow(popupHandle)
+    let fixture
+    let tab
+    await page.waitForBackgroundTree((items) => {
+      fixture = items.find(
+        (item) =>
+          item.type === 0 &&
+          item.children.some((child) =>
+            child.title?.startsWith('Keyboard unload active'),
+          ),
+      )
+      tab = fixture?.children.find((child) =>
+        child.title?.startsWith('Keyboard unload background'),
+      )
+      return tab?.state === TreeItemState.Open
+    }, 'Expected both unload fixture tabs to finish loading.')
+    fixtureWindows.push(fixture.uid)
+
+    const row = await page.treeItemByUid(tab.uid)
+    await row.scrollIntoView({ block: 'center', inline: 'nearest' })
+    await row.click()
+    await browser.keys('u')
+
+    await page.waitForBackgroundTree(
+      (items) =>
+        items
+          .find((item) => item.uid === fixture.uid)
+          ?.children.find((item) => item.uid === tab.uid)?.state ===
+        TreeItemState.Discarded,
+      'Expected the tree to report the tab as unloaded.',
+    )
+    const native = await browser.executeAsync(
+      (id, done) => window.browser.tabs.get(id).then(done),
+      tab.id,
+    )
+    expect(native.discarded).toBe(true)
   })
 
   it('runs reload, pin/unpin, label/note editing, note/separator creation, save, activate, and close on real tabs', async () => {

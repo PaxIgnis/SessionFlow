@@ -13,6 +13,7 @@ import {
 } from '@/services/notification-state'
 import { SessionTree } from '@/services/foreground-tree'
 import { Settings } from '@/services/settings'
+import { canUnloadTab } from '@/services/tree-utils'
 import { isPrivateWindowAccessAllowed } from '@/services/utils'
 import * as Messages from '@/types/messages'
 import type { SessionTreeCommandResult } from '@/types/runtime-port-service'
@@ -292,6 +293,23 @@ export function reloadTabs(tabs: Array<Tab>): Promise<void> {
     })),
     (failedCount, totalCount) =>
       i18n.t('failedReloadTabs', [
+        formatNumber(failedCount),
+        formatNumber(totalCount),
+      ]),
+  )
+}
+
+export function unloadTabs(tabs: Array<Tab>): Promise<void> {
+  const eligibleTabs = tabs.filter(canUnloadTab)
+  if (eligibleTabs.length === 0) return Promise.resolve()
+  return sendBulkCommands(
+    eligibleTabs.map((tab) => ({
+      action: 'unloadTab',
+      tabId: tab.id,
+      tabUid: tab.uid,
+    })),
+    (failedCount, totalCount) =>
+      i18n.t('failedUnloadTabs', [
         formatNumber(failedCount),
         formatNumber(totalCount),
       ]),

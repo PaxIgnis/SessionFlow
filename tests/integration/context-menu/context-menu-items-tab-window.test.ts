@@ -12,6 +12,7 @@ import {
 
 const openTabs = vi.hoisted(() => vi.fn())
 const reloadTabs = vi.hoisted(() => vi.fn())
+const unloadTabs = vi.hoisted(() => vi.fn())
 const saveTabs = vi.hoisted(() => vi.fn())
 const pinTabs = vi.hoisted(() => vi.fn())
 const unpinTabs = vi.hoisted(() => vi.fn())
@@ -22,6 +23,7 @@ const openModal = vi.hoisted(() => vi.fn())
 vi.mock('@/services/foreground-messages', () => ({
   openTabs,
   reloadTabs,
+  unloadTabs,
   saveTabs,
   pinTabs,
   unpinTabs,
@@ -197,6 +199,41 @@ describe('tab context menu items', () => {
 
     const reload = contextMenuItemsTab.reloadTab()
     expect(reload.enabled).toBe(false)
+  })
+
+  it('enables unload only when a selected tab can actually be unloaded', async () => {
+    const select = (...tabs: ReturnType<typeof makeForegroundTab>[]) => {
+      Selection.selectedItems.value = tabs.map((item) => ({
+        item,
+        type: SelectionType.TAB,
+      }))
+    }
+    const saved = makeForegroundTab('saved' as UID, { state: State.SAVED })
+    const discarded = makeForegroundTab('unloaded' as UID, {
+      state: State.DISCARDED,
+    })
+    const active = makeForegroundTab('active' as UID, {
+      state: State.OPEN,
+      active: true,
+    })
+    const open = makeForegroundTab('open' as UID, { state: State.OPEN })
+    resetForegroundTree([
+      makeForegroundWindow('window-1' as UID, [saved, discarded, active, open]),
+    ])
+    const { contextMenuItemsTab } =
+      await import('@/services/context-menu-items-tab')
+
+    select(saved, discarded, active)
+    expect(contextMenuItemsTab.unloadTab().enabled).toBe(false)
+
+    select(saved, open)
+    const unload = contextMenuItemsTab.unloadTab()
+    expect(unload.enabled).toBe(true)
+    unload.action?.()
+    expect(unloadTabs).toHaveBeenCalledWith([
+      expect.objectContaining({ uid: saved.uid }),
+      expect.objectContaining({ uid: open.uid }),
+    ])
   })
 
   it('applies each tab action descendant scope independently', async () => {

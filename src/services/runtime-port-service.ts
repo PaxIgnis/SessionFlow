@@ -370,6 +370,7 @@ function isSessionTreeCommand(
     case 'reloadTab':
       return hasNumber(value, 'tabId')
     case 'saveTab':
+    case 'unloadTab':
       return hasNumber(value, 'tabId') && hasString(value, 'tabUid')
     case 'moveWindows':
       return (

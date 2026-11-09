@@ -23,6 +23,16 @@ export function reloadTab(message: { tabId: number }): void {
 }
 
 /**
+ * Unloads a tab from memory while keeping it open in the browser. The tree
+ * follows the `discarded` change that Firefox reports through tabs.onUpdated.
+ *
+ * @param {number} tabId - The ID of the tab to be unloaded.
+ */
+export function unloadTab(tabId: number): Promise<void> {
+  return browser.tabs.discard(tabId)
+}
+
+/**
  * Pins a tab in the browser.
  *
  * @param {number} tabId - The ID of the tab to be pinned.

@@ -20,6 +20,7 @@ export const TAB_MENU: ContextMenuConfig = [
   { type: ContextMenuItemType.Action, id: 'createSeparator' },
   { type: ContextMenuItemType.Action, id: 'openTab' },
   { type: ContextMenuItemType.Action, id: 'reloadTab' },
+  { type: ContextMenuItemType.Action, id: 'unloadTab' },
   { type: ContextMenuItemType.Action, id: 'saveTab' },
   { type: ContextMenuItemType.Action, id: 'deleteTreeItem' },
   { type: ContextMenuItemType.Action, id: 'editLabel' },
@@ -29,7 +30,6 @@ export const TAB_MENU: ContextMenuConfig = [
   { type: ContextMenuItemType.Action, id: 'duplicateTreeItem' },
   { type: ContextMenuItemType.Action, id: 'treeItemIndentIncrease' },
   { type: ContextMenuItemType.Action, id: 'treeItemIndentDecrease' },
-  // 'unloadTab',
 ]
 
 export const NOTE_MENU: ContextMenuConfig = [

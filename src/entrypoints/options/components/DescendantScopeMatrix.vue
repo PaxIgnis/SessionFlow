@@ -8,6 +8,7 @@ type ScopeKey =
   | 'duplicateTreeItemDescendants'
   | 'contextMenuOpenDescendants'
   | 'contextMenuReloadDescendants'
+  | 'contextMenuUnloadDescendants'
   | 'contextMenuSaveDescendants'
   | 'contextMenuPinDescendants'
   | 'includeChildrenOfSelectedItemsWhenIndenting'
@@ -43,6 +44,11 @@ const rows: MatrixRow[] = [
   {
     key: 'contextMenuReloadDescendants',
     label: i18n.t('reloadTabs'),
+    options: ordinaryOptions,
+  },
+  {
+    key: 'contextMenuUnloadDescendants',
+    label: i18n.t('unloadTabs'),
     options: ordinaryOptions,
   },
   {
@@ -84,6 +90,12 @@ function updateScope(row: MatrixRow, value: string) {
       break
     case 'contextMenuReloadDescendants':
       Settings.values.contextMenuReloadDescendants = value as
+        | 'always'
+        | 'collapsed'
+        | 'never'
+      break
+    case 'contextMenuUnloadDescendants':
+      Settings.values.contextMenuUnloadDescendants = value as
         | 'always'
         | 'collapsed'
         | 'never'

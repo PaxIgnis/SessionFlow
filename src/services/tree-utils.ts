@@ -25,6 +25,11 @@ export function isSeparator(item: TreeItem): item is Separator {
   return item.type === TreeItemType.SEPARATOR
 }
 
+/** Firefox silently ignores tabs.discard for the active tab of a window. */
+export function canUnloadTab(tab: Tab): boolean {
+  return tab.state === State.OPEN && !tab.active
+}
+
 export function getChildren(item: TreeItem): TreeItem[] {
   if (item.type === TreeItemType.WINDOW) return item.children
   return []

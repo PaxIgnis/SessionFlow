@@ -111,6 +111,7 @@ export interface FakeBrowser {
     remove: ReturnType<typeof vi.fn>
     duplicate: ReturnType<typeof vi.fn>
     reload: ReturnType<typeof vi.fn>
+    discard: ReturnType<typeof vi.fn>
     create: ReturnType<typeof vi.fn>
     group: ReturnType<typeof vi.fn>
     ungroup: ReturnType<typeof vi.fn>
@@ -250,6 +251,7 @@ export function installFakeBrowser(): FakeBrowser {
       remove: vi.fn().mockResolvedValue(undefined),
       duplicate: vi.fn().mockResolvedValue({ id: 2 }),
       reload: vi.fn().mockResolvedValue(undefined),
+      discard: vi.fn().mockResolvedValue(undefined),
       create: vi.fn().mockResolvedValue({ id: 3 }),
       group: vi.fn().mockResolvedValue(1),
       ungroup: vi.fn().mockResolvedValue(undefined),

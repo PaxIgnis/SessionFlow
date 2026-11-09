@@ -19,6 +19,7 @@ export const DEFAULT_SETTINGS: Settings = {
   contextMenuDeleteDescendants: 'collapsed',
   contextMenuOpenDescendants: 'collapsed',
   contextMenuReloadDescendants: 'collapsed',
+  contextMenuUnloadDescendants: 'collapsed',
   contextMenuSaveDescendants: 'collapsed',
   contextMenuPinDescendants: 'collapsed',
 

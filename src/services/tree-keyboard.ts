@@ -287,6 +287,12 @@ async function runShortcut(
       Settings.values.contextMenuReloadDescendants,
     ).filter((target): target is Tab => target.type === TreeItemType.TAB)
     await Messages.reloadTabs(tabs)
+  } else if (key === 'shortcutUnload') {
+    const tabs = collectContextMenuActionItems(
+      Selection.getSelectedTabs(),
+      Settings.values.contextMenuUnloadDescendants,
+    ).filter((target): target is Tab => target.type === TreeItemType.TAB)
+    await Messages.unloadTabs(tabs)
   } else if (key === 'shortcutPin') {
     const tabs = collectContextMenuActionItems(
       Selection.getSelectedTabs(),
