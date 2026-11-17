@@ -140,6 +140,64 @@ describe('favicon service', () => {
     )
   })
 
+  it('exports valid entries and merges backed-up entries only when newer', async () => {
+    vi.mocked(browser.storage.local.get).mockResolvedValue({
+      favicons: JSON.stringify({
+        version: 1,
+        entries: [
+          {
+            url: 'old.test',
+            dataUrl: 'data:image/png;base64,old',
+            timestamp: 1,
+          },
+          {
+            url: 'new.test',
+            dataUrl: 'data:image/png;base64,new',
+            timestamp: 9,
+          },
+        ],
+      }),
+    })
+    const service = new FaviconService({
+      storageKey: 'favicons',
+      expiryDays: 7,
+    })
+
+    expect(
+      (await service.exportCacheEntries()).map((entry) => entry.url),
+    ).toEqual(['old.test', 'new.test'])
+
+    const merged = await service.mergeCacheEntries([
+      { url: 'old.test', dataUrl: 'data:image/png;base64,newer', timestamp: 5 },
+      { url: 'new.test', dataUrl: 'data:image/png;base64,stale', timestamp: 2 },
+      { url: 'added.test', dataUrl: 'data:image/png;base64,add', timestamp: 3 },
+      { url: 'bad/domain', dataUrl: 'data:image/png;base64,x', timestamp: 3 },
+      { url: 'evil.test', dataUrl: 'javascript:alert(1)', timestamp: 3 },
+    ])
+
+    expect(merged).toBe(2)
+    expect(service.getFavicon('https://old.test/')).toBe(
+      'data:image/png;base64,newer',
+    )
+    expect(service.getFavicon('https://new.test/')).toBe(
+      'data:image/png;base64,new',
+    )
+    expect(service.getFavicon('https://added.test/')).toBe(
+      'data:image/png;base64,add',
+    )
+    expect(browser.storage.local.set).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not rewrite storage when a merge changes nothing', async () => {
+    const service = new FaviconService({
+      storageKey: 'favicons',
+      expiryDays: 7,
+    })
+
+    expect(await service.mergeCacheEntries([])).toBe(0)
+    expect(browser.storage.local.set).not.toHaveBeenCalled()
+  })
+
   it('falls back to the default icon for missing or invalid URLs', () => {
     const service = new FaviconService()
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})

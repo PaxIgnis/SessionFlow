@@ -42,6 +42,9 @@ export interface Settings extends KeyboardSettings {
   sessionSnapshotKeepMonths: number
   sessionSnapshotKeepYears: number
 
+  // Backup & restore
+  backupIncludeFavicons: boolean
+
   // Windows
   focusWindowOnOpen: boolean
   openWindowsInSameLocation: boolean

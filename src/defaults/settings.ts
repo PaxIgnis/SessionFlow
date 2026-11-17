@@ -40,6 +40,9 @@ export const DEFAULT_SETTINGS: Settings = {
   sessionSnapshotKeepMonths: 12,
   sessionSnapshotKeepYears: 5,
 
+  // Backup & restore
+  backupIncludeFavicons: true,
+
   // Windows
   focusWindowOnOpen: true,
   openWindowsInSameLocation: true,

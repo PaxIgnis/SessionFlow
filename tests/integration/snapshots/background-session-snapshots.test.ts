@@ -12,6 +12,7 @@ import type {
 import type { TopLevelTreeItem } from '@/types/session-tree'
 import { State, TreeItemType } from '@/types/session-tree'
 import { installFakeBrowser } from '../../helpers/fake-browser'
+import { MemoryRepository } from '../../helpers/memory-snapshot-repository'
 import tabsOutlinerBackup from '../../fixtures/tabs-outliner-backup.json'
 import sessionBuddyExport from '../../fixtures/session-buddy-export.json'
 import tabSessionManagerExport from '../../fixtures/tab-session-manager-export.json'
@@ -893,51 +894,5 @@ function note(uid: string): TopLevelTreeItem {
     collapsed: false,
     indentLevel: 0,
     isParent: false,
-  }
-}
-
-class MemoryRepository implements SessionSnapshotRepository {
-  initialized = false
-  records = new Map<string, SessionSnapshotRecord>()
-
-  async initialize() {
-    this.initialized = true
-  }
-  async create(
-    metadata: SessionSnapshotMetadata,
-    payload: SessionSnapshotPayload,
-  ) {
-    this.records.set(metadata.id, { metadata, payload })
-  }
-  async listMetadata() {
-    return [...this.records.values()]
-      .map((record) => record.metadata)
-      .sort((a, b) => b.createdAt - a.createdAt)
-  }
-  async get(id: string) {
-    const record = this.records.get(id)
-    if (!record) throw new Error('missing')
-    return record
-  }
-  async setProtected(id: string, value: boolean) {
-    const record = await this.get(id)
-    record.metadata.protected = value
-  }
-  async delete(id: string) {
-    this.records.delete(id)
-  }
-  async clear() {
-    this.records.clear()
-  }
-  async deleteExcept(retainedIds: ReadonlySet<string>) {
-    for (const id of this.records.keys()) {
-      if (!retainedIds.has(id)) this.records.delete(id)
-    }
-  }
-  async approximateBytes() {
-    return [...this.records.values()].reduce(
-      (sum, record) => sum + record.metadata.sizeBytes,
-      0,
-    )
   }
 }

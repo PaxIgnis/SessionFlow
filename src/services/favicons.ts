@@ -259,6 +259,40 @@ export class FaviconService {
     }
   }
 
+  /** Returns a copy of every valid cache entry, for backups. */
+  public async exportCacheEntries(): Promise<FaviconCacheEntry[]> {
+    await this.init()
+    return Array.from(this.cache.values())
+      .filter((entry) => this.isValidCacheEntry(entry))
+      .map((entry) => ({ ...entry }))
+  }
+
+  /**
+   * Adds entries from a backup. An entry replaces a cached one for the same
+   * domain only when it is newer, so restoring never rolls an icon back.
+   *
+   * @returns the number of entries added or replaced
+   */
+  public async mergeCacheEntries(
+    entries: readonly FaviconCacheEntry[],
+  ): Promise<number> {
+    await this.init()
+    let merged = 0
+    for (const entry of entries) {
+      if (!this.isValidCacheEntry(entry)) continue
+      const current = this.cache.get(entry.url)
+      if (current && current.timestamp >= entry.timestamp) continue
+      this.cache.set(entry.url, {
+        url: entry.url,
+        dataUrl: entry.dataUrl,
+        timestamp: entry.timestamp,
+      })
+      merged += 1
+    }
+    if (merged > 0) await this.saveCacheToStorage()
+    return merged
+  }
+
   /**
    * Fetches and stores the favicon for a given URL
    *
