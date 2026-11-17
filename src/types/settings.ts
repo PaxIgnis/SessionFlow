@@ -44,6 +44,11 @@ export interface Settings extends KeyboardSettings {
 
   // Backup & restore
   backupIncludeFavicons: boolean
+  automaticBackups: boolean
+  automaticBackupInterval: number
+  automaticBackupIntervalUnit: (typeof SETTINGS_TYPES.automaticBackupIntervalUnit)[number]
+  automaticBackupFolder: string
+  automaticBackupKeepCount: number
 
   // Windows
   focusWindowOnOpen: boolean
@@ -124,6 +129,7 @@ export const SETTINGS_TYPES = {
   faviconRefreshTiming: ['startup-only', 'expiration-and-startup'],
   openWindowsInSameLocationUpdateIntervalUnit: ['seconds', 'minutes'],
   sessionSnapshotIntervalUnit: ['minutes', 'hours'],
+  automaticBackupIntervalUnit: ['hours', 'days', 'weeks'],
 } as const
 
 export const OPTIONS = {
@@ -213,5 +219,10 @@ export const OPTIONS = {
   sessionSnapshotIntervalUnit: [
     { label: i18n.t('minutes'), value: 'minutes' },
     { label: i18n.t('hours'), value: 'hours' },
+  ],
+  automaticBackupIntervalUnit: [
+    { label: i18n.t('hours'), value: 'hours' },
+    { label: i18n.t('days'), value: 'days' },
+    { label: i18n.t('weeks'), value: 'weeks' },
   ],
 }

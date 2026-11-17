@@ -42,6 +42,11 @@ export const DEFAULT_SETTINGS: Settings = {
 
   // Backup & restore
   backupIncludeFavicons: true,
+  automaticBackups: false,
+  automaticBackupInterval: 1,
+  automaticBackupIntervalUnit: 'days',
+  automaticBackupFolder: 'Session Flow',
+  automaticBackupKeepCount: 5,
 
   // Windows
   focusWindowOnOpen: true,

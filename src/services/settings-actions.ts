@@ -29,6 +29,8 @@ export const NUMERIC_SETTING_BOUNDS: Partial<
   sessionSnapshotKeepWeeks: { min: 0, max: 520 },
   sessionSnapshotKeepMonths: { min: 0, max: 240 },
   sessionSnapshotKeepYears: { min: 0, max: 100 },
+  automaticBackupInterval: { min: 1, max: 999 },
+  automaticBackupKeepCount: { min: 1, max: 50 },
 }
 const FAVICON_PERMISSION_ORIGINS = new Set(['http://*/*', 'https://*/*'])
 const FAVICON_PERMISSION_REMOVED_MESSAGE = 'faviconPermissionsRemoved'
