@@ -16,3 +16,4 @@ stats-*.json
 tests/fixtures/tab-stash-export.md
 tests/fixtures/onetab-export.html
 tests/fixtures/tab-stash-export-nested.md
+tests/fixtures/tabs-outliner-page.html

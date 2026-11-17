@@ -643,6 +643,33 @@ describe('background session snapshots', () => {
     expect(repository.records.size).toBe(1)
   })
 
+  it('imports a saved Tabs Outliner page as a protected snapshot through runtime messaging', async () => {
+    const originalTree = structuredClone(treeItems)
+    const response = await service.handleRuntimeMessage({
+      action: 'importSessionSnapshot',
+      json: readFileSync(
+        new URL('../../fixtures/tabs-outliner-page.mhtml', import.meta.url),
+        'utf8',
+      ),
+    })
+    expect(response).toMatchObject({
+      ok: true,
+      data: {
+        id: 'snapshot-1',
+        protected: true,
+        trigger: 'import',
+        counts: { windows: 4, tabs: 6, notes: 3, separators: 1 },
+        importSummary: {
+          source: 'tabs-outliner',
+          sourceCreatedAt: Date.UTC(2026, 10, 17, 11, 31, 49),
+        },
+      },
+    })
+    expect(treeItems).toEqual(originalTree)
+    expect(browser.tabs.create).not.toHaveBeenCalled()
+    expect(browser.windows.create).not.toHaveBeenCalled()
+  })
+
   it('imports a Tab Stash Markdown export as a protected snapshot through runtime messaging', async () => {
     const originalTree = structuredClone(treeItems)
     const response = await service.handleRuntimeMessage({

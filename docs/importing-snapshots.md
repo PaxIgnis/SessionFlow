@@ -7,7 +7,7 @@ You can bring saved tabs and sessions from other programs into Session Flow usin
 | Program             | Supported file                | Instructions                                            |
 | ------------------- | ----------------------------- | ------------------------------------------------------- |
 | Session Flow        | JSON snapshot or session tree | [Export from Session Flow](#session-flow)               |
-| Tabs Outliner       | JSON tree dump                | [Tabs Outliner Tree Dump](#tabs-outliner)               |
+| Tabs Outliner       | Saved page or JSON tree dump  | [Export from Tabs Outliner](#tabs-outliner)             |
 | Session Buddy       | JSON collection export        | [Export from Session Buddy](#session-buddy)             |
 | Tab Session Manager | JSON session export           | [Export from Tab Session Manager](#tab-session-manager) |
 | Simple Tab Groups   | JSON backup                   | [Back up Simple Tab Groups](#simple-tab-groups)         |
@@ -38,9 +38,18 @@ Existing JSON session-tree exports can also be imported.
 
 ## Tabs Outliner
 
-Session Flow currently accepts JSON tree dumps. If you already have one of these files, select it with **Import snapshot**.
+Session Flow accepts the Tabs Outliner window saved as a web page, or a JSON tree dump. Saving the page is easier; the JSON tree dump also keeps pinned tabs and private windows.
 
-Tabs Outliner's backups, HTML and text exports are different formats and cannot be imported yet as snapshots.
+Tabs Outliner's own backups and text exports are different formats and cannot be imported yet as snapshots.
+
+### Save the Tabs Outliner page
+
+1. Open the Tabs Outliner window in Chrome.
+2. Click **Expand All Collapsed Nodes** in the toolbar if it is shown. Collapsed branches may be saved without their contents.
+3. Press **Ctrl+S** and save the page. Both **Webpage, Single File** (`.mhtml`) and **Webpage, HTML Only** (`.html`) work.
+4. Import that file in Session Flow.
+
+Windows, tabs, notes, groups, separators, tab comments, and each window's active tab are imported the same way as from a JSON tree dump. Windows without a custom title are imported untitled.
 
 ### Export using the developer console
 

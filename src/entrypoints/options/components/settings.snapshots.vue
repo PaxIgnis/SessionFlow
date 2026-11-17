@@ -718,7 +718,7 @@ function fileTimestamp(value: number) {
       <input
         ref="importFileInput"
         type="file"
-        accept=".json,.txt,.html,.htm,.md,application/json,text/plain,text/html,text/markdown"
+        accept=".json,.txt,.html,.htm,.mhtml,.mht,.md,application/json,text/plain,text/html,text/markdown,multipart/related,message/rfc822"
         :aria-label="i18n.t('importASnapshot')"
         data-testid="import-snapshot-file"
         hidden

@@ -4,6 +4,14 @@ import {
   validateSessionSnapshotPayload,
 } from '@/services/session-snapshot-codec'
 import { parseUsDateTime } from '@/services/session-snapshot-import-dates'
+import {
+  find,
+  findAll,
+  hasClass,
+  parseHtml,
+  textOf,
+  type HtmlElement,
+} from '@/services/session-snapshot-import-html'
 import type {
   ParsedSessionSnapshotImport,
   SessionSnapshotImportWarning,
@@ -24,15 +32,6 @@ const warningMessages = {
     'Some group creation dates were not imported because their date format was not recognized.',
 } satisfies Partial<Record<SessionSnapshotImportWarning['code'], string>>
 type WarningCode = keyof typeof warningMessages
-
-interface HtmlElement {
-  tag: string
-  classes: Set<string>
-  attributes: Map<string, string>
-  children: HtmlNode[]
-  parent?: HtmlElement
-}
-type HtmlNode = HtmlElement | string
 
 export function isOneTabHtmlImport(text: string): boolean {
   return (
@@ -153,181 +152,4 @@ export function parseOneTabHtmlImport(
       })),
     },
   }
-}
-
-// A minimal reader for OneTab's generated markup. It builds an element tree
-// from tags and text, ignoring comments and the contents of raw-text elements.
-const voidTags = new Set([
-  'area',
-  'base',
-  'br',
-  'col',
-  'embed',
-  'hr',
-  'img',
-  'input',
-  'link',
-  'meta',
-  'source',
-  'track',
-  'wbr',
-])
-const rawTextTags = new Set(['script', 'style', 'title', 'textarea'])
-
-function parseHtml(html: string): HtmlElement {
-  const root: HtmlElement = {
-    tag: '#root',
-    classes: new Set(),
-    attributes: new Map(),
-    children: [],
-  }
-  let current = root
-  const tagPattern =
-    /<!--[\s\S]*?-->|<![^>]*>|<(\/?)([a-zA-Z][\w-]*)((?:[^>"']|"[^"]*"|'[^']*')*)>/g
-  let index = 0
-  for (
-    let match = tagPattern.exec(html);
-    match;
-    match = tagPattern.exec(html)
-  ) {
-    if (match.index > index)
-      current.children.push(decodeEntities(html.slice(index, match.index)))
-    index = tagPattern.lastIndex
-    const [, closing, rawTag, rawAttributes] = match
-    if (!rawTag) continue
-    const tag = rawTag.toLowerCase()
-    if (closing) {
-      // Close the nearest matching element; stray closing tags are ignored.
-      for (
-        let element: HtmlElement | undefined = current;
-        element;
-        element = element.parent
-      ) {
-        if (element.tag === tag) {
-          current = element.parent ?? root
-          break
-        }
-      }
-      continue
-    }
-    const attributes = parseAttributes(rawAttributes)
-    const element: HtmlElement = {
-      tag,
-      classes: new Set(
-        (attributes.get('class') ?? '').split(/\s+/).filter(Boolean),
-      ),
-      attributes,
-      children: [],
-      parent: current,
-    }
-    current.children.push(element)
-    if (voidTags.has(tag) || /\/\s*$/.test(rawAttributes)) continue
-    if (rawTextTags.has(tag)) {
-      const end = html.toLowerCase().indexOf(`</${tag}`, index)
-      const stop = end === -1 ? html.length : end
-      element.children.push(decodeEntities(html.slice(index, stop)))
-      const close = html.indexOf('>', stop)
-      index = close === -1 ? html.length : close + 1
-      tagPattern.lastIndex = index
-      continue
-    }
-    current = element
-  }
-  if (index < html.length)
-    current.children.push(decodeEntities(html.slice(index)))
-  return root
-}
-
-function parseAttributes(source: string): Map<string, string> {
-  const attributes = new Map<string, string>()
-  const pattern =
-    /([^\s=/"'<>]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+)))?/g
-  for (let match = pattern.exec(source); match; match = pattern.exec(source)) {
-    const [, name, double, single, bare] = match
-    attributes.set(
-      name.toLowerCase(),
-      decodeEntities(double ?? single ?? bare ?? ''),
-    )
-  }
-  return attributes
-}
-
-const namedEntities: Record<string, string> = {
-  amp: '&',
-  lt: '<',
-  gt: '>',
-  quot: '"',
-  apos: "'",
-  nbsp: String.fromCharCode(0xa0),
-}
-
-function decodeEntities(text: string): string {
-  return text.replace(
-    /&(#x[\da-f]+|#\d+|[a-z]+);/gi,
-    (entity, body: string) => {
-      if (body[0] === '#') {
-        const code =
-          body[1] === 'x' || body[1] === 'X'
-            ? parseInt(body.slice(2), 16)
-            : parseInt(body.slice(1), 10)
-        return Number.isInteger(code) && code >= 0 && code <= 0x10ffff
-          ? String.fromCodePoint(code)
-          : entity
-      }
-      return namedEntities[body.toLowerCase()] ?? entity
-    },
-  )
-}
-
-function hasClass(name: string) {
-  return (element: HtmlElement) => element.classes.has(name)
-}
-
-function* walk(element: HtmlElement): Generator<HtmlElement> {
-  for (const child of element.children) {
-    if (typeof child === 'string') continue
-    yield child
-    yield* walk(child)
-  }
-}
-
-function find(
-  element: HtmlElement,
-  predicate: (element: HtmlElement) => boolean,
-): HtmlElement | undefined {
-  for (const descendant of walk(element))
-    if (predicate(descendant)) return descendant
-  return undefined
-}
-
-// Matches are returned in document order; descendants of a match are skipped
-// so nested groups are not visited twice.
-function findAll(
-  element: HtmlElement,
-  predicate: (element: HtmlElement) => boolean,
-): HtmlElement[] {
-  const result: HtmlElement[] = []
-  const visit = (parent: HtmlElement) => {
-    for (const child of parent.children) {
-      if (typeof child === 'string') continue
-      if (predicate(child)) result.push(child)
-      else visit(child)
-    }
-  }
-  visit(element)
-  return result
-}
-
-// Element text with whitespace collapsed, as the browser would display it.
-function textOf(element: HtmlElement | undefined): string {
-  if (!element) return ''
-  const parts: string[] = []
-  const visit = (node: HtmlElement) => {
-    for (const child of node.children) {
-      if (typeof child === 'string') parts.push(child)
-      else visit(child)
-    }
-  }
-  visit(element)
-  return parts.join('').replace(/\s+/g, ' ').trim()
 }

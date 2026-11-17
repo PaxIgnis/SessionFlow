@@ -49,7 +49,7 @@ export const SESSION_SNAPSHOT_IMPORT_SOURCE_FILE_TYPES: Record<
   string
 > = {
   'session-flow': '.json',
-  'tabs-outliner': '.json',
+  'tabs-outliner': '.json, .mhtml, .html',
   'session-buddy': '.json',
   'tab-session-manager': '.json',
   'simple-tab-groups': '.json',

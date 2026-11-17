@@ -4,6 +4,10 @@ import {
   validateSessionSnapshotPayload,
 } from '@/services/session-snapshot-codec'
 import {
+  isTabsOutlinerHtmlImport,
+  parseTabsOutlinerHtmlImport,
+} from '@/services/session-snapshot-import-tabs-outliner-html'
+import {
   isTabsOutlinerImport,
   parseTabsOutlinerImport,
 } from '@/services/session-snapshot-import-tabs-outliner'
@@ -46,7 +50,8 @@ export function parseSessionSnapshotImport(
   try {
     value = JSON.parse(json.replace(/^\uFEFF/, ''))
   } catch {
-    // OneTab's text and HTML exports and Tab Stash's Markdown are not JSON.
+    // Saved pages (Tabs Outliner, OneTab), OneTab text and Tab Stash Markdown.
+    if (isTabsOutlinerHtmlImport(json)) return parseTabsOutlinerHtmlImport(json)
     if (isOneTabHtmlImport(json)) return parseOneTabHtmlImport(json)
     if (isOneTabImport(json)) return parseOneTabImport(json)
     if (isTabStashImport(json)) return parseTabStashImport(json)
