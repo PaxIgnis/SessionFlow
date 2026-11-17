@@ -12,6 +12,7 @@ You can bring saved tabs and sessions from other programs into Session Flow usin
 | Tab Session Manager | JSON session export           | [Export from Tab Session Manager](#tab-session-manager) |
 | Simple Tab Groups   | JSON backup                   | [Back up Simple Tab Groups](#simple-tab-groups)         |
 | OneTab              | HTML file or text URL export  | [Export from OneTab](#onetab)                           |
+| Tab Stash           | Markdown export (.md)         | [Export from Tab Stash](#tab-stash)                     |
 
 Only the formats listed above are supported. See the program sections below for limitations affecting older exports.
 
@@ -169,3 +170,21 @@ Each OneTab group becomes a saved window. Group names and creation dates are pre
 4. Import that file in Session Flow.
 
 Each block of tabs in the list (separated by a blank line) becomes a saved window. The text list only contains each tab's URL and title, so group names, creation dates, inner groups, and locked or starred status cannot be imported. OneTab also adds a blank line after inner groups, so a group that contains inner groups may be split across more than one window. All tabs are still imported in their original order.
+
+## Tab Stash
+
+Tab Stash copies its export to the clipboard, so save it as a Markdown file:
+
+1. Open Tab Stash.
+2. Open the menu beside the search box and choose **Export...**.
+3. Select **Markdown** as the format, then click **Copy**.
+4. Paste the text into a plain-text editor and save it as a `.md` file.
+5. Import that file in Session Flow.
+
+During import:
+
+- Each stash folder becomes a saved window. Links that are not in a folder are placed together in a first, untitled window.
+- Sub-folders become notes with their tabs beneath them, at every nesting level.
+- Folders you renamed keep their name. Unnamed folders, which Tab Stash shows as "Saved" and a date, use that date as the saved time when it is in the US date format (for example `11/17/2026, 1:23:45 AM`). Otherwise the name is kept and the conversion details report the date.
+
+Tab Stash's other export formats are not supported. The **OneTab** format can be imported as a [OneTab text list](#text-list), but folder names are lost.

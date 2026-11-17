@@ -3,6 +3,7 @@ import {
   countSnapshotItems,
   validateSessionSnapshotPayload,
 } from '@/services/session-snapshot-codec'
+import { parseUsDateTime } from '@/services/session-snapshot-import-dates'
 import type {
   ParsedSessionSnapshotImport,
   SessionSnapshotImportWarning,
@@ -77,7 +78,8 @@ export function parseOneTabHtmlImport(
     }
     const created = textOf(header && find(header, hasClass('createdDate')))
     if (created) {
-      const savedTime = parseCreatedDate(created)
+      // The label ("Created ...") is localized; the date is found within it.
+      const savedTime = parseUsDateTime(created)
       if (savedTime === undefined) warn('dates-not-imported')
       else window.savedTime = savedTime
     }
@@ -151,40 +153,6 @@ export function parseOneTabHtmlImport(
       })),
     },
   }
-}
-
-// OneTab writes dates with the browser's locale. Only the US short format
-// ("Created 11/17/26, 1:26:59 AM") is unambiguous enough to read back.
-function parseCreatedDate(text: string): number | undefined {
-  const match =
-    /(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4}),?\s+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([AP]M)?/i.exec(
-      text,
-    )
-  if (!match) return undefined
-  const [, month, day, year, hour, minute, second, meridiem] = match
-  let hours = Number(hour)
-  if (meridiem) {
-    if (hours < 1 || hours > 12) return undefined
-    hours = (hours % 12) + (/p/i.test(meridiem) ? 12 : 0)
-  }
-  const fullYear = year.length === 2 ? 2000 + Number(year) : Number(year)
-  const date = new Date(
-    fullYear,
-    Number(month) - 1,
-    Number(day),
-    hours,
-    Number(minute),
-    Number(second ?? 0),
-  )
-  // Reject rollovers such as 13/40/26.
-  if (
-    date.getFullYear() !== fullYear ||
-    date.getMonth() !== Number(month) - 1 ||
-    date.getDate() !== Number(day) ||
-    date.getHours() !== hours
-  )
-    return undefined
-  return date.getTime()
 }
 
 // A minimal reader for OneTab's generated markup. It builds an element tree

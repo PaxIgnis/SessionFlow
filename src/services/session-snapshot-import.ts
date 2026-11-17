@@ -24,6 +24,10 @@ import {
   parseSimpleTabGroupsImport,
 } from '@/services/session-snapshot-import-simple-tab-groups'
 import {
+  isTabStashImport,
+  parseTabStashImport,
+} from '@/services/session-snapshot-import-tab-stash'
+import {
   isTabSessionManagerImport,
   parseTabSessionManagerImport,
 } from '@/services/session-snapshot-import-tab-session-manager'
@@ -42,9 +46,10 @@ export function parseSessionSnapshotImport(
   try {
     value = JSON.parse(json.replace(/^\uFEFF/, ''))
   } catch {
-    // OneTab's text and HTML exports are the only supported non-JSON formats.
+    // OneTab's text and HTML exports and Tab Stash's Markdown are not JSON.
     if (isOneTabHtmlImport(json)) return parseOneTabHtmlImport(json)
     if (isOneTabImport(json)) return parseOneTabImport(json)
+    if (isTabStashImport(json)) return parseTabStashImport(json)
     throw new Error(i18n.t('invalidSnapshotFile'))
   }
 

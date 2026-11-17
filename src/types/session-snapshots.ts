@@ -29,6 +29,7 @@ export type SessionSnapshotImportSource =
   | 'tab-session-manager'
   | 'simple-tab-groups'
   | 'onetab'
+  | 'tab-stash'
 
 export const SESSION_SNAPSHOT_IMPORT_SOURCE_LABELS: Record<
   SessionSnapshotImportSource,
@@ -40,6 +41,7 @@ export const SESSION_SNAPSHOT_IMPORT_SOURCE_LABELS: Record<
   'tab-session-manager': 'Tab Session Manager',
   'simple-tab-groups': 'Simple Tab Groups',
   onetab: 'OneTab',
+  'tab-stash': 'Tab Stash',
 }
 
 export const SESSION_SNAPSHOT_IMPORT_SOURCE_FILE_TYPES: Record<
@@ -52,6 +54,7 @@ export const SESSION_SNAPSHOT_IMPORT_SOURCE_FILE_TYPES: Record<
   'tab-session-manager': '.json',
   'simple-tab-groups': '.json',
   onetab: '.txt, .html',
+  'tab-stash': '.md',
 }
 
 export interface SessionSnapshotImportWarning {

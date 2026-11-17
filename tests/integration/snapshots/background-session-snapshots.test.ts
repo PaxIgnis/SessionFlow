@@ -643,6 +643,33 @@ describe('background session snapshots', () => {
     expect(repository.records.size).toBe(1)
   })
 
+  it('imports a Tab Stash Markdown export as a protected snapshot through runtime messaging', async () => {
+    const originalTree = structuredClone(treeItems)
+    const response = await service.handleRuntimeMessage({
+      action: 'importSessionSnapshot',
+      json: readFileSync(
+        new URL('../../fixtures/tab-stash-export.md', import.meta.url),
+        'utf8',
+      ),
+    })
+    expect(response).toMatchObject({
+      ok: true,
+      data: {
+        id: 'snapshot-1',
+        protected: true,
+        trigger: 'import',
+        counts: { windows: 4, tabs: 7, notes: 3, separators: 0 },
+        importSummary: { source: 'tab-stash' },
+      },
+    })
+    expect(treeItems).toEqual(originalTree)
+    expect(browser.tabs.create).not.toHaveBeenCalled()
+    await expect(
+      service.importSnapshot('## Stash\n- [A](https://a.example)\nplain text'),
+    ).rejects.toThrow('not a valid snapshot file')
+    expect(repository.records.size).toBe(1)
+  })
+
   it('rejects invalid imports without writing and allows a subsequent valid import', async () => {
     const create = vi.spyOn(repository, 'create')
     await expect(

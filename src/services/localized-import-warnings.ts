@@ -44,6 +44,10 @@ const warningKeys = {
     'dates-not-imported':
       'someGroupCreationDatesWereNotImportedBecauseTheirDate',
   },
+  'tab-stash': {
+    'groups-as-windows': 'eachStashFolderWasImportedAsASavedWindowSubfolders',
+    'dates-not-imported': 'someStashDatesWereNotImportedBecauseTheirDateFormat',
+  },
   'simple-tab-groups': {
     'groups-as-windows': 'eachGroupWasImportedAsASavedWindowGroupSettingsSuch',
     'pinned-tabs-window': 'pinnedTabsWerePlacedInASeparateSavedWindow',
