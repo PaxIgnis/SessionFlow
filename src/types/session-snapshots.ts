@@ -28,6 +28,7 @@ export type SessionSnapshotImportSource =
   | 'session-buddy'
   | 'tab-session-manager'
   | 'simple-tab-groups'
+  | 'onetab'
 
 export const SESSION_SNAPSHOT_IMPORT_SOURCE_LABELS: Record<
   SessionSnapshotImportSource,
@@ -38,6 +39,19 @@ export const SESSION_SNAPSHOT_IMPORT_SOURCE_LABELS: Record<
   'session-buddy': 'Session Buddy',
   'tab-session-manager': 'Tab Session Manager',
   'simple-tab-groups': 'Simple Tab Groups',
+  onetab: 'OneTab',
+}
+
+export const SESSION_SNAPSHOT_IMPORT_SOURCE_FILE_TYPES: Record<
+  SessionSnapshotImportSource,
+  string
+> = {
+  'session-flow': '.json',
+  'tabs-outliner': '.json',
+  'session-buddy': '.json',
+  'tab-session-manager': '.json',
+  'simple-tab-groups': '.json',
+  onetab: '.txt, .html',
 }
 
 export interface SessionSnapshotImportWarning {
@@ -58,6 +72,7 @@ export interface SessionSnapshotImportWarning {
     | 'tab-order'
     | 'groups-as-windows'
     | 'pinned-tabs-window'
+    | 'dates-not-imported'
   count: number
   message: string
 }

@@ -11,15 +11,16 @@ You can bring saved tabs and sessions from other programs into Session Flow usin
 | Session Buddy       | JSON collection export        | [Export from Session Buddy](#session-buddy)             |
 | Tab Session Manager | JSON session export           | [Export from Tab Session Manager](#tab-session-manager) |
 | Simple Tab Groups   | JSON backup                   | [Back up Simple Tab Groups](#simple-tab-groups)         |
+| OneTab              | HTML file or text URL export  | [Export from OneTab](#onetab)                           |
 
-Only the JSON formats listed above are supported. See the program sections below for limitations affecting older exports.
+Only the formats listed above are supported. See the program sections below for limitations affecting older exports.
 
 ## Import into Session Flow
 
-1. Export a JSON file using the instructions for your program below.
+1. Export a file using the instructions for your program below.
 2. Open Session Flow **Settings → Snapshots**.
 3. Click **Import snapshot** beside **Take a snapshot now**.
-4. Select the JSON file.
+4. Select the exported file.
 
 The file becomes one snapshot in the history list, even if it contains several sessions. Imported snapshots receive an imported indicator and are protected automatically, so automatic cleanup will not remove them.
 
@@ -148,3 +149,23 @@ During import:
 - Tab order, parent links between tabs, and tab groups within a group are preserved.
 - Container assignments are preserved using the container details in the backup. When you restore, Session Flow offers to recreate containers that no longer exist. Tabs in temporary containers are restored without a container.
 - Saved favicons and thumbnails are not imported.
+
+## OneTab
+
+Session Flow accepts both of OneTab's exports. The HTML file keeps more detail, so use it when you can.
+
+### HTML file (recommended)
+
+1. Open OneTab and choose **More...** → **Save as HTML file**.
+2. Import the saved `.html` file in Session Flow.
+
+Each OneTab group becomes a saved window. Group names and creation dates are preserved, and groups without a name stay untitled. Inner groups become notes with their tabs beneath them. OneTab does not include notes in this file, so they cannot be imported. Creation dates are read when OneTab writes them in the US date format (for example `11/17/26, 1:26:59 AM`); dates in other formats are reported in the conversion details instead.
+
+### Text list
+
+1. Open OneTab and click **Export / Import URLs** (in the top-right menu, or under **Options** in some versions).
+2. Select all the text under **Export URLs** and copy it.
+3. Paste it into a plain-text editor and save it as a `.txt` file.
+4. Import that file in Session Flow.
+
+Each block of tabs in the list (separated by a blank line) becomes a saved window. The text list only contains each tab's URL and title, so group names, creation dates, inner groups, and locked or starred status cannot be imported. OneTab also adds a blank line after inner groups, so a group that contains inner groups may be split across more than one window. All tabs are still imported in their original order.

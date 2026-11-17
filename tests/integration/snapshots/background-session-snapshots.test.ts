@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '@/defaults/settings'
 import { SessionSnapshotService } from '@/services/background-session-snapshots'
@@ -612,6 +613,33 @@ describe('background session snapshots', () => {
         }),
       ),
     ).rejects.toThrow('Simple Tab Groups')
+    expect(repository.records.size).toBe(1)
+  })
+
+  it('imports a OneTab text export as a protected snapshot through runtime messaging', async () => {
+    const originalTree = structuredClone(treeItems)
+    const response = await service.handleRuntimeMessage({
+      action: 'importSessionSnapshot',
+      json: readFileSync(
+        new URL('../../fixtures/onetab-export.txt', import.meta.url),
+        'utf8',
+      ),
+    })
+    expect(response).toMatchObject({
+      ok: true,
+      data: {
+        id: 'snapshot-1',
+        protected: true,
+        trigger: 'import',
+        counts: { windows: 5, tabs: 8, notes: 0, separators: 0 },
+        importSummary: { source: 'onetab' },
+      },
+    })
+    expect(treeItems).toEqual(originalTree)
+    expect(browser.tabs.create).not.toHaveBeenCalled()
+    await expect(
+      service.importSnapshot('https://example.com | Example\nplain text'),
+    ).rejects.toThrow('not a valid snapshot file')
     expect(repository.records.size).toBe(1)
   })
 

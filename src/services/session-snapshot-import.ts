@@ -12,6 +12,14 @@ import {
   parseSessionBuddyImport,
 } from '@/services/session-snapshot-import-session-buddy'
 import {
+  isOneTabHtmlImport,
+  parseOneTabHtmlImport,
+} from '@/services/session-snapshot-import-onetab-html'
+import {
+  isOneTabImport,
+  parseOneTabImport,
+} from '@/services/session-snapshot-import-onetab'
+import {
   isSimpleTabGroupsImport,
   parseSimpleTabGroupsImport,
 } from '@/services/session-snapshot-import-simple-tab-groups'
@@ -34,6 +42,9 @@ export function parseSessionSnapshotImport(
   try {
     value = JSON.parse(json.replace(/^\uFEFF/, ''))
   } catch {
+    // OneTab's text and HTML exports are the only supported non-JSON formats.
+    if (isOneTabHtmlImport(json)) return parseOneTabHtmlImport(json)
+    if (isOneTabImport(json)) return parseOneTabImport(json)
     throw new Error(i18n.t('invalidSnapshotFile'))
   }
 

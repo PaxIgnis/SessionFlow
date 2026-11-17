@@ -37,6 +37,13 @@ const warningKeys = {
     'browser-specific-urls':
       'chromespecificURLsWerePreservedButMayNotOpenInFirefox',
   },
+  onetab: {
+    'groups-as-windows': 'eachOneTabGroupWasImportedAsASavedWindowGroup',
+    'browser-specific-urls':
+      'chromespecificURLsWerePreservedButMayNotOpenInFirefox',
+    'dates-not-imported':
+      'someGroupCreationDatesWereNotImportedBecauseTheirDate',
+  },
   'simple-tab-groups': {
     'groups-as-windows': 'eachGroupWasImportedAsASavedWindowGroupSettingsSuch',
     'pinned-tabs-window': 'pinnedTabsWerePlacedInASeparateSavedWindow',
