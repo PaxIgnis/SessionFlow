@@ -31,7 +31,10 @@ import { OPTIONS, type Settings as SettingsValues } from '@/types/settings'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import SnapshotConfirmationModal from './SnapshotConfirmationModal.vue'
 import SnapshotTree from './SnapshotTree.vue'
-import { SNAPSHOTS_CHANGED_EVENT } from './storage-events'
+import {
+  BACKUP_RESTORED_EVENT,
+  SNAPSHOTS_CHANGED_EVENT,
+} from './storage-events'
 
 type RetentionCountKey =
   | 'sessionSnapshotKeepRecentHours'
@@ -184,12 +187,18 @@ const intervalMax = computed(() =>
   Settings.values.sessionSnapshotIntervalUnit === 'hours' ? 24 : 1440,
 )
 
+const refreshAfterBackupRestore = () => {
+  void Favicons.reloadCacheFromStorage().then(() => refresh())
+}
+
 onMounted(async () => {
+  window.addEventListener(BACKUP_RESTORED_EVENT, refreshAfterBackupRestore)
   await Favicons.init()
   await refresh()
 })
 
 onBeforeUnmount(() => {
+  window.removeEventListener(BACKUP_RESTORED_EVENT, refreshAfterBackupRestore)
   if (successTimer) clearTimeout(successTimer)
   if (retentionTimer) clearTimeout(retentionTimer)
 })

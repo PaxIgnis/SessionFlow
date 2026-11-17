@@ -13,6 +13,7 @@ import SettingsTabGroups from './components/settings.tab-groups.vue'
 import SettingsWindows from './components/settings.windows.vue'
 import SettingsSnapshots from './components/settings.snapshots.vue'
 import SettingsStorage from './components/settings.storage.vue'
+import SettingsBackup from './components/settings.backup.vue'
 import SettingsKeyboard from './components/settings.keyboard.vue'
 
 const sections = [
@@ -26,6 +27,7 @@ const sections = [
   { id: 'settings_favicons', level: 0, label: i18n.t('favicons') },
   { id: 'settings_keyboard', level: 0, label: i18n.t('keyboardMappings') },
   { id: 'settings_snapshots', level: 0, label: i18n.t('snapshots') },
+  { id: 'settings_backup', level: 0, label: i18n.t('backupAndRestore') },
   { id: 'settings_storage', level: 0, label: i18n.t('storage') },
 ]
 
@@ -134,6 +136,7 @@ onUnmounted(() => {
       <Favicons />
       <SettingsKeyboard />
       <SettingsSnapshots />
+      <SettingsBackup />
       <SettingsStorage />
     </div>
   </div>

@@ -22,12 +22,14 @@ import type {
   SessionSnapshotImportResult,
   SessionSnapshotListResult,
   SessionSnapshotMetadata,
+  SessionSnapshotPayload,
   SessionSnapshotRecord,
   SessionSnapshotRestoreMode,
   SessionSnapshotRequest,
   SessionSnapshotResponse,
   SessionSnapshotTrigger,
 } from '@/types/session-snapshots'
+import { SESSION_SNAPSHOT_SCHEMA_VERSION } from '@/types/session-snapshots'
 import type { TopLevelTreeItem } from '@/types/session-tree'
 
 export const SNAPSHOT_ALARM_NAME = 'session-flow-periodic-snapshot'
@@ -288,8 +290,109 @@ export class SessionSnapshotService {
 
   restore(options: RestoreOptions): Promise<SessionSnapshotCounts> {
     return this.waitForTreeInitialized().then(() =>
-      this.serialize(() => this.restoreNow(options)),
+      this.serialize(async () => {
+        const record = await this.repository.get(options.snapshotId)
+        return this.restoreNow(record.payload, options)
+      }),
     )
+  }
+
+  /** Appends a whole payload that is not stored as a snapshot, such as a backup's tree. */
+  restorePayload(
+    payload: SessionSnapshotPayload,
+    allowWithoutSafetySnapshot: boolean,
+  ): Promise<SessionSnapshotCounts> {
+    return this.waitForTreeInitialized().then(() =>
+      this.serialize(() =>
+        this.restoreNow(payload, {
+          mode: 'all',
+          selectedUids: [],
+          allowWithoutSafetySnapshot,
+        }),
+      ),
+    )
+  }
+
+  restorePayloadSummary(
+    payload: SessionSnapshotPayload,
+  ): SessionSnapshotCounts {
+    return projectSnapshotForRestore({
+      payload,
+      mode: 'all',
+      selectedUids: new Set(),
+      existingUids: collectUids(this.getTreeItems()),
+    }).counts
+  }
+
+  /** Every readable snapshot, oldest first. Unreadable ones are left out. */
+  exportAll(): Promise<SessionSnapshotExport[]> {
+    return this.serialize(async () => {
+      const metadata = await this.repository.listMetadata()
+      const exported: SessionSnapshotExport[] = []
+      for (const item of [...metadata].reverse()) {
+        if (!item.available) continue
+        try {
+          const record = await this.repository.get(item.id)
+          exported.push(
+            createSessionSnapshotExport(record.metadata, record.payload),
+          )
+        } catch (error) {
+          console.error(`Skipping unreadable snapshot ${item.id}:`, error)
+        }
+      }
+      return exported
+    })
+  }
+
+  async countNewSnapshots(
+    exports: readonly SessionSnapshotExport[],
+  ): Promise<number> {
+    const existing = new Set(
+      (await this.repository.listMetadata()).map((item) => item.id),
+    )
+    return exports.filter((entry) => !existing.has(entry.metadata.id)).length
+  }
+
+  /**
+   * Adds snapshots from a backup, keeping their ids, dates and protection.
+   * Snapshots already present are skipped, so restoring twice adds nothing.
+   */
+  importExports(
+    exports: readonly SessionSnapshotExport[],
+  ): Promise<{ added: number; skipped: number }> {
+    return this.serialize(async () => {
+      const existing = new Set(
+        (await this.repository.listMetadata()).map((item) => item.id),
+      )
+      let added = 0
+      for (const entry of exports) {
+        if (existing.has(entry.metadata.id)) continue
+        const capture = await describeSessionSnapshot(entry.payload)
+        const metadata: SessionSnapshotMetadata = {
+          id: entry.metadata.id,
+          schemaVersion: SESSION_SNAPSHOT_SCHEMA_VERSION,
+          createdAt: entry.metadata.createdAt,
+          trigger: entry.metadata.trigger,
+          protected: entry.metadata.protected,
+          digest: capture.digest,
+          sizeBytes: capture.sizeBytes,
+          counts: capture.counts,
+          containsPrivateWindows: capture.containsPrivateWindows,
+          available: true,
+          ...(entry.metadata.importSummary
+            ? { importSummary: structuredClone(entry.metadata.importSummary) }
+            : {}),
+        }
+        await this.repository.create(metadata, capture.payload)
+        existing.add(metadata.id)
+        added += 1
+      }
+      if (added > 0) {
+        this.pruneRetryPending = true
+        await this.retryPendingPrune()
+      }
+      return { added, skipped: exports.length - added }
+    })
   }
 
   async restoreSummary(
@@ -373,9 +476,9 @@ export class SessionSnapshotService {
   }
 
   private async restoreNow(
-    options: RestoreOptions,
+    payload: SessionSnapshotPayload,
+    options: Omit<RestoreOptions, 'snapshotId'>,
   ): Promise<SessionSnapshotCounts> {
-    const record = await this.repository.get(options.snapshotId)
     const itemsBeforeSafetySnapshot = structuredClone(this.getTreeItems())
     if (itemsBeforeSafetySnapshot.length > 0) {
       try {
@@ -393,7 +496,7 @@ export class SessionSnapshotService {
     ) {
       const currentItems = structuredClone(this.getTreeItems())
       const projection = projectSnapshotForRestore({
-        payload: record.payload,
+        payload,
         mode: options.mode,
         selectedUids: new Set(options.selectedUids),
         existingUids: collectUids(currentItems),
@@ -445,7 +548,7 @@ export class SessionSnapshotService {
     return result
   }
 
-  private waitForTreeInitialized(): Promise<void> {
+  waitForTreeInitialized(): Promise<void> {
     return this.treeInitialized
       ? Promise.resolve()
       : this.treeInitializedPromise

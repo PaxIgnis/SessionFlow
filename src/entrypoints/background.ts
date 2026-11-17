@@ -8,6 +8,7 @@ import { FaviconRefresh } from '@/services/favicon-refresh'
 import { Settings } from '@/services/settings'
 import { stampOpenTreeIdentities } from '@/services/background-session-restore'
 import { SessionSnapshots } from '@/services/background-session-snapshots'
+import { Backups } from '@/services/background-backup'
 
 export default defineBackground(() => {
   console.log('Hello, SessionFlow Background has Started!', {
@@ -16,6 +17,7 @@ export default defineBackground(() => {
 
   DeferredEventsQueue.initializeDeferredEventsQueue()
   SessionSnapshots.listenForRequests()
+  Backups.listenForRequests()
   Actions.setupBrowserActionMenu()
   let startBackground: () => void = () => undefined
   const backgroundReady = new Promise<void>((resolve, reject) => {
@@ -42,6 +44,9 @@ async function initializeBackground(): Promise<void> {
     }
   } catch (error) {
     console.error('Failed to initialize session snapshots:', error)
+  } finally {
+    // Backup requests report their own errors if snapshots failed to start.
+    Backups.markReady()
   }
   await Tree.initializeContainers()
   // Listen before initializeWindows reads the open windows and tabs, so
