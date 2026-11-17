@@ -1,6 +1,8 @@
 import { i18n } from '@/services/i18n'
 import type {
+  AutomaticBackupState,
   BackgroundRestoreSection,
+  AutomaticBackupRequest,
   BackupPreview,
   BackupRequest,
   BackupResponse,
@@ -8,7 +10,9 @@ import type {
   SessionFlowBackup,
 } from '@/types/backup'
 
-async function request<T>(message: BackupRequest): Promise<T> {
+async function request<T>(
+  message: BackupRequest | AutomaticBackupRequest,
+): Promise<T> {
   const response = (await browser.runtime.sendMessage(message)) as
     | BackupResponse<T>
     | undefined
@@ -39,4 +43,6 @@ export const BackupClient = {
       ...options,
       sections: [...options.sections],
     }),
+  runAutomatic: () =>
+    request<AutomaticBackupState>({ action: 'runAutomaticBackup' }),
 }

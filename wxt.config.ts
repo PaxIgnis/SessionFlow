@@ -64,6 +64,7 @@ export default defineConfig({
     optional_host_permissions: ['http://*/*', 'https://*/*'],
     optional_permissions: [
       'clipboardWrite',
+      'downloads',
       'http://*/*' as never,
       'https://*/*' as never,
     ],

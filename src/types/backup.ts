@@ -82,3 +82,23 @@ export type BackupRequest =
 export type BackupResponse<T = unknown> =
   | { ok: true; data: T }
   | { ok: false; error: string; code?: 'safety-snapshot-failed' }
+
+export const AUTOMATIC_BACKUP_STATE_KEY = 'sessionflow-automatic-backup-state'
+
+/** Kept in storage.local, so the schedule and rotation survive restarts. */
+export interface AutomaticBackupState {
+  /** The slot the next backup file overwrites, from 1 to the keep count. */
+  nextSlot: number
+  /** When a run last finished, whether it wrote a file or found no change. */
+  lastRunAt?: number
+  /** When a backup file was last written, and where. */
+  lastBackupAt?: number
+  lastFile?: string
+  /** Fingerprint of the last written backup, to skip unchanged ones. */
+  lastDigest?: string
+  /** The most recent failure; cleared by the next successful run. */
+  lastError?: string
+  lastErrorAt?: number
+}
+
+export type AutomaticBackupRequest = { action: 'runAutomaticBackup' }

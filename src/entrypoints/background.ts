@@ -9,6 +9,7 @@ import { Settings } from '@/services/settings'
 import { stampOpenTreeIdentities } from '@/services/background-session-restore'
 import { SessionSnapshots } from '@/services/background-session-snapshots'
 import { Backups } from '@/services/background-backup'
+import { AutomaticBackups } from '@/services/background-automatic-backup'
 
 export default defineBackground(() => {
   console.log('Hello, SessionFlow Background has Started!', {
@@ -18,6 +19,7 @@ export default defineBackground(() => {
   DeferredEventsQueue.initializeDeferredEventsQueue()
   SessionSnapshots.listenForRequests()
   Backups.listenForRequests()
+  AutomaticBackups.listenForRequests()
   Actions.setupBrowserActionMenu()
   let startBackground: () => void = () => undefined
   const backgroundReady = new Promise<void>((resolve, reject) => {
@@ -47,6 +49,12 @@ async function initializeBackground(): Promise<void> {
   } finally {
     // Backup requests report their own errors if snapshots failed to start.
     Backups.markReady()
+  }
+  try {
+    // Scheduled backups wait for the tree, so this only sets the alarm.
+    await AutomaticBackups.initialize()
+  } catch (error) {
+    console.error('Failed to initialize automatic backups:', error)
   }
   await Tree.initializeContainers()
   // Listen before initializeWindows reads the open windows and tabs, so
@@ -78,6 +86,11 @@ async function initializeBackground(): Promise<void> {
       await SessionSnapshots.handleSettingsUpdated()
     } catch (error) {
       console.error('Failed to update session snapshot settings:', error)
+    }
+    try {
+      await AutomaticBackups.handleSettingsUpdated()
+    } catch (error) {
+      console.error('Failed to update automatic backup settings:', error)
     }
   })
   Settings.setupFaviconPermissionRemovalListener(

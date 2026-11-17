@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { DEFAULT_SETTINGS } from '@/defaults/settings'
 import { prepareRestoredSettings } from '@/services/backup-settings'
 
+const allGranted = { faviconFetch: true, downloads: true }
+
 describe('restored backup settings', () => {
   const withFaviconFetching = {
     ...DEFAULT_SETTINGS,
@@ -10,7 +12,7 @@ describe('restored backup settings', () => {
   }
 
   it('keeps favicon fetching when website access is granted', () => {
-    const restored = prepareRestoredSettings(withFaviconFetching, true)
+    const restored = prepareRestoredSettings(withFaviconFetching, allGranted)
 
     expect(restored.faviconFetchingDisabled).toBe(false)
     expect(restored.settings.fetchMissingFaviconsOnStartup).toBe(true)
@@ -18,7 +20,10 @@ describe('restored backup settings', () => {
   })
 
   it('turns favicon fetching off without website access', () => {
-    const restored = prepareRestoredSettings(withFaviconFetching, false)
+    const restored = prepareRestoredSettings(withFaviconFetching, {
+      ...allGranted,
+      faviconFetch: false,
+    })
 
     expect(restored.faviconFetchingDisabled).toBe(true)
     expect(restored.settings.fetchMissingFaviconsOnStartup).toBe(false)
@@ -32,7 +37,7 @@ describe('restored backup settings', () => {
         fetchMissingFaviconsOnStartup: false,
         refreshFaviconsAfterPeriodOfTime: false,
       },
-      false,
+      { ...allGranted, faviconFetch: false },
     )
 
     expect(restored.faviconFetchingDisabled).toBe(false)
@@ -46,7 +51,7 @@ describe('restored backup settings', () => {
         sessionSnapshotKeepNewest: 1_000_000,
         doubleClickOnOpenTab: 'explode' as never,
       },
-      true,
+      allGranted,
     )
 
     expect(restored.settings.focusTabOnOpen).toBe(false)
@@ -54,5 +59,20 @@ describe('restored backup settings', () => {
     expect(restored.settings.doubleClickOnOpenTab).toBe(
       DEFAULT_SETTINGS.doubleClickOnOpenTab,
     )
+  })
+
+  it('turns automatic backups off without download access', () => {
+    const withBackups = { ...DEFAULT_SETTINGS, automaticBackups: true }
+
+    const kept = prepareRestoredSettings(withBackups, allGranted)
+    const turnedOff = prepareRestoredSettings(withBackups, {
+      ...allGranted,
+      downloads: false,
+    })
+
+    expect(kept.settings.automaticBackups).toBe(true)
+    expect(kept.automaticBackupsDisabled).toBe(false)
+    expect(turnedOff.settings.automaticBackups).toBe(false)
+    expect(turnedOff.automaticBackupsDisabled).toBe(true)
   })
 })
