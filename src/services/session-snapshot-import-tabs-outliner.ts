@@ -14,10 +14,12 @@ import type {
 } from '@/types/session-snapshots'
 import { State, TreeItemType } from '@/types/session-tree'
 
-interface OutlinerNode {
+export interface OutlinerNode {
   uid: UID
   type: 'win' | 'savedwin' | 'tab' | 'textnote' | 'group' | 'separatorline'
+  /** Fields as in Tabs Outliner's JSON node data (url, title, note, ...). */
   data: Record<string, unknown>
+  /** Tabs Outliner's custom title, shown as a comment on tabs. */
   title?: string
   collapsed: boolean
   path: number[]
@@ -43,6 +45,7 @@ const warningMessages = {
   'unsupported-appearance':
     'Custom icons, window geometry, and separator styles were not imported.',
 } satisfies Partial<Record<SessionSnapshotImportWarning['code'], string>>
+export type OutlinerWarning = keyof typeof warningMessages
 
 export function isTabsOutlinerImport(value: unknown): boolean {
   return (
@@ -72,8 +75,8 @@ export function parseTabsOutlinerImport(
   )
     invalid()
 
-  const warnings = new Map<keyof typeof warningMessages, number>()
-  const warn = (code: keyof typeof warningMessages) =>
+  const warnings = new Map<OutlinerWarning, number>()
+  const warn = (code: OutlinerWarning) =>
     warnings.set(code, (warnings.get(code) ?? 0) + 1)
   const nodes = new Map<string, OutlinerNode>()
   for (const record of records.slice(1, -1)) {
@@ -167,7 +170,18 @@ export function parseTabsOutlinerImport(
     )
   sortSiblings(roots)
   for (const node of nodes.values()) sortSiblings(node.children)
+  return buildOutlinerImport(roots, warnings, footer.time)
+}
 
+// Converts a Tabs Outliner node tree, read from either the JSON tree dump or
+// the saved HTML page, into a snapshot.
+export function buildOutlinerImport(
+  roots: OutlinerNode[],
+  warnings: Map<OutlinerWarning, number>,
+  sourceCreatedAt?: number,
+): ParsedSessionSnapshotImport {
+  const warn = (code: OutlinerWarning) =>
+    warnings.set(code, (warnings.get(code) ?? 0) + 1)
   const items: SnapshotTopLevelItem[] = []
   function createWindow(
     uid: UID,
@@ -304,7 +318,7 @@ export function parseTabsOutlinerImport(
     payload,
     summary: {
       source: 'tabs-outliner',
-      sourceCreatedAt: footer.time,
+      ...(sourceCreatedAt !== undefined ? { sourceCreatedAt } : {}),
       counts: countSnapshotItems(payload.items),
       warnings: Array.from(warnings, ([code, count]) => ({
         code,

@@ -4,6 +4,10 @@ import {
   validateSessionSnapshotPayload,
 } from '@/services/session-snapshot-codec'
 import {
+  isTabsOutlinerHtmlImport,
+  parseTabsOutlinerHtmlImport,
+} from '@/services/session-snapshot-import-tabs-outliner-html'
+import {
   isTabsOutlinerImport,
   parseTabsOutlinerImport,
 } from '@/services/session-snapshot-import-tabs-outliner'
@@ -11,6 +15,22 @@ import {
   isSessionBuddyImport,
   parseSessionBuddyImport,
 } from '@/services/session-snapshot-import-session-buddy'
+import {
+  isOneTabHtmlImport,
+  parseOneTabHtmlImport,
+} from '@/services/session-snapshot-import-onetab-html'
+import {
+  isOneTabImport,
+  parseOneTabImport,
+} from '@/services/session-snapshot-import-onetab'
+import {
+  isSimpleTabGroupsImport,
+  parseSimpleTabGroupsImport,
+} from '@/services/session-snapshot-import-simple-tab-groups'
+import {
+  isTabStashImport,
+  parseTabStashImport,
+} from '@/services/session-snapshot-import-tab-stash'
 import {
   isTabSessionManagerImport,
   parseTabSessionManagerImport,
@@ -30,10 +50,16 @@ export function parseSessionSnapshotImport(
   try {
     value = JSON.parse(json.replace(/^\uFEFF/, ''))
   } catch {
+    // Saved pages (Tabs Outliner, OneTab), OneTab text and Tab Stash Markdown.
+    if (isTabsOutlinerHtmlImport(json)) return parseTabsOutlinerHtmlImport(json)
+    if (isOneTabHtmlImport(json)) return parseOneTabHtmlImport(json)
+    if (isOneTabImport(json)) return parseOneTabImport(json)
+    if (isTabStashImport(json)) return parseTabStashImport(json)
     throw new Error(i18n.t('invalidSnapshotFile'))
   }
 
   if (isTabsOutlinerImport(value)) return parseTabsOutlinerImport(value)
+  if (isSimpleTabGroupsImport(value)) return parseSimpleTabGroupsImport(value)
 
   if (isRecord(value) && 'format' in value) {
     if (value.format !== 'session-flow-snapshot') {

@@ -27,6 +27,9 @@ export type SessionSnapshotImportSource =
   | 'tabs-outliner'
   | 'session-buddy'
   | 'tab-session-manager'
+  | 'simple-tab-groups'
+  | 'onetab'
+  | 'tab-stash'
 
 export const SESSION_SNAPSHOT_IMPORT_SOURCE_LABELS: Record<
   SessionSnapshotImportSource,
@@ -36,6 +39,22 @@ export const SESSION_SNAPSHOT_IMPORT_SOURCE_LABELS: Record<
   'tabs-outliner': 'Tabs Outliner',
   'session-buddy': 'Session Buddy',
   'tab-session-manager': 'Tab Session Manager',
+  'simple-tab-groups': 'Simple Tab Groups',
+  onetab: 'OneTab',
+  'tab-stash': 'Tab Stash',
+}
+
+export const SESSION_SNAPSHOT_IMPORT_SOURCE_FILE_TYPES: Record<
+  SessionSnapshotImportSource,
+  string
+> = {
+  'session-flow': '.json',
+  'tabs-outliner': '.json, .mhtml, .html',
+  'session-buddy': '.json',
+  'tab-session-manager': '.json',
+  'simple-tab-groups': '.json',
+  onetab: '.txt, .html',
+  'tab-stash': '.md',
 }
 
 export interface SessionSnapshotImportWarning {
@@ -54,6 +73,9 @@ export interface SessionSnapshotImportWarning {
     | 'containers-not-imported'
     | 'invalid-parent-links'
     | 'tab-order'
+    | 'groups-as-windows'
+    | 'pinned-tabs-window'
+    | 'dates-not-imported'
   count: number
   message: string
 }

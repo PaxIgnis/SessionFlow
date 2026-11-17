@@ -23,7 +23,10 @@ import type {
   SessionSnapshotRecord,
   SessionSnapshotRestoreMode,
 } from '@/types/session-snapshots'
-import { SESSION_SNAPSHOT_IMPORT_SOURCE_LABELS } from '@/types/session-snapshots'
+import {
+  SESSION_SNAPSHOT_IMPORT_SOURCE_FILE_TYPES,
+  SESSION_SNAPSHOT_IMPORT_SOURCE_LABELS,
+} from '@/types/session-snapshots'
 import { OPTIONS, type Settings as SettingsValues } from '@/types/settings'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import SnapshotConfirmationModal from './SnapshotConfirmationModal.vue'
@@ -715,7 +718,7 @@ function fileTimestamp(value: number) {
       <input
         ref="importFileInput"
         type="file"
-        accept=".json,application/json"
+        accept=".json,.txt,.html,.htm,.mhtml,.mht,.md,application/json,text/plain,text/html,text/markdown,multipart/related,message/rfc822"
         :aria-label="i18n.t('importASnapshot')"
         data-testid="import-snapshot-file"
         hidden
@@ -745,7 +748,9 @@ function fileTimestamp(value: number) {
           v-for="(label, source) in SESSION_SNAPSHOT_IMPORT_SOURCE_LABELS"
           :key="source"
         >
-          {{ label }} — (.json)
+          {{ label }} — ({{
+            SESSION_SNAPSHOT_IMPORT_SOURCE_FILE_TYPES[source]
+          }})
         </li>
       </ul>
       <p>{{ i18n.t('importedSnapshotsAreProtectedAutomatically') }}</p>

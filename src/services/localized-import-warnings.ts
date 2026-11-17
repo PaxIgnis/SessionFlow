@@ -37,6 +37,30 @@ const warningKeys = {
     'browser-specific-urls':
       'chromespecificURLsWerePreservedButMayNotOpenInFirefox',
   },
+  onetab: {
+    'groups-as-windows': 'eachOneTabGroupWasImportedAsASavedWindowGroup',
+    'browser-specific-urls':
+      'chromespecificURLsWerePreservedButMayNotOpenInFirefox',
+    'dates-not-imported':
+      'someGroupCreationDatesWereNotImportedBecauseTheirDate',
+  },
+  'tab-stash': {
+    'groups-as-windows': 'eachStashFolderWasImportedAsASavedWindowSubfolders',
+    'dates-not-imported': 'someStashDatesWereNotImportedBecauseTheirDateFormat',
+  },
+  'simple-tab-groups': {
+    'groups-as-windows': 'eachGroupWasImportedAsASavedWindowGroupSettingsSuch',
+    'pinned-tabs-window': 'pinnedTabsWerePlacedInASeparateSavedWindow',
+    'containers-not-imported':
+      'someContainerAssignmentsWereNotImportedBecauseTheBackup',
+    'invalid-parent-links':
+      'missingSelfreferencingOrCyclicTabParentLinksWereRemovedAll',
+    'tab-order': 'tabsWereMovedBesideTheirParentBranchesToPreserveThe',
+    'tab-group-metadata':
+      'someTabGroupDetailsWereUnavailableDefaultColorsOrNames',
+    'unsupported-appearance':
+      'savedFaviconsAndThumbnailsWereNotImportedAvailableSession',
+  },
   'tabs-outliner': {
     'nested-windows':
       'nestedWindowsWereMovedBelowTheirContainingWindowAsSiblings',

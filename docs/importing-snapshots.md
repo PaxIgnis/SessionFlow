@@ -7,18 +7,21 @@ You can bring saved tabs and sessions from other programs into Session Flow usin
 | Program             | Supported file                | Instructions                                            |
 | ------------------- | ----------------------------- | ------------------------------------------------------- |
 | Session Flow        | JSON snapshot or session tree | [Export from Session Flow](#session-flow)               |
-| Tabs Outliner       | JSON tree dump                | [Tabs Outliner Tree Dump](#tabs-outliner)               |
+| Tabs Outliner       | Saved page or JSON tree dump  | [Export from Tabs Outliner](#tabs-outliner)             |
 | Session Buddy       | JSON collection export        | [Export from Session Buddy](#session-buddy)             |
 | Tab Session Manager | JSON session export           | [Export from Tab Session Manager](#tab-session-manager) |
+| Simple Tab Groups   | JSON backup                   | [Back up Simple Tab Groups](#simple-tab-groups)         |
+| OneTab              | HTML file or text URL export  | [Export from OneTab](#onetab)                           |
+| Tab Stash           | Markdown export (.md)         | [Export from Tab Stash](#tab-stash)                     |
 
-Only the JSON formats listed above are supported. See the program sections below for limitations affecting older exports.
+Only the formats listed above are supported. See the program sections below for limitations affecting older exports.
 
 ## Import into Session Flow
 
-1. Export a JSON file using the instructions for your program below.
+1. Export a file using the instructions for your program below.
 2. Open Session Flow **Settings → Snapshots**.
 3. Click **Import snapshot** beside **Take a snapshot now**.
-4. Select the JSON file.
+4. Select the exported file.
 
 The file becomes one snapshot in the history list, even if it contains several sessions. Imported snapshots receive an imported indicator and are protected automatically, so automatic cleanup will not remove them.
 
@@ -35,9 +38,18 @@ Existing JSON session-tree exports can also be imported.
 
 ## Tabs Outliner
 
-Session Flow currently accepts JSON tree dumps. If you already have one of these files, select it with **Import snapshot**.
+Session Flow accepts the Tabs Outliner window saved as a web page, or a JSON tree dump. Saving the page is easier; the JSON tree dump also keeps pinned tabs and private windows.
 
-Tabs Outliner's backups, HTML and text exports are different formats and cannot be imported yet as snapshots.
+Tabs Outliner's own backups and text exports are different formats and cannot be imported yet as snapshots.
+
+### Save the Tabs Outliner page
+
+1. Open the Tabs Outliner window in Chrome.
+2. Click **Expand All Collapsed Nodes** in the toolbar if it is shown. Collapsed branches may be saved without their contents.
+3. Press **Ctrl+S** and save the page. Both **Webpage, Single File** (`.mhtml`) and **Webpage, HTML Only** (`.html`) work.
+4. Import that file in Session Flow.
+
+Windows, tabs, notes, groups, separators, tab comments, and each window's active tab are imported the same way as from a JSON tree dump. Windows without a custom title are imported untitled.
 
 ### Export using the developer console
 
@@ -133,3 +145,55 @@ See [Session Buddy's export instructions](https://sessionbuddy.com/import-export
 Each session becomes a named note branch. Session Flow preserves tags as notes, saved windows, tab order and parent links, pinned tabs, and available tab-group details. Container assignments cannot be transferred from these exports; conversion details report affected tabs.
 
 Use an export from a current version of Tab Session Manager. Older exports with legacy tag or date formats are not supported yet; open and re-export them in a current version first.
+
+## Simple Tab Groups
+
+1. Open the Simple Tab Groups **Options**.
+2. In the **Backup your Simple Tab Groups** section, click **Create backup** and save the JSON file. Automatic backups saved to your downloads folder can also be imported.
+3. Import that file in Session Flow.
+
+During import:
+
+- Each group, including archived groups, becomes a saved window named after the group. Group settings such as icons, catch rules, and archive status are not imported.
+- Pinned tabs are placed together in a separate saved window named **Pinned tabs**.
+- Tab order, parent links between tabs, and tab groups within a group are preserved.
+- Container assignments are preserved using the container details in the backup. When you restore, Session Flow offers to recreate containers that no longer exist. Tabs in temporary containers are restored without a container.
+- Saved favicons and thumbnails are not imported.
+
+## OneTab
+
+Session Flow accepts both of OneTab's exports. The HTML file keeps more detail, so use it when you can.
+
+### HTML file (recommended)
+
+1. Open OneTab and choose **More...** → **Save as HTML file**.
+2. Import the saved `.html` file in Session Flow.
+
+Each OneTab group becomes a saved window. Group names and creation dates are preserved, and groups without a name stay untitled. Inner groups become notes with their tabs beneath them. OneTab does not include notes in this file, so they cannot be imported. Creation dates are read when OneTab writes them in the US date format (for example `11/17/26, 1:26:59 AM`); dates in other formats are reported in the conversion details instead.
+
+### Text list
+
+1. Open OneTab and click **Export / Import URLs** (in the top-right menu, or under **Options** in some versions).
+2. Select all the text under **Export URLs** and copy it.
+3. Paste it into a plain-text editor and save it as a `.txt` file.
+4. Import that file in Session Flow.
+
+Each block of tabs in the list (separated by a blank line) becomes a saved window. The text list only contains each tab's URL and title, so group names, creation dates, inner groups, and locked or starred status cannot be imported. OneTab also adds a blank line after inner groups, so a group that contains inner groups may be split across more than one window. All tabs are still imported in their original order.
+
+## Tab Stash
+
+Tab Stash copies its export to the clipboard, so save it as a Markdown file:
+
+1. Open Tab Stash.
+2. Open the menu beside the search box and choose **Export...**.
+3. Select **Markdown** as the format, then click **Copy**.
+4. Paste the text into a plain-text editor and save it as a `.md` file.
+5. Import that file in Session Flow.
+
+During import:
+
+- Each stash folder becomes a saved window. Links that are not in a folder are placed together in a first, untitled window.
+- Sub-folders become notes with their tabs beneath them, at every nesting level.
+- Folders you renamed keep their name. Unnamed folders, which Tab Stash shows as "Saved" and a date, use that date as the saved time when it is in the US date format (for example `11/17/2026, 1:23:45 AM`). Otherwise the name is kept and the conversion details report the date.
+
+Tab Stash's other export formats are not supported. The **OneTab** format can be imported as a [OneTab text list](#text-list), but folder names are lost.

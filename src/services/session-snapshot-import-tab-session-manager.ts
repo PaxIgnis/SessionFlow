@@ -3,6 +3,7 @@ import {
   countSnapshotItems,
   validateSessionSnapshotPayload,
 } from '@/services/session-snapshot-codec'
+import { nestSnapshotTabs } from '@/services/session-snapshot-import-tab-tree'
 import type {
   ParsedSessionSnapshotImport,
   SessionSnapshotImportWarning,
@@ -176,7 +177,8 @@ export function parseTabSessionManagerImport(
       )
         warn('window-presentation')
       const windowGroups = new Map<number, SnapshotTabGroupMetadata>()
-      const tabsById = new Map<number, SnapshotTab>()
+      const tabs: SnapshotTab[] = []
+      const indexById = new Map<number, number>()
       const parents = new Map<number, number>()
       for (const { source, id } of entries) {
         const url =
@@ -196,7 +198,8 @@ export function parseTabSessionManagerImport(
           isParent: false,
           savedTime,
         }
-        tabsById.set(id, tab)
+        indexById.set(id, tabs.length)
+        tabs.push(tab)
         if (source.active === true) window.savedActiveTabUid = tab.uid
         if (source.openerTabId !== undefined)
           parents.set(id, integer(source.openerTabId, -1))
@@ -245,58 +248,11 @@ export function parseTabSessionManagerImport(
           warn('browser-specific-urls')
       }
 
-      // Repair stale opener links before producing the strict snapshot tree.
-      for (const [id, parent] of parents) {
-        if (id === parent || !tabsById.has(parent)) {
-          parents.delete(id)
-          warn('invalid-parent-links')
-        }
-      }
-      const visited = new Set<number>()
-      for (const id of tabsById.keys()) {
-        const path = new Set<number>()
-        let current: number | undefined = id
-        while (current !== undefined && !visited.has(current)) {
-          path.add(current)
-          const parent: number | undefined = parents.get(current)
-          if (parent !== undefined && path.has(parent)) {
-            parents.delete(current)
-            warn('invalid-parent-links')
-            break
-          }
-          current = parent
-        }
-        for (const ancestor of path) visited.add(ancestor)
-      }
-      const children = new Map<number | undefined, number[]>()
-      for (const id of tabsById.keys()) {
-        const parent = parents.get(id)
-        const siblings = children.get(parent) ?? []
-        siblings.push(id)
-        children.set(parent, siblings)
-      }
-      const pending = [...(children.get(undefined) ?? [])].reverse()
-      while (pending.length) {
-        const id = pending.pop()!
-        const tab = tabsById.get(id)!
-        const parentId = parents.get(id)
-        if (parentId !== undefined) {
-          const parent = tabsById.get(parentId)!
-          tab.parentUid = parent.uid
-          tab.indentLevel = parent.indentLevel + 1
-          parent.isParent = true
-        }
-        window.children.push(tab)
-        const descendants = children.get(id) ?? []
-        for (let i = descendants.length - 1; i >= 0; i--)
-          pending.push(descendants[i])
-      }
-      if (
-        window.children.some(
-          (tab, index) => tab !== tabsById.get(entries[index].id),
-        )
-      )
-        warn('tab-order')
+      // Opener IDs become tab positions; unknown IDs are reported as stale links.
+      const parentIndexes = new Map<number, number>()
+      for (const [id, parent] of parents)
+        parentIndexes.set(indexById.get(id)!, indexById.get(parent) ?? -1)
+      window.children = nestSnapshotTabs(tabs, parentIndexes, warn)
       items.push(window)
     }
   }

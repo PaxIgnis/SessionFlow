@@ -11,3 +11,9 @@ coverage-all
 test-results
 stats.html
 stats-*.json
+
+# Fixtures reproduce other extensions' exports exactly.
+tests/fixtures/tab-stash-export.md
+tests/fixtures/onetab-export.html
+tests/fixtures/tab-stash-export-nested.md
+tests/fixtures/tabs-outliner-page.html

@@ -1,0 +1,133 @@
+From: <Saved by Blink>
+Snapshot-Content-Location: chrome-extension://eggkanocgddhmamlbiijnphhppkpkmkl/activesessionview.html?type=clone&yo=0
+Subject: Tabs Outliner
+Date: Tue, 17 Nov 2026 11:31:49 GMT
+MIME-Version: 1.0
+Content-Type: multipart/related;
+	type="text/html";
+	boundary="----MultipartBoundary--fixtureBoundary0000000000000000000000000----"
+
+
+------MultipartBoundary--fixtureBoundary0000000000000000000000000----
+Content-Type: text/html
+Content-ID: <frame-FIXTURE@mhtml.blink>
+Content-Transfer-Encoding: quoted-printable
+Content-Location: chrome-extension://eggkanocgddhmamlbiijnphhppkpkmkl/activesessionview.html?type=clone&yo=0
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.=
+w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns=3D"http://www.w3.=
+org/1999/xhtml"><!-- Copyright 2012 Vladyslav Volovyk --><head><meta http-e=
+quiv=3D"Content-Type" content=3D"text/html; charset=3DUTF-8">
+<title>Tabs Outliner</title>
+<style>.separatorline_text { color: #888; }</style>
+</head>
+<body id=3D"ID_activeSessionTreeScrollableContainer"><!--
+--><div id=3D"mainToolbarAndMessagesContainer"><!--
+    --><div id=3D"mainToolbar" class=3D"mainToolbarContainer"><a id=3D"newW=
+indowActionLink" class=3D"actionButton actionLink" data-fabric=3D"openwin_"=
+ title=3D"Window"></a></div></div><!--
+-->
+
+<li id=3D"idmvc1" class=3D"nodeTitleAndSubnodesContainer sessionNTASC NTASC=
+-windowFrame"><div class=3D"nodeTitleContainer sessionNTC NTC-windowFrame e=
+xpandedsubnodes"><div class=3D"nodeFaviconAndTextHelperContainer session"><=
+img class=3D"node_favicon session_favicon" src=3D"chrome-extension://eggkan=
+ocgddhmamlbiijnphhppkpkmkl/img/session.png"><span class=3D"node_text sessio=
+n_text" draggable=3D"true">Current Session</span></div></div><ul class=3D"s=
+ubnodeslist"><li id=3D"idmvc2" class=3D"nodeTitleAndSubnodesContainer textn=
+oteNTASC NTASC-defaultFrame"><div class=3D"nodeTitleContainer textnoteNTC N=
+TC-defaultFrame expandedsubnodes"><span class=3D"node_text textnote_text" d=
+raggable=3D"true">MAIN &amp; more</span></div><ul class=3D"subnodeslist"><l=
+i id=3D"idmvc3" class=3D"nodeTitleAndSubnodesContainer savedwinNTASC NTASC-=
+windowFrame"><div class=3D"nodeTitleContainer savedwinNTC NTC-windowFrame e=
+xpandedsubnodes"><div class=3D"nodeFaviconAndTextHelperContainer savedwin">=
+<img class=3D"node_favicon savedwin_favicon" src=3D"chrome-extension://eggk=
+anocgddhmamlbiijnphhppkpkmkl/img/savedwin.png"><span class=3D"node_text sav=
+edwin_text" draggable=3D"true">Music</span></div></div><ul class=3D"subnode=
+slist"><li id=3D"idmvc4" class=3D"nodeTitleAndSubnodesContainer savedtabNTA=
+SC NTASC-tabFrame"><a class=3D"nodeTitleContainer savedtabNTC NTC-tabFrame =
+nosubnodes" href=3D"chrome://newtab/"><img class=3D"node_favicon savedtab_f=
+avicon" src=3D"chrome-extension://eggkanocgddhmamlbiijnphhppkpkmkl/img/nofa=
+vicon.png"><span class=3D"node_text savedtab_text" draggable=3D"true">New T=
+ab</span></a></li><li id=3D"idmvc5" class=3D"nodeTitleAndSubnodesContainer =
+savedtabNTASC NTASC-tabFrame"><a class=3D"nodeTitleContainer savedtabNTC NT=
+C-tabFrame expandedsubnodes selectedtab" href=3D"https://example.com/search=
+?q=3Dmusic&amp;page=3D2"><img class=3D"node_favicon savedtab_favicon" src=
+=3D"data:image/png;base64,AAAA" data-node-icon-for-html-export=3D"https://e=
+xample.com/favicon.ico"><span class=3D"node_text savedtab_text" draggable=
+=3D"true"><span class=3D"tab_comment">listen later</span>Caf=C3=A9 music =
+=E2=80=93 playlist</span></a><ul class=3D"subnodeslist"><li id=3D"idmvc6" c=
+lass=3D"nodeTitleAndSubnodesContainer savedtabNTASC NTASC-tabFrame"><a clas=
+s=3D"nodeTitleContainer savedtabNTC NTC-tabFrame nosubnodes" href=3D"https:=
+//example.org/child"><img class=3D"node_favicon savedtab_favicon" src=3D"ch=
+rome-extension://eggkanocgddhmamlbiijnphhppkpkmkl/img/nofavicon.png"><span =
+class=3D"node_text savedtab_text" draggable=3D"true">Child page</span></a><=
+/li></ul></li></ul></li><li id=3D"idmvc7" class=3D"nodeTitleAndSubnodesCont=
+ainer savedwinNTASC NTASC-windowFrame"><div class=3D"nodeTitleContainer sav=
+edwinNTC NTC-windowFrame expandedsubnodes"><div class=3D"nodeFaviconAndText=
+HelperContainer savedwin"><img class=3D"node_favicon savedwin_favicon" src=
+=3D"chrome-extension://eggkanocgddhmamlbiijnphhppkpkmkl/img/savedwin.png"><=
+span class=3D"node_text savedwin_text" draggable=3D"true">Window (crashed T=
+ue Apr 20 2021)</span></div></div><div style=3D"overflow: hidden; padding: =
+0px; transition-property: height; transition-duration: 0.3s; height: 40px;"=
+><ul class=3D"subnodeslist"><li id=3D"idmvc8" class=3D"nodeTitleAndSubnodes=
+Container savedtabNTASC NTASC-tabFrame"><a class=3D"nodeTitleContainer save=
+dtabNTC NTC-tabFrame nosubnodes" href=3D"https://example.net/"><img class=
+=3D"node_favicon savedtab_favicon" src=3D"chrome-extension://eggkanocgddhma=
+mlbiijnphhppkpkmkl/img/nofavicon.png"><span class=3D"node_text savedtab_tex=
+t" draggable=3D"true">example.net</span></a></li></ul></div></li></ul></li>=
+<li id=3D"idmvc9" class=3D"nodeTitleAndSubnodesContainer separatorlineNTASC=
+ NTASC-defaultFrame NCC-NTASC-a"><div class=3D"nodeTitleContainer separator=
+lineNTC NTC-defaultFrame nosubnodes NCC-NTC-a"><span class=3D"node_text sep=
+aratorline_text" draggable=3D"true">=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=
+=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=
+=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D</span></div></=
+li><li id=3D"idmvc10" class=3D"nodeTitleAndSubnodesContainer groupNTASC NTA=
+SC-windowFrame"><div class=3D"nodeTitleContainer groupNTC NTC-windowFrame e=
+xpandedsubnodes"><div class=3D"nodeFaviconAndTextHelperContainer group"><im=
+g class=3D"node_favicon group_favicon" src=3D"chrome-extension://eggkanocgd=
+dhmamlbiijnphhppkpkmkl/img/group-icon.png"><span class=3D"node_text group_t=
+ext" draggable=3D"true">Courses</span></div></div><ul class=3D"subnodeslist=
+"><li id=3D"idmvc11" class=3D"nodeTitleAndSubnodesContainer savedwinNTASC N=
+TASC-windowFrame"><div class=3D"nodeTitleContainer savedwinNTC NTC-windowFr=
+ame expandedsubnodes"><div class=3D"nodeFaviconAndTextHelperContainer saved=
+win"><img class=3D"node_favicon savedwin_favicon" src=3D"chrome-extension:/=
+/eggkanocgddhmamlbiijnphhppkpkmkl/img/group-icon.png"><span class=3D"node_t=
+ext savedwin_text" draggable=3D"true">Term 1</span></div></div><ul class=3D=
+"subnodeslist"><li id=3D"idmvc12" class=3D"nodeTitleAndSubnodesContainer sa=
+vedwinNTASC NTASC-windowFrame"><div class=3D"nodeTitleContainer savedwinNTC=
+ NTC-windowFrame expandedsubnodes"><div class=3D"nodeFaviconAndTextHelperCo=
+ntainer savedwin"><img class=3D"node_favicon savedwin_favicon" src=3D"chrom=
+e-extension://eggkanocgddhmamlbiijnphhppkpkmkl/img/savedwin.png"><span clas=
+s=3D"node_text savedwin_text" draggable=3D"true">Window</span></div></div><=
+ul class=3D"subnodeslist"><li id=3D"idmvc13" class=3D"nodeTitleAndSubnodesC=
+ontainer savedtabNTASC NTASC-tabFrame"><a class=3D"nodeTitleContainer saved=
+tabNTC NTC-tabFrame nosubnodes" href=3D"https://example.edu/course"><img cl=
+ass=3D"node_favicon savedtab_favicon" src=3D"chrome-extension://eggkanocgdd=
+hmamlbiijnphhppkpkmkl/img/nofavicon.png"><span class=3D"node_text savedtab_=
+text" draggable=3D"true">Course page</span></a></li></ul></li></ul></li></u=
+l></li><li id=3D"idmvc14" class=3D"nodeTitleAndSubnodesContainer winNTASC N=
+TASC-windowFrame currentNode"><div class=3D"nodeTitleContainer winNTC NTC-w=
+indowFrame expandedsubnodes focusedwindow protected currentNode" tabindex=
+=3D"1"><div class=3D"nodeFaviconAndTextHelperContainer win"><img class=3D"n=
+ode_favicon win_favicon" src=3D"chrome-extension://eggkanocgddhmamlbiijnphh=
+ppkpkmkl/img/win.png"><span class=3D"node_text win_text" draggable=3D"true"=
+>Window</span></div></div><ul class=3D"subnodeslist"><li id=3D"idmvc15" cla=
+ss=3D"nodeTitleAndSubnodesContainer tabNTASC NTASC-tabFrame"><a class=3D"no=
+deTitleContainer tabNTC NTC-tabFrame nosubnodes selectedtab" href=3D"chrome=
+-extension://eggkanocgddhmamlbiijnphhppkpkmkl/activesessionview.html?type=
+=3Dclone&amp;yo=3D0"><img class=3D"node_favicon tab_favicon" src=3D"chrome-=
+extension://eggkanocgddhmamlbiijnphhppkpkmkl/img/favicon.png"><span class=
+=3D"node_text tab_text" draggable=3D"true">Tabs Outliner</span></a></li></u=
+l></li></ul></li><div id=3D"scrollToLastNodeCompensator" style=3D"height: 0=
+px;"></div></body></html>
+
+
+------MultipartBoundary--fixtureBoundary0000000000000000000000000----
+Content-Type: image/png
+Content-Transfer-Encoding: base64
+Content-Location: chrome-extension://eggkanocgddhmamlbiijnphhppkpkmkl/img/nofavicon.png
+
+iVBORw0KGgo=
+
+------MultipartBoundary--fixtureBoundary0000000000000000000000000------

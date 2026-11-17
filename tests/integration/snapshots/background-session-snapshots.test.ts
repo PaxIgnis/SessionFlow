@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '@/defaults/settings'
 import { SessionSnapshotService } from '@/services/background-session-snapshots'
@@ -14,6 +15,7 @@ import { installFakeBrowser } from '../../helpers/fake-browser'
 import tabsOutlinerBackup from '../../fixtures/tabs-outliner-backup.json'
 import sessionBuddyExport from '../../fixtures/session-buddy-export.json'
 import tabSessionManagerExport from '../../fixtures/tab-session-manager-export.json'
+import simpleTabGroupsBackup from '../../fixtures/simple-tab-groups-backup.json'
 
 describe('background session snapshots', () => {
   let repository: MemoryRepository
@@ -573,6 +575,125 @@ describe('background session snapshots', () => {
         ]),
       ),
     ).rejects.toThrow('Tab Session Manager')
+    expect(repository.records.size).toBe(1)
+  })
+
+  it('imports a Simple Tab Groups backup atomically as a protected snapshot through runtime messaging', async () => {
+    const originalTree = structuredClone(treeItems)
+    const response = await service.handleRuntimeMessage({
+      action: 'importSessionSnapshot',
+      json: JSON.stringify(simpleTabGroupsBackup),
+    })
+    expect(response).toMatchObject({
+      ok: true,
+      data: {
+        id: 'snapshot-1',
+        protected: true,
+        trigger: 'import',
+        containsPrivateWindows: false,
+        counts: { windows: 3, tabs: 6, notes: 0, separators: 0 },
+        importSummary: { source: 'simple-tab-groups' },
+      },
+    })
+    const record = await service.get('snapshot-1')
+    expect(record.metadata.importSummary?.counts).toEqual(
+      record.metadata.counts,
+    )
+    expect((await service.exportSnapshot('snapshot-1')).payload).toEqual(
+      record.payload,
+    )
+    expect(treeItems).toEqual(originalTree)
+    expect(browser.tabs.create).not.toHaveBeenCalled()
+    expect(browser.windows.create).not.toHaveBeenCalled()
+    await expect(
+      service.importSnapshot(
+        JSON.stringify({
+          ...simpleTabGroupsBackup,
+          groups: [...simpleTabGroupsBackup.groups, { tabs: [{}] }],
+        }),
+      ),
+    ).rejects.toThrow('Simple Tab Groups')
+    expect(repository.records.size).toBe(1)
+  })
+
+  it('imports a OneTab text export as a protected snapshot through runtime messaging', async () => {
+    const originalTree = structuredClone(treeItems)
+    const response = await service.handleRuntimeMessage({
+      action: 'importSessionSnapshot',
+      json: readFileSync(
+        new URL('../../fixtures/onetab-export.txt', import.meta.url),
+        'utf8',
+      ),
+    })
+    expect(response).toMatchObject({
+      ok: true,
+      data: {
+        id: 'snapshot-1',
+        protected: true,
+        trigger: 'import',
+        counts: { windows: 5, tabs: 8, notes: 0, separators: 0 },
+        importSummary: { source: 'onetab' },
+      },
+    })
+    expect(treeItems).toEqual(originalTree)
+    expect(browser.tabs.create).not.toHaveBeenCalled()
+    await expect(
+      service.importSnapshot('https://example.com | Example\nplain text'),
+    ).rejects.toThrow('not a valid snapshot file')
+    expect(repository.records.size).toBe(1)
+  })
+
+  it('imports a saved Tabs Outliner page as a protected snapshot through runtime messaging', async () => {
+    const originalTree = structuredClone(treeItems)
+    const response = await service.handleRuntimeMessage({
+      action: 'importSessionSnapshot',
+      json: readFileSync(
+        new URL('../../fixtures/tabs-outliner-page.mhtml', import.meta.url),
+        'utf8',
+      ),
+    })
+    expect(response).toMatchObject({
+      ok: true,
+      data: {
+        id: 'snapshot-1',
+        protected: true,
+        trigger: 'import',
+        counts: { windows: 4, tabs: 6, notes: 3, separators: 1 },
+        importSummary: {
+          source: 'tabs-outliner',
+          sourceCreatedAt: Date.UTC(2026, 10, 17, 11, 31, 49),
+        },
+      },
+    })
+    expect(treeItems).toEqual(originalTree)
+    expect(browser.tabs.create).not.toHaveBeenCalled()
+    expect(browser.windows.create).not.toHaveBeenCalled()
+  })
+
+  it('imports a Tab Stash Markdown export as a protected snapshot through runtime messaging', async () => {
+    const originalTree = structuredClone(treeItems)
+    const response = await service.handleRuntimeMessage({
+      action: 'importSessionSnapshot',
+      json: readFileSync(
+        new URL('../../fixtures/tab-stash-export.md', import.meta.url),
+        'utf8',
+      ),
+    })
+    expect(response).toMatchObject({
+      ok: true,
+      data: {
+        id: 'snapshot-1',
+        protected: true,
+        trigger: 'import',
+        counts: { windows: 4, tabs: 7, notes: 3, separators: 0 },
+        importSummary: { source: 'tab-stash' },
+      },
+    })
+    expect(treeItems).toEqual(originalTree)
+    expect(browser.tabs.create).not.toHaveBeenCalled()
+    await expect(
+      service.importSnapshot('## Stash\n- [A](https://a.example)\nplain text'),
+    ).rejects.toThrow('not a valid snapshot file')
     expect(repository.records.size).toBe(1)
   })
 
