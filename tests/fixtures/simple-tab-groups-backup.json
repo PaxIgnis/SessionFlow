@@ -1,0 +1,85 @@
+{
+  "version": "6.0",
+  "autoBackupEnable": true,
+  "autoBackupFilePath": "STG-backups-FF-{ff-version}/STG-backup {date-full} {time-short}",
+  "hotkeys": [],
+  "defaultGroupProps": {},
+  "groups": [
+    {
+      "id": 1,
+      "title": "Research",
+      "iconColor": "#0f9d58",
+      "iconUrl": null,
+      "iconViewType": "main-squares",
+      "isArchive": false,
+      "isSticky": false,
+      "catchTabRules": "",
+      "catchTabContainers": [],
+      "newTabContainer": "firefox-default",
+      "subGroups": [
+        {
+          "id": "a1b2c3d4",
+          "title": "Reading",
+          "color": "blue",
+          "collapsed": true
+        }
+      ],
+      "tabs": [
+        {
+          "url": "https://example.com/",
+          "title": "Example",
+          "cookieStoreId": "firefox-container-1",
+          "lastAccessed": 1700000000000
+        },
+        {
+          "url": "https://example.com/article",
+          "title": "Article",
+          "cookieStoreId": "firefox-container-1",
+          "subGroupId": "a1b2c3d4",
+          "lastAccessed": 1700000100000,
+          "openerOffset": -1
+        },
+        {
+          "url": "https://example.org/",
+          "title": "Example Org",
+          "subGroupId": "a1b2c3d4",
+          "favIconUrl": "data:image/png;base64,AAAA",
+          "lastAccessed": 1700000050000
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "",
+      "iconColor": "#db4437",
+      "iconUrl": null,
+      "iconViewType": "main-squares",
+      "isArchive": true,
+      "subGroups": [],
+      "tabs": [
+        {
+          "url": "https://example.net/docs",
+          "title": "Docs",
+          "openerOffset": 1
+        },
+        {
+          "url": "https://example.net/",
+          "title": "Example Net",
+          "cookieStoreId": "temporary-container"
+        }
+      ]
+    },
+    { "id": 3, "uploadToCloud": false }
+  ],
+  "pinnedTabs": [{ "url": "https://mail.example.com/", "title": "Mail" }],
+  "containers": {
+    "firefox-container-1": {
+      "cookieStoreId": "firefox-container-1",
+      "name": "Work",
+      "color": "blue",
+      "colorCode": "#37adff",
+      "icon": "briefcase",
+      "iconUrl": "resource://usercontext-content/briefcase.svg"
+    }
+  }
+}

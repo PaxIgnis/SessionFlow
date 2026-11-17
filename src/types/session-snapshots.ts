@@ -27,6 +27,7 @@ export type SessionSnapshotImportSource =
   | 'tabs-outliner'
   | 'session-buddy'
   | 'tab-session-manager'
+  | 'simple-tab-groups'
 
 export const SESSION_SNAPSHOT_IMPORT_SOURCE_LABELS: Record<
   SessionSnapshotImportSource,
@@ -36,6 +37,7 @@ export const SESSION_SNAPSHOT_IMPORT_SOURCE_LABELS: Record<
   'tabs-outliner': 'Tabs Outliner',
   'session-buddy': 'Session Buddy',
   'tab-session-manager': 'Tab Session Manager',
+  'simple-tab-groups': 'Simple Tab Groups',
 }
 
 export interface SessionSnapshotImportWarning {
@@ -54,6 +56,8 @@ export interface SessionSnapshotImportWarning {
     | 'containers-not-imported'
     | 'invalid-parent-links'
     | 'tab-order'
+    | 'groups-as-windows'
+    | 'pinned-tabs-window'
   count: number
   message: string
 }

@@ -10,6 +10,7 @@ You can bring saved tabs and sessions from other programs into Session Flow usin
 | Tabs Outliner       | JSON tree dump                | [Tabs Outliner Tree Dump](#tabs-outliner)               |
 | Session Buddy       | JSON collection export        | [Export from Session Buddy](#session-buddy)             |
 | Tab Session Manager | JSON session export           | [Export from Tab Session Manager](#tab-session-manager) |
+| Simple Tab Groups   | JSON backup                   | [Back up Simple Tab Groups](#simple-tab-groups)         |
 
 Only the JSON formats listed above are supported. See the program sections below for limitations affecting older exports.
 
@@ -133,3 +134,17 @@ See [Session Buddy's export instructions](https://sessionbuddy.com/import-export
 Each session becomes a named note branch. Session Flow preserves tags as notes, saved windows, tab order and parent links, pinned tabs, and available tab-group details. Container assignments cannot be transferred from these exports; conversion details report affected tabs.
 
 Use an export from a current version of Tab Session Manager. Older exports with legacy tag or date formats are not supported yet; open and re-export them in a current version first.
+
+## Simple Tab Groups
+
+1. Open the Simple Tab Groups **Options**.
+2. In the **Backup your Simple Tab Groups** section, click **Create backup** and save the JSON file. Automatic backups saved to your downloads folder can also be imported.
+3. Import that file in Session Flow.
+
+During import:
+
+- Each group, including archived groups, becomes a saved window named after the group. Group settings such as icons, catch rules, and archive status are not imported.
+- Pinned tabs are placed together in a separate saved window named **Pinned tabs**.
+- Tab order, parent links between tabs, and tab groups within a group are preserved.
+- Container assignments are preserved using the container details in the backup. When you restore, Session Flow offers to recreate containers that no longer exist. Tabs in temporary containers are restored without a container.
+- Saved favicons and thumbnails are not imported.

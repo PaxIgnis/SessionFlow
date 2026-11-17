@@ -12,6 +12,10 @@ import {
   parseSessionBuddyImport,
 } from '@/services/session-snapshot-import-session-buddy'
 import {
+  isSimpleTabGroupsImport,
+  parseSimpleTabGroupsImport,
+} from '@/services/session-snapshot-import-simple-tab-groups'
+import {
   isTabSessionManagerImport,
   parseTabSessionManagerImport,
 } from '@/services/session-snapshot-import-tab-session-manager'
@@ -34,6 +38,7 @@ export function parseSessionSnapshotImport(
   }
 
   if (isTabsOutlinerImport(value)) return parseTabsOutlinerImport(value)
+  if (isSimpleTabGroupsImport(value)) return parseSimpleTabGroupsImport(value)
 
   if (isRecord(value) && 'format' in value) {
     if (value.format !== 'session-flow-snapshot') {
