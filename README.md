@@ -12,7 +12,7 @@ Session Flow is a free, open-source Firefox extension that brings your open tabs
 - **Keep tabs for later.** Save a tab or an entire window to close it in Firefox while keeping its place in the tree. Reopen it when you need it.
 - **Notes and labels.** Add context beside your tabs, give windows meaningful names, and use notes to group windows by project or topic.
 - **Session snapshots.** Take snapshots manually or on a schedule. Preview an earlier session and restore everything or just selected items.
-- **Import and export.** Export snapshots as JSON, or import supported JSON exports from other session managers.
+- **Backups, import and export.** Back up your tree, snapshots, and settings to a file, manually or automatically to your download folder. Export snapshots as JSON, or import exports from Session Buddy, Tab Session Manager, Simple Tab Groups, OneTab, Tab Stash, and Tabs Outliner.
 - **Firefox containers and tab groups.** See container identities and tab-group colors alongside your tree. Choose or create containers for tabs. Firefox group membership and tree nesting are independent.
 - **Keyboard controls and settings.** Navigate the tree with the keyboard and customize shortcuts, drag-and-drop behavior, actions on child items, and startup behavior.
 
@@ -100,28 +100,31 @@ Automatic snapshots are enabled by default. In **Settings → Snapshots**, you c
 
 Older snapshots are thinned out as they age. Protected snapshots are never removed; imported snapshots and, by default, the ones you take yourself are protected. You can change the limits or turn automatic removal off in the same section; if a change would delete existing snapshots, Session Flow asks first. **Settings → Storage** shows how much space the session tree, snapshots, favicon cache, and settings use.
 
-Use **Save as JSON** in a snapshot preview to keep a backup outside your Firefox profile. Local snapshots do not provide a backup if the profile itself is lost or removed. There is no built-in cloud sync.
+Snapshots are stored in your Firefox profile, so they are lost if the profile is lost or removed. To keep a copy outside the profile, open **Settings → Backup & restore**. A backup is a single JSON file containing the session tree, snapshot history, settings and, optionally, the favicon cache. When restoring, you choose which of those to bring back. A restored session tree is added below your current tree after a safety snapshot, and snapshots you already have are skipped.
+
+Turn on **Back up automatically** in the same section to save a backup on a schedule to a folder inside your download folder. Session Flow keeps a set number of rotating files (`session-flow-backup-1.json`, `-2.json`, and so on), overwriting the oldest, and skips a scheduled backup when nothing has changed. Firefox asks for permission to manage downloads the first time. You can also use **Save as JSON** in a snapshot preview to export a single snapshot. There is no built-in cloud sync.
 
 To move from another session manager, choose **Import snapshot**. Importing creates a snapshot for review before you restore anything; it does not immediately open tabs or change your current tree. Supported formats and conversion limits are covered in the [import and export guide](docs/importing-snapshots.md).
 
 ## Privacy and permissions
 
-Session Flow has no analytics or tracking and does not send your browsing data to its developer. Your session tree, settings, and snapshots are stored locally in your Firefox profile.
+Session Flow has no analytics or tracking and does not send your browsing data to its developer. Your session tree, settings, and snapshots are stored locally in your Firefox profile, and backups are saved only where you choose on your computer.
 
 Website icons may be fetched from the sites that provide them. Fetching missing icons and refreshing cached icons require optional website access. These requests can contact websites and their icon hosts.
 
 Session Flow requests permissions for the features it provides:
 
-| Permission                    | Purpose                                                    |
-| ----------------------------- | ---------------------------------------------------------- |
-| Tabs and sessions             | Track, organize, and restore browser windows and tabs.     |
-| Containers and cookies        | Read and manage Firefox container identities for tabs.     |
-| Tab groups                    | Read and manage Firefox tab-group membership and metadata. |
-| Menus                         | Provide context-menu actions for tree items.               |
-| Storage and unlimited storage | Keep your saved tree, settings, and favicon cache locally. |
-| Alarms                        | Schedule automatic snapshots and maintenance.              |
-| Website access (optional)     | Fetch missing favicons or refresh cached icons.            |
-| Clipboard access (optional)   | Copy snapshot JSON to the clipboard when you request it.   |
+| Permission                    | Purpose                                                     |
+| ----------------------------- | ----------------------------------------------------------- |
+| Tabs and sessions             | Track, organize, and restore browser windows and tabs.      |
+| Containers and cookies        | Read and manage Firefox container identities for tabs.      |
+| Tab groups                    | Read and manage Firefox tab-group membership and metadata.  |
+| Menus                         | Provide context-menu actions for tree items.                |
+| Storage and unlimited storage | Keep your saved tree, settings, and favicon cache locally.  |
+| Alarms                        | Schedule automatic snapshots and maintenance.               |
+| Website access (optional)     | Fetch missing favicons or refresh cached icons.             |
+| Clipboard access (optional)   | Copy snapshot JSON to the clipboard when you request it.    |
+| Downloads (optional)          | Save automatic backups to a folder in your download folder. |
 
 Private-window access is optional and must be allowed in Firefox. Keeping private windows in the saved tree, including them in snapshots, and caching their favicons are separate settings, all off by default. Enabling them can retain private titles, URLs, or icons after private windows close. Turning retention off does not delete existing snapshots.
 
