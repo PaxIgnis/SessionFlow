@@ -1,13 +1,13 @@
 import { ContextMenu } from '@/services/context-menu'
 import { SessionTree } from '@/services/foreground-tree'
+import { Selection } from '@/services/selection'
 import {
   ContextMenuConfig,
   ContextMenuItem,
   ContextMenuItemType,
   ContextMenuType,
 } from '@/types/context-menu'
-// import { Settings } from '@/services/settings'
-import { Selection } from '@/services/selection'
+import type { TreeItem } from '@/types/session-tree'
 import {
   Note,
   SelectionType,
@@ -16,7 +16,6 @@ import {
   TreeItemType,
   Window,
 } from '@/types/session-tree'
-import type { TreeItem } from '@/types/session-tree'
 
 interface ItemLocation {
   item: TreeItem

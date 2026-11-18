@@ -12,10 +12,6 @@ import { Backups } from '@/services/background-backup'
 import { AutomaticBackups } from '@/services/background-automatic-backup'
 
 export default defineBackground(() => {
-  console.log('Hello, SessionFlow Background has Started!', {
-    id: browser.runtime.id,
-  })
-
   DeferredEventsQueue.initializeDeferredEventsQueue()
   SessionSnapshots.listenForRequests()
   Backups.listenForRequests()

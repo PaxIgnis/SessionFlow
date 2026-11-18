@@ -1,4 +1,3 @@
-import { i18n } from '@/services/i18n'
 import { Browser } from '@/services/background-browser'
 import {
   claimTabRelocation,
@@ -6,14 +5,15 @@ import {
 } from '@/services/background-command-removal'
 import { DeferredEventsQueue } from '@/services/background-deferred-events-queue'
 import { OnCreatedQueue } from '@/services/background-on-created-queue'
+import { writeTabUid } from '@/services/background-session-identity'
 import { Tree } from '@/services/background-tree'
 import { Favicons } from '@/services/favicons'
+import { i18n } from '@/services/i18n'
 import { emitTreeDelta } from '@/services/runtime-port-service'
 import { Settings } from '@/services/settings'
-import { writeTabUid } from '@/services/background-session-identity'
 import * as Utils from '@/services/utils'
-import type { OpenTabMessage } from '@/types/messages'
 import type { FaviconReference } from '@/types/favicons'
+import type { OpenTabMessage } from '@/types/messages'
 import {
   ContainerMetadata,
   Note,
@@ -962,7 +962,6 @@ export function tabIndentIncrease(tabUids: UID[]): void {
     return
   }
 
-  // repairInvalidTabParentUids(win, false)
   const childrenMap = Tree.buildChildrenMap(win.children)
 
   // remove any tabs from the selection that are descendants of other selected tabs
@@ -1033,7 +1032,6 @@ export function tabIndentDecrease(tabUids: UID[]): void {
     return
   }
 
-  // repairInvalidTabParentUids(win, false)
   const childrenMap = Tree.buildChildrenMap(win.children)
 
   // remove any tabs from the selection that are descendants of other selected tabs

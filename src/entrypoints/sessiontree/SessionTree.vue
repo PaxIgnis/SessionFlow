@@ -1,5 +1,4 @@
 <script lang="ts" setup>
-import { i18n, formatNumber } from '@/services/i18n'
 import IconChevronRight from '@/assets/chevron-right.svg'
 import IconPinned from '@/assets/pinned.svg'
 import ContainerRecoveryModal from '@/components/ContainerRecoveryModal.vue'
@@ -14,6 +13,7 @@ import { DragAndDrop } from '@/services/drag-and-drop'
 import { Favicons } from '@/services/favicons'
 import * as Messages from '@/services/foreground-messages'
 import { SessionTree } from '@/services/foreground-tree'
+import { formatNumber, i18n } from '@/services/i18n'
 import { closeModal, ModalState } from '@/services/modal-state'
 import { subscribeTreeUpdates } from '@/services/runtime-port-service'
 import { Selection } from '@/services/selection'
@@ -60,7 +60,6 @@ window.onbeforeunload = () => {
   Selection.clearSelection()
   Messages.deselectAllItems()
 
-  console.log('Unloading')
   unsubscribeFromTreeUpdates?.()
   faviconService.saveCacheToStorage()
 }
@@ -201,7 +200,6 @@ const indentGuideStates = computed(() => {
 
 // On component mount
 onMounted(async () => {
-  console.log('Mounted')
   await Settings.loadSettingsFromStorage()
   Settings.setupSettingsUpdatedListener()
   removeContextMenuListener = ContextMenu.setupContextMenuLifecycle()
@@ -259,8 +257,6 @@ onMounted(async () => {
           faviconRevision.value += 1
         })
         break
-      default:
-      // console.warn('Unknown message type:', message.type)
     }
   }
   window.browser.runtime.onMessage.addListener(faviconListener)
@@ -294,7 +290,6 @@ onMounted(async () => {
 // reset sessionTree to non-ref object to avoid zombie dead object
 onBeforeUnmount(() => {
   isSessionTreeUnmounted = true
-  console.log('Unmounted')
   unsubscribeFromTreeUpdates?.()
   removeRuntimeListener?.()
   removeContextMenuListener?.()

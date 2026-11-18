@@ -536,7 +536,6 @@ export async function windowDoubleClick(
   state: State,
   incognito = false,
 ): Promise<void> {
-  console.log('Window double clicked. Window ID: ', windowId)
   if (state === State.SAVED) {
     if (incognito && !(await canOpenPrivateItem('window'))) {
       return

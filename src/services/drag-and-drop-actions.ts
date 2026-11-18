@@ -289,7 +289,6 @@ export function onDragMove(e: DragEvent): void {
 }
 
 export function onDrop(e: DragEvent): void {
-  console.log(DragAndDrop.dragState)
   if (e.dataTransfer) e.dataTransfer.dropEffect = 'none'
   if (!Settings.values.enableDragAndDrop) {
     reset()
