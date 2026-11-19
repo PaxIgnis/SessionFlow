@@ -114,17 +114,17 @@ Website icons may be fetched from the sites that provide them. Fetching missing 
 
 Session Flow requests permissions for the features it provides:
 
-| Permission                    | Purpose                                                     |
-| ----------------------------- | ----------------------------------------------------------- |
-| Tabs and sessions             | Track, organize, and restore browser windows and tabs.      |
-| Containers and cookies        | Read and manage Firefox container identities for tabs.      |
-| Tab groups                    | Read and manage Firefox tab-group membership and metadata.  |
-| Menus                         | Provide context-menu actions for tree items.                |
-| Storage and unlimited storage | Keep your saved tree, settings, and favicon cache locally.  |
-| Alarms                        | Schedule automatic snapshots and maintenance.               |
-| Website access (optional)     | Fetch missing favicons or refresh cached icons.             |
-| Clipboard access (optional)   | Copy snapshot JSON to the clipboard when you request it.    |
-| Downloads (optional)          | Save automatic backups to a folder in your download folder. |
+| Permission                    | Purpose                                                                     |
+| ----------------------------- | --------------------------------------------------------------------------- |
+| Tabs and sessions             | Track, organize, and restore browser windows and tabs.                      |
+| Containers and cookies        | Read and manage Firefox container identities for tabs.                      |
+| Tab groups                    | Read and manage Firefox tab-group membership and metadata.                  |
+| Menus                         | Provide context-menu actions for tree items.                                |
+| Storage and unlimited storage | Keep your saved tree, settings, and favicon cache locally.                  |
+| Alarms                        | Schedule automatic snapshots and maintenance.                               |
+| Website access (optional)     | Fetch missing favicons or refresh cached icons.                             |
+| Clipboard access (optional)   | Copy snapshot JSON or a window's URLs to the clipboard when you request it. |
+| Downloads (optional)          | Save automatic backups to a folder in your download folder.                 |
 
 Private-window access is optional and must be allowed in Firefox. Keeping private windows in the saved tree, including them in snapshots, and caching their favicons are separate settings, all off by default. Enabling them can retain private titles, URLs, or icons after private windows close. Turning retention off does not delete existing snapshots.
 
