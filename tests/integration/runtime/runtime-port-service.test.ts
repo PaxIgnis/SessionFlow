@@ -279,6 +279,155 @@ describe('runtime port service', () => {
     unsubscribe()
   })
 
+  it('coalesces deltas emitted in one synchronous run into one versioned batch message', async () => {
+    const { browser, runtime } = await loadRuntimePortService()
+    runtime.initializeSessionTreePort({
+      dispatchCommand: vi.fn(),
+      getSnapshot: () => [],
+    })
+    const port = browser.runtime.connect({ name: 'sessiontree-rpc' })
+    const messages: Array<Record<string, unknown>> = []
+    port.onMessage.addListener((message: object) => {
+      messages.push(message as Record<string, unknown>)
+    })
+    await flushMicrotasks()
+
+    runtime.emitTreeDelta({ op: 'windowRemoved', windowUid: 'w-1' as UID })
+    runtime.emitTreeDelta({ op: 'windowRemoved', windowUid: 'w-2' as UID })
+    runtime.emitTreeDelta({
+      op: 'batch',
+      deltas: [{ op: 'windowRemoved', windowUid: 'w-3' as UID }],
+    })
+    await flushMicrotasks()
+    await flushMicrotasks()
+    runtime.emitTreeDelta({ op: 'windowRemoved', windowUid: 'w-4' as UID })
+    await flushMicrotasks()
+    await flushMicrotasks()
+
+    expect(messages).toEqual([
+      {
+        type: 'delta',
+        version: 1,
+        delta: {
+          op: 'batch',
+          deltas: [
+            { op: 'windowRemoved', windowUid: 'w-1' },
+            { op: 'windowRemoved', windowUid: 'w-2' },
+            { op: 'windowRemoved', windowUid: 'w-3' },
+          ],
+        },
+      },
+      {
+        type: 'delta',
+        version: 2,
+        delta: { op: 'windowRemoved', windowUid: 'w-4' },
+      },
+    ])
+  })
+
+  it('flushes queued deltas before a synchronous command response', async () => {
+    const { browser, runtime } = await loadRuntimePortService()
+    runtime.initializeSessionTreePort({
+      dispatchCommand: () => {
+        runtime.emitTreeDelta({ op: 'windowRemoved', windowUid: 'w-1' as UID })
+        runtime.emitTreeDelta({ op: 'windowRemoved', windowUid: 'w-2' as UID })
+      },
+      getSnapshot: () => [],
+    })
+    const port = browser.runtime.connect({ name: 'sessiontree-rpc' })
+    const messages: Array<Record<string, unknown>> = []
+    port.onMessage.addListener((message: object) => {
+      messages.push(message as Record<string, unknown>)
+    })
+    await flushMicrotasks()
+    port.postMessage({
+      type: 'command',
+      requestId: 'sync-command',
+      command: { action: 'printSessionTree' },
+    })
+    await flushMicrotasks()
+    await flushMicrotasks()
+    await flushMicrotasks()
+
+    expect(messages.map((message) => message.type)).toEqual([
+      'delta',
+      'response',
+    ])
+    expect(messages[1]).toMatchObject({ version: messages[0].version })
+  })
+
+  it('drops queued deltas that a later treeReplaced snapshot supersedes', async () => {
+    const { runtime } = await loadRuntimePortService()
+    const listener = vi.fn()
+    runtime.initializeSessionTreePort({
+      dispatchCommand: vi.fn(),
+      getSnapshot: () => [],
+    })
+    runtime.onTreeDeltaPort(listener)
+    await flushMicrotasks()
+
+    runtime.emitTreeDelta({ op: 'windowRemoved', windowUid: 'w-1' as UID })
+    runtime.emitTreeReplaced()
+    runtime.emitTreeDelta({ op: 'windowRemoved', windowUid: 'w-2' as UID })
+    await flushMicrotasks()
+    await flushMicrotasks()
+
+    expect(listener).toHaveBeenCalledTimes(1)
+    expect(listener).toHaveBeenCalledWith({
+      op: 'batch',
+      deltas: [
+        { op: 'treeReplaced', treeItems: [] },
+        { op: 'windowRemoved', windowUid: 'w-2' },
+      ],
+    })
+  })
+
+  it.each([
+    ['an empty batch', { op: 'batch', deltas: [] }],
+    [
+      'a nested batch',
+      {
+        op: 'batch',
+        deltas: [
+          {
+            op: 'batch',
+            deltas: [{ op: 'windowRemoved', windowUid: 'w-1' }],
+          },
+        ],
+      },
+    ],
+    [
+      'a batch with a malformed entry',
+      {
+        op: 'batch',
+        deltas: [
+          { op: 'windowRemoved', windowUid: 'w-1' },
+          { op: 'tabRemoved', tabUid: 'tab-1' },
+        ],
+      },
+    ],
+  ])('resynchronizes instead of applying %s', async (_label, delta) => {
+    const { browser, runtime } = await loadRuntimePortService()
+    const applyDelta = vi.fn(() => true)
+    const onError = vi.fn()
+    const replaceTree = vi.fn()
+    const unsubscribe = runtime.subscribeTreeUpdates({
+      replaceTree,
+      applyDelta,
+      onError,
+    })
+    await flushMicrotasks()
+
+    browser.__ports.servers[0].postMessage({ type: 'delta', version: 1, delta })
+    await flushMicrotasks()
+
+    expect(applyDelta).not.toHaveBeenCalled()
+    expect(onError).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'Malformed session tree delta' }),
+    )
+    unsubscribe()
+  })
+
   it('stops delivering deltas after unsubscribe', async () => {
     const { runtime } = await loadRuntimePortService()
     const listener = vi.fn()

@@ -5,6 +5,7 @@ import {
   SESSION_TREE_PORT_NAME,
   SessionTreeCommandResult,
   SessionTreeDelta,
+  SessionTreeSingleDelta,
   SessionTreePortMessage,
   SessionTreePortRequest,
   SessionTreePortResponse,
@@ -31,6 +32,8 @@ interface VersionedDelta {
 
 const sessionTreePorts = new Set<browser.runtime.Port>()
 let treeVersion = 0
+let pendingDeltas: SessionTreeSingleDelta[] = []
+let deltaFlushScheduled = false
 let dispatchCommandHandler: DispatchCommand | undefined
 let getSnapshotHandler: SnapshotGetter | undefined
 let initialized = false
@@ -76,6 +79,8 @@ function sendResponse(
     result?: SessionTreeCommandResult
   },
 ): void {
+  // Deliver queued deltas first so the response version covers them.
+  flushTreeDeltas()
   const response: SessionTreePortResponse = {
     type: 'response',
     requestId,
@@ -189,6 +194,19 @@ function isTreeSnapshot(value: unknown): value is TopLevelTreeItem[] {
 }
 
 function isSessionTreeDelta(value: unknown): value is SessionTreeDelta {
+  if (isRecord(value) && value.op === 'batch') {
+    return (
+      Array.isArray(value.deltas) &&
+      value.deltas.length > 0 &&
+      value.deltas.every(isSessionTreeSingleDelta)
+    )
+  }
+  return isSessionTreeSingleDelta(value)
+}
+
+function isSessionTreeSingleDelta(
+  value: unknown,
+): value is SessionTreeSingleDelta {
   if (!isRecord(value) || typeof value.op !== 'string') return false
 
   switch (value.op) {
@@ -721,6 +739,8 @@ async function handleSubscribe(
     return
   }
 
+  // Send queued deltas before snapshotting so the snapshot version matches.
+  flushTreeDeltas()
   sendResponse(port, requestId, true, {
     treeItems: getTreeSnapshot(),
   })
@@ -740,11 +760,42 @@ export function initializeSessionTreePort(options: {
   browser.runtime.onConnect.addListener(onConnect)
 }
 
+/**
+ * Queues a tree delta for the foreground session tree.
+ * Deltas emitted in the same synchronous run are coalesced into one port
+ * message on the next microtask, so a single action that touches many items
+ * (for example re-indenting every descendant of a removed tab) costs the
+ * foreground one update and one render instead of one per item.
+ *
+ * @param {SessionTreeDelta} delta - Delta to deliver; nested batches are flattened.
+ */
 export function emitTreeDelta(delta: SessionTreeDelta): void {
+  if (delta.op === 'treeReplaced') {
+    // The snapshot already contains every queued change.
+    pendingDeltas = []
+  }
+  if (delta.op === 'batch') pendingDeltas.push(...delta.deltas)
+  else pendingDeltas.push(delta)
+
+  if (deltaFlushScheduled) return
+  deltaFlushScheduled = true
+  queueMicrotask(flushTreeDeltas)
+}
+
+/**
+ * Sends all queued deltas as one versioned port message.
+ * Called automatically after emitTreeDelta, and before any response or
+ * snapshot so the foreground never sees a version that skips queued changes.
+ */
+export function flushTreeDeltas(): void {
+  deltaFlushScheduled = false
+  if (pendingDeltas.length === 0) return
+  const deltas = pendingDeltas
+  pendingDeltas = []
   const message: SessionTreePortMessage = {
     type: 'delta',
     version: nextTreeVersion(),
-    delta,
+    delta: deltas.length === 1 ? deltas[0] : { op: 'batch', deltas },
   }
   sessionTreePorts.forEach((port) => {
     try {

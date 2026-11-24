@@ -21,13 +21,18 @@ import * as ToolbarActions from '@/services/session-tree-toolbar-actions'
 import { Settings } from '@/services/settings'
 import { setupTreeKeyboard } from '@/services/tree-keyboard'
 import {
-  buildIndentGuideStates,
+  buildDescendantSummaries,
+  buildSessionIndentGuideStates,
+  collectVisibleTreeItems,
+  createDescendantSummaryStabilizer,
+  createIndentGuideStateStabilizer,
+} from '@/services/session-tree-rows'
+import {
   createTreeItemTally,
   formatStateBreakdown,
   formatTallyLine,
   formatTallyLines,
   tallyTreeItem,
-  type TreeItemIndentGuideState,
 } from '@/services/tree-utils'
 import { normalizeEditTextValue } from '@/services/utils'
 import '@/styles/variables.css'
@@ -148,55 +153,31 @@ const sessionHoverDetails = computed(() => {
 
 const visibleTreeItems = computed<SessionTreeItem[]>(() => {
   if (rootCollapsed.value) return []
-  const items: SessionTreeItem[] = []
-  const appendVisibleList = (list: SessionTreeItem[]) => {
-    list.forEach((item) => {
-      if (item.parentUid === undefined || item.isVisible !== false) {
-        appendVisible(item)
-      }
-    })
-  }
-  const appendVisible = (item: SessionTreeItem) => {
-    if (item.isVisible !== false) {
-      items.push(item)
-      if (!item.collapsed && item.type === TreeItemType.WINDOW) {
-        appendVisibleList(item.children)
-      }
-    }
-  }
-  appendVisibleList(SessionTree.reactiveItems.value as SessionTreeItem[])
-  return items
-})
-
-const indentGuideStates = computed(() => {
-  const topLevelItems = SessionTree.reactiveItems.value as SessionTreeItem[]
-  const topLevelStates = buildIndentGuideStates(topLevelItems)
-  const states = new Map<SessionTreeItem['uid'], TreeItemIndentGuideState>(
-    topLevelStates,
+  return collectVisibleTreeItems(
+    SessionTree.reactiveItems.value as SessionTreeItem[],
   )
-
-  for (const item of topLevelItems) {
-    if (item.type !== TreeItemType.WINDOW) continue
-    const windowIndent = item.indentLevel ?? 0
-    const windowState = topLevelStates.get(item.uid)
-    const childStates = buildIndentGuideStates(item.children)
-    for (const [uid, childState] of childStates) {
-      states.set(uid, {
-        verticalLevels: [
-          ...(windowState?.verticalLevels.filter(
-            (level) => level <= windowIndent,
-          ) ?? []),
-          ...(windowState?.hasFollowingAtSameLevel ? [windowIndent] : []),
-          ...childState.verticalLevels.filter((level) => level > windowIndent),
-        ],
-        hasFollowingAtSameLevel: childState.hasFollowingAtSameLevel,
-        hasFollowingDirectSibling: childState.hasFollowingDirectSibling,
-      })
-    }
-  }
-
-  return states
 })
+
+// Reuses unchanged per-row state objects so rows whose guides did not change
+// keep identical props and skip re-rendering.
+const stabilizeIndentGuideStates = createIndentGuideStateStabilizer()
+const indentGuideStates = computed(() =>
+  stabilizeIndentGuideStates(
+    buildSessionIndentGuideStates(
+      SessionTree.reactiveItems.value as SessionTreeItem[],
+    ),
+  ),
+)
+
+const stabilizeDescendantSummaries = createDescendantSummaryStabilizer()
+const descendantSummaries = computed(() =>
+  stabilizeDescendantSummaries(
+    buildDescendantSummaries(
+      SessionTree.reactiveItems.value as SessionTreeItem[],
+      SessionTree.windowsByUid,
+    ),
+  ),
+)
 
 // On component mount
 onMounted(async () => {
@@ -481,6 +462,7 @@ function runToolbarAction(action: () => void | Promise<void>): void {
           :favicon-service="faviconService"
           :favicon-revision="faviconRevision"
           :indent-guide-state="indentGuideStates.get(item.uid)"
+          :descendant-summary="descendantSummaries.get(item.uid)"
         />
       </template>
 
