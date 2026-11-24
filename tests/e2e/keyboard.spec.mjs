@@ -536,13 +536,20 @@ describe('keyboard mappings and tree navigation', () => {
         items.find((item) => item.uid === fixture.uid)?.children ?? []
       return children[0]?.uid === tab.uid && children[0]?.pinned
     }, 'Expected pinning to move the tab before its neighbor.')
-    await expect(await page.treeItemByUid(neighborUid)).toBeFocused()
-    await expect(await $('.tree-item-selected')).not.toBeExisting()
+    // Pinning moves the row; focus and selection follow the tab acted on.
+    await expect(await page.treeItemByUid(tab.uid)).toBeFocused()
+    await expect(await page.treeItemByUid(tab.uid)).toHaveElementClass(
+      'tree-item-selected',
+    )
     expect(
       await browser.execute(
         () => getComputedStyle(document.activeElement).outlineStyle,
       ),
     ).toBe('none')
+    await browser.keys('ArrowDown')
+    await expect(await page.treeItemByUid(neighborUid)).toHaveElementClass(
+      'tree-item-selected',
+    )
     await browser.keys('ArrowUp')
     await expect(await page.treeItemByUid(tab.uid)).toHaveElementClass(
       'tree-item-selected',

@@ -20,6 +20,7 @@ import {
 } from '@/services/favicons'
 import * as Messages from '@/services/foreground-messages'
 import { SessionTree } from '@/services/foreground-tree'
+import type { TreeItemDescendantSummary } from '@/services/session-tree-rows'
 import { Selection } from '@/services/selection'
 import { Settings } from '@/services/settings'
 import {
@@ -49,6 +50,9 @@ const props = defineProps<{
   faviconService: FaviconService
   faviconRevision?: number
   indentGuideState?: TreeItemIndentGuideState
+  /* Precomputed by the session tree for non-window rows. Without it the row
+     scans its own list, which makes it depend on every item in that list. */
+  descendantSummary?: TreeItemDescendantSummary
 }>()
 
 function getTabFavicon(tab: Tab): string {
@@ -236,6 +240,8 @@ function toggleCollapsedItem() {
 const childCount = computed(() => {
   if (isWindow(props.item)) {
     return countTreeItemDescendants(props.item)
+  } else if (props.descendantSummary) {
+    return props.descendantSummary.childCount
   } else if (isNote(props.item)) {
     return countTreeItemDescendants(props.item, getContainingList(props.item))
   } else if (isTab(props.item)) {
@@ -400,6 +406,8 @@ const childrenOpen = computed(() => {
         isTab(tab) &&
         (tab.state === State.OPEN || tab.state === State.DISCARDED),
     )
+  } else if (props.descendantSummary) {
+    return props.descendantSummary.hasOpenDescendant
   } else if (isNote(props.item)) {
     return flatDescendantsHaveOpenTab(props.item)
   } else if (isTab(props.item)) {
@@ -416,6 +424,9 @@ const childrenOpen = computed(() => {
 const hidesFocusedTab = computed(() => {
   if (props.item.collapsed !== true) return false
   if (isWindow(props.item)) return props.item.children.some(isFocusedTab)
+  if (props.descendantSummary) {
+    return props.descendantSummary.hasFocusedDescendant
+  }
   if (isNote(props.item) || isTab(props.item)) {
     return someFlatDescendantTab(props.item, isFocusedTab)
   }

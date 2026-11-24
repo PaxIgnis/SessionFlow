@@ -298,6 +298,49 @@ describe('foreground SessionTree deltas', () => {
     expectForegroundIndexes()
   })
 
+  it('applies a batch whose later deltas target items created earlier in the same batch', () => {
+    const window = makeForegroundWindow('window-1' as UID)
+    const first = makeForegroundTab('tab-1' as UID, { windowUid: window.uid })
+    const second = makeForegroundTab('tab-2' as UID, { windowUid: window.uid })
+    resetForegroundTree([window])
+
+    const applied = SessionTree.applyDelta({
+      op: 'batch',
+      deltas: [
+        { op: 'tabCreated', windowUid: window.uid, tab: first, index: 0 },
+        { op: 'tabUpdated', tab: { ...first, title: 'first updated' } },
+        { op: 'tabCreated', windowUid: window.uid, tab: second, index: 1 },
+        { op: 'tabUpdated', tab: { ...second, indentLevel: 2 } },
+        { op: 'tabRemoved', windowUid: window.uid, tabUid: first.uid },
+      ],
+    })
+
+    expect(applied).toBe(true)
+    expect(
+      SessionTree.windowsByUid.get(window.uid)?.children.map((t) => t.uid),
+    ).toEqual([second.uid])
+    expect(SessionTree.tabsByUid.has(first.uid)).toBe(false)
+    expect(SessionTree.tabsByUid.get(second.uid)?.indentLevel).toBe(2)
+    expectForegroundIndexes()
+  })
+
+  it('reports a batch as unapplied when one of its deltas does not fit, keeping indexes consistent', () => {
+    const tab = makeForegroundTab('tab-1' as UID)
+    const window = makeForegroundWindow('window-1' as UID, [tab])
+    resetForegroundTree([window])
+
+    const applied = SessionTree.applyDelta({
+      op: 'batch',
+      deltas: [
+        { op: 'tabRemoved', windowUid: window.uid, tabUid: tab.uid },
+        { op: 'tabUpdated', tab: { ...tab, title: 'gone' } },
+      ],
+    })
+
+    expect(applied).toBe(false)
+    expectForegroundIndexes()
+  })
+
   it('clears a stale tab parent when a tab update explicitly sets parentUid undefined', () => {
     const parent = makeForegroundTab('tab-parent' as UID, { isParent: true })
     const child = makeForegroundTab('tab-child' as UID, {

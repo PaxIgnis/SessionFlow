@@ -46,6 +46,10 @@ export interface SessionTreePortResponse {
 }
 
 export type SessionTreeDelta =
+  | SessionTreeSingleDelta
+  | { op: 'batch'; deltas: SessionTreeSingleDelta[] }
+
+export type SessionTreeSingleDelta =
   | { op: 'treeReplaced'; treeItems: TopLevelTreeItem[] }
   | { op: 'windowCreated'; window: Window; index: number }
   | { op: 'windowRemoved'; windowUid: UID }

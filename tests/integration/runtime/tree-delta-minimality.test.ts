@@ -274,4 +274,54 @@ describe('minimal sufficient tree deltas', () => {
     expect(parent.isParent).toBe(false)
     expect(emittedDeltas.map((delta) => delta.op)).toEqual(['treeReplaced'])
   })
+  it('emits no window snapshot when closing a saved tab in an already saved window', async () => {
+    const parent = createTab('tab-parent' as UID, {
+      id: -1,
+      state: State.SAVED,
+      isParent: true,
+    })
+    const child = createTab('tab-child' as UID, {
+      id: -1,
+      state: State.SAVED,
+      parentUid: parent.uid,
+      indentLevel: 2,
+    })
+    const window = createWindow('window-1' as UID, [parent, child], {
+      id: -1,
+      state: State.SAVED,
+      savedTime: 1234,
+    })
+    Tree.recomputeSessionTree(false)
+    emittedDeltas.length = 0
+
+    await Tree.closeTab({ tabId: -1, tabUid: parent.uid })
+
+    expect(emittedDeltas.map((delta) => delta.op)).not.toContain(
+      'windowUpdated',
+    )
+    expect(window.savedTime).toBe(1234)
+    expect(child.indentLevel).toBe(1)
+  })
+
+  it('normalizes a stored saved window id once instead of on every close', async () => {
+    const tabs = ['tab-a', 'tab-b', 'tab-c'].map((uid) =>
+      createTab(uid as UID, { id: 0, state: State.SAVED }),
+    )
+    const window = createWindow('window-1' as UID, tabs, {
+      id: 0,
+      state: State.SAVED,
+    })
+    Tree.recomputeSessionTree(false)
+    emittedDeltas.length = 0
+
+    await Tree.closeTab({ tabId: 0, tabUid: tabs[0].uid })
+    expect(window.id).toBe(-1)
+    expect(
+      emittedDeltas.filter((delta) => delta.op === 'windowUpdated'),
+    ).toHaveLength(1)
+
+    emittedDeltas.length = 0
+    await Tree.closeTab({ tabId: 0, tabUid: tabs[1].uid })
+    expect(emittedDeltas.map((delta) => delta.op)).toEqual(['tabRemoved'])
+  })
 })

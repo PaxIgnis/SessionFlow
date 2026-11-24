@@ -561,8 +561,12 @@ export async function closeTab(
     (child) => child.state === State.OPEN || child.state === State.DISCARDED,
   )
   if (window.children.length > 0 && openTabs.length === 0) {
-    Tree.updateWindowState(window.uid, State.SAVED, emitDelta)
-    Tree.updateWindowId(window.uid, -1, emitDelta)
+    // Only on the transition: each windowUpdated carries the whole window, and
+    // re-saving an already saved window would also reset its savedTime.
+    if (window.state !== State.SAVED) {
+      Tree.updateWindowState(window.uid, State.SAVED, emitDelta)
+    }
+    if (window.id !== -1) Tree.updateWindowId(window.uid, -1, emitDelta)
   }
 }
 

@@ -1,4 +1,7 @@
-import { SessionTreeDelta } from '@/types/runtime-port-service'
+import {
+  SessionTreeDelta,
+  SessionTreeSingleDelta,
+} from '@/types/runtime-port-service'
 import {
   Note,
   Separator,
@@ -165,7 +168,46 @@ function replaceSessionTree(newItems: Array<TopLevelTreeItem>): void {
   reindexTree()
 }
 
+/**
+ * Applies a delta (or a batch of deltas) to the foreground tree.
+ * The uid indexes are rebuilt only after structural changes, and at most once
+ * per lookup, so a batch of N property updates costs O(N) instead of O(N * tree).
+ *
+ * @param {SessionTreeDelta} delta - Delta received from the background.
+ * @returns {boolean} False when the delta cannot be applied and a resync is needed.
+ */
 function applyDelta(delta: SessionTreeDelta): boolean {
+  const deltas = delta.op === 'batch' ? delta.deltas : [delta]
+  let indexStale = false
+  const ensureIndex = () => {
+    if (!indexStale) return
+    reindexTree()
+    indexStale = false
+  }
+
+  try {
+    for (const single of deltas) {
+      const result = applySingleDelta(single, ensureIndex)
+      if (result === false) return false
+      if (result === 'structural') indexStale = true
+    }
+    return true
+  } finally {
+    ensureIndex()
+  }
+}
+
+/**
+ * Applies one delta without rebuilding the uid indexes.
+ *
+ * @returns 'structural' when items were added, removed, or replaced (indexes are stale),
+ *   true for in-place property updates, false when the delta does not fit the tree.
+ */
+function applySingleDelta(
+  delta: SessionTreeSingleDelta,
+  ensureIndex: () => void,
+): boolean | 'structural' {
+  ensureIndex()
   switch (delta.op) {
     case 'treeReplaced':
       replaceSessionTree(delta.treeItems)
@@ -179,8 +221,7 @@ function applyDelta(delta: SessionTreeDelta): boolean {
       }
       const window = structuredClone(delta.window)
       SessionTree.reactiveItems.value.splice(delta.index, 0, window)
-      reindexTree()
-      return true
+      return 'structural'
     }
     case 'windowRemoved': {
       const index = SessionTree.reactiveItems.value.findIndex(
@@ -188,15 +229,13 @@ function applyDelta(delta: SessionTreeDelta): boolean {
       )
       if (index === -1) return false
       SessionTree.reactiveItems.value.splice(index, 1)
-      reindexTree()
-      return true
+      return 'structural'
     }
     case 'windowUpdated': {
       const existingWindow = SessionTree.windowsByUid.get(delta.window.uid)
       if (!existingWindow) return false
       updateTreeItemInPlace(existingWindow, delta.window)
-      reindexTree()
-      return true
+      return 'structural'
     }
     case 'tabCreated': {
       const window = findWindow(delta.windowUid)
@@ -208,8 +247,7 @@ function applyDelta(delta: SessionTreeDelta): boolean {
       if (existingIndex === -1) {
         window.children.splice(delta.index, 0, structuredClone(delta.tab))
       }
-      reindexTree()
-      return true
+      return 'structural'
     }
     case 'tabRemoved': {
       const window = findWindow(delta.windowUid)
@@ -217,14 +255,12 @@ function applyDelta(delta: SessionTreeDelta): boolean {
       const index = window.children.findIndex((t) => t.uid === delta.tabUid)
       if (index === -1) return false
       window.children.splice(index, 1)
-      reindexTree()
-      return true
+      return 'structural'
     }
     case 'tabUpdated': {
       const existingTab = SessionTree.tabsByUid.get(delta.tab.uid)
       if (!existingTab) return false
       updateObjectProperties(existingTab, delta.tab)
-      reindexTree()
       return true
     }
     case 'noteCreated':
@@ -238,14 +274,12 @@ function applyDelta(delta: SessionTreeDelta): boolean {
       )
       if (!existingSeparator) return false
       updateTreeItemInPlace(existingSeparator, delta.separator)
-      reindexTree()
       return true
     }
     case 'noteUpdated': {
       const existingNote = SessionTree.notesByUid.get(delta.note.uid)
       if (!existingNote) return false
       updateTreeItemInPlace(existingNote, delta.note)
-      reindexTree()
       return true
     }
     default:
