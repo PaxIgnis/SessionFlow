@@ -6,8 +6,6 @@ export {
   getDropPosition,
   type DragImagePreview,
 } from './drag-and-drop-presentation'
-import { getDropPosition } from './drag-and-drop-presentation'
-import { i18n } from '@/services/i18n'
 import { DragAndDrop } from '@/services/drag-and-drop'
 import {
   hasSupportedExternalDropType,
@@ -16,9 +14,9 @@ import {
 } from '@/services/external-drop'
 import * as Messages from '@/services/foreground-messages'
 import { SessionTree } from '@/services/foreground-tree'
+import { i18n } from '@/services/i18n'
 import { Selection } from '@/services/selection'
 import { Settings } from '@/services/settings'
-import { Settings as SettingsType } from '@/types/settings'
 import {
   DragInfo,
   DragType,
@@ -31,6 +29,9 @@ import {
   TreeItemType,
   Window,
 } from '@/types/session-tree'
+import { Settings as SettingsType } from '@/types/settings'
+import { toRaw } from 'vue'
+import { getDropPosition } from './drag-and-drop-presentation'
 
 export function collectDraggedItemsWithIncludedChildren(
   items: TreeItem[],
@@ -1285,11 +1286,9 @@ function draggedItemsCrossPrivateWindowBoundary(
 ): boolean {
   const candidates = new Map(draggedItems.map((item) => [item.uid, item]))
   if (includeDescendants) {
-    for (const item of draggedItems) {
-      for (const descendantUid of itemDescendantUids(item)) {
-        const descendant = getTreeItem(descendantUid)
-        if (descendant) candidates.set(descendant.uid, descendant)
-      }
+    for (const descendantUid of collectDescendantUids(draggedItems, true)) {
+      const descendant = getTreeItem(descendantUid)
+      if (descendant) candidates.set(descendant.uid, descendant)
     }
   }
 
@@ -1369,13 +1368,13 @@ function isSelfOrDescendantParentDrop(
     : getDropParentUidAfterMovingWithoutDescendants(draggedItems, dropParentUid)
   if (!effectiveDropParentUid) return false
 
-  return draggedItems
-    .filter((item) => item.type === TreeItemType.NOTE)
-    .some(
-      (item) =>
-        effectiveDropParentUid === item.uid ||
-        noteDescendantUids(item).has(effectiveDropParentUid),
-    )
+  const draggedNotes = draggedItems.filter(
+    (item) => item.type === TreeItemType.NOTE,
+  )
+  return (
+    draggedNotes.some((item) => effectiveDropParentUid === item.uid) ||
+    collectDescendantUids(draggedNotes, false).has(effectiveDropParentUid)
+  )
 }
 
 function getDropParentUidAfterMovingWithoutDescendants(
@@ -1458,9 +1457,12 @@ function shouldIncludeDescendantsForDraggedItems(items: TreeItem[]): boolean {
 function includedDraggedNoteDescendantsContainWindow(
   items: TreeItem[],
 ): boolean {
-  return items
-    .filter((item) => item.type === TreeItemType.NOTE)
-    .some((item) => noteDescendantsContainWindow(item))
+  const notes = items.filter((item) => item.type === TreeItemType.NOTE)
+  if (notes.length === 0) return false
+  for (const uid of collectDescendantUids(notes, false)) {
+    if (SessionTree.windowsByUid.has(uid)) return true
+  }
+  return false
 }
 
 /**
@@ -1474,11 +1476,14 @@ function includedDraggedDescendantsContainDestination(
   items: TreeItem[],
   destinationId: UID,
 ): boolean {
-  return items.some((item) => itemDescendantUids(item).has(destinationId))
+  return collectDescendantUids(items, true).has(destinationId)
 }
 
 /**
  * Checks whether a destination is a descendant included in the drag payload.
+ * An item is never its own descendant, so this matches
+ * includedDraggedDescendantsContainDestination; it is kept as a separate name
+ * for the self-drop check that reads it.
  *
  * @param {TreeItem[]} items - Dragged items to inspect.
  * @param {UID} destinationId - UID of the current drop destination.
@@ -1488,89 +1493,56 @@ function isIncludedDescendantTarget(
   items: TreeItem[],
   destinationId: UID,
 ): boolean {
-  return items.some(
-    (item) =>
-      item.uid !== destinationId && itemDescendantUids(item).has(destinationId),
-  )
+  return includedDraggedDescendantsContainDestination(items, destinationId)
 }
 
 /**
- * Collects descendant UIDs for a tree item in the foreground tree.
+ * Collects the descendant UIDs of every root in one pass over the foreground
+ * tree. These checks run on every dragover event.
  *
- * @param {TreeItem} item - Tree item whose descendants should be collected.
- * @returns {Set<UID>} Descendant UIDs for the item.
+ * A descendant is any later item in the same flat list with a deeper indent
+ * than its root. A window root also owns all of its children, and with
+ * includeNestedWindowChildren a window nested under a root brings its children.
+ *
+ * @param {readonly TreeItem[]} roots - Items whose descendants are collected.
+ * @param {boolean} includeNestedWindowChildren - Whether nested windows contribute their children.
+ * @returns {Set<UID>} Descendant UIDs of all roots, excluding the roots themselves unless nested under another root.
  */
-function itemDescendantUids(item: TreeItem): Set<UID> {
+export function collectDescendantUids(
+  roots: readonly TreeItem[],
+  includeNestedWindowChildren: boolean,
+): Set<UID> {
   const descendantUids = new Set<UID>()
-  if (item.type === TreeItemType.WINDOW) {
-    addWindowChildDescendantUids(item.children as TreeItem[], descendantUids)
+  if (roots.length === 0) return descendantUids
+  const rootUids = new Set(roots.map((item) => item.uid))
+  // Raw arrays: iterating the reactive proxies costs far more than the scan.
+  const topLevelItems = toRaw(SessionTree.reactiveItems.value) as TreeItem[]
+
+  const addWindowChildren = (window: TreeItem) => {
+    if (window.type !== TreeItemType.WINDOW) return
+    for (const child of toRaw(window.children)) descendantUids.add(child.uid)
   }
-
-  const location = findItemLocation(
-    SessionTree.reactiveItems.value as TreeItem[],
-    item.uid,
-  )
-  if (!location) return descendantUids
-
-  const itemIndent = item.indentLevel ?? 0
-  for (let i = location.index + 1; i < location.children.length; i++) {
-    const candidate = location.children[i]
-    if ((candidate.indentLevel ?? 0) <= itemIndent) break
-    descendantUids.add(candidate.uid)
-    if (candidate.type === TreeItemType.WINDOW) {
-      addWindowChildDescendantUids(
-        candidate.children as TreeItem[],
-        descendantUids,
-      )
+  const scanList = (list: readonly TreeItem[]) => {
+    let rootIndent: number | undefined
+    for (const item of list) {
+      const indent = item.indentLevel ?? 0
+      if (rootIndent !== undefined && indent <= rootIndent) {
+        rootIndent = undefined
+      }
+      if (rootIndent !== undefined) {
+        descendantUids.add(item.uid)
+        if (includeNestedWindowChildren) addWindowChildren(item)
+      } else if (rootUids.has(item.uid)) {
+        rootIndent = indent
+      }
     }
   }
-  return descendantUids
-}
 
-/**
- * Adds direct window child UIDs to a descendant UID set.
- *
- * @param {TreeItem[]} children - Window children to add.
- * @param {Set<UID>} descendantUids - Set that receives the child UIDs.
- */
-function addWindowChildDescendantUids(
-  children: TreeItem[],
-  descendantUids: Set<UID>,
-): void {
-  for (const child of children) {
-    descendantUids.add(child.uid)
-  }
-}
-
-function noteDescendantsContainWindow(note: TreeItem): boolean {
-  const location = findItemLocation(
-    SessionTree.reactiveItems.value as TreeItem[],
-    note.uid,
-  )
-  if (!location) return false
-
-  const noteIndent = note.indentLevel ?? 0
-  for (let i = location.index + 1; i < location.children.length; i++) {
-    const candidate = location.children[i]
-    if ((candidate.indentLevel ?? 0) <= noteIndent) break
-    if (candidate.type === TreeItemType.WINDOW) return true
-  }
-  return false
-}
-
-function noteDescendantUids(note: TreeItem): Set<UID> {
-  const descendantUids = new Set<UID>()
-  const location = findItemLocation(
-    SessionTree.reactiveItems.value as TreeItem[],
-    note.uid,
-  )
-  if (!location) return descendantUids
-
-  const noteIndent = note.indentLevel ?? 0
-  for (let i = location.index + 1; i < location.children.length; i++) {
-    const candidate = location.children[i]
-    if ((candidate.indentLevel ?? 0) <= noteIndent) break
-    descendantUids.add(candidate.uid)
+  scanList(topLevelItems)
+  for (const item of topLevelItems) {
+    if (item.type !== TreeItemType.WINDOW) continue
+    if (rootUids.has(item.uid)) addWindowChildren(item)
+    scanList(toRaw(item.children) as TreeItem[])
   }
   return descendantUids
 }

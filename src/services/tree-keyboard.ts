@@ -1,21 +1,15 @@
-import { nextTick, watch } from 'vue'
-import * as Messages from '@/services/foreground-messages'
-import { SessionTree } from '@/services/foreground-tree'
-import { Selection } from '@/services/selection'
-import {
-  getLogicalTreeOrder,
-  collectContextMenuActionItems,
-} from '@/services/selection-actions'
-import { Settings } from '@/services/settings'
-import { matchingTreeShortcut } from '@/services/keyboard-shortcuts'
-import {
-  collectSelectedDragItems,
-  shouldIncludeDescendantsForDrop,
-} from '@/services/drag-and-drop-actions'
 import {
   canDecreaseIndentSelectedItems,
   canIncreaseIndentSelectedItems,
 } from '@/services/context-menu-actions'
+import {
+  collectSelectedDragItems,
+  shouldIncludeDescendantsForDrop,
+} from '@/services/drag-and-drop-actions'
+import * as Messages from '@/services/foreground-messages'
+import { SessionTree } from '@/services/foreground-tree'
+import { i18n } from '@/services/i18n'
+import { matchingTreeShortcut } from '@/services/keyboard-shortcuts'
 import {
   ModalState,
   openEditCustomLabelModal,
@@ -23,17 +17,23 @@ import {
   openEditWindowTitleModal,
 } from '@/services/modal-state'
 import { showNotification } from '@/services/notification-state'
-import { i18n } from '@/services/i18n'
+import { Selection } from '@/services/selection'
+import {
+  collectContextMenuActionItems,
+  getLogicalTreeOrder,
+} from '@/services/selection-actions'
+import { Settings } from '@/services/settings'
+import type { TreeShortcutKey } from '@/types/keyboard'
 import {
   DragType,
-  State,
   SelectionType,
+  State,
   TreeItemType,
-  type TreeItem,
   type Tab,
+  type TreeItem,
   type Window,
 } from '@/types/session-tree'
-import type { TreeShortcutKey } from '@/types/keyboard'
+import { nextTick, watch } from 'vue'
 
 function currentItem(): TreeItem | undefined {
   const selected = Selection.selectedItems.value
@@ -256,7 +256,14 @@ async function runShortcut(
     else if (item.type === TreeItemType.NOTE) openEditNoteModal(item)
   } else if (key === 'shortcutClose') {
     // Match each row's delete button; its children are handled by the command.
-    for (const target of selectedForScope('never')) {
+    const targets = selectedForScope('never')
+    if (targets.length > 1) {
+      // One command removes the whole selection deepest-first and sends a
+      // single tree update.
+      await Messages.deleteTreeItems(targets.map((target) => target.uid))
+      return
+    }
+    for (const target of targets) {
       if (target.type === TreeItemType.WINDOW)
         await Messages.closeWindow(target.id, target.uid)
       else if (target.type === TreeItemType.TAB)
