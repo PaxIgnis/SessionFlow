@@ -2,6 +2,7 @@ import { SessionTree } from '@/services/foreground-tree'
 import { Selection } from '@/services/selection'
 import {
   Note,
+  SelectedItem,
   Separator,
   SelectionType,
   Tab,
@@ -9,6 +10,7 @@ import {
   TreeItemType,
   Window,
 } from '@/types/session-tree'
+import { toRaw } from 'vue'
 
 export type ContextMenuDescendantScope = 'always' | 'collapsed' | 'never'
 
@@ -21,7 +23,7 @@ export function selectItem(item: TreeItem, type: SelectionType, e: MouseEvent) {
   if (shiftKey && anchorItem) {
     if (selectItemRange(anchorItem, item, ctrlKey)) return
     clearSelection()
-    addSelectedItem(item)
+    addSelectedItems([item])
     Selection.anchor.value = item
     return
   }
@@ -81,9 +83,7 @@ function selectItemRange(
 
   if (!additive) Selection.clearSelection()
   const [minIndex, maxIndex] = [firstIndex, lastIndex].sort((a, b) => a - b)
-  for (let i = minIndex; i <= maxIndex; i++) {
-    addSelectedItem(logicalItems[i])
-  }
+  addSelectedItems(logicalItems.slice(minIndex, maxIndex + 1))
   // The fill runs in tree order and clearSelection drops the anchor, so put it
   // back: extending upward must keep ranging from where the user started.
   Selection.anchor.value = firstItem
@@ -151,20 +151,23 @@ export function collectContextMenuActionItems(
   return logicalItems.filter((item) => includedUids.has(item.uid))
 }
 
-function addSelectedItem(item: TreeItem | undefined): void {
-  if (!item) return
-  if (
-    Selection.selectedItems.value.some(
-      (selectedItem) => selectedItem.item.uid === item.uid,
-    )
-  ) {
-    return
+/**
+ * Adds items to the selection, skipping ones already selected. Works on the
+ * raw selection array and appends in one push: checking membership through the
+ * reactive proxy for each item made a range fill quadratic in its size.
+ */
+function addSelectedItems(items: readonly (TreeItem | undefined)[]): void {
+  const selectedUids = new Set(
+    toRaw(Selection.selectedItems.value).map(({ item }) => item.uid),
+  )
+  const added: SelectedItem[] = []
+  for (const item of items) {
+    if (!item || selectedUids.has(item.uid)) continue
+    selectedUids.add(item.uid)
+    item.selected = true
+    added.push({ item, type: getSelectionType(item) })
   }
-  item.selected = true
-  Selection.selectedItems.value.push({
-    item,
-    type: getSelectionType(item),
-  })
+  if (added.length > 0) Selection.selectedItems.value.push(...added)
 }
 
 function getSelectionType(item: TreeItem): SelectionType {
@@ -205,9 +208,7 @@ export function selectMultipleTabsInWindow(firstTab: Tab, lastTab: Tab) {
 
   // Push all tabs and notes in between
   const [minIndex, maxIndex] = [startIndex, endIndex].sort((a, b) => a - b)
-  for (let i = minIndex; i <= maxIndex; i++) {
-    addSelectedItem(allTabs[i])
-  }
+  addSelectedItems(allTabs.slice(minIndex, maxIndex + 1))
 }
 
 export function selectMultipleWindows(firstWindow: Window, lastWindow: Window) {
@@ -223,9 +224,7 @@ export function selectMultipleWindows(firstWindow: Window, lastWindow: Window) {
 
   // Push all windows and notes in between
   const [minIndex, maxIndex] = [startIndex, endIndex].sort((a, b) => a - b)
-  for (let i = minIndex; i <= maxIndex; i++) {
-    addSelectedItem(allItems[i])
-  }
+  addSelectedItems(allItems.slice(minIndex, maxIndex + 1))
 }
 
 export function clearSelection() {

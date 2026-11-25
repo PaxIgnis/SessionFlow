@@ -120,6 +120,45 @@ describe('generic tree item structural actions', () => {
     expectTreeInvariants()
   })
 
+  it('deletes a note with its nested windows before the note, in one update', async () => {
+    const note = createNote('note' as UID, {
+      indentLevel: 0,
+      isParent: true,
+      collapsed: true,
+    })
+    Tree.Items.push(note)
+    Tree.notesByUid.set(note.uid, note)
+    Tree.existingUidsSet.add(note.uid)
+    const nested = ['nested-1', 'nested-2'].map((uid) =>
+      createWindow(uid as UID, [createTab(`${uid}-tab` as UID)], {
+        id: -1,
+        parentUid: note.uid,
+        indentLevel: 1,
+        isVisible: false,
+      }),
+    )
+    const tail = createNote('tail' as UID, { indentLevel: 0 })
+    Tree.Items.push(tail)
+    Tree.notesByUid.set(tail.uid, tail)
+    Tree.existingUidsSet.add(tail.uid)
+    const removeNote = vi.spyOn(Tree, 'removeNote')
+    const removeWindow = vi.spyOn(Tree, 'removeWindow')
+    emitTreeDelta.mockClear()
+
+    await Tree.deleteTreeItems([note.uid, ...nested.map((w) => w.uid)])
+
+    expect(Tree.Items).toEqual([tail])
+    // Removing the note first would promote its windows to top level.
+    expect(removeWindow.mock.invocationCallOrder.at(-1)).toBeLessThan(
+      removeNote.mock.invocationCallOrder[0],
+    )
+    expect(emitTreeDelta).toHaveBeenCalledExactlyOnceWith({
+      op: 'treeReplaced',
+      treeItems: [structuredClone(tail)],
+    })
+    expectTreeInvariants()
+  })
+
   it('continues deleting after one browser removal fails and reports the aggregate failure', async () => {
     const failed = createTab('tab-failed' as UID, {
       id: 10,
