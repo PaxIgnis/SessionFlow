@@ -802,6 +802,42 @@ describe('critical Firefox UI workflows', () => {
     }, 'Expected two open windows with one open tab each.')
   })
 
+  it('drags a window whose shift-click range also selected its tabs', async () => {
+    await openSeededSessionTree()
+
+    await switchToPrimaryBrowserWindow()
+    await openFixtureWindow(seed, SESSION_FIXTURE_TITLES.secondWindow)
+    await browser.switchToWindow(popup.popupHandle)
+    await updateWindowTitleContainingTab(
+      SESSION_FIXTURE_TITLES.initial,
+      'First window',
+    )
+    await updateWindowTitleContainingTab(
+      SESSION_FIXTURE_TITLES.secondWindow,
+      'Second window',
+    )
+
+    // A range fill selects the window together with its tab. That mixed
+    // selection used to be rejected as a window+tab drag.
+    await sessionTree.selectTreeItemRange(
+      'First window',
+      SESSION_FIXTURE_TITLES.initial,
+    )
+    await sessionTree.dragTreeItem(
+      'First window',
+      'Second window',
+      DropPosition.Below,
+    )
+
+    await sessionTree.waitForBackgroundTree(
+      (tree) =>
+        windowsInTree(tree)
+          .map((windowItem) => windowItem.title)
+          .join('|') === 'Second window|First window',
+      'Expected the shift-selected window to move below the second window.',
+    )
+  })
+
   it('removes a browser-closed tab from the session tree', async () => {
     await openSeededSessionTree()
 
