@@ -91,11 +91,27 @@ export function collectSelectedDragItems(
     ? selectedItems
     : [...selectedItems, draggedItem]
   const seen = new Set<UID>()
-  return roots.filter((item) => {
+  const unique = roots.filter((item) => {
     if (seen.has(item.uid)) return false
     seen.add(item.uid)
     return true
   })
+
+  // A window carries all of its children when moved. A shift-click range
+  // selects a window together with its children, and keeping them would make
+  // the drag a window+tab mix, which is rejected.
+  const windowUids = new Set(
+    unique
+      .filter((item) => item.type === TreeItemType.WINDOW)
+      .map((item) => item.uid),
+  )
+  if (windowUids.size === 0) return unique
+  return unique.filter(
+    (item) =>
+      item.type === TreeItemType.WINDOW ||
+      !item.windowUid ||
+      !windowUids.has(item.windowUid),
+  )
 }
 
 export function populateInternalDragData(

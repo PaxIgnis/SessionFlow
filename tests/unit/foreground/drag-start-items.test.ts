@@ -298,6 +298,40 @@ describe('drag start item collection', () => {
     ).toEqual([tab.uid, note.uid])
   })
 
+  it('drops children of selected windows so a shift-selected window range stays a window drag', () => {
+    const firstTab = makeForegroundTab('first-tab' as UID)
+    const firstNote = makeForegroundNote('first-note' as UID)
+    const first = makeForegroundWindow('first' as UID, [firstTab, firstNote])
+    const secondTab = makeForegroundTab('second-tab' as UID)
+    const second = makeForegroundWindow('second' as UID, [secondTab])
+
+    // Range fills list each window followed by its children.
+    const selected = [first, firstTab, firstNote, second, secondTab]
+
+    expect(
+      collectSelectedDragItems(first, selected, true).map((item) => item.uid),
+    ).toEqual([first.uid, second.uid])
+    // Grabbing a child row of a selected window still drags the windows.
+    expect(
+      collectSelectedDragItems(secondTab, selected, true).map(
+        (item) => item.uid,
+      ),
+    ).toEqual([first.uid, second.uid])
+  })
+
+  it('keeps tabs whose window is not part of the drag', () => {
+    const otherTab = makeForegroundTab('other-tab' as UID)
+    makeForegroundWindow('other' as UID, [otherTab])
+    const windowTab = makeForegroundTab('window-tab' as UID)
+    const window = makeForegroundWindow('window' as UID, [windowTab])
+
+    expect(
+      collectSelectedDragItems(window, [otherTab, window, windowTab], true).map(
+        (item) => item.uid,
+      ),
+    ).toEqual([otherTab.uid, window.uid])
+  })
+
   it('preserves ordering and bounded preview output for a 10,000-item drag (PF-12)', () => {
     const tabs = Array.from({ length: 10_000 }, (_, index) =>
       makeForegroundTab(`drag-scale-${index}` as UID, {

@@ -75,9 +75,18 @@ function onDragStart(e: DragEvent) {
     Selection.selectedItems.value.map((selectedItem) => selectedItem.item),
     Settings.values.includeSelectedItemsWithDraggedItem,
   )
+  // Grabbing a row inside a dragged window drags that window instead.
+  const parentWindowUid =
+    props.item.type === TreeItemType.WINDOW ? undefined : props.item.windowUid
+  const draggedRoot = items.some((item) => item.uid === props.item.uid)
+    ? props.item
+    : (items.find(
+        (item) =>
+          item.type === TreeItemType.WINDOW && item.uid === parentWindowUid,
+      ) ?? props.item)
   items = collectDraggedItemsWithIncludedChildren(
     items,
-    getType(props.item),
+    getType(draggedRoot),
     Settings.values.includeChildrenOfSelectedItems,
     SessionTree.windowsByUid,
   )
@@ -85,7 +94,7 @@ function onDragStart(e: DragEvent) {
   console.debug('Final dragged items:', items)
 
   const dragInfo: DragInfo = {
-    dragType: getDragType(props.item),
+    dragType: getDragType(draggedRoot),
     items: items,
   }
 
