@@ -15,7 +15,11 @@ import { i18n } from '@/services/i18n'
 import { initializeSessionTreePort } from '@/services/runtime-port-service'
 import { Selection } from '@/services/selection'
 import { Settings } from '@/services/settings'
-import { normalizeEditTextValue, storedTabIdentity } from '@/services/utils'
+import {
+  coalesceWhileRunning,
+  normalizeEditTextValue,
+  storedTabIdentity,
+} from '@/services/utils'
 import * as Messages from '@/types/messages'
 import type { SessionTreeCommandResult } from '@/types/runtime-port-service'
 import {
@@ -307,13 +311,21 @@ async function publishFaviconUpdate(tab: browser.tabs.Tab): Promise<void> {
   if (!tab.favIconUrl) return
   await Favicons.init()
   await Favicons.updateFavicon(tab.favIconUrl, tab)
+  await persistAndAnnounceFavicons()
+}
+
+/*
+ * Each save writes the whole cache, and each announcement makes every open
+ * view re-read it. Updates that land while a save runs share one follow-up save.
+ */
+const persistAndAnnounceFavicons = coalesceWhileRunning(async () => {
   await Favicons.saveCacheToStorage()
   await window.browser.runtime
     .sendMessage({ type: 'FAVICON_CACHE_UPDATED' })
     .catch(() => {
       console.debug('No receivers for favicon update')
     })
-}
+})
 
 function scheduleFaviconRecheck(tab: browser.tabs.Tab): void {
   if (tab.id === undefined || tab.windowId === undefined || !tab.url) return

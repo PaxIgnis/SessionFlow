@@ -1,12 +1,14 @@
 import { FAVICON_CACHE_STORAGE_KEY } from '@/defaults/constants'
 import { DEFAULT_FAVICON_URL } from '@/defaults/favicons'
 import { Settings } from '@/services/settings'
+import { coalesceWhileRunning } from '@/services/utils'
 import {
   FaviconCacheEntry,
   FaviconCacheEnvelope,
   FaviconReference,
   FaviconStorageConfig,
 } from '@/types/favicons'
+import { shallowReactive, toRaw } from 'vue'
 
 type FaviconTabSource = Pick<browser.tabs.Tab, 'url' | 'favIconUrl'> & {
   id?: number
@@ -98,6 +100,16 @@ export class FaviconService {
     Promise<FaviconImageFetchResult>
   >()
   private readonly domainGenerations = new Map<string, number>()
+  /*
+   * Change counters per domain and per faviconless page. getFavicon reads the
+   * entry for its own key, so a row re-renders only when its icon changes.
+   */
+  private readonly domainVersions = shallowReactive(new Map<string, number>())
+  private readonly pageVersions = shallowReactive(new Map<string, number>())
+  private readonly coalescedReload = coalesceWhileRunning(async () => {
+    await this.loadCacheFromStorage()
+    this.initialized = true
+  })
 
   constructor(
     config?: FaviconStorageConfig,
@@ -128,10 +140,10 @@ export class FaviconService {
   /**
    * Reloads the persisted cache, replacing any in-memory entries.
    * This is used by extension views after the background refreshes favicons.
+   * Requests that arrive during a reload share one follow-up read.
    */
-  public async reloadCacheFromStorage(): Promise<void> {
-    await this.loadCacheFromStorage()
-    this.initialized = true
+  public reloadCacheFromStorage(): Promise<void> {
+    return this.coalescedReload()
   }
 
   public async hasFetchPermissions(): Promise<boolean> {
@@ -169,8 +181,16 @@ export class FaviconService {
       const entries = this.readPersistedEntries(parsedCache)
       if (!entries) return
 
+      const previous = new Map(this.cache)
       this.cache.clear()
       entries.forEach((entry) => this.cache.set(entry.url, entry))
+      for (const [domain, entry] of this.cache) {
+        if (previous.get(domain)?.dataUrl !== entry.dataUrl)
+          this.touchDomain(domain)
+      }
+      for (const domain of previous.keys()) {
+        if (!this.cache.has(domain)) this.touchDomain(domain)
+      }
     } catch (error) {
       console.error('Failed to load favicon cache from storage', error)
     }
@@ -287,6 +307,7 @@ export class FaviconService {
         dataUrl: entry.dataUrl,
         timestamp: entry.timestamp,
       })
+      this.touchDomain(entry.url)
       merged += 1
     }
     if (merged > 0) await this.saveCacheToStorage()
@@ -331,11 +352,12 @@ export class FaviconService {
     // resolve from the static table before anything else.
     const privilegedIcon = privilegedPageIcon(url)
     if (privilegedIcon) return privilegedIcon
+    // Track this page and its domain, so only rows showing them re-render.
+    void this.pageVersions.get(url)
     if (this.faviconlessPages.has(url)) return DEFAULT_FAVICON_URL
-    // extract the domain from the URL
     const domain = this.getDomainFromUrl(url)
-    // check if the favicon is in the cache
     if (!domain) return DEFAULT_FAVICON_URL
+    void this.domainVersions.get(domain)
     const entry = this.cache.get(domain)
     if (entry && entry.dataUrl && entry.dataUrl !== '') {
       return entry.dataUrl
@@ -358,6 +380,7 @@ export class FaviconService {
     const removed: string[] = []
     for (const domain of privateDomains) {
       if (!normalDomains.has(domain) && this.cache.delete(domain)) {
+        this.touchDomain(domain)
         removed.push(domain)
       }
     }
@@ -374,7 +397,9 @@ export class FaviconService {
     for (const reference of references) {
       if (this.getDomainFromUrl(reference.url) === domain) return false
     }
-    return this.cache.delete(domain)
+    if (!this.cache.delete(domain)) return false
+    this.touchDomain(domain)
+    return true
   }
 
   /**
@@ -382,7 +407,9 @@ export class FaviconService {
    * that Firefox has authoritatively reported as faviconless.
    */
   public markPageWithoutFavicon(url: string): void {
-    if (this.isWebUrl(url)) this.faviconlessPages.add(url)
+    if (!this.isWebUrl(url) || this.faviconlessPages.has(url)) return
+    this.faviconlessPages.add(url)
+    this.touchPage(url)
   }
 
   /**
@@ -537,7 +564,8 @@ export class FaviconService {
     try {
       if (tab?.incognito && !Settings.values.cachePrivateTabFavicons) return
       const pageUrl = tab?.url || url
-      if (pageUrl) this.faviconlessPages.delete(pageUrl)
+      if (pageUrl && this.faviconlessPages.delete(pageUrl))
+        this.touchPage(pageUrl)
       // extract the domain from the URL
       const domain = this.getDomainFromUrl(pageUrl!)
       if (!domain) return
@@ -554,6 +582,7 @@ export class FaviconService {
         }
         if (this.domainGenerations.get(domain) === generation) {
           this.cache.set(domain, faviconData)
+          this.touchDomain(domain)
         }
         return
       }
@@ -611,6 +640,7 @@ export class FaviconService {
           this.domainGenerations.get(domain) === generation
         ) {
           this.cache.set(domain, faviconData)
+          this.touchDomain(domain)
         }
         return
       }
@@ -625,6 +655,7 @@ export class FaviconService {
         this.domainGenerations.get(domain) === generation
       ) {
         this.cache.set(domain, faviconData)
+        this.touchDomain(domain)
       }
     } catch (error) {
       console.error('Failed to update favicon', error, favIconUrl)
@@ -907,6 +938,17 @@ export class FaviconService {
    * @param {string} url - The URL to extract the domain from
    * @returns {string} - The domain extracted from the URL
    */
+  private touchDomain(domain: string): void {
+    this.domainVersions.set(
+      domain,
+      (toRaw(this.domainVersions).get(domain) ?? 0) + 1,
+    )
+  }
+
+  private touchPage(url: string): void {
+    this.pageVersions.set(url, (toRaw(this.pageVersions).get(url) ?? 0) + 1)
+  }
+
   private getDomainFromUrl(url: string): string {
     if (!url.trim()) return ''
     try {

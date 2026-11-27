@@ -48,7 +48,6 @@ import { computed } from 'vue'
 const props = defineProps<{
   item: TreeItem
   faviconService: FaviconService
-  faviconRevision?: number
   indentGuideState?: TreeItemIndentGuideState
   /* Precomputed by the session tree for non-window rows. Without it the row
      scans its own list, which makes it depend on every item in that list. */
@@ -56,8 +55,6 @@ const props = defineProps<{
 }>()
 
 function getTabFavicon(tab: Tab): string {
-  // Reading this prop makes background cache refreshes invalidate the image src.
-  void props.faviconRevision
   return tab.loadingStatus === 'loading' && tab.state === State.OPEN
     ? TAB_LOADING
     : props.faviconService.getFavicon(

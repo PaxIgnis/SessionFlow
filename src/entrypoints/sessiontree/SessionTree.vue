@@ -70,7 +70,6 @@ window.onbeforeunload = () => {
 }
 
 const faviconService = Favicons
-const faviconRevision = ref(0)
 const containerRecoveryPending = ref(false)
 const deleteTreeItemsPending = ref(false)
 const blockingModalActive = computed(
@@ -220,23 +219,19 @@ onMounted(async () => {
       case 'FAVICON_UPDATED':
         console.log('FaviconUpdated message received')
         if (message.favIconUrl) {
-          void faviconService
-            .updateFavicon(message.favIconUrl, message.tab as browser.tabs.Tab)
-            .then(() => {
-              faviconRevision.value += 1
-            })
+          void faviconService.updateFavicon(
+            message.favIconUrl,
+            message.tab as browser.tabs.Tab,
+          )
         }
         break
       case 'FAVICON_CLEARED':
         if (message.pageUrl) {
           faviconService.markPageWithoutFavicon(message.pageUrl)
-          faviconRevision.value += 1
         }
         break
       case 'FAVICON_CACHE_UPDATED':
-        void faviconService.reloadCacheFromStorage().then(() => {
-          faviconRevision.value += 1
-        })
+        void faviconService.reloadCacheFromStorage()
         break
     }
   }
@@ -460,7 +455,6 @@ function runToolbarAction(action: () => void | Promise<void>): void {
         <TreeItem
           :item="item"
           :favicon-service="faviconService"
-          :favicon-revision="faviconRevision"
           :indent-guide-state="indentGuideStates.get(item.uid)"
           :descendant-summary="descendantSummaries.get(item.uid)"
         />
