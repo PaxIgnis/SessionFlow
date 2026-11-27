@@ -9,6 +9,12 @@ import {
   readSnapshotAlarm,
   sendSnapshotRequest,
 } from './support/session-snapshots.mjs'
+import {
+  SessionTreePage,
+  TreeItemState,
+  tabsInWindow,
+  windowsInTree,
+} from './support/session-tree-page.mjs'
 
 describe('session snapshot workflows', () => {
   it('keeps Tabs Outliner group notes and shared loose-tab windows after import and reload', async () => {
@@ -568,6 +574,94 @@ describe('session snapshot workflows', () => {
         },
       )
     } finally {
+      await sendSnapshotRequest({ action: 'clearSessionSnapshots' })
+      await closeOptionsPage(options.optionsHandle, options.originalHandle)
+    }
+  })
+
+  it('opens a restored window past tabs Firefox refuses and leaves them saved', async () => {
+    const BLOB_FIRST = 'blob:https://first.example.test/'
+    const BLOB_LATER = 'blob:https://later.example.test/'
+    const OPENABLE_FIRST = 'http://127.0.0.1:9/after-first-blob'
+    const OPENABLE_LAST = 'http://127.0.0.1:9/after-later-blob'
+    const options = await openOptionsPage()
+    const tree = new SessionTreePage()
+    let openedWindowUid
+    try {
+      await sendSnapshotRequest({ action: 'clearSessionSnapshots' })
+      const fixture = JSON.parse(
+        await readFile(
+          path.resolve('tests/fixtures/tabs-outliner-backup.json'),
+          'utf8',
+        ),
+      )
+      const imported = await sendSnapshotRequest({
+        action: 'importSessionSnapshot',
+        json: JSON.stringify([
+          fixture.data[0],
+          [
+            2001,
+            { type: 'savedwin', data: {}, marks: { customTitle: 'Blob' } },
+            [0],
+          ],
+          [2001, { data: { url: BLOB_FIRST } }, [0, 0]],
+          [2001, { data: { url: OPENABLE_FIRST } }, [0, 1]],
+          [2001, { data: { url: BLOB_LATER } }, [0, 2]],
+          [2001, { data: { url: OPENABLE_LAST } }, [0, 3]],
+          fixture.data.at(-1),
+        ]),
+      })
+      expect(imported.ok).toBe(true)
+      const restored = await sendSnapshotRequest({
+        action: 'restoreSessionSnapshot',
+        snapshotId: imported.data.id,
+        mode: 'all',
+        selectedUids: [],
+        allowWithoutSafetySnapshot: true,
+      })
+      expect(restored.ok).toBe(true)
+
+      const findWindow = (items) =>
+        windowsInTree(items).find((windowItem) =>
+          tabsInWindow(windowItem).some((tab) => tab.url === BLOB_FIRST),
+        )
+      const savedWindow = findWindow(await tree.backgroundTreeSnapshot())
+      expect(savedWindow?.state).toBe(TreeItemState.Saved)
+      openedWindowUid = savedWindow.uid
+
+      await tree.sendTreeCommand({
+        action: 'openWindow',
+        windowUid: savedWindow.uid,
+      })
+
+      await tree.waitForBackgroundTree((items) => {
+        const current = findWindow(items)
+        if (current?.state !== TreeItemState.Open) return false
+        const states = Object.fromEntries(
+          tabsInWindow(current).map((tab) => [tab.url, tab.state]),
+        )
+        return (
+          states[BLOB_FIRST] === TreeItemState.Saved &&
+          states[BLOB_LATER] === TreeItemState.Saved &&
+          states[OPENABLE_FIRST] !== TreeItemState.Saved &&
+          states[OPENABLE_LAST] !== TreeItemState.Saved
+        )
+      }, 'Expected the window to open with its refused blob tabs left saved.')
+    } finally {
+      if (openedWindowUid) {
+        const current = windowsInTree(await tree.backgroundTreeSnapshot()).find(
+          (windowItem) => windowItem.uid === openedWindowUid,
+        )
+        if (current) {
+          await tree
+            .sendTreeCommand({
+              action: 'closeWindow',
+              windowId: current.id,
+              windowUid: current.uid,
+            })
+            .catch(() => undefined)
+        }
+      }
       await sendSnapshotRequest({ action: 'clearSessionSnapshots' })
       await closeOptionsPage(options.optionsHandle, options.originalHandle)
     }

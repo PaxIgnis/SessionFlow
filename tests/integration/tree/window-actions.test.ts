@@ -1567,42 +1567,126 @@ describe('window actions', () => {
     expect(secondTab.active).toBe(true)
   })
 
-  it('rejects when a later tab fails during incremental window restoration', async () => {
+  function savedTabs(...urls: string[]) {
+    return urls.map((url, index) =>
+      createTab(`tab-${index}` as UID, { id: -1, state: State.SAVED, url }),
+    )
+  }
+
+  it('keeps opening a window when Firefox refuses a later tab and leaves that tab saved', async () => {
     Settings.values.openWindowWithTabsDiscarded = false
     Settings.values.openWindowsInSameLocation = false
-    const firstTab = createTab('tab-first' as UID, {
-      id: -1,
-      state: State.SAVED,
-      url: 'https://example.test/first',
-    })
-    const secondTab = createTab('tab-second' as UID, {
-      id: -1,
-      state: State.SAVED,
-      url: 'https://example.test/second',
-    })
-    const window = createWindow('window-1' as UID, [firstTab, secondTab], {
-      id: -1,
-      state: State.SAVED,
-    })
+    const [firstTab, refusedTab, lastTab] = savedTabs(
+      'https://example.test/first',
+      'blob:https://www.example.test/',
+      'https://example.test/last',
+    )
+    const window = createWindow(
+      'window-1' as UID,
+      [firstTab, refusedTab, lastTab],
+      { id: -1, state: State.SAVED },
+    )
     vi.spyOn(OnCreatedQueue, 'createWindowAndWait').mockResolvedValue({
       id: 30,
       tabs: [{ id: 101 }],
     } as browser.windows.Window)
-    vi.spyOn(OnCreatedQueue, 'createTabAndWait').mockRejectedValue(
-      new Error('Firefox refused the second tab'),
+    vi.spyOn(OnCreatedQueue, 'createTabAndWait')
+      .mockRejectedValueOnce(
+        new Error('Illegal URL: blob:https://www.example.test/'),
+      )
+      .mockResolvedValueOnce({ id: 103, windowId: 30 } as browser.tabs.Tab)
+
+    const result = await Tree.openWindow({ windowUid: window.uid })
+
+    expect(result).toEqual({
+      warnings: [
+        {
+          code: 'tabs-not-opened',
+          message:
+            'Session Flow opened the window, but 1 tab could not be opened and was left saved.',
+          affectedCount: 1,
+        },
+      ],
+    })
+    expect(window).toMatchObject({ id: 30, state: State.OPEN })
+    expect(firstTab).toMatchObject({ id: 101, state: State.OPEN })
+    expect(refusedTab).toMatchObject({ id: -1, state: State.SAVED })
+    expect(lastTab).toMatchObject({ id: 103, state: State.OPEN })
+    expect(browser.windows.remove).not.toHaveBeenCalled()
+    expectTreeInvariants()
+  })
+
+  it('opens the window with the next tab when Firefox refuses the first tab URL', async () => {
+    Settings.values.openWindowWithTabsDiscarded = false
+    Settings.values.openWindowsInSameLocation = false
+    const [refusedTab, secondTab] = savedTabs(
+      'blob:https://www.example.test/',
+      'https://example.test/second',
+    )
+    const window = createWindow('window-1' as UID, [refusedTab, secondTab], {
+      id: -1,
+      state: State.SAVED,
+    })
+    const createWindowAndWait = vi
+      .spyOn(OnCreatedQueue, 'createWindowAndWait')
+      .mockRejectedValueOnce(
+        new Error('Illegal URL: blob:https://www.example.test/'),
+      )
+      .mockResolvedValueOnce({
+        id: 30,
+        tabs: [{ id: 102 }],
+      } as browser.windows.Window)
+    const createTabAndWait = vi.spyOn(OnCreatedQueue, 'createTabAndWait')
+
+    const result = await Tree.openWindow({ windowUid: window.uid })
+
+    expect(createWindowAndWait).toHaveBeenCalledTimes(2)
+    expect(createWindowAndWait).toHaveBeenLastCalledWith(
+      expect.objectContaining({ url: 'https://example.test/second' }),
+    )
+    expect(createTabAndWait).not.toHaveBeenCalled()
+    expect(result?.warnings?.map((warning) => warning.code)).toEqual([
+      'tabs-not-opened',
+    ])
+    expect(window).toMatchObject({ id: 30, state: State.OPEN })
+    expect(refusedTab).toMatchObject({ id: -1, state: State.SAVED })
+    expect(secondTab).toMatchObject({ id: 102, state: State.OPEN })
+    expectTreeInvariants()
+  })
+
+  it('rolls the window back when Firefox refuses every tab URL', async () => {
+    const tabs = savedTabs('blob:https://a.example.test/', 'file:///tmp/b')
+    const window = createWindow('window-1' as UID, tabs, {
+      id: -1,
+      state: State.SAVED,
+    })
+    vi.spyOn(OnCreatedQueue, 'createWindowAndWait').mockRejectedValue(
+      new Error('Illegal URL: refused'),
     )
 
     await expect(Tree.openWindow({ windowUid: window.uid })).rejects.toThrow(
-      'Firefox refused the second tab',
+      'Illegal URL',
     )
-    expect(window.state).toBe(State.SAVED)
-    expect(window.id).toBe(-1)
-    expect(firstTab.state).toBe(State.SAVED)
-    expect(firstTab.id).toBe(-1)
-    expect(secondTab.state).toBe(State.SAVED)
-    expect(secondTab.id).toBe(-1)
-    expect(browser.windows.remove).toHaveBeenCalledWith(30)
-    expect(browser.tabs.group).not.toHaveBeenCalled()
+    expect(OnCreatedQueue.createWindowAndWait).toHaveBeenCalledTimes(2)
+    expect(window).toMatchObject({ id: -1, state: State.SAVED })
+    expect(tabs.every((tab) => tab.state === State.SAVED)).toBe(true)
+  })
+
+  it('does not retry window creation for errors other than a refused URL', async () => {
+    const tabs = savedTabs('https://example.test/a', 'https://example.test/b')
+    const window = createWindow('window-1' as UID, tabs, {
+      id: -1,
+      state: State.SAVED,
+    })
+    vi.spyOn(OnCreatedQueue, 'createWindowAndWait').mockRejectedValue(
+      new Error('windows.create failed'),
+    )
+
+    await expect(Tree.openWindow({ windowUid: window.uid })).rejects.toThrow(
+      'windows.create failed',
+    )
+    expect(OnCreatedQueue.createWindowAndWait).toHaveBeenCalledTimes(1)
+    expect(window).toMatchObject({ id: -1, state: State.SAVED })
   })
 
   it('restores a missing snapshot when open-without-container window creation fails', async () => {

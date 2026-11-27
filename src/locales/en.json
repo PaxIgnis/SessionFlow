@@ -770,6 +770,10 @@
   "tabs": "tabs",
   "tabsLabel": "Tabs",
   "tabsLoadTheFirstTimeYouClickThemNotWhen": "Tabs load the first time you click them, not when the window opens.",
+  "tabsNotOpened": {
+    "1": "Session Flow opened the window, but $1 tab could not be opened and was left saved.",
+    "n": "Session Flow opened the window, but $1 tabs could not be opened and were left saved."
+  },
   "tabsOutlinerGroupsWereConvertedToNoteBranches": "Tabs Outliner groups were converted to note branches.",
   "tabsWereMovedBesideTheirParentBranchesToPreserveThe": "Tabs were moved beside their parent branches to preserve the saved hierarchy.",
   "tagsDetail": "Tags: $1",

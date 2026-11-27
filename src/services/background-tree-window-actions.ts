@@ -12,7 +12,10 @@ import {
 } from '@/services/background-session-identity'
 import * as Utils from '@/services/utils'
 import type { OpenWindowMessage } from '@/types/messages'
-import type { SessionTreeCommandResult } from '@/types/runtime-port-service'
+import type {
+  SessionTreeCommandResult,
+  SessionTreeCommandWarning,
+} from '@/types/runtime-port-service'
 import {
   State,
   TreeItemType,
@@ -463,6 +466,12 @@ export async function closeWindow(
   }
 }
 
+/** Firefox rejects URLs an extension may not open with "Illegal URL: <url>". */
+function isIllegalUrlError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return message.includes('Illegal URL')
+}
+
 /**
  * Opens a window by creating it in the browser and updating the session tree.
  *
@@ -521,28 +530,49 @@ export async function openWindow(
       if (tab.pinned) pinnedTabs.push(tab.uid)
     }
     let createdWindowId: number | undefined
+    // Tabs Firefox refused to open. They stay saved and the window still opens.
+    const unopenedTabUids: UID[] = []
     try {
       // First change the state of the window in sessionTree from SAVED to OPEN
       Tree.updateWindowState(message.windowUid, State.OPEN)
-      const properties: browser.windows._CreateCreateData = {}
-      properties.incognito = sessionTreeWindow.incognito
-      if (urls[0]) properties.url = urls[0]
-      if (sessionTabs[0]?.container?.cookieStoreId) {
-        properties.cookieStoreId = sessionTabs[0].container.cookieStoreId
-      }
+      const baseProperties: browser.windows._CreateCreateData = {}
+      baseProperties.incognito = sessionTreeWindow.incognito
       if (
         Settings.values.openWindowsInSameLocation &&
         sessionTreeWindow.windowPosition
       ) {
         Object.assign(
-          properties,
+          baseProperties,
           Utils.restorableWindowBounds(sessionTreeWindow.windowPosition),
         )
       }
-      const window = await OnCreatedQueue.createWindowAndWait(properties)
+      // The window opens with its first tab. When Firefox refuses that tab's
+      // URL, leave the tab saved and open the window with the next one.
+      let firstIndex = 0
+      let window: browser.windows.Window | undefined
+      for (;;) {
+        const properties = { ...baseProperties }
+        if (urls[firstIndex]) properties.url = urls[firstIndex]
+        const cookieStoreId = sessionTabs[firstIndex]?.container?.cookieStoreId
+        if (cookieStoreId) properties.cookieStoreId = cookieStoreId
+        try {
+          window = await OnCreatedQueue.createWindowAndWait(properties)
+          break
+        } catch (error) {
+          if (!isIllegalUrlError(error) || firstIndex >= sessionTabs.length - 1)
+            throw error
+          console.warn(
+            'Firefox refused a tab URL; leaving the tab saved:',
+            urls[firstIndex],
+            error,
+          )
+          unopenedTabUids.push(sessionTabs[firstIndex].uid)
+          firstIndex += 1
+        }
+      }
       createdWindowId = window?.id
       const firstBrowserTab = window?.tabs?.[0]
-      const firstSessionTab = sessionTabs[0]
+      const firstSessionTab = sessionTabs[firstIndex]
       if (
         window?.id === undefined ||
         (firstSessionTab && firstBrowserTab?.id === undefined)
@@ -563,16 +593,24 @@ export async function openWindow(
         }
       }
 
-      for (const tab of sessionTabs.slice(1)) {
-        await Tree.openTab({
-          tabUid: tab.uid,
-          windowUid: message.windowUid,
-          discarded: Settings.values.openWindowWithTabsDiscarded,
-          active: false,
-          deferGroupRestore: true,
-          containerRecovery: message.containerRecovery,
-          containerRecoveryStoreIds: message.containerRecoveryStoreIds,
-        })
+      for (const tab of sessionTabs.slice(firstIndex + 1)) {
+        try {
+          await Tree.openTab({
+            tabUid: tab.uid,
+            windowUid: message.windowUid,
+            discarded: Settings.values.openWindowWithTabsDiscarded,
+            active: false,
+            deferGroupRestore: true,
+            containerRecovery: message.containerRecovery,
+            containerRecoveryStoreIds: message.containerRecoveryStoreIds,
+          })
+        } catch (error) {
+          // openTab already left the tab saved. One bad tab must not undo the
+          // whole window, unless the window itself is gone.
+          if (!Tree.windowsByUid.has(message.windowUid)) throw error
+          console.warn('Could not open tab; leaving it saved:', tab.url, error)
+          unopenedTabUids.push(tab.uid)
+        }
       }
       for (const tab of sessionTabs) {
         const savedTabGroup = tabSnapshots.get(tab.uid)?.tabGroup
@@ -601,20 +639,28 @@ export async function openWindow(
         Tree.updateWindow(message.windowUid, { activeTabId: savedActiveTab.id })
         Browser.focusTab({ tabId: savedActiveTab.id })
       }
+      const warnings: SessionTreeCommandWarning[] = []
+      if (unopenedTabUids.length > 0) {
+        const affectedCount = unopenedTabUids.length
+        warnings.push({
+          code: 'tabs-not-opened',
+          message: i18n.t('tabsNotOpened', affectedCount, [
+            formatNumber(affectedCount),
+          ]),
+          affectedCount,
+        })
+      }
       if (groupRestoreResult.failures.length > 0) {
         const affectedCount = groupRestoreResult.failures.length
-        return {
-          warnings: [
-            {
-              code: 'tab-group-restore-partial',
-              message: i18n.t('groupsNotRestored', affectedCount, [
-                formatNumber(affectedCount),
-              ]),
-              affectedCount,
-            },
-          ],
-        }
+        warnings.push({
+          code: 'tab-group-restore-partial',
+          message: i18n.t('groupsNotRestored', affectedCount, [
+            formatNumber(affectedCount),
+          ]),
+          affectedCount,
+        })
       }
+      if (warnings.length > 0) return { warnings }
     } catch (error) {
       if (createdWindowId !== undefined) {
         await browser.windows.remove(createdWindowId).catch(() => undefined)
