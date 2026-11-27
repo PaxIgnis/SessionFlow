@@ -770,6 +770,10 @@
   "tabs": "Tabs",
   "tabsLabel": "Tabs",
   "tabsLoadTheFirstTimeYouClickThemNotWhen": "Tabs werden erst beim ersten Anklicken geladen, nicht beim Öffnen des Fensters.",
+  "tabsNotOpened": {
+    "1": "Session Flow hat das Fenster geöffnet, aber $1 Tab konnte nicht geöffnet werden und bleibt gespeichert.",
+    "n": "Session Flow hat das Fenster geöffnet, aber $1 Tabs konnten nicht geöffnet werden und bleiben gespeichert."
+  },
   "tabsOutlinerGroupsWereConvertedToNoteBranches": "Gruppen aus Tabs Outliner wurden in Notiz-Zweige umgewandelt.",
   "tabsWereMovedBesideTheirParentBranchesToPreserveThe": "Tabs wurden neben ihre übergeordneten Zweige verschoben, um die gespeicherte Hierarchie zu erhalten.",
   "tagsDetail": "Schlagwörter: $1",

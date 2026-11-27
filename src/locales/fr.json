@@ -791,6 +791,11 @@
   "tabs": "onglets",
   "tabsLabel": "Onglets",
   "tabsLoadTheFirstTimeYouClickThemNotWhen": "Les onglets se chargent au premier clic, et non à l’ouverture de la fenêtre.",
+  "tabsNotOpened": {
+    "0": "Session Flow a ouvert la fenêtre, mais $1 onglet n’a pas pu être ouvert et reste enregistré.",
+    "1": "Session Flow a ouvert la fenêtre, mais $1 onglet n’a pas pu être ouvert et reste enregistré.",
+    "n": "Session Flow a ouvert la fenêtre, mais $1 onglets n’ont pas pu être ouverts et restent enregistrés."
+  },
   "tabsOutlinerGroupsWereConvertedToNoteBranches": "Les groupes de Tabs Outliner ont été convertis en branches de notes.",
   "tabsWereMovedBesideTheirParentBranchesToPreserveThe": "Les onglets ont été déplacés à côté de leurs branches parentes pour préserver la hiérarchie enregistrée.",
   "tagsDetail": "Étiquettes : $1",

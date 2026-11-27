@@ -25,7 +25,7 @@ export type SessionTreePortRequest =
   | SessionTreePortCommandRequest
 
 export interface SessionTreeCommandWarning {
-  code: 'tab-group-restore-partial'
+  code: 'tab-group-restore-partial' | 'tabs-not-opened'
   message: string
   affectedCount: number
 }
