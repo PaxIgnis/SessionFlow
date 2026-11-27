@@ -96,19 +96,53 @@ export function getLogicalTreeOrder(): TreeItem[] {
   )
 }
 
-/** Selection is view state: background snapshots must not erase it. */
-export function reconcileSelection(): void {
-  const current = new Map(getLogicalTreeOrder().map((item) => [item.uid, item]))
-  Selection.selectedItems.value = Selection.selectedItems.value.flatMap(
-    (selected) => {
-      const item = current.get(selected.item.uid)
-      if (!item) return []
-      item.selected = true
-      return [{ item, type: selected.type }]
-    },
+function findCurrentItem(uid: UID): TreeItem | undefined {
+  return (
+    SessionTree.tabsByUid.get(uid) ??
+    SessionTree.windowsByUid.get(uid) ??
+    SessionTree.notesByUid.get(uid) ??
+    SessionTree.separatorsByUid.get(uid)
   )
-  if (Selection.anchor.value)
-    Selection.anchor.value = current.get(Selection.anchor.value.uid)
+}
+
+/**
+ * Selection is view state: background updates must not erase it. They reset
+ * `selected` to false and can swap or remove item objects, so each entry is
+ * re-pointed at the current item and its flag restored.
+ *
+ * Runs after every delta, so it looks entries up in the uid indexes (cost
+ * follows the selection, not the tree) and only replaces the selection when
+ * an entry was dropped or swapped.
+ */
+export function reconcileSelection(): void {
+  const selected = toRaw(Selection.selectedItems.value)
+  let changed = false
+  const next: SelectedItem[] = []
+  for (const entry of selected) {
+    const item = findCurrentItem(entry.item.uid)
+    if (!item) {
+      changed = true
+      continue
+    }
+    const rawItem = toRaw(item)
+    // Write through the proxy only when the flag was reset, so the rows that
+    // render it update; reads stay raw to keep the per-delta pass cheap.
+    if (!rawItem.selected) item.selected = true
+    if (rawItem === toRaw(entry.item)) {
+      next.push(entry)
+    } else {
+      changed = true
+      next.push({ item, type: entry.type })
+    }
+  }
+  if (changed) Selection.selectedItems.value = next
+
+  const anchor = Selection.anchor.value
+  if (anchor) {
+    const current = findCurrentItem(anchor.uid)
+    if (!current || toRaw(current) !== toRaw(anchor))
+      Selection.anchor.value = current
+  }
 }
 
 export function collectContextMenuActionItems(
