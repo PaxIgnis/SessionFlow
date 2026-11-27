@@ -241,3 +241,40 @@ export function normalizeEditTextValue(
     ? undefined
     : normalized
 }
+
+/**
+ * Wraps an async task so overlapping calls collapse. A call while the task is
+ * idle starts it at once. Calls while it runs share one follow-up run that
+ * starts after it, so a burst of N calls costs at most two runs and the last
+ * caller still sees the latest state.
+ */
+export function coalesceWhileRunning(
+  task: () => Promise<void>,
+): () => Promise<void> {
+  let running: Promise<void> | undefined
+  let queued: Promise<void> | undefined
+
+  const start = (): Promise<void> => {
+    // Starting on a microtask means `run` is assigned before `finally` reads it.
+    const run: Promise<void> = Promise.resolve()
+      .then(task)
+      .finally(() => {
+        if (running === run) running = undefined
+      })
+    running = run
+    return run
+  }
+
+  return () => {
+    if (queued) return queued
+    if (!running) return start()
+    const follow = running
+      .catch(() => undefined)
+      .then(() => {
+        queued = undefined
+        return start()
+      })
+    queued = follow
+    return follow
+  }
+}
